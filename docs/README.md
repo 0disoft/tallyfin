@@ -17,6 +17,7 @@
 - [패키지 소유권](./monorepo/package-ownership.md)
 - [위험 등록부](./product/03-risk-register.md)
 - [프론트엔드 설계](./frontend/FRONTEND_DESIGN.md)
+- [선택한 화면 디자인](./frontend/SELECTED_VISUAL.md)
 - [개발 가이드](../DEVELOPMENT.md)
 - [기여 안내](../CONTRIBUTING.md)
 - [검증](../VALIDATION.md)
