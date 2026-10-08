@@ -11,6 +11,8 @@
 - [성능 예산](./engineering/03-performance-budget.md)
 - [ADR 0002 계약 기준 문서](./adr/0002-contract-source-of-truth.md)
 - [ADR 0003 최소·프라이버시 이벤트](./adr/0003-minimal-privacy-preserving-events.md)
+- [ADR 0004 범용 제품 분석](./adr/0004-general-product-analytics.md)
+- [Sembom 연동 예시](./integrations/sembom.md)
 - [워크스페이스 경계](./monorepo/workspace-boundaries.md)
 - [패키지 소유권](./monorepo/package-ownership.md)
 - [위험 등록부](./product/03-risk-register.md)
