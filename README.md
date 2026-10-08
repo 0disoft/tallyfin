@@ -2,14 +2,14 @@
 
 Tallyfin은 Rodisoft의 여러 서비스에서 공통으로 사용하는 가벼운 제품 이벤트 분석 플랫폼이다. 프로젝트별 설정으로 회원가입·파일 변환·구매·계산 등 서로 다른 행동을 분석하며, 개인정보 수집을 최소화한다. Sembom은 첫 적용 사례다.
 
-현재 저장소에는 설계 문서, v0.1 이벤트/API/논리 DB 계약과 [샘플 관리자 UI](prototypes/admin/README.md)가 있다. 실제 수집기·SDK·조회 서버와 적용된 DB 마이그레이션은 아직 없다.
+현재 저장소에는 설계 문서, v0.1 이벤트/API/논리 DB 계약, [샘플 관리자 UI](prototypes/admin/README.md)와 로컬로 구현한 코어·저장·수집기 패키지가 있다. `packages/core`는 등록 정의·배치·시간 정규화·SHA-256 입력을, `packages/storage-d1`는 D1 영수증·시도·할당량·집계를 원자적으로 반영하는 어댑터를, `apps/collector`는 네이티브 fetch 최소 브라우저 수집기를 구현했고 저장소 루트 npm 검사로 확인한다. 브라우저 SDK·관리자 조회 API·운영 인증·원격 DB 적용은 아직 없다.
 
 MVP는 프로젝트별로 등록한 이벤트의 건수·추이·허용 속성별 집계와 작업 흐름의 완료/오류를 다룬다. 서비스별 이벤트 연결은 각 서비스가 담당하고, 공통 SDK에는 특정 서비스 이벤트명을 내장하지 않는다. 브라우저부터 구현하며 서버 연동은 계약에서 발행 출처를 구분한 뒤 후속으로 구현한다.
 
 초기 기술 방향은 TypeScript, 외부 런타임 의존성 없는 브라우저 SDK, 네이티브 fetch Cloudflare Worker와 별도 D1 저장 어댑터다. 코어/SDK는 비공개 ZDP 패키지나 Cloudflare에 의존하지 않는다. SDK와 한 서비스의 연동 코드·필수 설정 합계는 gzip 3KiB 이하를 목표로 하며 아직 측정하지 않았다. 수집 실패가 서비스 화면이나 업무 처리를 막지 않도록 설계한다.
 
-계획된 구성: `packages/core`, `packages/browser`, `packages/storage-d1`, `apps/collector`, `apps/admin`, `examples/sembom`. 이 디렉터리와 실행 워크스페이스는 아직 생성하지 않았다.
+구성: `packages/core`, `packages/browser`(예정), `packages/storage-d1`, `apps/collector`, `apps/admin`(예정), `examples/sembom`(예정). npm workspaces를 초기화했고 core·storage-d1·collector를 생성했다.
 
-문서: [제품 개요](docs/product/00-product-brief.md), [제품 명세](docs/product/02-spec.md), [화면 설계](docs/frontend/FRONTEND_DESIGN.md), [아키텍처](ARCHITECTURE.md), [ADR 0004](docs/adr/0004-general-product-analytics.md), [Sembom 연동 예시](docs/integrations/sembom.md), [성능 목표](docs/engineering/03-performance-budget.md), [로드맵](docs/product/01-roadmap.md).
+문서: [제품 개요](docs/product/00-product-brief.md), [제품 명세](docs/product/02-spec.md), [화면 설계](docs/frontend/FRONTEND_DESIGN.md), [아키텍처](ARCHITECTURE.md), [ADR 0004](docs/adr/0004-general-product-analytics.md), [Sembom 연동 예시](docs/integrations/sembom.md), [성능 목표](docs/engineering/03-performance-budget.md), [로드맵](docs/product/01-roadmap.md), [전송·집계 계약](docs/backend/event-contract.md), [수집기 구현](docs/backend/collector.md), [검증](VALIDATION.md).
 
-원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. [이벤트·집계 계약](docs/backend/event-contract.md)에 따라 OpenAPI와 DBML 예제를 v0.1 계약으로 교체했다. 수집기·SDK·SQL 마이그레이션은 아직 없으며 운영 인증 제공자·IP 보호 정책·도메인·라이선스는 미정이다.
+원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. [이벤트·집계 계약](docs/backend/event-contract.md)에 따라 OpenAPI와 DBML 예제를 v0.1 계약으로 교체했다. SQL 마이그레이션 `0001_initial.sql`은 초기 빈 DB용이며 로컬 Miniflare 테스트에서만 적용하고 원격 DB에는 적용하지 않는다. 브라우저 SDK·관리자 조회 API·운영 인증 제공자·IP 보호 정책·도메인·라이선스는 미정이다.

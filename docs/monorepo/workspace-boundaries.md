@@ -1,12 +1,14 @@
 # 워크스페이스 경계
 
-상태: 계획. 아래 디렉터리/패키지는 아직 생성되지 않았고 워크스페이스가 초기화되지 않았다.
+상태: 부분 구현. npm workspaces를 초기화했고 아래 생성한 패키지의 로컬 구현·검증을 마쳤다. 나머지는 계획이다.
 
-## 계획된 패키지 그래프
-- packages/core — 프로젝트별 이벤트/속성 정의, 검증, 목표·집계 기준 (비공개 ZDP·Cloudflare 의존 없음)
+## 생성한 패키지
+- packages/core — 프로젝트별 이벤트/속성 정의, 검증, 정규화, 해시, 목표·집계 기준 (비공개 ZDP·Cloudflare 의존 없음). 로컬 구현·검증 완료.
+- packages/storage-d1 — D1 분석 저장 어댑터 (원자적 커밋·CAS 가드·할당량·만료 정리). 로컬 구현·검증 완료.
+- apps/collector — 네이티브 Cloudflare Worker fetch 수신 경계 (프레임워크 없음). 최소 browser 수집 로컬 구현·검증 완료.
+
+## 계획된 패키지
 - packages/browser — 브라우저 SDK (외부 런타임 의존성 없음)
-- packages/storage-d1 — D1 분석 저장 어댑터
-- apps/collector — 네이티브 Cloudflare Worker fetch (프레임워크 없음)
 - apps/admin — 대시보드 (프레임워크 미결정)
 - examples/sembom — 예시
 
