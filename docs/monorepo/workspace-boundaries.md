@@ -7,6 +7,7 @@
 - packages/storage-d1 — D1 분석 저장 어댑터 (원자적 커밋·CAS 가드·할당량·만료 정리). 로컬 구현·검증 완료.
 - apps/collector — 네이티브 Cloudflare Worker fetch 수신 경계 (프레임워크 없음). 최소 browser 수집 로컬 구현·검증 완료.
 - packages/browser — 브라우저 SDK (외부 런타임 의존성 없음, 서버 core/D1 런타임 미포함). 로컬 구현·검증 완료.
+- packages/auth-oidc — 서버용 OIDC JWT 검증 어댑터 (`jose ^6`, Cloudflare/D1 비의존). collector가 명시적으로 연결하며 core/SDK에 포함하지 않는다.
 - examples/sembom — Sembom 연동 예제 (등록 스키마 투영 + 호스트 어댑터 예시). 로컬 구현·검증 완료, 실제 Sembom 저장소에 설치·활성화하지 않음.
 
 ## 계획된 패키지

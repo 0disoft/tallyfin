@@ -1,7 +1,7 @@
 # 관리자 조회 경계 (apps/collector)
 
-상태: 관리자 GET 조회와 검증기 포트를 로컬에서 구현·검증했다. 실제 인증 제공자·서명
-검증·토큰 발급과 운영 설정은 아직 없어 운영 로그인이 되는 상태가 아니다.
+상태: 관리자 GET 조회·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다.
+실제 인증 제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
 
 호스트는 `createWorker(verifyBearer)`로 신뢰하는 검증기를 연결한다. `verifyBearer`는
 서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
@@ -19,6 +19,10 @@ import { createWorker } from './apps/collector/src/index.ts';
 
 export default createWorker(bearer => hostVerify(bearer));
 ```
+
+일반 JWT access token 제공자에는 `createOidcWorker(options)`도 사용할 수 있다.
+운영자가 issuer·API audience·HTTPS 공개키 주소를 지정한다. 지원 프로필과 캐시
+갱신 한계는 [OIDC 어댑터](./oidc.md)에 설명한다.
 
 검증된 issuer/subject로 매 조회마다 `project_grants`의 role(reader/owner)을 확인한다.
 화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이

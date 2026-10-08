@@ -10,6 +10,10 @@ Tallyfin은 Rodisoft의 여러 서비스에서 사용하는 범용 제품 이벤
 
 ## 기술 방향
 
+관리자 인증은 호스트의 검증기 포트를 유지하고 기본 OIDC JWT access token 검증은
+`packages/auth-oidc`로 분리한다. `jose ^6`은 서버용 의존성으로만 사용한다.
+실제 인증 제공자·로그인 흐름은 미정이며 [OIDC 어댑터](../backend/oidc.md)의 정책을 따른다.
+
 초기 아키텍처는 TypeScript를 기준으로 한다. 브라우저 SDK는 의존성 없이(dependency-free) 배포하며 서버 코어·D1 런타임을 번들에 넣지 않는다. 수집 엔드포인트는 Cloudflare Worker의 네이티브 fetch로 처리하고 D1은 별도 어댑터로 분리한다. 코어는 사설 ZDP나 Cloudflare 의존성을 갖지 않는 이식 가능한(portable) 형태로 유지한다. Hono, Gin, Elysia 같은 웹 프레임워크는 지금 추가하지 않는다.
 
 브라우저를 우선 구현한다. 서버 측 제품 이벤트는 일반 계약과 향후 서버 SDK 수준에서 고려하되, 서버 SDK를 지금 구현하지는 않는다. 서버 계약은 언어 중립적인 이벤트 형태로 정의해 향후 서버 SDK가 같은 스키마를 재사용할 수 있게 한다. 인프라 텔레메트리, 세션 리플레이, 과금, AI, 광고 어트리뷰션, PostHog 동등성은 범위 밖이다.
