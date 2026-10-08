@@ -1,0 +1,315 @@
+// Same-origin administration API client. The bearer token lives only in this
+// instance's private field: it is never written to storage, cookies, the query
+// string, request bodies, logs, or serialized output. Server error text is not
+// surfaced; only a fixed message plus the request id.
+
+import type {
+  EventSeriesResponse,
+  ProjectPage,
+  QueryMeta,
+  Registry,
+  SummaryResponse,
+  WorkflowResponse,
+} from './types.ts';
+import {
+  ContractError,
+  parseEventSeriesResponse,
+  parseProjectPage,
+  parseRegistry,
+  parseSummaryResponse,
+  parseWorkflowResponse,
+} from './validate.ts';
+
+export const API_BASE_PATH = '/v1';
+export const MAX_PAGE_LIMIT = 100;
+export const DEFAULT_PAGE_LIMIT = 25;
+
+export const CROSS_ORIGIN_NOTICE =
+  '이 프로토타입은 같은 출처(same-origin)에만 연결해요. 다른 출처는 이번 범위가 아니라 연결하지 않아요. ' +
+  '교차 출처 연결에는 HTTPS와 서버 측 명시적 CORS 허용이 필요하고, 로컬 개발에서만 http://localhost 예외를 둘 수 있어요.';
+
+export type ApiErrorKind =
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'invalid_request'
+  | 'storage_unavailable'
+  | 'http'
+  | 'network'
+  | 'contract';
+
+export class ApiError extends Error {
+  kind: ApiErrorKind;
+  status: number;
+  code: string | null;
+  requestId: string | null;
+  constructor(kind: ApiErrorKind, message: string, details: { status?: number; code?: string | null; requestId?: string | null } = {}) {
+    super(message);
+    this.name = 'ApiError';
+    this.kind = kind;
+    this.status = details.status ?? 0;
+    this.code = details.code ?? null;
+    this.requestId = details.requestId ?? null;
+  }
+}
+
+const KIND_MESSAGE: Record<ApiErrorKind, string> = {
+  unauthorized: '관리자 인증이 필요해요. (HTTP 401)',
+  forbidden: '이 프로젝트에 대한 권한이 없어요. (HTTP 403)',
+  not_found: '프로젝트나 스키마를 찾지 못했어요. (HTTP 404)',
+  invalid_request: '요청 범위가 계약과 맞지 않아요. (HTTP 400)',
+  storage_unavailable: '저장소를 사용할 수 없어요. (HTTP 503)',
+  http: '요청이 실패했어요.',
+  network: 'API 서버에 연결하지 못했어요.',
+  contract: 'API 응답이 계약과 맞지 않아요.',
+};
+
+const STATUS_KIND: Record<number, ApiErrorKind> = {
+  400: 'invalid_request',
+  401: 'unauthorized',
+  403: 'forbidden',
+  404: 'not_found',
+  503: 'storage_unavailable',
+};
+
+export function clampLimit(limit?: number): number {
+  if (limit === undefined || !Number.isFinite(limit)) return DEFAULT_PAGE_LIMIT;
+  return Math.min(MAX_PAGE_LIMIT, Math.max(1, Math.floor(limit)));
+}
+
+export function resolveApiEndpoint(input: string, currentOrigin: string): { basePath: string } | { error: string } {
+  const value = input.trim();
+  if (!value || value === '/' || value === API_BASE_PATH) return { basePath: API_BASE_PATH };
+  let url: URL;
+  try {
+    url = new URL(value, currentOrigin);
+  } catch {
+    return { error: '연결 주소 형식을 확인해 주세요.' };
+  }
+  if (url.username || url.password) return { error: '주소에 자격 증명(userinfo)을 넣을 수 없어요.' };
+  if (url.search || url.hash) return { error: '주소에 쿼리나 해시를 넣을 수 없어요.' };
+  if (url.origin !== currentOrigin) return { error: CROSS_ORIGIN_NOTICE };
+  if (url.pathname && url.pathname !== '/' && url.pathname !== API_BASE_PATH) {
+    return { error: `같은 출처의 ${API_BASE_PATH} 경로만 사용할 수 있어요.` };
+  }
+  return { basePath: API_BASE_PATH };
+}
+
+export type FetchOption = {
+  method?: string;
+  headers?: Record<string, string>;
+  signal?: AbortSignal;
+  credentials?: 'omit';
+  cache?: 'no-store';
+  referrerPolicy?: 'no-referrer';
+};
+
+export type FetchLike = (
+  input: string,
+  init?: FetchOption,
+) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+
+function defaultFetch(input: string, init?: FetchOption): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
+  // Invoke fetch as a property of globalThis so the receiver is the global
+  // object, not this ApiClient instance (browsers reject that with
+  // "Illegal invocation").
+  return globalThis.fetch(input, init as RequestInit) as unknown as Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+}
+
+export class ApiClient {
+  #token = '';
+  #basePath: string;
+  #fetch: FetchLike;
+  #controllers = new Set<AbortController>();
+  #destroyed = false;
+
+  constructor(options: { token?: string; basePath?: string; fetchImpl?: FetchLike } = {}) {
+    const basePath = options.basePath ?? API_BASE_PATH;
+    if (basePath !== API_BASE_PATH) {
+      throw new ApiError('invalid_request', `같은 출처의 ${API_BASE_PATH} 경로만 사용할 수 있어요.`);
+    }
+    this.#token = options.token ?? '';
+    this.#basePath = basePath;
+    this.#fetch = options.fetchImpl ?? defaultFetch;
+  }
+
+  get hasToken(): boolean {
+    return this.#token.length > 0;
+  }
+
+  toString(): string {
+    return '[ApiClient]';
+  }
+
+  toJSON(): string {
+    return '[ApiClient]';
+  }
+
+  destroy(): void {
+    this.#token = '';
+    this.#destroyed = true;
+    for (const controller of this.#controllers) controller.abort();
+    this.#controllers.clear();
+  }
+
+  async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {
+    const params = { limit: clampLimit(options.limit), cursor: options.cursor ?? undefined };
+    return this.#parse(await this.#get('/projects', params, options.signal), parseProjectPage);
+  }
+
+  async getSchema(projectId: string, schemaVersion: number, options: { signal?: AbortSignal } = {}): Promise<Registry> {
+    const version = this.#version(schemaVersion);
+    const path = `/projects/${encodeURIComponent(projectId)}/schemas/${version}`;
+    const registry = this.#parse(await this.#get(path, {}, options.signal), parseRegistry);
+    if (registry.project.id !== projectId || registry.schemaVersion !== version) {
+      throw new ApiError('contract', '응답이 요청한 프로젝트나 스키마 버전과 맞지 않아요.');
+    }
+    return registry;
+  }
+
+  async getSummary(
+    projectId: string,
+    options: { schemaVersion: number; from: string; to: string; signal?: AbortSignal },
+  ): Promise<SummaryResponse> {
+    const version = this.#version(options.schemaVersion);
+    const params = { schemaVersion: version, from: options.from, to: options.to };
+    const path = `/projects/${encodeURIComponent(projectId)}/summary`;
+    const response = this.#parse(await this.#get(path, params, options.signal), parseSummaryResponse);
+    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
+    return response;
+  }
+
+  async getEventDaily(
+    projectId: string,
+    eventName: string,
+    options: { schemaVersion: number; from: string; to: string; groupBy?: string; signal?: AbortSignal },
+  ): Promise<EventSeriesResponse> {
+    const version = this.#version(options.schemaVersion);
+    const params = {
+      schemaVersion: version,
+      from: options.from,
+      to: options.to,
+      groupBy: options.groupBy ? options.groupBy : undefined,
+    };
+    const path = `/projects/${encodeURIComponent(projectId)}/events/${encodeURIComponent(eventName)}/daily`;
+    const response = this.#parse(await this.#get(path, params, options.signal), parseEventSeriesResponse);
+    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
+    if (response.eventName !== eventName) throw new ApiError('contract', '응답 이벤트가 요청과 달라요.');
+    if ((response.groupBy ?? null) !== (options.groupBy ?? null)) {
+      throw new ApiError('contract', '응답 groupBy가 요청과 달라요.');
+    }
+    return response;
+  }
+
+  async getWorkflowDaily(
+    projectId: string,
+    workflowId: string,
+    options: { schemaVersion: number; from: string; to: string; signal?: AbortSignal },
+  ): Promise<WorkflowResponse> {
+    const version = this.#version(options.schemaVersion);
+    const params = { schemaVersion: version, from: options.from, to: options.to };
+    const path = `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/daily`;
+    const response = this.#parse(await this.#get(path, params, options.signal), parseWorkflowResponse);
+    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
+    if (response.workflowId !== workflowId) throw new ApiError('contract', '응답 작업 흐름이 요청과 달라요.');
+    return response;
+  }
+
+  #version(schemaVersion: number): number {
+    if (!Number.isInteger(schemaVersion) || schemaVersion < 1) {
+      throw new ApiError('invalid_request', '스키마 버전을 1 이상의 정수로 입력해 주세요.');
+    }
+    return schemaVersion;
+  }
+
+  #assertMeta(meta: QueryMeta, expected: { projectId: string; schemaVersion: number; from: string; to: string }): void {
+    if (
+      meta.projectId !== expected.projectId ||
+      meta.schemaVersion !== expected.schemaVersion ||
+      meta.from !== expected.from ||
+      meta.to !== expected.to
+    ) {
+      throw new ApiError('contract', '응답이 요청한 프로젝트·버전·기간과 맞지 않아요.');
+    }
+  }
+
+  #parse<T>(body: unknown, parser: (value: unknown) => T): T {
+    try {
+      return parser(body);
+    } catch (error) {
+      if (error instanceof ContractError) {
+        throw new ApiError('contract', `API 응답이 계약 형식과 달라요. (${error.message})`);
+      }
+      throw error;
+    }
+  }
+
+  async #get(
+    path: string,
+    params: Record<string, string | number | undefined> = {},
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    if (this.#destroyed) throw new ApiError('network', KIND_MESSAGE.network);
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined) query.set(key, String(value));
+    }
+    const suffix = query.size > 0 ? `?${query.toString()}` : '';
+    const url = `${this.#basePath}${path}${suffix}`;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (this.#token) headers.Authorization = `Bearer ${this.#token}`;
+    const controller = new AbortController();
+    const forward = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener('abort', forward, { once: true });
+    }
+    this.#controllers.add(controller);
+    try {
+      let response: { ok: boolean; status: number; json: () => Promise<unknown> };
+      try {
+        response = await this.#fetch(url, {
+          method: 'GET',
+          headers,
+          signal: controller.signal,
+          credentials: 'omit',
+          cache: 'no-store',
+          referrerPolicy: 'no-referrer',
+        });
+      } catch (error) {
+        if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
+        throw new ApiError('network', KIND_MESSAGE.network);
+      }
+      if (!response.ok) throw await this.#toApiError(response);
+      try {
+        return await response.json();
+      } catch (error) {
+        if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
+        throw new ApiError('contract', 'API 응답을 JSON으로 읽지 못했어요.');
+      }
+    } finally {
+      // Keep the controller registered until the body is read so destroy()
+      // can abort an in-flight body stream too.
+      this.#controllers.delete(controller);
+      signal?.removeEventListener('abort', forward);
+    }
+  }
+
+  async #toApiError(response: { status: number; json: () => Promise<unknown> }): Promise<ApiError> {
+    let code: string | null = null;
+    let requestId: string | null = null;
+    try {
+      const body = (await response.json()) as { error?: { code?: unknown; requestId?: unknown } } | null;
+      const detail = body?.error;
+      if (detail && typeof detail === 'object') {
+        if (typeof detail.code === 'string' && detail.code.length <= 64) code = detail.code;
+        if (typeof detail.requestId === 'string' && detail.requestId.length <= 64) requestId = detail.requestId;
+      }
+    } catch {
+      // Body is not JSON; keep the fixed status-based message.
+    }
+    const kind = STATUS_KIND[response.status] ?? 'http';
+    const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
+    return new ApiError(kind, message, { status: response.status, code, requestId });
+  }
+}

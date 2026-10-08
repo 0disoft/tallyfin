@@ -1,0 +1,348 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
+import { Trend } from './Dashboard';
+import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
+import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
+import { missingBrowserEvents } from './api/coverage';
+import { appendPage, shouldApplyPage } from './api/pagination';
+import { periodRange, rangeLabel, todayInZone } from './api/dates';
+import type { EventDefinition, EventSeriesResponse, Project, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse } from './api/types';
+
+type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
+type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
+type MainData = { registry: Registry; summary: SummaryResponse; workflows: WorkflowLoad[]; range: { from: string; to: string } };
+type EventRow = { definition: EventDefinition; source: 'browser' | 'server' | null; count: number | null };
+type ActiveProject = { name: string; timeZone: string };
+
+const MAX_SCHEMA_VERSION = 2147483647;
+
+function toApiError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  if (error instanceof Error) return new ApiError('contract', error.message);
+  return new ApiError('network', '알 수 없는 오류가 발생했어요.');
+}
+
+function describeError(error: ApiError): { title: string; detail: string } {
+  switch (error.kind) {
+    case 'unauthorized':
+      return { title: '인증이 필요해요', detail: '관리자 bearer 토큰을 넣고 연결해 주세요. 검증기가 없으면 API는 401을 돌려줘요.' };
+    case 'forbidden':
+      return { title: '이 프로젝트를 볼 권한이 없어요', detail: '서버에서 이 프로젝트에 대한 관리자 grant를 확인해 주세요.' };
+    case 'not_found':
+      return { title: '프로젝트나 스키마 버전을 찾지 못했어요', detail: '프로젝트 ID와 스키마 버전을 확인해 주세요.' };
+    case 'invalid_request':
+      return { title: '요청 범위가 계약과 맞지 않아요', detail: '스키마 버전과 기간(최대 31일)을 확인해 주세요.' };
+    case 'storage_unavailable':
+      return { title: '저장소를 사용할 수 없어요', detail: '서버가 0으로 채운 응답을 주지 않아요. 잠시 후 다시 시도해 주세요.' };
+    case 'contract':
+      return { title: '응답이 계약과 맞지 않아요', detail: '값을 임의로 0으로 채우지 않고 그대로 멈췄어요. 응답을 확인해 주세요.' };
+    case 'network':
+      return { title: 'API 서버에 연결하지 못했어요', detail: `같은 출처 ${API_BASE_PATH} 경로가 열려 있는지 확인해 주세요.` };
+    default:
+      return { title: '요청이 실패했어요', detail: `HTTP ${error.status} 응답이에요.` };
+  }
+}
+
+function ErrorPanel({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
+  const { title, detail } = describeError(error);
+  return <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>{title}</h2><p>{detail}</p><div className="state-actions"><button className="secondary-button" type="button" onClick={onRetry}>다시 시도</button></div>{error.requestId && <p className="context-note">requestId: {error.requestId}</p>}</section>;
+}
+
+function workflowRecords(load: WorkflowLoad): DailyRecord[] {
+  const { definition, response } = load;
+  return response.days.map(day => ({
+    date: day.date,
+    events: {
+      [definition.startEvent]: day.startedAttempts,
+      [definition.successEvent]: day.succeededAttempts,
+    },
+  }));
+}
+
+export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate }: { view: View; period: Period; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void }) {
+  const currentOrigin = useMemo(() => window.location.origin, []);
+  const [session, setSession] = useState<{ token: string; basePath: string } | null>(null);
+  const [token, setToken] = useState('');
+  const [endpoint, setEndpoint] = useState('');
+  const [endpointError, setEndpointError] = useState<string | null>(null);
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [versionInput, setVersionInput] = useState('1');
+  const [groupBy, setGroupBy] = useState('');
+  const [query, setQuery] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const [more, setMore] = useState(false);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [main, setMain] = useState<Load<MainData>>({ status: 'idle' });
+  const [series, setSeries] = useState<Load<EventSeriesResponse>>({ status: 'idle' });
+
+  const client = useMemo(() => (session ? new ApiClient({ token: session.token, basePath: session.basePath }) : null), [session]);
+  const sessionRef = useRef(0);
+  const clientRef = useRef<ApiClient | null>(null);
+  const moreControllerRef = useRef<AbortController | null>(null);
+  clientRef.current = client;
+
+  const versionText = versionInput.trim();
+  const version = /^[0-9]+$/.test(versionText) ? Number(versionText) : Number.NaN;
+  const validVersion = Number.isInteger(version) && version >= 1 && version <= MAX_SCHEMA_VERSION;
+  const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
+  const activeProjectId = activeProject?.id ?? null;
+  const activeTimeZone = activeProject?.timeZone ?? null;
+  const retry = useCallback(() => setRefreshTick(tick => tick + 1), []);
+
+  function connect() {
+    const resolved = resolveApiEndpoint(endpoint, currentOrigin);
+    if ('error' in resolved) { setEndpointError(resolved.error); return; }
+    sessionRef.current += 1;
+    setEndpointError(null);
+    setProjects({ status: 'idle' });
+    setNextCursor(null);
+    setMain({ status: 'idle' });
+    setSeries({ status: 'idle' });
+    setProjectId(null);
+    setSelectedEvent(null);
+    setSession({ token, basePath: resolved.basePath });
+  }
+  function disconnect() {
+    sessionRef.current += 1;
+    moreControllerRef.current?.abort();
+    moreControllerRef.current = null;
+    setMore(false);
+    client?.destroy();
+    setSession(null);
+    setToken('');
+    setProjects({ status: 'idle' });
+    setNextCursor(null);
+    setMain({ status: 'idle' });
+    setSeries({ status: 'idle' });
+    setProjectId(null);
+    setSelectedEvent(null);
+    setGroupBy('');
+    setQuery('');
+    setPageError(null);
+    setEndpointError(null);
+    setRefreshTick(0);
+  }
+
+  useEffect(() => () => { clientRef.current?.destroy(); }, []);
+
+  useEffect(() => {
+    if (!client) return;
+    const controller = new AbortController();
+    setProjects({ status: 'loading' });
+    setPageError(null);
+    client.listProjects({ limit: DEFAULT_PAGE_LIMIT, signal: controller.signal })
+      .then(page => {
+        if (controller.signal.aborted) return;
+        setProjects({ status: 'ready', data: page.data });
+        setNextCursor(page.page.nextCursor);
+      })
+      .catch(error => {
+        if (controller.signal.aborted) return;
+        setProjects({ status: 'error', error: toApiError(error) });
+      });
+    return () => controller.abort();
+  }, [client, refreshTick]);
+
+  useEffect(() => {
+    if (projects.status !== 'ready' || !projects.data) return;
+    if (projectId && projects.data.some(item => item.id === projectId)) return;
+    setProjectId(projects.data[0]?.id ?? null);
+  }, [projects, projectId]);
+
+  useEffect(() => {
+    onActiveProjectChange(activeProject ? { name: activeProject.name, timeZone: activeProject.timeZone } : null);
+  }, [activeProject, onActiveProjectChange]);
+
+  useEffect(() => {
+    if (!client || !activeProjectId || !activeTimeZone || !validVersion) { setMain({ status: 'idle' }); return; }
+    const controller = new AbortController();
+    setMain({ status: 'loading' });
+    const range = periodRange(todayInZone(activeTimeZone), period);
+    (async () => {
+      try {
+        const registry = await client.getSchema(activeProjectId, version, { signal: controller.signal });
+        const summary = await client.getSummary(activeProjectId, { schemaVersion: version, from: range.from, to: range.to, signal: controller.signal });
+        const missing = missingBrowserEvents(registry, summary);
+        if (missing.length > 0) {
+          throw new ApiError('contract', `집계 응답에 등록된 브라우저 이벤트가 빠져 있어요: ${missing.join(', ')}`);
+        }
+        const workflows = await Promise.all(registry.workflows.map(async definition => ({
+          definition,
+          response: await client.getWorkflowDaily(activeProjectId, definition.id, { schemaVersion: version, from: range.from, to: range.to, signal: controller.signal }),
+        })));
+        if (controller.signal.aborted) return;
+        setMain({ status: 'ready', data: { registry, summary, workflows, range } });
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        setMain({ status: 'error', error: toApiError(error) });
+      }
+    })();
+    return () => controller.abort();
+  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick]);
+
+  useEffect(() => {
+    if (!client || !activeProjectId || !activeTimeZone || !validVersion || !selectedEvent) { setSeries({ status: 'idle' }); return; }
+    const controller = new AbortController();
+    setSeries({ status: 'loading' });
+    const range = periodRange(todayInZone(activeTimeZone), period);
+    client.getEventDaily(activeProjectId, selectedEvent, { schemaVersion: version, from: range.from, to: range.to, groupBy: groupBy.trim() || undefined, signal: controller.signal })
+      .then(next => { if (!controller.signal.aborted) setSeries({ status: 'ready', data: next }); })
+      .catch(error => { if (!controller.signal.aborted) setSeries({ status: 'error', error: toApiError(error) }); });
+    return () => controller.abort();
+  }, [client, activeProjectId, activeTimeZone, selectedEvent, groupBy, version, validVersion, period, refreshTick]);
+
+  async function loadMore() {
+    if (!client || !nextCursor || more) return;
+    const generation = sessionRef.current;
+    const controller = new AbortController();
+    moreControllerRef.current?.abort();
+    moreControllerRef.current = controller;
+    setMore(true);
+    setPageError(null);
+    try {
+      const page = await client.listProjects({ limit: DEFAULT_PAGE_LIMIT, cursor: nextCursor, signal: controller.signal });
+      if (!shouldApplyPage({ generation, current: sessionRef.current, aborted: controller.signal.aborted })) return;
+      setProjects(previous => previous.status === 'ready' && previous.data
+        ? { status: 'ready', data: appendPage(previous.data, page).items }
+        : { status: 'ready', data: page.data });
+      setNextCursor(page.page.nextCursor);
+    } catch (error) {
+      if (generation !== sessionRef.current || controller.signal.aborted) return;
+      setPageError(toApiError(error).message);
+    } finally {
+      if (moreControllerRef.current === controller) moreControllerRef.current = null;
+      if (generation === sessionRef.current) setMore(false);
+    }
+  }
+
+  if (!client) {
+    return <section className="settings-section">
+      <h2>API 연결</h2>
+      <p className="context-note">이 프로토타입은 같은 출처(same-origin)의 관리자 API만 조회해요. 기본 엔드포인트는 현재 출처의 {API_BASE_PATH}예요. 다른 출처는 이번 범위가 아니라 연결하지 않아요.</p>
+      <form className="settings-form" onSubmit={event => { event.preventDefault(); connect(); }}>
+        <label className="field-label" htmlFor="api-endpoint">엔드포인트</label>
+        <input id="api-endpoint" className="text-input" value={endpoint} placeholder={`${currentOrigin}${API_BASE_PATH}`} onChange={event => { setEndpoint(event.target.value); setEndpointError(null); }} />
+        <label className="field-label" htmlFor="api-token">관리자 bearer 토큰</label>
+        <input id="api-token" className="text-input" type="password" autoComplete="off" value={token} placeholder="토큰은 이 탭 메모리에만 보관" onChange={event => setToken(event.target.value)} />
+        <p className="context-note">토큰은 메모리에만 두고 localStorage·sessionStorage·쿠키·쿼리·로그에 저장하지 않아요. 새로고침하면 사라져요.</p>
+        {endpointError && <p className="form-error" role="alert">{endpointError}</p>}
+        <div className="form-actions"><button className="primary-button" type="submit"><PlugsConnected size={22} weight="fill" />연결</button></div>
+      </form>
+    </section>;
+  }
+
+  const data = main.status === 'ready' ? main.data ?? null : null;
+  const range = data?.range ?? null;
+  const registry = data?.registry ?? null;
+  const primary = data?.workflows[0] ?? null;
+  const startDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.startEvent) ?? null : null;
+  const successDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.successEvent) ?? null : null;
+  const summaryCounts = new Map((data?.summary.events ?? []).map(item => [item.name, item.count]));
+  const registeredEvents: EventRow[] = registry ? registry.events.map(definition => ({
+    definition,
+    source: definition.source,
+    count: definition.source === 'browser' ? summaryCounts.get(definition.name) ?? null : null,
+  })) : [];
+  const unknownEvents: EventRow[] = data && registry
+    ? data.summary.events.filter(item => !registry.events.some(definition => definition.name === item.name))
+      .map(item => ({ definition: { name: item.name, label: '등록에 없음', source: 'browser', properties: {} }, source: null, count: item.count }))
+    : [];
+  const eventRows = [...registeredEvents, ...unknownEvents];
+  const browserCount = registeredEvents.filter(row => row.definition.source === 'browser').length;
+  const serverCount = registeredEvents.filter(row => row.definition.source === 'server').length;
+  const filteredEvents = eventRows.filter(item => `${item.definition.name} ${item.definition.label}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const seriesData = series.status === 'ready' ? series.data ?? null : null;
+  const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
+  const startLabel = startDefinition?.label ?? '시작 시도';
+  const successLabel = successDefinition?.label ?? '성공 시도';
+
+  function countCell(row: EventRow) {
+    if (row.count !== null) return formatCount(row.count);
+    return row.definition.source === 'server' ? '수집 미지원' : '—';
+  }
+
+  return <>
+    <div className="toolbar api-toolbar">
+      <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => { setProjectId(event.target.value || null); setSelectedEvent(null); }} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
+      <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => setVersionInput(event.target.value)} /></label>
+      <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
+      {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
+      <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
+    </div>
+    <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
+    {pageError && <p className="form-error" role="alert">{pageError}</p>}
+    {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
+    {projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>서버가 이 토큰에 부여한 프로젝트 grant가 없어요. 다른 토큰으로 연결해 주세요.</p></section>}
+    {!validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
+    {validVersion && main.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
+    {validVersion && main.status === 'error' && main.error && <ErrorPanel error={main.error} onRetry={retry} />}
+    {validVersion && data && registry && <>
+      {view === 'overview' && <>
+        <section className="metric-grid" aria-label="주요 지표">
+          {([
+            ['수집 이벤트', formatCount(data.summary.totalEvents)],
+            [startLabel, primary ? formatCount(primary.response.summary.startedAttempts) : '—'],
+            [successLabel, primary ? formatCount(primary.response.summary.succeededAttempts) : '—'],
+            ['완료율', primary ? formatRate(primary.response.summary.completionRate) : '—'],
+          ] as const).map(([label, value], index) => <div className="metric" key={label}><div className="metric-label">{label}</div><div className="metric-value">{value}</div>{index === 3 && primary && <div className="metric-detail">{formatCount(primary.response.summary.succeededAttempts)} / {formatCount(primary.response.summary.startedAttempts)}</div>}</div>)}
+        </section>
+        {data.summary.totalEvents === 0 && <p className="notice" role="status">선택한 기간에 수신된 이벤트가 없어요. 완료율을 계산할 수 없어요.</p>}
+        {primary ? <section className="trend-section"><div className="section-header"><h2>{primary.definition.label} 일별 시작 시도</h2>{onNavigate && <button type="button" className="primary-button" onClick={() => onNavigate('events')}><ChartBar size={22} weight="fill" />이벤트 분석으로 이동</button>}</div><div className="legend"><Circle size={12} weight="fill" color="#155EEF" />시작 시도</div><Trend records={workflowRecords(primary)} event={primary.definition.startEvent} /></section>
+          : <section className="table-section"><h2>작업 흐름 없음</h2><p className="context-note">등록된 작업 흐름이 없어 완료율을 계산할 수 없어요.</p></section>}
+        <section className="table-section"><h2>등록 이벤트 집계</h2><p className="context-note">브라우저 이벤트 {browserCount}개 · 서버 이벤트 {serverCount}개. 서버 이벤트는 이 계약에 집계 경로가 없어 값을 표시하지 않아요.</p><div className="table-scroll" tabIndex={0} aria-label="등록 이벤트 집계"><table className="event-table"><caption className="sr-only">등록된 이벤트별 수신 건수(관찰된 값)</caption><thead><tr><th scope="col">이벤트</th><th scope="col">발행 출처</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{eventRows.map(row => <tr key={row.definition.name}><th scope="row" className="event-name">{row.definition.name}<div className="event-label">{row.definition.label}</div></th><td>{row.source ?? '—'}</td><td className="number-cell">{countCell(row)}</td></tr>)}</tbody></table></div></section>
+      </>}
+      {view === 'events' && <>
+        <div className="toolbar">
+          <label className="search-control"><MagnifyingGlass size={20} /><span className="sr-only">이벤트 검색</span><input type="search" placeholder="이벤트 이름 검색" value={query} onChange={event => setQuery(event.target.value)} /></label>
+          <label className="api-field"><span>groupBy (선택)</span><input className="text-input" aria-label="groupBy 속성" value={groupBy} placeholder="등록 속성 이름" onChange={event => setGroupBy(event.target.value)} /></label>
+          <span className="context-note">스키마 v{registry.schemaVersion} · 브라우저 {browserCount}개 · {registry.schemaStatus === 'retired' ? '사용 중지(retired)' : '운영 중(active)'}</span>
+        </div>
+        <div className="table-scroll" tabIndex={0} aria-label="등록 이벤트 표"><table className="event-table"><caption className="sr-only">선택 기간의 등록 이벤트 수신 건수</caption><thead><tr><th scope="col">이벤트</th><th scope="col">발행 출처</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{filteredEvents.map(row => <tr key={row.definition.name}><th scope="row">{row.definition.source === 'browser' ? <button className="text-button event-name" type="button" aria-pressed={selectedEvent === row.definition.name} onClick={() => setSelectedEvent(row.definition.name)}>{row.definition.name}<ArrowRight size={16} /></button> : <span className="event-name">{row.definition.name}</span>}<div className="event-label">{row.definition.label}</div></th><td>{row.source ?? '—'}</td><td className="number-cell">{countCell(row)}</td></tr>)}</tbody><tfoot><tr><th scope="row" colSpan={2}>표시된 브라우저 이벤트 합계</th><td className="number-cell">{formatCount(filteredEvents.reduce((total, row) => total + (row.count ?? 0), 0))}</td></tr></tfoot></table></div>
+        {filteredEvents.length === 0 && <div className="state-panel" role="status"><h2>검색 결과가 없어요</h2><button className="secondary-button" type="button" onClick={() => setQuery('')}>검색 초기화</button></div>}
+        {selectedEvent && <section className="event-detail">
+          <div className="section-header"><h2>{selectedEvent} 일별 건수</h2><button className="text-button" type="button" onClick={() => setSelectedEvent(null)}>상세 닫기</button></div>
+          <p className="context-note">{groupBy.trim() ? `groupBy: ${groupBy.trim()}` : 'groupBy 없음 · 일별 총계만 조회해요'}</p>
+          {series.status === 'loading' && <p className="context-note" role="status">일별 시계열을 조회하는 중이에요.</p>}
+          {series.status === 'error' && series.error && <ErrorPanel error={series.error} onRetry={retry} />}
+          {seriesData && <><Trend records={seriesRecords} event={seriesData.eventName} />
+            {groupBy.trim() && <div className="table-scroll series-breakdown" tabIndex={0} aria-label="속성 버킷 표"><table className="event-table"><caption className="sr-only">일별 속성 버킷</caption><thead><tr><th scope="col">날짜</th><th scope="col">속성 값</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{seriesData.days.flatMap(day => day.breakdown.map((bucket, index) => <tr key={`${day.date}-${index}`}><th scope="row">{day.date}</th><td>{bucket.value === null ? '(없음)' : String(bucket.value)}</td><td className="number-cell">{formatCount(bucket.count)}</td></tr>))}</tbody></table></div>}
+          </>}
+        </section>}
+      </>}
+      {view === 'goals' && (data.workflows.length === 0
+        ? <section className="state-panel" role="status"><h2>등록된 작업 흐름이 없어요</h2><p>이 스키마에는 완료율을 계산할 작업 흐름 정의가 없어요.</p></section>
+        : data.workflows.map(load => <section className="goal-section" key={load.definition.id}>
+          <div className="goal-header"><div><h2>{load.definition.label}</h2><p className="context-note">시작일 기준 코호트({load.response.cohortBasis}) · 정의 v{registry.schemaVersion}</p></div><div className="goal-ratio"><strong>{formatRate(load.response.summary.completionRate)}</strong><span>{formatCount(load.response.summary.succeededAttempts)} / {formatCount(load.response.summary.startedAttempts)}</span></div></div>
+          {load.response.summary.completionRate !== null && <progress className="goal-track" max={100} value={load.response.summary.completionRate} aria-label={`${load.definition.label} 완료율`} />}
+          <dl className="definition-list">
+            <div><dt>시작</dt><dd>{load.definition.startEvent}<span>{formatCount(load.response.summary.startedAttempts)}건</span></dd></div>
+            <div><dt>성공</dt><dd>{load.definition.successEvent}<span>{formatCount(load.response.summary.succeededAttempts)}건</span></dd></div>
+            <div><dt>실패</dt><dd>{load.definition.failureEvent ?? '등록 안 됨'}<span>{load.response.summary.failedAttempts === null ? '—' : `${formatCount(load.response.summary.failedAttempts)}건`}</span></dd></div>
+            <div><dt>대기</dt><dd>pending<span>{formatCount(load.response.summary.pendingAttempts)}건</span></dd></div>
+          </dl>
+          <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
+        </section>))}
+      {view === 'settings' && <section className="settings-section">
+        <h2>API 연결 정보 (읽기 전용)</h2>
+        <p className="context-note">API 모드에서는 프로젝트 이름을 저장하지 않아요. 여기 값은 서버가 준 정의예요.</p>
+        <dl className="definition-list">
+          <div><dt>엔드포인트</dt><dd>{currentOrigin}{session?.basePath ?? API_BASE_PATH}</dd></div>
+          <div><dt>프로젝트</dt><dd>{registry.project.id}<span>{registry.project.name} · {registry.project.status}</span></dd></div>
+          <div><dt>스키마</dt><dd>v{registry.schemaVersion}<span>{registry.schemaStatus === 'retired' ? '사용 중지(retired)' : '운영 중(active)'}</span></dd></div>
+          <div><dt>시간대</dt><dd>{registry.project.timeZone}</dd></div>
+          <div><dt>허용 출처</dt><dd>{registry.allowedOrigins.join(', ')}</dd></div>
+          <div><dt>수집 한도</dt><dd>분당 {formatCount(registry.limits.requestsPerMinute)}회<span>UTC 하루 신규 {formatCount(registry.limits.newReceiptsPerUtcDay)}건</span></dd></div>
+        </dl>
+        <p className="context-note">교차 출처는 이번 범위가 아니라 연결하지 않아요. 교차 출처 연결에는 HTTPS와 서버 측 명시적 CORS 허용이 필요하고, 로컬 개발에서만 http://localhost 예외를 둘 수 있어요.</p>
+        <div className="form-actions"><button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button></div>
+        <h3>등록 이벤트 정의</h3>
+        <div className="table-scroll" tabIndex={0} aria-label="등록 정의 표"><table className="event-table"><thead><tr><th scope="col">이벤트</th><th scope="col">출처</th><th scope="col">허용 속성</th></tr></thead><tbody>{registry.events.map(definition => <tr key={definition.name}><th scope="row" className="event-name">{definition.name}<div className="event-label">{definition.label}</div></th><td>{definition.source}</td><td>{Object.keys(definition.properties).join(', ') || '—'}</td></tr>)}</tbody></table></div>
+        <h3>작업 흐름 정의</h3>
+        <div className="table-scroll" tabIndex={0} aria-label="작업 흐름 정의 표"><table className="event-table"><thead><tr><th scope="col">흐름</th><th scope="col">시작</th><th scope="col">성공</th><th scope="col">실패</th></tr></thead><tbody>{registry.workflows.length === 0 ? <tr><th scope="row">—</th><td>—</td><td>—</td><td>—</td></tr> : registry.workflows.map(definition => <tr key={definition.id}><th scope="row" className="event-name">{definition.id}<div className="event-label">{definition.label}</div></th><td>{definition.startEvent}</td><td>{definition.successEvent}</td><td>{definition.failureEvent ?? '—'}</td></tr>)}</tbody></table></div>
+      </section>}
+    </>}
+  </>;
+}

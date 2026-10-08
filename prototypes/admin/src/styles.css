@@ -991,6 +991,16 @@ button {
 .diagnostics { margin-top:12px; }
 .diagnostics label { display:block; margin:12px 0 6px; }
 .diagnostics select { padding:8px; border:1px solid #d4ddeb; border-radius:6px; background:#fff; }
+
+.mode-switch { display:inline-flex; align-items:stretch; border:1px solid #d4ddeb; border-radius:6px; overflow:hidden; background:#fff; }
+.mode-switch button { border:0; background:transparent; padding:0 14px; min-height:44px; font-size:15px; font-weight:600; color:#64748b; }
+.mode-switch button.active { background:#155eef; color:#fff; }
+.api-toolbar { align-items:flex-end; margin-bottom:10px; }
+.api-field { display:flex; flex-direction:column; gap:6px; font-size:15px; font-weight:600; color:#475569; }
+.api-field select { border:0; appearance:none; background:transparent; min-width:170px; padding:8px 0; font-weight:600; }
+.api-field .text-input { min-height:44px; }
+.sidebar-note { margin:10px 12px 0; }
+.series-breakdown { margin-top:12px; }
 @media(max-width:800px) {
  .title-group h1 { font-size:32px; }
  .header-controls { width:100%; }

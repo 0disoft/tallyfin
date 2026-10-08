@@ -61,3 +61,13 @@ Post-fix captures were reopened in full-view and focused comparison. No actionab
 - [x] Projects, periods, search, sorting, settings and sample states exercised.
 - [x] Responsive widths and browser console checked.
 - [x] Evidence and production limitations recorded.
+
+## API 연결 모드 추가분 (2026-10-08)
+
+- `src/api/*`(client·validate·dates·coverage·pagination)와 `src/LiveDashboard.tsx`가 실 API 조회를 맡고 기존 시각 시안과 레이아웃은 유지한다. 헤더의 `Sample`/`API 연결` 전환으로 나눈다.
+- 같은 출처만 허용하고(userinfo·쿼리·해시 거부) `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`로 요청한다. 기본 fetch는 globalThis 컨텍스트로 호출한다.
+- 토큰은 탭 메모리와 클라이언트 사설 필드에만 두고 서버 오류 문구는 반사하지 않는다(고정 안내 + requestId). `연결 끊기`는 토큰을 지우고 헤더 및 본문을 읽는 중인 요청을 중단한다.
+- 계약 타입/최소 런타임 검증과 meta·이벤트·작업 흐름 ID 대조로 다른 프로젝트·버전·기간 응답을 거부하고, 값이 없으면 0으로 채우지 않는다.
+- 로컬 검증: 타입체크, 샘플 모델·API 클라이언트 테스트 19/19, 프로덕션 빌드, Sites 패키징 테스트 4/4 통과. JS 번들 약 653kB(압축 전)의 크기 경고는 남아 있다.
+- `http://127.0.0.1:5187/`에서 로컬 Miniflare D1의 관리자 조회 API(5188)를 프록시해 수집 3건·시작 1건·성공 1건·완료율 100%, 이벤트 일별 집계·속성 버킷, 목표·읽기 전용 설정을 확인했다. 증명: `.tmp/admin-api-d1-local-20261008.jpg`.
+- 잘못된/빈 스키마 버전, 존재하지 않는 버전의 404, 토큰 없는 401, 연결 해제 후 초기화·재연결을 확인했다. 실제 인증 제공자와 서명 검증은 연결하지 않았고 검증기 포트만 모킹했다. 403·503은 클라이언트/관리자 테스트에서만 검증했다.
