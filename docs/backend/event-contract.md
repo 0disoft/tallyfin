@@ -1,10 +1,11 @@
 # 이벤트·집계 계약 v0.1
 
 2026-10-08에 v0.1 설계 계약을 확정했다. 코어 검증과 D1 저장 어댑터, 최소 브라우저
-수집기를 로컬에서 구현·검증했고 관리자 조회·서버 수집·운영 배포는 아직 없다.
-원격에 적용한 마이그레이션과 운영 데이터도 없다. 구현 상태는
-[수집기 구현](./collector.md)에 정리한다. 형태는 [OpenAPI](../../api/openapi.yaml)·
-[DBML](../../db/schema.dbml), 결정은
+수집기, 관리자 GET 조회(검증기 포트 포함)를 로컬에서 구현·검증했고 서버 수집·운영
+배포는 아직 없다. 실제 인증 제공자와 grant provisioning도 후속이다. 원격에 적용한
+마이그레이션과 운영 데이터도 없다. 구현 상태는 [수집기 구현](./collector.md)과
+[관리자 조회 경계](./administrator.md)에 정리한다. 형태는
+[OpenAPI](../../api/openapi.yaml)·[DBML](../../db/schema.dbml), 결정은
 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)를 따른다.
 
 일반 이벤트는 각 단계의 발생일에 세고, 완료율은 시작이 실제 수신된 시도 중 성공한
@@ -125,6 +126,7 @@ project_grants를 확인한다. 단순 JWT decode와 화면의 프로젝트 선�
 목록은 접근 가능한 프로젝트만 ID 오름차순으로 반환하며 cursor를 매번 검사한다.
 인증 제공자·토큰 발급은 후속 구현이며 설정 없이는 관리자 API를 열지 않는다.
 reader/owner는 조회 가능하고 owner만 별도 provisioning을 수행한다.
+관리자 GET 조회와 grant 조건 검사는 로컬에서 구현·검증했다.
 
 조회는 정확한 schemaVersion, 프로젝트-local from/to, 보존 90일 안에서 최대 31일,
 from <= to <= 오늘을 요구한다. browser 한 출처/한 버전만 집계한다. 이벤트 표는

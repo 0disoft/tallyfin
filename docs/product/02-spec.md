@@ -1,12 +1,12 @@
 # Tallyfin 제품 스펙
 
-상태: 초기 설계 기준 문서. 아래 기능은 운영 활성화 전 계획이며, 코어 검증·D1 저장 어댑터·최소 브라우저 수집기·브라우저 SDK는 로컬에서 구현·검증했다. 구현/배포 상태는 [수집기 구현](../backend/collector.md)과 [브라우저 SDK](../backend/browser-sdk.md)에 정리한다.
+상태: 초기 설계 기준 문서. 아래 기능은 운영 활성화 전 계획이며, 코어 검증·D1 저장 어댑터·최소 브라우저 수집기·브라우저 SDK·관리자 조회 API는 로컬에서 구현·검증했다. 구현/배포 상태는 [수집기 구현](../backend/collector.md)·[관리자 조회 경계](../backend/administrator.md)·[브라우저 SDK](../backend/browser-sdk.md)에 정리한다.
 
 ## 범위와 방향
 
 Tallyfin은 Rodisoft의 여러 서비스에서 사용하는 범용 제품 이벤트 분석 플랫폼이다. Sembom은 첫 적용 사례이며, 프로젝트별 설정으로 회원가입·파일 변환·구매·계산 같은 서로 다른 행동을 분석한다.
 
-전송·조회 API와 논리 DB 계약은 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)와 [전송·집계 계약](../backend/event-contract.md)에 확정했다. 코어 검증·D1 저장 어댑터·최소 브라우저 수집기·브라우저 SDK는 로컬에서 구현·검증했고, 조회 API·운영 인증·운영 배포는 아직 없다. 도메인, 운영 인증 제공자, 라이선스와 악용 방지용 IP 정책은 미정이다(UNDECIDED).
+전송·조회 API와 논리 DB 계약은 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)와 [전송·집계 계약](../backend/event-contract.md)에 확정했다. 코어 검증·D1 저장 어댑터·최소 브라우저 수집기·브라우저 SDK·관리자 조회 API는 로컬에서 구현·검증했고, 실제 인증 제공자·운영 배포는 아직 없다. 도메인, 운영 인증 제공자, 라이선스와 악용 방지용 IP 정책은 미정이다(UNDECIDED).
 
 ## 기술 방향
 

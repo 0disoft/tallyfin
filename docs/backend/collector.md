@@ -3,15 +3,16 @@
 상태: 최소 브라우저 수집기를 구현했고 로컬 Miniflare HTTP 테스트로 확인한다. 워커는
 네이티브 fetch 경계이며 `packages/core`(검증·정규화·해시)와 `packages/storage-d1`
 (D1 원자 저장)을 호출한다. 브라우저 SDK(`packages/browser`)는 별도로 로컬 구현·검증했고
-[브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 조회/인증·원격 DB 적용·운영
-배포는 아직 없다. 이 문서는 계약을 수집 경계에 어떻게 적용했는지와 구현/배포 상태만
-기록한다.
+[브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 GET 조회는 검증기 포트와 함께 로컬에서 구현·검증했고, 실제
+인증 제공자 설정·원격 DB 적용·운영 배포는 아직 없다. 이 문서는 계약을 수집 경계에
+어떻게 적용했는지와 구현/배포 상태만 기록한다.
 
 동작 의미는 [이벤트·집계 계약](./event-contract.md), 요청/응답 형태는
 [OpenAPI](../../api/openapi.yaml), 본문 정책은 [HTTP API 정책](./04-http-api-policy.md),
 오류·로그는 [오류 응답](./05-error-response.md)과
-[로그 경계](./06-logging-and-observability.md)를 따른다. 실행 명령과 현재 검증
-상태는 [VALIDATION.md](../../VALIDATION.md)에 있다.
+[로그 경계](./06-logging-and-observability.md)를 따른다. 관리자 조회 경로와 검증기
+포트는 [관리자 조회 경계](./administrator.md)에 있다. 실행 명령과 현재 검증 상태는
+[VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 경계와 라우트
 
@@ -22,8 +23,11 @@
 의존하지 않는다.
 
 - `POST /v1/projects/{projectId}/batches` — 공개 수집, 관리자 자격증명 없음.
-- 그 밖의 `/v1/projects`와 `/v1/projects/...` 경로는 인증 전까지 `unauthorized`(401)로
-  닫는다. 그 밖의 경로는 `not_found`(404)이다.
+- 관리자 GET 조회는 `/v1/projects`,
+  `/v1/projects/{projectId}/schemas/{schemaVersion}`, `.../summary`,
+  `.../events/{eventName}/daily`, `.../workflows/{workflowId}/daily`다. 검증기를
+  연결하지 않은 기본 export는 401로 닫고, GET이 아니면 405(Allow: GET)다.
+- 그 밖의 경로는 `not_found`(404)이다.
 
 `projectId`는 정규식 `^[a-z][a-z0-9-]{0,47}$`를 통과해야 한다. 등록되지 않은
 프로젝트는 `not_found`(404), paused 프로젝트는 `project_unavailable`(403)이다.
@@ -63,7 +67,8 @@ SQL·토큰·IP·Origin·전체 URL은 메시지나 로그에 남기지 않는�
 - 503에는 `Retry-After: 1`을 보낸다.
 - 429의 `Retry-After`는 최대 86400초(다음 UTC 자정)다. [OpenAPI](../../api/openapi.yaml)도
   같은 상한을 쓴다.
-- 관리자 라우트는 검증기를 설정하기 전까지 401로 닫고 열지 않는다.
+- 관리자 라우트는 호스트가 검증기를 연결하지 않으면 401로 닫는다(기본 export 상태).
+  연결 뒤에도 GET 조회만 지원하고 그 밖의 메서드는 405다.
 
 ## 중복·원자성 (저장 어댑터)
 
@@ -118,10 +123,13 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 ## 구현·배포 상태
 
 - 구현·로컬 검증: `packages/core`(등록·배치·시간·해시), `packages/storage-d1`(D1 원자
-  커밋·CAS·할당량·정리), `apps/collector`(네이티브 fetch 최소 browser 수집과 HTTP
-  경계), `packages/browser`(브라우저 SDK)와 `examples/sembom` 예제, 초기 빈 DB용 SQL
-  `0001_initial.sql`(로컬 Miniflare 전용).
-- 아직 없음: 관리자 조회 API와 실제 인증·권한, 서버 발행 수집, 관리자
+  커밋·CAS·할당량·정리와 grant 조건 조회), `apps/collector`(네이티브 fetch 최소 browser
+  수집, HTTP 경계, 관리자 GET 조회), `packages/browser`(브라우저 SDK)와
+  `examples/sembom` 예제, 초기 빈 DB용 SQL `0001_initial.sql`(로컬 Miniflare 전용).
+- 관리자 조회: 검증기 포트 `createWorker(verifyBearer)`와 `admin.ts`의 GET 조회를
+  로컬 구현·검증했다. 테스트는 모킹한 trusted 검증기와 D1 grant 경계를 쓴다. 경로는
+  [관리자 조회 경계](./administrator.md)에 있다.
+- 아직 없음: 실제 인증 제공자·실서명 검증·토큰 발급, 서버 발행 수집, 관리자
   grant provisioning API, 원격 D1 마이그레이션, 운영 Wrangler 설정과 바인딩·시크릿,
   정리 스케줄러.
 - 측정: 브라우저 SDK가 gzip 3KiB 예산 안(실측값은 [VALIDATION.md](../../VALIDATION.md)).

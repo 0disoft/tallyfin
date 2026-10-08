@@ -16,6 +16,7 @@
 - [전송·집계 계약](./backend/event-contract.md)
 - [수집기 구현](./backend/collector.md)
 - [브라우저 SDK](./backend/browser-sdk.md)
+- [관리자 조회 경계](./backend/administrator.md)
 - [OpenAPI](../api/openapi.yaml), [DBML](../db/schema.dbml)
 - [Sembom 연동 예시](./integrations/sembom.md)
 - [워크스페이스 경계](./monorepo/workspace-boundaries.md)
@@ -28,4 +29,4 @@
 - [검증](../VALIDATION.md)
 
 ## 채워지지 않은 템플릿
-운영 ops/auth 문서 중 아직 채우지 않은 항목은 템플릿이다. OpenAPI·DBML은 v0.1 Tallyfin 계약으로 교체했고 코어·저장·수집기·브라우저 SDK 런타임도 로컬에서 구현·검증했으나, 운영 배포와 관리자 인증을 뜻하지 않는다.
+운영 ops/auth 문서 중 아직 채우지 않은 항목은 템플릿이다. OpenAPI·DBML은 v0.1 Tallyfin 계약으로 교체했고 코어·저장·수집기·브라우저 SDK와 관리자 조회 API 런타임도 로컬에서 구현·검증했으나, 운영 배포와 실제 인증 제공자 설정을 뜻하지 않는다.

@@ -1,6 +1,6 @@
 # 아키텍처
 
-상태: 부분 구현. `packages/core`·`packages/storage-d1`·`apps/collector`·`packages/browser`와 `examples/sembom` 예제를 로컬에서 구현·검증했고, `apps/admin`와 운영 배포는 아직 없다.
+상태: 부분 구현. `packages/core`·`packages/storage-d1`·`apps/collector`(수집·관리자 GET 조회)·`packages/browser`와 `examples/sembom` 예제를 로컬에서 구현·검증했고, `apps/admin`와 운영 배포는 아직 없다.
 
 ```mermaid
 flowchart LR
@@ -23,6 +23,6 @@ flowchart LR
 
 초기 기술 방향은 TypeScript, 외부 런타임 의존성 없는 브라우저 SDK, 네이티브 fetch Worker와 별도 D1 저장 어댑터다. 코어/SDK에는 Cloudflare나 비공개 ZDP 패키지 의존성을 넣지 않는다. 일별 집계를 우선하고 Worker 메모리를 영속 저장으로 쓰지 않는다. 수집 실패는 서비스 화면·업무 처리를 막지 않는다.
 
-프로젝트 등록으로 개인정보 제한을 우회하지 않는다. 호환되지 않는 버전·출처는 섞지 않는다. v0.1 API·논리 DB 계약을 확정했고 코어 검증·D1 원자 저장·최소 브라우저 수집기·브라우저 SDK를 로컬에서 구현·검증했다. 실제 관리자 인증·조회와 운영 배포는 아직 구현하지 않았다.
+프로젝트 등록으로 개인정보 제한을 우회하지 않는다. 호환되지 않는 버전·출처는 섞지 않는다. v0.1 API·논리 DB 계약을 확정했고 코어 검증·D1 원자 저장·최소 브라우저 수집기·브라우저 SDK·관리자 조회 API를 로컬에서 구현·검증했다. 실제 인증 제공자 설정과 운영 배포는 아직 구현하지 않았다.
 
-관련: [제품 명세](./docs/product/02-spec.md), [브라우저 SDK](./docs/backend/browser-sdk.md), [범용 제품 결정](./docs/adr/0004-general-product-analytics.md), [프라이버시](./docs/adr/0003-minimal-privacy-preserving-events.md), [패키지 경계](./docs/monorepo/workspace-boundaries.md).
+관련: [제품 명세](./docs/product/02-spec.md), [브라우저 SDK](./docs/backend/browser-sdk.md), [관리자 조회 경계](./docs/backend/administrator.md), [범용 제품 결정](./docs/adr/0004-general-product-analytics.md), [프라이버시](./docs/adr/0003-minimal-privacy-preserving-events.md), [패키지 경계](./docs/monorepo/workspace-boundaries.md).
