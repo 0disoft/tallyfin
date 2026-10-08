@@ -4,6 +4,8 @@ import { build } from 'esbuild';
 import { Miniflare, Log, LogLevel } from 'miniflare';
 import { UUID } from '@tallyfin/core';
 import { migrationStatements, registry, seed } from '../../../packages/storage-d1/test/helpers.ts';
+import { FakeBrowser } from '../../../packages/browser/test/helpers.ts';
+import { createSembomAnalytics } from '../../../examples/sembom/browser.ts';
 
 let mf: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
@@ -52,6 +54,33 @@ test('real Worker with D1 accepts JSON and exact retry without duplicate count',
 test('Beacon text/plain uses the same JSON validation', async () => {
   assert.equal((await send(JSON.stringify(input()), { 'Content-Type': 'text/plain; charset=utf-8' })).status, 200);
   await checkError(await send('free text', { 'Content-Type': 'text/plain' }), 400, 'invalid_request');
+});
+
+test('Sembom SDK example delivers a workflow through the Worker into D1 without duplicate counts', async () => {
+  const host = new FakeBrowser(); host.time = Date.now();
+  let delivery: Promise<Awaited<ReturnType<typeof send>>> | undefined;
+  host.reply = async index => {
+    delivery = send(host.calls[index]!.body, { 'Content-Type': 'text/plain;charset=utf-8' });
+    const response = await delivery;
+    return { status: response.status, retryAfter: response.headers.get('Retry-After') };
+  };
+  const disabled = createSembomAnalytics('https://collector.example.invalid/v1/projects/sembom/batches', false, host);
+  assert.equal(disabled.view('loan'), false); assert.equal(host.listeners.size, 0);
+  const analytics = createSembomAnalytics('https://collector.example.invalid/v1/projects/sembom/batches', true, host);
+  try {
+    assert.equal(analytics.view('loan'), true);
+    const attempt = analytics.startInput('loan'); assert.ok(attempt);
+    assert.equal(analytics.validationError('loan', 'required'), true);
+    assert.equal(attempt.succeed(), true); assert.equal(attempt.succeed(), false);
+    assert.equal(analytics.resultCopied('loan'), true);
+    assert.equal(analytics.feedbackSubmitted('loan'), true);
+    analytics.flush(); await host.tick(0); assert.ok(delivery);
+    assert.deepEqual(await (await delivery).json(), { accepted: 6, duplicates: 0 });
+    assert.deepEqual(await (await send(host.calls[0]!.body)).json(), { accepted: 0, duplicates: 6 });
+    assert.equal(await db.prepare('SELECT sum(count) AS count FROM event_daily_counts').first('count'), 6);
+    assert.deepEqual(await db.prepare('SELECT started_count, succeeded_count, failed_count FROM workflow_daily_counts').first(),
+      { started_count: 1, succeeded_count: 1, failed_count: 0 });
+  } finally { analytics.destroy(); disabled.destroy(); }
 });
 for (const denied of ['', 'null', 'https://sembom.example.invalid.evil.invalid', `${origin}/`, 'https://evil.invalid'])
   test(`origin denied: ${denied || 'missing'}`, async () => {

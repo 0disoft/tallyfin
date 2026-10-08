@@ -1,0 +1,88 @@
+{
+  "version": 1,
+  "events": {
+    "tool_view": {
+      "tool": [
+        "enum",
+        true,
+        [
+          "grade",
+          "loan",
+          "timer"
+        ]
+      ]
+    },
+    "input_start": {
+      "tool": [
+        "enum",
+        true,
+        [
+          "grade",
+          "loan",
+          "timer"
+        ]
+      ]
+    },
+    "calculation_success": {
+      "tool": [
+        "enum",
+        true,
+        [
+          "grade",
+          "loan",
+          "timer"
+        ]
+      ]
+    },
+    "validation_error": {
+      "tool": [
+        "enum",
+        true,
+        [
+          "grade",
+          "loan",
+          "timer"
+        ]
+      ],
+      "error": [
+        "enum",
+        false,
+        [
+          "required",
+          "range"
+        ]
+      ]
+    },
+    "result_copy": {
+      "tool": [
+        "enum",
+        true,
+        [
+          "grade",
+          "loan",
+          "timer"
+        ]
+      ]
+    },
+    "feedback_submit": {
+      "tool": [
+        "enum",
+        true,
+        [
+          "grade",
+          "loan",
+          "timer"
+        ]
+      ]
+    }
+  },
+  "workflows": {
+    "calculation": {
+      "start": "input_start",
+      "success": "calculation_success",
+      "dimensions": [
+        "tool"
+      ]
+    }
+  }
+}
