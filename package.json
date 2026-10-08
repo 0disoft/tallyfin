@@ -22,6 +22,7 @@
     "test:browser": "node --test packages/browser/test/*.test.ts",
     "build:browser": "npm run build --workspace @tallyfin/browser",
     "check:browser-size": "node tools/browser/check.mjs",
+    "bench:browser": "node tools/browser-bench/run.mjs",
     "check": "npm run typecheck && npm test && npm run check:browser-size"
   },
   "devDependencies": {

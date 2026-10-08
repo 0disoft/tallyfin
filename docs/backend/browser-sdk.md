@@ -42,4 +42,7 @@ npm run check:browser-size
 `build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 실행 결과와 실측값은 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 남은 검증
-실제 Sembom 저장소 설치·활성화, 초기 실행 비용, 실브라우저 지연·처리량, 원격 배포는 아직이다. 서버 발행 수집과 관리자 조회·인증도 후속이다.
+합성 화면의 실브라우저 초기 실행·동기 호출·전송과 수집기 종료 시 동작은
+[측정 도구](../../tools/browser-bench/README.md)로 확인했다.
+실제 Sembom 설치·활성화와 서비스 지연·처리량, 모바일·운영 환경, 원격 배포는 남았다.
+서버 발행 수집과 실제 운영 관리자 인증 연결도 후속이다.

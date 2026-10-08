@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tallyfin local browser benchmark</title>
+<style>
+  body { font: 18px system-ui; margin: 2rem auto; padding: 1rem; max-width: 42rem; }
+  label { display: block; margin: 1rem 0; }
+  input, button { font: inherit; padding: .6rem; }
+  input { width: 8rem; }
+  output { display: block; font-size: 2rem; margin-top: 1rem; }
+</style>
+<h1>Tallyfin browser benchmark</h1>
+<p>Local synthetic workload. No production data or authentication.</p>
+<p id="mode"></p>
+<label>First number <input id="left" type="number" value="1"></label>
+<label>Second number <input id="right" type="number" value="2"></label>
+<button id="calculate" type="button" disabled>Add numbers</button>
+<output id="result" aria-live="polite">3</output>
+<script type="module" src="/page.mjs"></script>
+</html>

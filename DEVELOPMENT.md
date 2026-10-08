@@ -70,6 +70,13 @@ Sample/API 연결 관리자 UI의 실행과 검증 명령은 [프로토타입 RE
 
 운영 명령·CI·자격증명을 가정하지 않는다. 저장소에 실제로 있는 package.json 명령만 실행한다.
 
+## 브라우저 SDK 비용 측정
+
+`npm ci --prefix tools/browser-bench --ignore-scripts`로 개발용 도구를 설치한 뒤
+`npm run bench:browser -- --channel chrome --samples 5`로 로컬 브라우저·수집기·D1을
+연결해 확인한다. 기본 검사나 CI에는 포함하지 않는다. 설치된 Edge와 전용 Chromium도
+선택할 수 있다. [실행·측정 안내](./tools/browser-bench/README.md)를 따른다.
+
 ## 로컬 git
 작은 작업 단위로 변경 파일만 커밋한다. 푸시·배포·게시는 사용자가 요청한 범위에서 진행한다.
 

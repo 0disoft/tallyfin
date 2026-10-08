@@ -13,6 +13,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "examples/**/*.ts", "tools/provision/*.ts", "tools/runtime/*.ts"],
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "examples/**/*.ts", "tools/provision/*.ts", "tools/runtime/*.ts", "tools/browser-bench/*.ts"],
   "exclude": ["apps/collector/src/runtime.ts"]
 }

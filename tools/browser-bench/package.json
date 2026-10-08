@@ -1,0 +1,7 @@
+{
+  "name": "tallyfin-browser-bench",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24" },
+  "devDependencies": { "playwright": "^1" }
+}
