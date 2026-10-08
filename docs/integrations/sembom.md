@@ -4,7 +4,7 @@ Sembom은 Tallyfin의 첫 파일럿이며, 이 문서는 Tallyfin 코어가 아�
 
 ## 등록 이벤트
 
-구현 시 Sembom 프로젝트에 다음 여섯 이벤트를 등록할 계획이다.
+구현 시 Sembom 프로젝트에 다음 여섯 이벤트를 등록할 계획이며, 저장소 예제 `examples/sembom/browser-schema.json`에 같은 여섯 이벤트를 투영해 두었다.
 
 - tool_view: 도구 화면을 본 시점
 - input_start: 사용자가 명시적으로 입력을 시작한 시점
@@ -23,8 +23,11 @@ tool, locale, mode, error, field는 선택 속성 후보이며 코어 필수 필
 
 input_start는 해당 도구 방문의 첫 사용자 입력에서 무작위 attemptId와 startedAt을 만들고, 이후 첫 calculation_success에 같은 값을 붙인다. 자동 초기 결과는 완료로 세지 않는다. 입력 검증 오류는 일반 이벤트이며 작업 종료 실패로 세지 않는다. 이 예시의 목표에는 실패 단계가 없어 failedAttempts=null이다. result_copy와 feedback_submit은 동작이 성공했을 때만 보내고 서버에서도 같은 업무를 중복 기록하지 않는다.
 
+## 현재 예제 구현
+`examples/sembom/browser.ts`와 `examples/sembom/browser-schema.json`에 연동 예제가 있다. 스키마는 v0.1 [등록 예시](../../api/examples/registry.json)에서 빌드 시점에 투영한 browser 스키마와 같고 `npm run check:browser-size`가 일치를 검사한다. 예제는 `createSembomAnalytics(endpoint, enabled = false)`를 노출하고 기본은 비활성이라 호스트가 명시적으로 켜야 수집한다. view·startInput·validationError·resultCopied·feedbackSubmitted와 flush·destroy를 노출하며, startInput이 돌려주는 작업 핸들의 succeed/fail 연결은 호스트가 맡는다. 이 예제는 저장소 안에만 있고 실제 Sembom 저장소에 설치·활성화하지 않았으며, 활성 데이터 수집은 없다.
+
 ## 경계
 
 이벤트 이름과 속성 이름은 Sembom 저장소에서 정의하며, Tallyfin SDK는 이름을 하드코딩하지 않는다. 등록 스키마는 버전으로 관리해 변경 시 이전 집계와 섞이지 않게 한다. 호스트 어댑터는 Sembom 저장소에 남고, 이 문서는 Sembom 저장소를 수정하지 않는다. 현재 활성 데이터 수집은 없다.
 
-상세 스키마 규칙은 제품 스펙 [02-spec.md](../product/02-spec.md)을 따른다.
+상세 스키마 규칙은 제품 스펙 [02-spec.md](../product/02-spec.md), SDK 동작은 [브라우저 SDK](../backend/browser-sdk.md)를 따른다.

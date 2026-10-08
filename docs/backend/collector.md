@@ -2,8 +2,9 @@
 
 상태: 최소 브라우저 수집기를 구현했고 로컬 Miniflare HTTP 테스트로 확인한다. 워커는
 네이티브 fetch 경계이며 `packages/core`(검증·정규화·해시)와 `packages/storage-d1`
-(D1 원자 저장)을 호출한다. 브라우저 SDK·관리자 조회/인증·원격 DB 적용·운영 배포는
-아직 없다. 이 문서는 계약을 수집 경계에 어떻게 적용했는지와 구현/배포 상태만
+(D1 원자 저장)을 호출한다. 브라우저 SDK(`packages/browser`)는 별도로 로컬 구현·검증했고
+[브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 조회/인증·원격 DB 적용·운영
+배포는 아직 없다. 이 문서는 계약을 수집 경계에 어떻게 적용했는지와 구현/배포 상태만
 기록한다.
 
 동작 의미는 [이벤트·집계 계약](./event-contract.md), 요청/응답 형태는
@@ -118,9 +119,11 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 
 - 구현·로컬 검증: `packages/core`(등록·배치·시간·해시), `packages/storage-d1`(D1 원자
   커밋·CAS·할당량·정리), `apps/collector`(네이티브 fetch 최소 browser 수집과 HTTP
-  경계), 초기 빈 DB용 SQL `0001_initial.sql`(로컬 Miniflare 전용).
-- 아직 없음: 브라우저 SDK, 관리자 조회 API와 실제 인증·권한, 서버 발행 수집, 관리자
+  경계), `packages/browser`(브라우저 SDK)와 `examples/sembom` 예제, 초기 빈 DB용 SQL
+  `0001_initial.sql`(로컬 Miniflare 전용).
+- 아직 없음: 관리자 조회 API와 실제 인증·권한, 서버 발행 수집, 관리자
   grant provisioning API, 원격 D1 마이그레이션, 운영 Wrangler 설정과 바인딩·시크릿,
   정리 스케줄러.
-- 미측정: SDK gzip 3KiB 목표, 쓰기 처리량·지연, 프로젝트 수·조합 규모별 비용.
+- 측정: 브라우저 SDK가 gzip 3KiB 예산 안(실측값은 [VALIDATION.md](../../VALIDATION.md)).
+- 미측정: SDK 초기 실행 비용·실브라우저 지연, 쓰기 처리량·지연, 프로젝트 수·조합 규모별 비용.
 - 배포·활성화: 원격 D1·운영 Worker·도메인·인증 제공자는 설정하지 않았다.
