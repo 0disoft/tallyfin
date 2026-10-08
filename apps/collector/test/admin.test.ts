@@ -116,6 +116,9 @@ test('grant revoked before the database snapshot cannot reveal a schema or aggre
     (error: unknown) => error instanceof CollectionError && error.code === 'forbidden');
 });
 test('storage corruption and aggregate overflow return 503 instead of fabricated zero data', async () => {
+  const incomplete = new D1Queries({ prepare: fixture.db.prepare.bind(fixture.db), batch: async () => [] });
+  await assert.rejects(incomplete.query(principal, { projectId: 'sembom', version: 1, kind: 'summary', from: '2026-10-08', to: '2026-10-09' }, now),
+    (error: unknown) => error instanceof CollectionError && error.code === 'storage_unavailable');
   await fixture.db.prepare("INSERT INTO event_daily_counts (project_id,schema_version,source,event_date,event_name,dimension_key,count,updated_at) VALUES ('sembom',1,'browser','2026-10-08','tool_view',?, ?, ?)")
     .bind('[["tool","string","loan"]]', Number.MAX_SAFE_INTEGER, now).run();
   await fixture.db.prepare("INSERT INTO event_daily_counts (project_id,schema_version,source,event_date,event_name,dimension_key,count,updated_at) VALUES ('sembom',1,'browser','2026-10-08','tool_view',?, 1, ?)")

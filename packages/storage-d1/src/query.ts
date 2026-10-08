@@ -16,7 +16,7 @@ export class D1Queries implements AdminStore {
     const result = await this.db.batch<ProjectState>([this.db.prepare(`SELECT p.* FROM projects p
       WHERE p.id > ? AND EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = p.id AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))
       ORDER BY p.id LIMIT ?`).bind(cursor, principal.issuer, principal.subject, limit + 1)]);
-    if (!result[0]?.success) throw new CollectionError('storage_unavailable', 503);
+    if (result.length !== 1 || !result[0]?.success || !Array.isArray(result[0].results)) throw new CollectionError('storage_unavailable', 503);
     const rows = result[0].results;
     return { data: rows.slice(0, limit).map(p => ({ id: p.id, name: p.name, status: p.status, timeZone: p.time_zone })),
       page: { limit, nextCursor: rows.length > limit ? rows[limit - 1]!.id : null } };
@@ -45,7 +45,7 @@ export class D1Queries implements AdminStore {
       GROUP BY cohort_date LIMIT 32`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
     // Every read carries the grant predicate; all definitions, permission and counts share one batch snapshot.
     const result = await this.db.batch<ProjectState | SchemaRow | EventRow | WorkflowRow>(statements);
-    if (result.some(r => !r.success)) throw new CollectionError('storage_unavailable', 503);
+    if (result.length !== statements.length || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
     const p = result[0]?.results[0] as ProjectState | undefined;
     if (!p) throw new CollectionError('forbidden', 403);
     const schema = result[1]?.results[0] as SchemaRow | undefined;
