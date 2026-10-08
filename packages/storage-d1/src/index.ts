@@ -102,8 +102,16 @@ export class D1Store implements CollectionStore {
         plan.events.map(e => [batch.projectId, batch.schemaVersion, 'browser', e.event_date, e.event_name, e.dimension_key, e.count, batch.receivedAt]),
         `ON CONFLICT(project_id, schema_version, source, event_date, event_name, dimension_key) DO UPDATE SET count=count+excluded.count, updated_at=max(updated_at, excluded.updated_at)`));
       statements.push(...bulk(this.db, 'workflow_daily_counts', ['project_id', 'schema_version', 'source', 'cohort_date', 'workflow_id', 'dimension_key', 'started_count', 'succeeded_count', 'failed_count', 'updated_at'],
-        plan.workflows.map(w => [batch.projectId, batch.schemaVersion, 'browser', w.cohort_date, w.workflow_id, w.dimension_key, w.started_count, w.succeeded_count, w.failed_count, batch.receivedAt]),
-        `ON CONFLICT(project_id, schema_version, source, cohort_date, workflow_id, dimension_key) DO UPDATE SET started_count=started_count+excluded.started_count, succeeded_count=succeeded_count+excluded.succeeded_count, failed_count=failed_count+excluded.failed_count, updated_at=max(updated_at, excluded.updated_at)`));
+        plan.workflows.map(w => [batch.projectId, batch.schemaVersion, 'browser', w.cohort_date, w.workflow_id, w.dimension_key, 0, 0, 0, batch.receivedAt]),
+        `ON CONFLICT(project_id, schema_version, source, cohort_date, workflow_id, dimension_key) DO NOTHING`));
+      // SQLite validates the INSERT before resolving its conflict. A terminal-only delta
+      // (0 starts, 1 success) is invalid as a new row, but valid when added to an existing cohort.
+      // Create valid zero rows, then apply deltas within the same guarded atomic write batch.
+      statements.push(...plan.workflows.map(w => this.db.prepare(`UPDATE workflow_daily_counts SET
+        started_count=started_count+?, succeeded_count=succeeded_count+?, failed_count=failed_count+?,
+        updated_at=max(updated_at, ?) WHERE project_id=? AND schema_version=? AND source='browser'
+        AND cohort_date=? AND workflow_id=? AND dimension_key=?`).bind(w.started_count, w.succeeded_count,
+          w.failed_count, batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
       try {
         const committed = await this.db.batch(statements);
         if (committed[0]?.meta.changes !== 1 || committed.some(r => !r.success)) throw new CollectionError('storage_unavailable', 503);

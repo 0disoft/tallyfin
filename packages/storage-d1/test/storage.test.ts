@@ -36,6 +36,30 @@ test('terminal arriving first is pending until the actual start arrives', async 
   const row = (await rows('workflow_daily_counts'))[0]!;
   assert.equal(row.started_count, 1); assert.equal(row.succeeded_count, 1);
 });
+
+test('start and terminal in separate batches update the existing cohort exactly once', async () => {
+  const input = batch();
+  const start = { ...input, events: [input.events[0]] };
+  const terminal = { ...input, events: [input.events[1]] };
+  assert.deepEqual(await fixture.store.commit(await prepare(start), registry), { accepted: 1, duplicates: 0 });
+  assert.deepEqual(await fixture.store.commit(await prepare(terminal), registry), { accepted: 1, duplicates: 0 });
+  assert.deepEqual(await fixture.store.commit(await prepare(terminal), registry), { accepted: 0, duplicates: 1 });
+  const row = (await rows('workflow_daily_counts'))[0]!;
+  assert.equal(row.started_count, 1); assert.equal(row.succeeded_count, 1);
+  assert.equal(await scalar('SELECT sum(count) AS value FROM event_daily_counts'), 2);
+  assert.equal(await scalar('SELECT new_receipts AS value FROM ingest_daily_usage'), 2);
+});
+
+test('a completion-only delta can share a batch with a new complete attempt', async () => {
+  const input = batch();
+  await fixture.store.commit(await prepare({ ...input, events: [input.events[0]] }), registry);
+  const next = batch(); const attemptId = crypto.randomUUID();
+  next.events.forEach((event: any) => { event.eventId = crypto.randomUUID(); event.attempt.attemptId = attemptId; });
+  next.events.unshift(input.events[1]);
+  assert.deepEqual(await fixture.store.commit(await prepare(next), registry), { accepted: 3, duplicates: 0 });
+  const row = (await rows('workflow_daily_counts'))[0]!;
+  assert.equal(row.started_count, 2); assert.equal(row.succeeded_count, 2);
+});
 test('new IDs for compatible repeated phases consume quota but do not recount', async () => {
   await fixture.store.commit(await prepare(), registry);
   const b = batch(); b.events[0].eventId = crypto.randomUUID(); b.events[1].eventId = crypto.randomUUID();
