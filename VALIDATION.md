@@ -106,6 +106,27 @@ npm run check:browser-size
 클라이언트 검사를 추가했다. 원격 푸시·배포·마이그레이션은 실행하지 않았다.
 
 ## 포맷·문서·스캐폴드
+
+2026-10-08 OIDC 로그인 연결 검증: `prototypes/admin`의 `npm run typecheck`,
+`npm test` 31/31, `npm run build`, `npm run test:sites` 4/4 통과. 기존 28개에
+요청별 현재 bearer 조회·갱신 실패의 고정 401·공유 갱신 대기 중 취소/연결 해제
+검증 3개를 추가했다. PKCE 클라이언트 9개는 생성한 키로 ID 서명·state/nonce·
+중복 코드 교환·회전 갱신·만료·늦은 응답 취소를 검사한다.
+
+로컬 Vite 5180 브라우저에서 설정 없음, 직접 연결 접기/펼치기, 다른 출처 거부,
+실패 콜백 쿼리 제거·대기 종료, 샘플 모드 복귀/재진입을 확인했고 콘솔 오류는
+수집되지 않았다. 증거는 `.tmp/admin-oidc-login-20261008.png`다. 실제 제공자
+로그인/CORS·운영 access token·운영 배포는 설정이 없어 실행하지 않았다.
+전체 접근성 감사와 부하 테스트는 이번 로그인 연결 범위에서 실행하지 않았다.
+프로토타입에는 lint 스크립트가 없으며 `git diff --check`를 통과했다.
+
+로그인 코드는 지연 로드 청크 30.65kB/gzip 10.85kB로 분리됐다. 메인 청크는
+657.25kB/gzip 191.91kB로 기존 크기 경고가 남는다. API/OpenAPI·DB·루트 러너와
+의존성 계약은 이번 화면 연결에서 변경하지 않았다. 설정/보관/갱신 조건은
+`docs/backend/oidc.md`, 화면 책임은 `docs/frontend/FRONTEND_DESIGN.md`에 반영했다.
+스캐폴드 `ssealed update . --yes`와 `ssealed doctor . --strict`도 통과했다.
+원격 푸시·배포·마이그레이션은 실행하지 않았다.
+
 - `format`: `git diff --check`로 공백 오류를 확인한다.
 - `docs`: 변경 문서의 상대 Markdown 링크와 계획/구현 상태의 일관성을 확인한다.
 - `check`(스캐폴드): 외부 CLI의 `ssealed doctor . --strict`로 상태를 확인한다. 의도적인

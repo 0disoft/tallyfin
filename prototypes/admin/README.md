@@ -3,7 +3,8 @@
 선택한 [개요 시안](../../docs/frontend/SELECTED_VISUAL.md)을 검토하는 샘플 UI다.
 ModuFile·Sembom·Orchid Pass는 가상의 데이터이며 실제 서비스를 조회하지 않는다.
 헤더의 모드 전환으로 **Sample**과 **API 연결**(같은 출처 `/v1` 관리자 API 실조회)을
-나눠 볼 수 있다. API 연결의 실제 인증은 아직 연결하지 않았다.
+나눠 볼 수 있다. API 모드는 OIDC 로그인과 관리자 bearer 직접 연결을 제공한다.
+실제 인증 제공자 설정과 운영 배포는 아직 연결하지 않았다.
 
 ## 실행
 
@@ -47,3 +48,15 @@ npm run build
 - 사용 경로는 `GET /v1/projects`, `/projects/{id}/schemas/{version}`, `/summary`, `/events/{name}/daily`, `/workflows/{id}/daily`이며 `from`/`to`는 프로젝트 시간대의 오늘과 7/14/30일로 계산한다.
 - 완료율과 시도 수는 작업 흐름 응답 값을 그대로 쓰고 이벤트 총수로 추론하지 않는다. 서버 출처 이벤트는 집계 경로가 없어 값을 표시하지 않는다.
 - 401·403·404·503·네트워크·형식 오류·빈 등록·빈 집계를 구분하고, 실패를 0이나 샘플 수치로 채우지 않는다.
+
+## OIDC 관리자 로그인
+
+관리자 콘솔은 공개 클라이언트 OIDC와 PKCE(S256)로 로그인하고 access/refresh token은
+메모리에만 보관한다. 콜백 주소는 현재 출처의 `/auth/callback`이며 state/nonce/verifier는
+10분짜리 일회성 sessionStorage 기록으로 보관했다가 코드 교환 전에 지운다.
+새로고침하면 재로그인이 필요하며 연결 해제는 로컬 세션을 지운다.
+
+필수 빌드 환경 변수는 `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_SCOPE`
+(`openid` 포함)다. 선택값과 CORS·회전 갱신·같은 출처 `/v1` 라우팅 조건은
+[OIDC 연결 문서](../../docs/backend/oidc.md#브라우저-관리자-로그인)를 따른다.
+실제 제공자와 API audience는 UNDECIDED이며 실제 제공자 로그인은 아직 검증하지 않았다.
