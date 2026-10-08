@@ -1,17 +1,20 @@
 import { CollectionError, parseBatch, prepareBatch, PROJECT_ID } from '@tallyfin/core';
 import type { CollectionStore, ErrorCode } from '@tallyfin/core';
 import { readBody } from './body.ts';
+import { administrator } from './admin.ts';
+import type { AdministratorAccess } from './admin.ts';
 
 const messages: Record<ErrorCode, string> = {
   invalid_request: 'Invalid request.', invalid_event: 'Invalid or unregistered event.', unknown_schema: 'Schema is unavailable.',
   origin_denied: 'Origin is not allowed.', project_unavailable: 'Project is unavailable.',
   event_conflict: 'Event ID conflicts with a previous event.', attempt_conflict: 'Attempt conflicts with previous state.',
-  quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Administrator authentication is not configured.',
+  quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Administrator authentication is required.',
   forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
 };
 export interface CollectorOptions {
   now?: () => number;
   log?: (entry: { requestId: string; code: ErrorCode }) => void;
+  admin?: AdministratorAccess;
 }
 export function allowedOrigin(origin: string | null, allowed: string[]): origin is string {
   if (!origin || origin.length > 256 || !Array.isArray(allowed) || !allowed.includes(origin)) return false;
@@ -31,7 +34,10 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       const path = new URL(request.url).pathname;
       const route = /^\/v1\/projects\/([^/]+)\/batches$/.exec(path);
       if (!route) {
-        if (path === '/v1/projects' || path.startsWith('/v1/projects/')) throw new CollectionError('unauthorized', 401);
+        if (path === '/v1/projects' || path.startsWith('/v1/projects/')) {
+          const result = await administrator(request, options.admin, receivedAt);
+          return Response.json(result, { headers });
+        }
         throw new CollectionError('not_found', 404);
       }
       const projectId = route[1]!;
@@ -69,6 +75,8 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       return Response.json(result, { status: 200, headers });
     } catch (error) {
       const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503);
+      if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
+      if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow', 'GET');
       if (failure.status === 429) {
         // Admission resumes at the next fixed minute; daily quota resumes at UTC midnight.
         headers.set('Retry-After', String(retryAfter ?? Math.max(1, Math.ceil((86_400_000 - receivedAt % 86_400_000) / 1000))));
@@ -79,3 +87,4 @@ export function createCollector(store: CollectionStore, options: CollectorOption
     }
   };
 }
+const routeForCollection = (url: string) => /^\/v1\/projects\/[^/]+\/batches$/.test(new URL(url).pathname);

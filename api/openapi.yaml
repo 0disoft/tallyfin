@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Tallyfin API
   version: 0.1.0
-  description: Browser collection is implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
+  description: Browser collection and administrator read boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
     Administrator reads require a verified principal and project grant. Registry snapshots are provisioned out
     of band; write API and server ingestion are deferred.
 tags:
@@ -1074,6 +1074,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported for administrator reads.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable.
           content:
@@ -1126,6 +1137,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported for administrator reads.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable; no fabricated zero response.
           content:
@@ -1170,6 +1192,17 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported for administrator reads.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
           content:
             application/json:
               schema:
@@ -1232,6 +1265,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported for administrator reads.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable; no fabricated zero response.
           content:
@@ -1277,6 +1321,17 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported for administrator reads.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
           content:
             application/json:
               schema:

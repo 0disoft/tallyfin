@@ -3,6 +3,7 @@ import type { AttemptState, CollectionStore, PreparedBatch, Receipt, Registry } 
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
+export { D1Queries } from './query.ts';
 
 export class D1Store implements CollectionStore {
   readonly db: SqlDatabase;
