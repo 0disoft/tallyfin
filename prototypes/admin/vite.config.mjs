@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { collectorProxy } from "./scripts/local-proxy.mjs";
 
 export default defineConfig({
   build: {
@@ -11,6 +12,8 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     allowedHosts: ["terminal.local"],
+    proxy: collectorProxy(process.env.TALLYFIN_COLLECTOR_ORIGIN),
+    forwardConsole: false,
     warmup: {
       clientFiles: ["./src/main.jsx"],
     },

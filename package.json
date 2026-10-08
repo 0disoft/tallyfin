@@ -10,6 +10,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "dev": "node tools/runtime/stack.ts",
     "typecheck": "npm run collector:types && tsc --noEmit && tsc -p apps/collector/tsconfig.runtime.json",
     "test": "node --test --test-timeout=30000 packages/*/test/*.test.ts apps/*/test/*.test.ts tools/provision/test/*.test.ts tools/runtime/test/*.test.ts",
     "provision": "node tools/provision/cli.ts",
