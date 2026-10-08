@@ -25,7 +25,7 @@ npm test
 npm run check
 ```
 
-`typecheck`는 `tsc --noEmit`로 코어·저장·수집기·브라우저 SDK 소스와 `examples/sembom` 예제 소스를 검사하고, `test`는 `packages/core`·`packages/storage-d1`·`packages/browser`·`apps/collector` 테스트를 실행한다. `check`는 여기에 `check:browser-size`를 더한다. 저장 어댑터 테스트는 Miniflare D1에 `db/migrations/0001_initial.sql`을 적용해 원자적 커밋·CAS 가드·중복·할당량·정리를 확인하고, 수집기 테스트는 esbuild로 번들한 Worker를 Miniflare에서 호출해 HTTP 경계를 확인하며 Sembom 예제의 여섯 이벤트·작업 흐름 전달과 재전송 duplicate도 검사한다. `test:core`는 코어 테스트만, `test:browser`는 브라우저 SDK 테스트만 실행한다.
+`typecheck`는 `tsc --noEmit`로 코어·저장·수집기·브라우저 SDK 소스와 `examples/sembom` 예제와 `tools/provision` CLI 소스를 검사하고, `test`는 `packages/core`·`packages/storage-d1`·`packages/browser`·`apps/collector`·`tools/provision` 테스트를 실행한다. `check`는 여기에 `check:browser-size`를 더한다. 저장 어댑터 테스트는 Miniflare D1에 `db/migrations/0001_initial.sql`을 적용해 원자적 커밋·CAS 가드·중복·할당량·정리를 확인하고, 수집기 테스트는 esbuild로 번들한 Worker를 Miniflare에서 호출해 HTTP 경계를 확인하며 Sembom 예제의 여섯 이벤트·작업 흐름 전달과 재전송 duplicate도 검사한다. `test:core`는 코어 테스트만, `test:browser`는 브라우저 SDK 테스트만 실행한다.
 
 개발 전용 계약 검사는 별도 패키지다.
 
@@ -46,10 +46,14 @@ npm run check:browser-size
 `build:browser`는 esbuild 번들과 `tsc` 타입 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. SDK 동작은 [브라우저 SDK](./docs/backend/browser-sdk.md), 실행 결과와 실측값은 [VALIDATION.md](./VALIDATION.md)에 있다.
 
 ## 다음 구현
-브라우저 SDK와 관리자 조회 API의 로컬 구현은 끝났고, 남은 것은 운영 요소다. 만료 정리 스케줄러, 서버 발행 수집, 실제 인증 제공자와 grant provisioning, 원격 D1 마이그레이션이 후속이다. 초기 실행 비용과 실브라우저 지연·처리량·원격 배포는 아직 검증하지 않았다. 계약과 명령 상태는 [VALIDATION.md](./VALIDATION.md)에 기록한다.
+브라우저 SDK와 관리자 조회 API의 로컬 구현은 끝났고, 남은 것은 운영 요소다. 만료 정리 예약 핸들러와 로컬 등록·권한 관리 CLI도 구현했다. 서버 발행 수집, 실제 인증 제공자 연결, 원격 D1 마이그레이션과 예약 등록은 후속이다. 초기 실행 비용과 실브라우저 지연·처리량·원격 배포는 아직 검증하지 않았다. 계약과 명령 상태는 [VALIDATION.md](./VALIDATION.md)에 기록한다.
 Sample/API 연결 관리자 UI의 실행과 검증 명령은 [프로토타입 README](./prototypes/admin/README.md)에 있다. API 연결은 같은 출처의 `/v1` GET 조회만 사용한다.
 
 ## 가짜 명령 금지
+로컬 프로젝트 등록·권한 관리는 `npm run provision -- --help`로 시작한다.
+기본은 미리보기이며 초기화·등록·권한 변경에는 `--apply`가 필요하다.
+입력 형식·명령·복구 절차는 [등록·권한 관리 CLI](./docs/backend/provisioning.md)를 따른다.
+
 운영 명령·CI·자격증명을 가정하지 않는다. 저장소에 실제로 있는 package.json 명령만 실행한다.
 
 ## 로컬 git

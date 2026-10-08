@@ -50,7 +50,33 @@ SDK+Sembom gzip 2949 bytes로 유지된다. DBML에 운영용 커서 테이블�
 변경 범위 밖이므로 반복하지 않았다. 조건과 롤백은
 [자동 정리](./docs/backend/retention-cleanup.md)에 기록한다.
 
+## 로컬 프로젝트 등록·권한 관리 CLI — 2026-10-08
+
+`tools/provision`에 init/register/grant/revoke를 구현했다(코드 커밋 `d8019cf`).
+Node 24·Miniflare 영속 로컬 D1을 사용하며 기본은 미리보기다. `--apply`로만
+반영하고 `--expect-plan`으로 검토한 입력·DB 상태와 일치하는지 확인한다.
+시간대·발행 스키마 불변성, 새 버전 증가, 마지막 owner 보호, CAS 충돌 시
+원자적 롤백을 검사한다. CLI는 신뢰된 파일시스템 운영자용이며 로그인을 검사하지 않는다.
+
+타입 검사, CLI 관련 테스트 6/6과 루트 `npm run check`의 전체 108/108 통과.
+권한 회수 후 조회 목록에서 제외, 두 owner 제거 계획 사이 충돌, 변경 없는 계획의
+오래된 스냅샷 거부, 재등록 no-op, 실제 CLI 프로세스의 help/실패 종료 코드와
+영속 DB 재실행을 확인했다. `tools/contracts` 검사 27/27 통과.
+SDK gzip 2667 bytes, SDK+Sembom gzip 2949 bytes로 3072 bytes 예산 안이다.
+`git diff --check` 통과. 설치된 `@types/node` 24.19.1을 개발 의존성 `^24`로
+추가하고 CLI를 루트 타입 검사·테스트 러너에 포함했다. 실행 코드·설치 버전은 검사 후
+변경하지 않았고 의존성 선언 범위만 같은 메이저로 넓혔다.
+
+OpenAPI·DBML·SQL 마이그레이션·브라우저 SDK·CI 변경은 없다.
+권한 문서 `docs/backend/02-authorization.md`에 로컬 운영자와 조회 grant 경계를
+명시하고 사용법·복구를 `docs/backend/provisioning.md`에 기록했다.
+실제 인증 제공자 사용자·운영 권한·원격 DB·배포·부하는 환경 설정과 승인 범위가 없어
+실행하지 않았다. UI 검사는 이번 CLI 범위 밖이므로 반복하지 않았다.
+원격 푸시·배포·마이그레이션은 실행하지 않았다.
+
 ## 검증 이름
+스캐폴드 `ssealed update . --yes`, `ssealed doctor . --strict` 통과.
+매니페스트의 기존 키 정렬을 유지해 체크섬 갱신만 남겼다.
 
 기존 체크리스트와 연결되는 이름을 유지한다: `format`, `lint`, `typecheck`, `test`, `contract`, `migration-check`, `smoke`, `docs`, `check`.
 
@@ -164,7 +190,7 @@ npm run check:browser-size
 - 브라우저 SDK 초기 실행 비용과 실브라우저 지연·처리량, 원격 배포
 - 서버 발행 수집과 실제 인증 제공자 연결, 운영 관리자 조회 배포(로컬 grant 강제는 관리자 테스트로 확인)
 - 원격 D1 마이그레이션과 운영 smoke
-- 만료 정리 스케줄러와 운영 Worker·도메인·인증 제공자
+- 원격 만료 정리 예약 등록과 운영 Worker·도메인·인증 제공자
 - 쓰기 처리량·지연 성능 측정
 
 서술(prose) 테스트는 작성하지 않는다.
