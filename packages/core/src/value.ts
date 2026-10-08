@@ -8,6 +8,11 @@ export const PROJECT_ID = /^[a-z][a-z0-9-]{0,47}$/;
 export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const ENUM_VALUE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export const has = (object: object, key: string): boolean => Object.hasOwn(object, key);
+export function canonicalJson(value: unknown): string {
+  const sorted = (input: unknown): unknown => Array.isArray(input) ? input.map(sorted) : record(input)
+    ? Object.fromEntries(Object.entries(input).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, sorted(item)])) : input;
+  return JSON.stringify(sorted(value));
+}
 export function record(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

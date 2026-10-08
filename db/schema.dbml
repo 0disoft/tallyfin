@@ -1,5 +1,5 @@
 Project tallyfin {
-  Note: 'Logical v0.1 D1 adapter contract, not an applied migration. UTC epoch milliseconds and ISO project-local dates; no visitor, content or raw event table.'
+  Note: 'v0.1 D1 adapter contract; migration 0001 is locally tested only. UTC epoch milliseconds and ISO project-local dates; no visitor, content or raw event table.'
 }
 
 Table projects {
@@ -12,6 +12,7 @@ Table projects {
   new_receipts_per_utc_day integer [not null, note: '1..1000000; default 100000']
   latest_received_at bigint [note: 'Latest committed new receipt, not complete-delivery evidence']
   created_at bigint [not null]
+  ingest_revision bigint [not null, default: 0, note: 'Adapter compare-and-swap guard; nonnegative safe integer, incremented by every ingest commit']
 }
 
 Table project_grants {
@@ -48,7 +49,7 @@ Table event_receipts {
   expires_at bigint [not null, note: 'received_at + 48h']
   indexes {
     (project_id, source, event_id) [pk]
-    expires_at
+    (project_id, expires_at)
   }
 }
 Ref: event_receipts.(project_id, schema_version) > project_schemas.(project_id, version)
@@ -68,7 +69,7 @@ Table workflow_attempts {
   expires_at bigint [not null, note: 'started_at + 72h']
   indexes {
     (project_id, source, attempt_id) [pk]
-    expires_at
+    (project_id, expires_at)
   }
 }
 Ref: workflow_attempts.(project_id, schema_version) > project_schemas.(project_id, version)
@@ -80,7 +81,16 @@ Table ingest_daily_usage {
   expires_at bigint [not null, note: 'UTC day end + 72h']
   indexes {
     (project_id, utc_date) [pk]
-    expires_at
+    (project_id, expires_at)
+  }
+}
+
+Table ingest_minute_usage {
+  project_id text [not null, ref: > projects.id]
+  minute_start bigint [not null, note: 'UTC fixed-minute admission window; no IP or visitor key']
+  request_count integer [not null, note: 'Saturates at project limit + 1, including denied/malformed requests']
+  indexes {
+    (project_id, minute_start) [pk]
   }
 }
 
@@ -95,6 +105,7 @@ Table event_daily_counts {
   updated_at bigint [not null]
   indexes {
     (project_id, schema_version, source, event_date, event_name, dimension_key) [pk]
+    (project_id, event_date)
   }
 }
 Ref: event_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)
@@ -112,6 +123,7 @@ Table workflow_daily_counts {
   updated_at bigint [not null]
   indexes {
     (project_id, schema_version, source, cohort_date, workflow_id, dimension_key) [pk]
+    (project_id, cohort_date)
   }
 }
 Ref: workflow_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)
