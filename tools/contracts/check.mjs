@@ -100,8 +100,9 @@ check('response totals and denominators agree', () => {
 const database = new Parser().parse(read('db/schema.dbml'),'dbml');
 check('DBML parses with project-scoped storage and no raw visitor tables', () => {
   const tables=database.schemas.flatMap(schema=>schema.tables);
-  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_schemas','event_receipts','workflow_attempts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts'].sort());
-  for (const table of tables.filter(t=>t.name!=='projects')) assert.ok(table.fields.some(f=>f.name==='project_id'));
+  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_schemas','event_receipts','workflow_attempts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
+  for (const table of tables.filter(t=>!['projects','retention_cleanup_state'].includes(t.name))) assert.ok(table.fields.some(f=>f.name==='project_id'));
+  assert.deepEqual(tables.find(t=>t.name==='retention_cleanup_state').fields.map(f=>f.name).sort(),['id','last_project_id','revision']);
 });
 check('API auth declarations remain explicit', () => {
   assert.deepEqual(spec.paths['/v1/projects/{projectId}/batches'].post.security,[]);

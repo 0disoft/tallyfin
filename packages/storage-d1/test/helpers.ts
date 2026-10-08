@@ -8,7 +8,8 @@ export const now = Date.parse('2026-10-08T15:00:15Z');
 export const registry = validateRegistry(example('registry'));
 export const batch = () => example('browser-batch');
 export function migrationStatements(): string[] {
-  const sql = readFileSync(new URL('../../../db/migrations/0001_initial.sql', import.meta.url), 'utf8').replace(/^--.*$/gm, '');
+  const sql = ['0001_initial.sql', '0002_retention_cleanup.sql'].map(name =>
+    readFileSync(new URL(`../../../db/migrations/${name}`, import.meta.url), 'utf8').replace(/^--.*$/gm, '')).join('\n');
   // This migration contains no quoted semicolons; preserve complete trigger bodies.
   return [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
 }

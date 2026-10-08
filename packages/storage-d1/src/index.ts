@@ -4,6 +4,8 @@ import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
 export { D1Queries } from './query.ts';
+export { D1Maintenance } from './maintenance.ts';
+export type { CleanupPage } from './maintenance.ts';
 
 export class D1Store implements CollectionStore {
   readonly db: SqlDatabase;
@@ -124,6 +126,7 @@ export class D1Store implements CollectionStore {
     statements.push(this.db.prepare(`DELETE FROM ingest_minute_usage WHERE rowid IN (SELECT rowid FROM ingest_minute_usage WHERE project_id = ? AND minute_start < ? LIMIT ?)`).bind(projectId, Math.floor(now / 60_000) * 60_000 - 120_000, limit));
     for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date']])
       statements.push(this.db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND ${column} < ? LIMIT ?)`).bind(projectId, oldest, limit));
-    await this.db.batch(statements);
+    const result = await this.db.batch(statements);
+    if (result.length !== statements.length || result.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
   }
 }

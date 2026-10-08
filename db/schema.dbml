@@ -1,5 +1,11 @@
 Project tallyfin {
-  Note: 'v0.1 D1 adapter contract; migration 0001 is locally tested only. UTC epoch milliseconds and ISO project-local dates; no visitor, content or raw event table.'
+  Note: 'v0.1 D1 adapter contract; migrations are locally tested only. UTC epoch milliseconds and ISO project-local dates; no visitor, content or raw event table.'
+}
+
+Table retention_cleanup_state {
+  id integer [pk, not null, note: 'Singleton row, id = 1']
+  last_project_id text [not null, default: '', note: 'Last attempted project, including failures; no FK so deleted projects do not reset the sweep']
+  revision bigint [not null, default: 0, note: 'Compare-and-swap cursor guard; nonnegative safe integer']
 }
 
 Table projects {
