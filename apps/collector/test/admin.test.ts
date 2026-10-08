@@ -5,6 +5,9 @@ import type { AdminPrincipal } from '@tallyfin/core';
 import { D1Queries, D1Store } from '@tallyfin/storage-d1';
 import { setup, seed, registry, migrationStatements } from '../../../packages/storage-d1/test/helpers.ts';
 import { createCollector } from '../src/handler.ts';
+import { build } from 'esbuild';
+import { Miniflare, Log, LogLevel } from 'miniflare';
+import { fileURLToPath } from 'node:url';
 
 let fixture: Awaited<ReturnType<typeof setup>>;
 const now = Date.parse('2026-10-09T03:00:00Z');
@@ -129,4 +132,28 @@ test('provisional date boundaries follow local midnight and DST, not UTC midnigh
   assert.equal(localDate(end - 1, 'America/New_York'), '2026-03-08');
   assert.equal(localDate(end, 'America/New_York'), '2026-03-09');
   assert.equal(end - dateEnd('2026-03-07', 'America/New_York'), 23 * DAY / 24);
+});
+
+test('configured administrator factory runs in the real Worker runtime with D1 grants', async () => {
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  const bundle = await build({ stdin: {
+    contents: `import { createWorker } from './apps/collector/src/index.ts';
+      export default createWorker(async () => (${JSON.stringify(principal)}));`,
+    resolveDir: root, loader: 'ts',
+  }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+  const runtime = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
+    d1Databases: { DB: 'tallyfin-admin-runtime-test' }, log: new Log(LogLevel.NONE) });
+  try {
+    const db = await runtime.getD1Database('DB');
+    for (const sql of migrationStatements()) await db.prepare(sql).run();
+    await seed(db);
+    await db.prepare('INSERT INTO project_grants (project_id,issuer,subject,role,created_at) VALUES (?,?,?,?,?)')
+      .bind('sembom', principal.issuer, principal.subject, 'reader', now).run();
+    const get = () => runtime.dispatchFetch('https://collector.example.invalid/v1/projects/sembom/schemas/1',
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    const response = await get(); assert.equal(response.status, 200);
+    assert.equal((await response.json() as { project: { id: string } }).project.id, 'sembom');
+    await db.prepare('DELETE FROM project_grants').run();
+    assert.equal((await get()).status, 403);
+  } finally { await runtime.dispose(); }
 });
