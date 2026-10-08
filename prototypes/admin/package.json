@@ -1,0 +1,29 @@
+{
+  "name": "tallyfin-admin-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "preview": "vite preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test src/model.test.mjs"
+  },
+  "dependencies": {
+    "react": "^19",
+    "react-dom": "^19",
+    "recharts": "^3",
+    "@phosphor-icons/react": "^2",
+    "@fontsource/noto-sans-kr": "^5",
+    "@fontsource/inter": "^5"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6",
+    "vite": "^8",
+    "typescript": "^7",
+    "@types/react": "^19",
+    "@types/react-dom": "^19"
+  }
+}

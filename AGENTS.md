@@ -29,7 +29,7 @@ DB structure is sourced from `db/schema.dbml`.
 
 ## Hard Rules
 
-- Do not generate or infer application source code from this scaffold.
+- Do not infer production application code from generic scaffold examples. The user-authorized sample-data prototype may live in `prototypes/admin/`; it does not establish production API, DB, authentication, or framework contracts.
 - Do not invent technology choices. Use UNDECIDED when a decision is not known.
 - Do not create fake credentials, tokens, secrets, or private values.
 - Do not rely on generated, cache, or build output as source truth.
@@ -50,7 +50,7 @@ DB structure is sourced from `db/schema.dbml`.
 
 ## Out of Scope
 
-- Application source scaffolding.
+- Production application scaffolding beyond the explicitly authorized prototype.
 - Runtime infrastructure such as Docker, Kubernetes, Terraform, or framework apps.
 - Project-specific credentials or deployment secrets.
 
