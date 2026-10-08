@@ -1,20 +1,28 @@
-# Performance Budget
+# 성능 예산
 
-- Status: Draft
+이 문서는 Tallyfin의 성능 목표와 측정 원칙을 기록한다. 모든 항목은 계획이며 구현·검증·운영 배포된 상태가 아니다. 현재 저장소에는 애플리케이션, package.json, 런타임, 배포, 벤치마크가 없다.
 
-## Contract
+## 목표
 
-Performance budgets must track latency, payload size, query count, cache behavior, bundle size, background jobs, and UNDECIDED project-specific thresholds.
+- 브라우저 SDK와 호스트 어댑터를 합쳐 증분 목표는 ≤3KiB gzip이다. 호스트 앱 전체 크기가 아니다.
+- 동기 수집 I/O를 두지 않으며 렌더링·계산에서 전송 완료를 기다리지 않는다.
+- 측정 전에는 달성 수치를 주장하지 않는다.
 
-## Required Evidence
+## 버퍼와 전송
 
-- Source of truth: UNDECIDED
-- Owner: UNASSIGNED
-- Merge-blocking validation: VALIDATION.md
-- Related checklist: CHECKLIST.md
+- 크기가 제한된 메모리 버퍼에 이벤트를 모은다.
+- 주기적으로 배치를 전송하고, 탭이 숨겨질 때도 남은 배치 전송을 시도한다.
+- sendBeacon/keepalive는 전달 보장이 아니다.
+- 정확한 interval, 용량, 재시도, 중복 제거 TTL, 요청 크기 한도는 다음 API 슬라이스까지 UNDECIDED로 둔다.
+- 유계 재시도, 배치 멱등성, 원자적 집계, 입력·속도 제한이 필요하다. Worker 메모리 카운터는 영속 집계로 쓰지 않는다.
 
-## Review Blockers
+## 측정 방법
 
-- A change bypasses the source of truth.
-- A change weakens validation or hides skipped checks.
-- A change lacks failure, recovery, security, performance, or test evidence where relevant.
+- 기준선(비활성)과 활성 상태를 동일 조건에서 비교한다.
+- 상호작용 지연, SDK 실행 시간, 전송 크기를 함께 본다.
+- 정확한 지연·전송 예산은 UNDECIDED이며 측정된 주장은 없다.
+
+## 실패 처리
+
+- 수집 실패는 계산기에 영향을 주지 않는다.
+- 비활성 메커니즘은 UNDECIDED다.

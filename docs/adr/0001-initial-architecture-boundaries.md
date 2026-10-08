@@ -1,28 +1,31 @@
-# Initial Architecture Boundaries
+# ADR 0001 — 초기 아키텍처 경계
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태: 제안됨 / 초기 계획 기록. 구현·검증 상태가 아닙니다.
 
-## Purpose
+## 맥락
 
-This document captures the durable design contract for Initial Architecture Boundaries.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
+Tallyfin은 최소·고속·프라이버시 우선 제품 이벤트 분석을 목표로 합니다. 첫 소비자는 Sembom 계산기 포털입니다. 현재 저장소에는 문서만 있고 애플리케이션/런타임/배포는 없습니다.
 
-## Source of Truth
+## 초기 구현 방향
 
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
+- 언어는 TypeScript.
+- 브라우저 SDK는 외부 의존성 없이.
+- Worker는 Cloudflare 네이티브 fetch, 프레임워크 없이.
+- D1 분석 저장은 별도 어댑터로 분리.
+- 코어/SDK는 사설 ZDP나 Cloudflare에 의존하지 않는 이식 가능한 구조.
 
-## Required Decisions
+## 결과
 
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
+- 이식성: 코어/SDK를 다른 제품/호스트로 옮길 수 있습니다.
+- 격리: 수집 실패가 계산기에 영향을 주지 않습니다.
+- 제약: D1 쓰기 처리량이 규모를 제한할 수 있어 확장 전에 측정이 필요합니다.
 
-## Review Blockers
+## 프레임워크 없음
 
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+수집 Worker는 프레임워크를 두지 않는 계획입니다. 관리자 대시보드의 프레임워크는 미정입니다.
+
+## 남은 결정
+
+패키지 범위, 빌드 스크립트, 도메인, 리소스, 시크릿, 인증, 보관, 라이선스, 전송 간격/용량/재시도/dedupe TTL/요청 크기 한도, 원시 보관 기간.
+
+관련: [아키텍처](../../ARCHITECTURE.md), [명세](../product/02-spec.md).

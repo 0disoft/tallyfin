@@ -1,28 +1,33 @@
-# Product Brief
+# 제품 개요 — Tallyfin
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태: Draft / 초기 계획. 구현·검증·운영 상태가 아닙니다.
 
-## Purpose
+## 문제
 
-This document captures the durable design contract for Product Brief.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
+제품 팀은 도구 사용 흐름을 개선하려면 최소한의 이벤트만으로도 유용한 신호가 필요합니다. Sembom에 필요한 집계 범위와 브라우저 비용을 먼저 정하고 그 범위에 맞는 도구를 만들려 합니다. Sembom 계산기 포털은 계산 성능과 프라이버시를 해치지 않는 가벼운 계측이 필요합니다.
 
-## Source of Truth
+## 사용자
 
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
+- 1차: Sembom 계산기 포털을 개발/운영하는 담당자로, 계산 흐름의 이탈 지점을 파악하려는 사람.
+- 이후: 같은 계측 방식을 자사 여러 제품에서 재사용하려는 팀.
 
-## Required Decisions
+## 목표
 
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
+- 최소 이벤트로 제품 흐름을 파악합니다.
+- 응답 속도와 렌더링/계산을 방해하지 않습니다.
+- 프라이버시를 우선합니다: 원시 입력/결과/개인 식별 데이터를 수집하지 않습니다.
+- 다른 환경으로 옮길 수 있는 구조로 여러 제품에 재사용합니다.
 
-## Review Blockers
+## 첫 파일럿 — Sembom 계산기 포털
 
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+- 닫힌 MVP 이벤트 집합으로 계산기 사용 흐름을 봅니다.
+- 계산기 동작에는 어떤 실패도 영향을 주지 않습니다.
+- Sembom 전용 호스트 어댑터는 Sembom 저장소에 둡니다.
+
+## 유용성 근거 (검증 방법, 아직 미실행)
+
+- 입력 시작 대비 계산 성공 비율(같은 코호트/시간 기준) 추이.
+- 검증 오류 유형/필드 분포로 마찰 지점 식별.
+- 복사/피드백 같은 행동 카운터로 결과 활용도 추정.
+
+이 근거는 계획이며 아직 측정되지 않았습니다. 시장 규모나 경쟁 우위에 대한 주장은 하지 않습니다. 자세한 기준은 [명세](./02-spec.md)를 봅니다.

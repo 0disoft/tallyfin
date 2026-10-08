@@ -1,28 +1,18 @@
-# Roadmap
+# 로드맵 — Tallyfin
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태 표기: 계획 / 착수 안 함. 현재 문서 슬라이스만 초안 작성되었고 나머지는 시작하지 않았습니다.
 
-## Purpose
+작은 순차 슬라이스로 진행합니다.
 
-This document captures the durable design contract for Roadmap.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
+1. **문서** — 현재 슬라이스. 초안 작성됨.
+2. **API + DB + 코어** — 계약 슬라이스: `api/openapi.yaml`/`db/schema.dbml` 교체, 스키마/검증/코호트. 착수 안 함.
+3. **SDK** — 브라우저 SDK + Sembom 호스트 어댑터. 착수 안 함.
+4. **Worker** — Cloudflare 수집기. 착수 안 함.
+5. **Sembom 파일럿** — 실사용 계측. 착수 안 함.
+6. **관리자** — 대시보드. 착수 안 함.
+7. **측정 기반 안정화** — 측정 후 확장/최적화. 착수 안 함.
+8. **라이선스/오픈소스 준비** — 라이선스 결정 및 공개 준비. 착수 안 함.
 
-## Source of Truth
+각 슬라이스는 이전 슬라이스가 완료되기 전에는 시작하지 않습니다. 계획된 폴더는 아직 생성되지 않았으며, 폴더 계획은 작업 공간 선언이 아닙니다.
 
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
-
-## Required Decisions
-
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
-
-## Review Blockers
-
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+관련: [명세](./02-spec.md), [성능 예산](../engineering/03-performance-budget.md).

@@ -1,28 +1,17 @@
-# Risk Register
+# 위험 등록부 (03)
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태: Draft(초기 계획). 아래 완화책은 계획이며 구현/검증되지 않았다. 미결정 항목은 다음 API 슬라이스에서 확정한다.
 
-## Purpose
+| 위험 | 설명 | 완화(계획) | 미결정 |
+| --- | --- | --- | --- |
+| 누락 | 탭 종료/차단/전송 실패로 유실 | 배치 재시도, 멱등성, 탭 숨김 시 전송 | 재시도 횟수, 배치 주기 |
+| 중복 | 재전송으로 중복 집계 | 배치 idempotency, 중복 제거 | 중복 제거 TTL |
+| 스팸 | 공개 프로젝트 ID·origin 게이트는 봇 방지 불가 | 레이트 리밋, 입력 제한 | 차단 메커니즘 |
+| 프라이버시 | 원문/결과/URL/식별자 저장 위험 | 허용 필드만 수집, 금지 목록 | 일시적 IP 정책 |
+| 카디널리티 | 자유 텍스트/고유값 폭증 | 경계 enum, 카운터, 스키마 버전 | 허용 enum 범위 |
+| 코호트 | 원시 이벤트 나눗셈으로 완료율 오도 | 동일 코호트/시간 기준 완료 계산 | 코호트 정의 |
+| 저장 | D1 쓰기 처리량이 확장 제약 | 일별 집계 우선 | 원시 보존 여부/기간 |
+| 벤더 | 수집/저장 구현의 Cloudflare 의존 | core/SDK 비의존 어댑터 | 다른 호스팅 환경의 저장 어댑터 |
+| 라이선스 | 오픈소스 의도이나 미정 | 라이선스 확정 전 배포 금지 | 라이선스 종류 |
 
-This document captures the durable design contract for Risk Register.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
-
-## Source of Truth
-
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
-
-## Required Decisions
-
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
-
-## Review Blockers
-
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+프라이버시 세부는 [ADR 0003](../adr/0003-minimal-privacy-preserving-events.md) 참조. 정확도 보장 없음.

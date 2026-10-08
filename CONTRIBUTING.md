@@ -1,28 +1,18 @@
-# Contributing
+# 기여 안내
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태: 현재는 문서/설계 기여만. 라이선스와 CLA는 미결정이며 CI나 릴리스를 가정하지 않는다.
 
-## Purpose
+## 기여 유형
+- 문서: 명확·간결, 반복적 템플릿 문구 금지.
+- 설계: 계획과 구현/검증/운영 상태를 명확히 구분.
 
-This document captures the durable design contract for Contributing.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
+## 검토 기준
+- 프라이버시: 허용 목록 밖 데이터/영속 식별자/쿠키/저장소 사용 금지([ADR 0003](./docs/adr/0003-minimal-privacy-preserving-events.md)).
+- 성능: 동기 수집 I/O 금지, 렌더링/계산 대기 금지.
+- API 범위: 구현 전에 실제 전송 계약과 DB 계약을 확정한다([ADR 0002](./docs/adr/0002-contract-source-of-truth.md)).
 
-## Source of Truth
+## 문서
+문서의 상대 링크는 실제 파일로 연결한다. 구현하지 않은 기능과 실행하지 않은 검증을 완료 상태로 기록하지 않는다.
 
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
-
-## Required Decisions
-
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
-
-## Review Blockers
-
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+## 라이선스
+라이선스와 CLA는 미결정. 확정 전 권리를 가정하지 않는다.

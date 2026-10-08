@@ -1,28 +1,80 @@
-# Product Specification
+# 명세 — Tallyfin (제품 범위 기준)
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태: Draft / 초기 계획. 구현·검증·운영 상태가 아닙니다. 이 문서가 제품 범위의 기준 문서입니다.
 
-## Purpose
+## 1. 범위와 비범위
 
-This document captures the durable design contract for Product Specification.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
+MVP는 닫힌 이벤트 집합만 수집합니다. 청구/계정/세션 리플레이/AI/광고/PostHog 동등 기능은 제외합니다.
 
-## Source of Truth
+## 2. 이벤트 (MVP, 계획)
 
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
+- `tool_view` — 적격 도구 라우트 방문
+- `input_start` — 라이프사이클당 첫 입력
+- `calculation_success` — 라이프사이클당 첫 성공(사용자 입력 이후)
+- `validation_error` — 검증 실패
+- `result_copy` — 성공한 결과 복사(행동 카운트)
+- `feedback_submit` — 성공한 제출만
 
-## Required Decisions
+키 입력별 이벤트나 타이머 틱 이벤트는 만들지 않습니다.
 
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
+## 3. 라이프사이클과 코호트
 
-## Review Blockers
+- 적격 도구 라우트 방문은 메모리 내 라이프사이클을 가지며, 내비게이션 시 갱신됩니다.
+- 첫 입력과 성공은 라이프사이클당 각각 한 번 기록합니다.
+- 복사/행동 카운트는 별도로 집계합니다.
+- 완료율 = 같은 코호트/시간 기준에서 입력 시작 방문 중 성공 방문 비율입니다. 원시 이벤트 수를 나눈 값이 아닙니다.
+- 분모가 없으면 unknown입니다.
+- 잘못된 입력은 엔진 장애가 아닙니다.
 
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+방문은 동일한 사람의 식별자가 아닌, 현재 도구 화면이 열린 동안의 메모리 상태입니다. 자동 계산의 초기 결과는 입력 이후 성공으로 세지 않습니다. 모드 변경·자정 경계·재시도로 같은 방문이 다른 집계에 섞이지 않도록 코호트 기준과 중복 제거 형식을 다음 계약 작업에서 확정합니다. 이 기준 없이 완료율을 제공하지 않습니다.
+
+## 4. 메타데이터 경계
+
+허용: 프로젝트/도구/locale/mode/event/오류 메타데이터/카운터/스키마 버전. 값의 종류와 길이에 한도를 두며 안정적인 오류/필드 enum만 사용합니다. 알 수 없는 속성은 거부합니다.
+
+금지: 원시 입력/결과/텍스트/건강/금융/이메일/전체 URL query/hash/referrer 경로/DOM/세션 리플레이/지문/영구 ID/분석 쿠키/localStorage/sessionStorage.
+
+- 공개 project ID는 라우팅 메타데이터이며 비밀/인증이 아닙니다.
+- 설정된 origin 게이트는 봇 방지가 아닙니다.
+- 보호를 위한 일시적 요청 IP는 분석 저장이 아니며, 활성화 전 정책이 필요합니다.
+- 요청 본문 로그는 남기지 않습니다.
+
+## 5. 전송 (bounded transport)
+
+- 목표: 브라우저 SDK + 호스트 어댑터 합계 증분 <=3KiB gzip. 호스트 앱 전체가 아닙니다. 자세한 내용은 [성능 예산](../engineering/03-performance-budget.md).
+- 수집 때문에 동기 I/O를 수행하거나 렌더링/계산에서 전송 완료를 기다리지 않습니다.
+- 크기가 제한된 메모리 버퍼에 모으고 주기적으로 전송합니다. 탭이 숨겨질 때도 남은 배치 전송을 시도합니다.
+- sendBeacon/keepalive는 전달 보장이 아닙니다.
+- 정확한 간격/용량/재시도/중복 제거 TTL/요청 크기 한도는 다음 API 슬라이스까지 미정입니다.
+
+## 6. 중복 제거와 집계
+
+- 유계 재시도, 배치 멱등성, 원자적 집계가 필요합니다.
+- Worker 메모리 카운터에 의존하지 않습니다.
+- 입력 및 속도 제한이 필요합니다.
+- 일별 집계를 우선합니다. 선택적 원시 보관은 정당화/유계가 필요하며 기간은 미정입니다.
+
+## 7. 저장
+
+- 별도 D1 분석 저장 어댑터를 둡니다.
+- 확장 전에 측정합니다. D1 쓰기 처리량이 규모를 제한할 수 있습니다.
+
+## 8. 관리자
+
+- 관리자 인증과 프로젝트별 권한 검사가 필요합니다. 메커니즘은 미정입니다.
+- Sembom 토큰을 빌려 쓰지 않습니다.
+- 대시보드 프레임워크/패키지 범위/빌드 스크립트/도메인/리소스/시크릿/인증/보관/라이선스는 미정입니다.
+
+## 9. 정확성 한계
+
+- 봇/스팸/차단/미전달은 카운트를 왜곡합니다. 정확성을 보장하지 않습니다.
+- 초기에는 정확한 고유 사용자 수/재방문 사용자 수, 전체 페이지 간 퍼널, 어트리뷰션을 제공하지 않습니다.
+
+## 10. 실패 격리
+
+- 실패는 계산기에 영향을 주지 않습니다. 비활성화 메커니즘은 미정입니다.
+- 제로 오버헤드/비용 보장은 없습니다.
+
+## 11. 미정 사항
+
+관리자 UI 프레임워크, 패키지 범위, 빌드 스크립트, 도메인, 리소스, 시크릿, 인증, 보관, 라이선스, 전송 간격/용량/재시도/dedupe TTL/요청 크기, 원시 보관 기간. `api/openapi.yaml`/`db/schema.dbml`는 일반 예시이며 Tallyfin 계약이 아니므로 다음 계약 슬라이스에서 교체합니다.
