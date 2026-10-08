@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Tallyfin API
   version: 0.1.0
-  description: Design contract only; no endpoints deployed. Browser ingestion is public and untrusted.
+  description: Browser collection is implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
     Administrator reads require a verified principal and project grant. Registry snapshots are provisioned out
     of band; write API and server ingestion are deferred.
 tags:
@@ -745,6 +745,89 @@ components:
             $ref: "#/components/schemas/WorkflowDay"
 paths:
   /v1/projects/{projectId}/batches:
+    options:
+      tags:
+        - Collection
+      operationId: preflightBrowserBatch
+      summary: Check exact origin and browser collection headers
+      description: Preflight consumes project admission quota. Only POST and the Content-Type header are allowed.
+        Replies have Cache-Control no-store and Vary Origin, with no credential permission.
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+            maxLength: 256
+        - name: Access-Control-Request-Method
+          in: header
+          required: true
+          schema:
+            type: string
+            const: POST
+        - name: Access-Control-Request-Headers
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+          description: Empty or Content-Type only, case-insensitive.
+      responses:
+        "204":
+          description: Exact origin may submit a browser batch.
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Exact registered origin.
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                const: POST
+              description: Browser collection method.
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                const: Content-Type
+              description: Only the content type header is permitted.
+            Vary:
+              schema:
+                type: string
+                const: Origin
+              description: Cache partition by origin.
+        "400":
+          description: Invalid preflight method or headers.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Origin denied or project paused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Project admission quota reached. Retry-After is seconds to the next UTC fixed minute.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
         - Collection
@@ -911,18 +994,19 @@ paths:
                 type: string
                 const: Origin
         "429":
-          description: Admission rate or daily accepted-event quota reached.
+          description: Admission rate or daily new-receipt quota reached.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
           headers:
             Retry-After:
-              description: Integer delay in seconds; SDK applies bounded retries.
+              description: Seconds until the next fixed UTC minute for admission or UTC midnight for daily quota.
+                SDK applies bounded retries and drops retries beyond its time budget.
               schema:
                 type: integer
                 minimum: 1
-                maximum: 3600
+                maximum: 86400
             Access-Control-Allow-Origin:
               description: Exact allowed request origin, no wildcard.
               schema:
@@ -948,59 +1032,6 @@ paths:
               schema:
                 type: string
                 const: Origin
-    options:
-      tags:
-        - Collection
-      operationId: preflightBrowserBatch
-      summary: Check the registered origin for CORS
-      security: []
-      parameters:
-        - $ref: "#/components/parameters/ProjectId"
-        - name: Origin
-          in: header
-          required: true
-          schema:
-            type: string
-            format: uri
-            maxLength: 256
-        - name: Access-Control-Request-Method
-          in: header
-          required: true
-          schema:
-            type: string
-            const: POST
-        - name: Access-Control-Request-Headers
-          in: header
-          required: false
-          schema:
-            type: string
-            maxLength: 128
-          description: Case-insensitive header list; only Content-Type is permitted.
-      responses:
-        "204":
-          description: Exact allowed origin; POST and Content-Type allowed, credentials disabled.
-          headers:
-            Access-Control-Allow-Origin:
-              schema:
-                type: string
-              description: Exact registered request origin, never wildcard.
-            Vary:
-              schema:
-                type: string
-                const: Origin
-              description: Cache partition by origin.
-            Access-Control-Allow-Methods:
-              schema:
-                type: string
-                const: POST
-              description: Accepted collection method.
-            Access-Control-Allow-Headers:
-              schema:
-                type: string
-                const: Content-Type
-              description: No administrator credentials accepted for collection.
-        "403":
-          description: Unknown project or denied origin; no CORS permission.
   /v1/projects:
     get:
       tags:

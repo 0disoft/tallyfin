@@ -72,6 +72,7 @@ test('registry rejects unsafe origin, excessive cardinality and conflicting work
     (r: any) => { r.allowedOrigins = ['https://example.invalid/']; },
     (r: any) => { r.allowedOrigins = ['https://*.example.invalid']; },
     (r: any) => { r.allowedOrigins = ['http://localhost:5173']; },
+    (r: any) => { r.project.timeZone = '+09:00'; },
     (r: any) => { r.events[0].properties.number = { type: 'integer', required: true, purpose: 'bucket', minimum: 0, maximum: 32 }; },
     (r: any) => { r.workflows.push({ ...r.workflows[0], id: 'other' }); },
     (r: any) => { r.events[2].properties.tool.values = ['other']; },

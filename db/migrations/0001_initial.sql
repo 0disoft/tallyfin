@@ -6,7 +6,7 @@ CREATE TABLE projects (
   requests_per_minute INTEGER NOT NULL CHECK (requests_per_minute BETWEEN 1 AND 600),
   new_receipts_per_utc_day INTEGER NOT NULL CHECK (new_receipts_per_utc_day BETWEEN 1 AND 1000000),
   latest_received_at INTEGER, created_at INTEGER NOT NULL,
-  ingest_revision INTEGER NOT NULL DEFAULT 0 CONSTRAINT tallyfin_ingest_revision CHECK (ingest_revision BETWEEN 0 AND 9007199254740991)
+  ingest_revision INTEGER NOT NULL DEFAULT 0 CONSTRAINT tallyfin_ingest_revision CHECK (typeof(ingest_revision) = 'integer' AND ingest_revision BETWEEN 0 AND 9007199254740991)
 );
 CREATE TABLE project_grants (
   project_id TEXT NOT NULL REFERENCES projects(id), issuer TEXT NOT NULL, subject TEXT NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE workflow_attempts (
   start_seen INTEGER NOT NULL DEFAULT 0 CHECK (start_seen IN (0, 1)),
   terminal_kind TEXT CHECK (terminal_kind IN ('success', 'failure')), terminal_at INTEGER,
   expires_at INTEGER NOT NULL CHECK (expires_at = started_at + 259200000),
-  CHECK ((terminal_kind IS NULL AND terminal_at IS NULL) OR (terminal_kind IS NOT NULL AND terminal_at >= started_at AND terminal_at <= started_at + 86400000)),
+  CHECK ((terminal_kind IS NULL AND terminal_at IS NULL) OR (terminal_kind IS NOT NULL AND terminal_at IS NOT NULL AND terminal_at >= started_at AND terminal_at <= started_at + 86400000)),
   PRIMARY KEY (project_id, source, attempt_id), FOREIGN KEY (project_id, schema_version) REFERENCES project_schemas(project_id, version)
 );
 CREATE INDEX workflow_attempts_expiry ON workflow_attempts(project_id, expires_at);
@@ -56,7 +56,7 @@ CREATE TABLE event_daily_counts (
   project_id TEXT NOT NULL, schema_version INTEGER NOT NULL, source TEXT NOT NULL CHECK (source = 'browser'),
   event_date TEXT NOT NULL, event_name TEXT NOT NULL,
   dimension_key TEXT NOT NULL CHECK (length(CAST(dimension_key AS BLOB)) <= 512 AND json_valid(dimension_key)),
-  count INTEGER NOT NULL DEFAULT 0 CHECK (count BETWEEN 0 AND 9007199254740991), updated_at INTEGER NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0 CHECK (typeof(count) = 'integer' AND count BETWEEN 0 AND 9007199254740991), updated_at INTEGER NOT NULL,
   PRIMARY KEY (project_id, schema_version, source, event_date, event_name, dimension_key),
   FOREIGN KEY (project_id, schema_version) REFERENCES project_schemas(project_id, version)
 );
@@ -65,9 +65,9 @@ CREATE TABLE workflow_daily_counts (
   project_id TEXT NOT NULL, schema_version INTEGER NOT NULL, source TEXT NOT NULL CHECK (source = 'browser'),
   cohort_date TEXT NOT NULL, workflow_id TEXT NOT NULL,
   dimension_key TEXT NOT NULL CHECK (length(CAST(dimension_key AS BLOB)) <= 512 AND json_valid(dimension_key)),
-  started_count INTEGER NOT NULL DEFAULT 0 CHECK (started_count BETWEEN 0 AND 9007199254740991),
-  succeeded_count INTEGER NOT NULL DEFAULT 0 CHECK (succeeded_count BETWEEN 0 AND 9007199254740991),
-  failed_count INTEGER NOT NULL DEFAULT 0 CHECK (failed_count BETWEEN 0 AND 9007199254740991),
+  started_count INTEGER NOT NULL DEFAULT 0 CHECK (typeof(started_count) = 'integer' AND started_count BETWEEN 0 AND 9007199254740991),
+  succeeded_count INTEGER NOT NULL DEFAULT 0 CHECK (typeof(succeeded_count) = 'integer' AND succeeded_count BETWEEN 0 AND 9007199254740991),
+  failed_count INTEGER NOT NULL DEFAULT 0 CHECK (typeof(failed_count) = 'integer' AND failed_count BETWEEN 0 AND 9007199254740991),
   updated_at INTEGER NOT NULL, CHECK (succeeded_count + failed_count <= started_count),
   PRIMARY KEY (project_id, schema_version, source, cohort_date, workflow_id, dimension_key),
   FOREIGN KEY (project_id, schema_version) REFERENCES project_schemas(project_id, version)

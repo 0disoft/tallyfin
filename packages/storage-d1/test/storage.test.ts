@@ -86,6 +86,8 @@ test('SQL protects schema immutability, foreign keys and workflow invariant', as
   await assert.rejects(fixture.db.prepare("UPDATE projects SET time_zone = 'UTC'").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO event_daily_counts VALUES ('other', 1, 'browser', '2026-10-08', 'tool_view', '[]', 1, 0)").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO workflow_daily_counts VALUES ('sembom', 1, 'browser', '2026-10-08', 'calculation', '[]', 1, 2, 0, 0)").run());
+  await assert.rejects(fixture.db.prepare("INSERT INTO event_daily_counts VALUES ('sembom', 1, 'browser', '2026-10-08', 'tool_view', '[]', 1.5, 0)").run());
+  await assert.rejects(fixture.db.prepare("INSERT INTO workflow_attempts VALUES ('sembom', 'browser', 'attempt', 1, 'calculation', 0, '1970-01-01', '[]', 1, 'success', NULL, 259200000)").run());
 });
 test('full 20-event batch respects D1 binding limits', async () => {
   const b = batch(); b.events = Array.from({ length: 20 }, () => ({ ...b.events[0], eventId: crypto.randomUUID(), name: 'tool_view' }));
@@ -103,11 +105,14 @@ test('minute admission is shared across instances, saturates, and resets at UTC 
 });
 test('expiry cleanup is project-scoped and bounded; old receipt does not bypass time validation', async () => {
   await fixture.store.commit(await prepare(), registry); await seed(fixture.db, 'other');
+  const otherRegistry = structuredClone(registry); otherRegistry.project.id = 'other';
+  await fixture.store.commit(await prepare(batch(), now, otherRegistry), otherRegistry);
   await fixture.store.cleanup('sembom', registry.project.timeZone, now + 4 * DAY, 1);
-  assert.equal((await rows('event_receipts')).length, 1);
+  assert.equal((await rows('event_receipts')).length, 3);
   await fixture.store.cleanup('sembom', registry.project.timeZone, now + 4 * DAY);
-  assert.equal((await rows('event_receipts')).length, 0);
-  assert.equal((await rows('workflow_attempts')).length, 0);
+  assert.equal((await rows('event_receipts')).length, 2);
+  assert.equal((await rows('workflow_attempts')).length, 1);
+  assert.equal(await fixture.db.prepare("SELECT count(*) AS count FROM event_receipts WHERE project_id='sembom'").first('count'), 0);
   await assert.rejects(prepare(batch(), now + 4 * DAY), errorCode('invalid_event'));
   assert.equal((await rows('projects')).length, 2);
 });

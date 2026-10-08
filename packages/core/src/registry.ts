@@ -25,6 +25,7 @@ export function validateRegistry(value: unknown, options: { allowLocalHttp?: boo
     !integer(value.schemaVersion, 1, 2_147_483_647) || !['active', 'retired'].includes(String(value.schemaStatus)) ||
     !closed(value.limits, ['requestsPerMinute', 'newReceiptsPerUtcDay']) || !integer(value.limits.requestsPerMinute, 1, 600) ||
     !integer(value.limits.newReceiptsPerUtcDay, 1, 1_000_000)) throw Error('invalid registry');
+  if (!/^[A-Za-z][A-Za-z0-9_+./-]*$/.test(value.project.timeZone)) throw Error('invalid registry');
   new Intl.DateTimeFormat('en', { timeZone: value.project.timeZone });
   if (!Array.isArray(value.allowedOrigins) || value.allowedOrigins.length < 1 || value.allowedOrigins.length > 16 ||
     new Set(value.allowedOrigins).size !== value.allowedOrigins.length) throw Error('invalid registry');

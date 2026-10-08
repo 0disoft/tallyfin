@@ -1,4 +1,4 @@
-import { canonicalJson, CollectionError, DAY, localDate, planIngest, validateRegistry } from '@tallyfin/core';
+import { canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, validateRegistry } from '@tallyfin/core';
 import type { AttemptState, CollectionStore, PreparedBatch, Receipt, Registry } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
@@ -14,8 +14,12 @@ export class D1Store implements CollectionStore {
     const results = await this.db.batch<ProjectRow>([this.db.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId)]);
     const row = results[0]?.results[0];
     if (!row) return null;
+    const origins: unknown = JSON.parse(row.allowed_origins_json);
+    if (!Array.isArray(origins) || !origins.every((origin: unknown) => typeof origin === 'string') ||
+      !integer(row.requests_per_minute, 1, 600) || !integer(row.new_receipts_per_utc_day, 1, 1_000_000))
+      throw new CollectionError('storage_unavailable', 503);
     return { id: row.id, name: row.name, status: row.status, timeZone: row.time_zone,
-      allowedOrigins: JSON.parse(row.allowed_origins_json) as string[],
+      allowedOrigins: origins,
       limits: { requestsPerMinute: row.requests_per_minute, newReceiptsPerUtcDay: row.new_receipts_per_utc_day } };
   }
   async admit(projectId: string, receivedAt: number, limit: number): Promise<boolean> {
@@ -35,7 +39,7 @@ export class D1Store implements CollectionStore {
   }
   private registry(project: ProjectRow, schema: SchemaRow): Registry {
     const definitions: unknown = JSON.parse(schema.definitions_json);
-    if (typeof definitions !== 'object' || definitions === null || Array.isArray(definitions)) throw Error('invalid registry');
+    if (!closed(definitions, ['events', 'workflows'])) throw Error('invalid registry');
     return validateRegistry({ ...definitions, project: { id: project.id, name: project.name, status: project.status, timeZone: project.time_zone },
       allowedOrigins: JSON.parse(project.allowed_origins_json), schemaVersion: schema.version, schemaStatus: schema.status,
       limits: { requestsPerMinute: project.requests_per_minute, newReceiptsPerUtcDay: project.new_receipts_per_utc_day } }, { allowLocalHttp: this.allowLocalHttp });
