@@ -8,12 +8,27 @@ ModuFile·Sembom·Orchid Pass는 가상의 데이터이며 실제 서비스를 �
 
 ## 실행
 
+수집기와 함께 실행하려면 저장소 루트에서 Node 24 이상을 사용한다.
+DB 초기화·등록과 의존성 설치를 마친 뒤 다음 명령을 실행한다.
+
+```sh
+npm run dev -- --local --state-dir .tmp/collector-db
+```
+
+관리자는 `http://127.0.0.1:5180`, 수집기는 `http://127.0.0.1:5188`에서 실행된다.
+포트 변경·설정·종료 절차는 [통합 실행 안내](../../docs/backend/runtime.md#통합-개발-실행)에 있다.
+
 이 폴더에서 Node.js 22.18 이상과 npm을 사용한다.
 
 ```sh
 npm ci
 npm run dev -- --host 127.0.0.1 --port 5180 --strictPort
 ```
+
+이 독립 실행도 `/v1`을 기본 `http://127.0.0.1:5188` 수집기로 전달한다.
+서버 환경 변수 `TALLYFIN_COLLECTOR_ORIGIN`으로 다른 루프백 HTTP 포트를 지정한다.
+`/auth/callback`은 관리자 화면에서 처리한다. 수집기가 없으면 API 연결은 실패하지만
+샘플 모드는 사용할 수 있다.
 
 ## 구현 범위
 

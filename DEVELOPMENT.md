@@ -20,12 +20,16 @@
 
 ```sh
 npm ci --ignore-scripts
+npm ci --prefix prototypes/admin --ignore-scripts
 npm run typecheck
 npm test
 npm run check
 ```
 
 `typecheck`는 `tsc --noEmit`로 코어·저장·수집기·브라우저 SDK 소스와 `examples/sembom` 예제와 `tools/provision` CLI 소스를 검사하고, `test`는 `packages/core`·`packages/storage-d1`·`packages/browser`·`apps/collector`·`tools/provision` 테스트를 실행한다. `check`는 여기에 `check:browser-size`를 더한다. 저장 어댑터 테스트는 Miniflare D1에 `db/migrations/0001_initial.sql`을 적용해 원자적 커밋·CAS 가드·중복·할당량·정리를 확인하고, 수집기 테스트는 esbuild로 번들한 Worker를 Miniflare에서 호출해 HTTP 경계를 확인하며 Sembom 예제의 여섯 이벤트·작업 흐름 전달과 재전송 duplicate도 검사한다. `test:core`는 코어 테스트만, `test:browser`는 브라우저 SDK 테스트만 실행한다.
+
+`tools/runtime` 실행기 소스와 테스트도 루트 검사에 포함한다. 통합 실행 테스트가
+관리자 서버를 띄우므로 `prototypes/admin` 의존성도 설치해야 한다.
 
 개발 전용 계약 검사는 별도 패키지다.
 
@@ -50,6 +54,11 @@ npm run check:browser-size
 Sample/API 연결 관리자 UI의 실행과 검증 명령은 [프로토타입 README](./prototypes/admin/README.md)에 있다. API 연결은 같은 출처의 `/v1` GET 조회만 사용한다.
 
 ## 가짜 명령 금지
+관리자와 수집기를 함께 띄우려면 `npm run dev -- --local --state-dir .tmp/collector-db`를
+실행한다. 루트와 `prototypes/admin` 의존성을 각각 설치하고 아래 등록 CLI로 DB를
+먼저 준비한다. 기본 포트는 관리자 5180·수집기 5188이며, 실행·프록시·종료 절차는
+[통합 개발 실행](./docs/backend/runtime.md#통합-개발-실행)을 따른다.
+
 수집기는 `npm run collector:dev -- --local --state-dir .tmp/collector-db`로 실행한다.
 같은 디렉터리를 등록 CLI에서 먼저 초기화하고 프로젝트를 등록한다.
 실행 설정·배포 파일 준비·업로드 없는 묶음 검사는 [수집기 실행](./docs/backend/runtime.md)을 따른다.

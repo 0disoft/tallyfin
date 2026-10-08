@@ -120,6 +120,7 @@ OpenAPI·DBML·SQL 마이그레이션·브라우저 SDK·CI 변경은 없다. `.
 
 ```sh
 npm ci --ignore-scripts
+npm ci --prefix prototypes/admin --ignore-scripts
 npm run typecheck
 npm test
 npm run check
@@ -140,6 +141,9 @@ Worker를 Miniflare에서 호출해 HTTP 경계(오리진·본문 한도·CORS·
 `2026-08-06`이다. 더 새로운 날짜(예: 2026-10-08)는 아직 검증하지 않았다.
 
 2026-10-08 검증: 루트 `npm run check`(실행 당시 typecheck + 테스트 78개)와 별도 `check:browser-size` 통과. 이후 기본 `check`에 크기 검사도 연결했다. 테스트는 기존 58개에 브라우저 SDK 19개와 SDK→Worker→D1 통합 1개를 더한 78개다. `npm run build:browser`와 `npm run check:browser-size` 통과, 크기는 SDK 5747 bytes/gzip 2667 bytes, SDK+Sembom 어댑터·스키마 6628 bytes/gzip 2949 bytes로 3072 bytes 예산 안이다. 개발 전용 계약 검사 `tools/contracts` lint/check 27개 통과, OpenAPI Redocly lint와 타입 검사 통과. `npm ci`는 기존 설치 상태라 이번에 다시 돌리지 않았고 `git diff --check` 통과.
+
+루트 테스트에는 `tools/provision`·`tools/runtime`도 포함한다. 통합 실행 테스트가
+관리자 서버를 사용하므로 `prototypes/admin` 의존성은 별도로 설치한다.
 
 ## 계약 검사
 개발 전용 계약 검사 패키지는 `tools/contracts/`이며 운영 코드와 분리한다.
@@ -220,6 +224,26 @@ npm run check:browser-size
 - `check`(스캐폴드): 외부 CLI의 `ssealed doctor . --strict`로 상태를 확인한다. 의도적인
   문서 수정은 `ssealed update . --yes`로 인정한 후 확인한다. 파일 내용을 덮어쓰는
   `--force`는 사용하지 않는다.
+
+## 2026-10-08 통합 개발 실행
+
+루트 `npm run check`(타입 검사·116/116 테스트·브라우저 크기 예산), 관리자
+`npm run typecheck`·`npm test` 32/32·`npm run build` 통과. supervisor 테스트는
+정상 종료·예기치 않은 종료·시작 실패 시 자식 정리를 확인한다. 실제 스택 통합
+테스트는 초기화된 로컬 D1, 관리자 페이지·로그인 콜백 SPA, `/v1/projects`의
+수집기 401 JSON 응답, 종료 후 양쪽 리스너 해제를 확인했다. 프록시 테스트는
+경로·쿼리·헤더 전달, `/auth/callback`·`/v10` 제외와 비루프백 주소 거부를 확인했다.
+
+브라우저에서 5190/5198 스택의 샘플 화면·API 연결 전환·실패 콜백의 SPA 처리와
+OIDC 미설정 상태의 직접 연결 화면을 확인했다. 확인용 스택은 종료했다.
+관리자 빌드의 기존 청크 크기 경고는 남는다. 실제 OIDC 제공자 로그인·원격
+리소스·운영 배포·부하 시험은 설정이 없거나 이번 범위 밖이어서 실행하지 않았다.
+
+API/OpenAPI·DB·의존성 계약은 변경하지 않았다. 루트 `dev` 러너, 관리자 테스트
+명령, 로컬 프록시·IPC 종료 처리를 추가했다. 실행 문서는 `docs/backend/runtime.md`,
+`DEVELOPMENT.md`, `prototypes/admin/README.md`에 반영했다. 원격 푸시·배포는 하지 않았다.
+계약·문서 링크 검사 27/27과 `git diff --check` 통과. 종료 후 5190·5198에
+리스너가 남지 않은 것을 확인했다.
 
 ## 아직 실행하지 않음
 - 브라우저 SDK 초기 실행 비용과 실브라우저 지연·처리량, 원격 배포
