@@ -50,8 +50,8 @@ DB structure is sourced from `db/schema.dbml`.
 
 ## Out of Scope
 
-- Production application scaffolding beyond the explicitly authorized prototype.
-- Runtime infrastructure such as Docker, Kubernetes, Terraform, or framework apps.
+- Deployment, credentials and infrastructure provisioning without explicit authorization.
+- Framework apps beyond the selected native fetch collector and portable TypeScript packages.
 - Project-specific credentials or deployment secrets.
 
 ## Final Response Requirements

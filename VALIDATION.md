@@ -1,6 +1,6 @@
 # 검증
 
-상태: 문서·v0.1 계약·샘플 UI의 로컬 검증이 해당한다. 실제 수집·조회·DB 마이그레이션 검증은 미구성이다.
+상태: 문서·v0.1 계약·샘플 UI와 입력 검증 코어의 로컬 검증이 해당한다. 실제 수집·조회·DB 마이그레이션 검증은 미구성이다.
 
 ## 검증 이름
 
@@ -11,11 +11,13 @@
 - `format`: `git diff --check`로 공백 오류를 확인한다.
 - `check`: 외부 CLI의 `ssealed doctor . --strict`로 스캐폴드 상태를 확인한다. 의도적인 문서 수정은 `ssealed update . --yes`로 인정한 후 확인한다. 파일 내용을 덮어쓰는 `--force`는 사용하지 않는다.
 
-## 패키지 스크립트 없음
-저장소 루트의 운영 패키지와 실행 러너는 아직 없다.
+## 패키지 스크립트
+저장소 루트에 npm workspaces와 Node 24 기반 실행 러너를 추가했다.
+`npm ci --ignore-scripts`, `npm run typecheck`, `npm run test:core`로 코어를 확인한다.
+코어는 외부 런타임 의존성 없이 등록 정의·배치 검증·정규화·SHA-256 입력을 처리한다.
 `prototypes/admin/`에는 `typecheck`·`test`·`build` 명령이 있다.
 UI smoke와 디자인 비교는 [design-qa.md](./prototypes/admin/design-qa.md)에 기록한다.
-개발 전용 계약 검사 패키지는 `tools/contracts/`이며 루트 운영 러너는 추가하지 않는다.
+개발 전용 계약 검사 패키지는 `tools/contracts/`이며 운영 코드와 분리한다.
 
 ```sh
 npm ci --prefix tools/contracts --ignore-scripts
