@@ -14,6 +14,7 @@ import { EventAnalysis, Goals, Overview } from './Dashboard';
 import Settings from './Settings';
 import { LiveDashboard } from './LiveDashboard';
 import './styles.css';
+import { initialCallback } from './auth/bootstrap';
 
 const navigation = [
   { id: 'overview' as const, title: '개요', icon: House },
@@ -26,7 +27,7 @@ const stateLabels: Record<DisplayState, string> = { normal: '기본', loading: '
 type Mode = 'sample' | 'api';
 
 export function App() {
-  const [mode, setMode] = useState<Mode>('sample');
+  const [mode, setMode] = useState<Mode>(() => initialCallback() ? 'api' : 'sample');
   const [liveProject, setLiveProject] = useState<{ name: string; timeZone: string } | null>(null);
   const [projectId, setProjectId] = useState<ProjectId>('modufile');
   const [view, setView] = useState<View>('overview');
@@ -94,7 +95,7 @@ export function App() {
           {view === 'settings' && <Settings project={project} displayName={names[projectId]} onSave={name => setNames(previous => ({ ...previous, [projectId]: name }))} onReset={() => setNames(previous => ({ ...previous, [projectId]: project.name }))} />}
         </>}
       </div>
-      <footer className="prototype-footer">{mode === 'api' ? <p className="context-note">API 연결 · 같은 출처 /v1 조회 · 토큰은 메모리에만 · 실제 인증 연결 전</p> : <><p className="context-note">샘플 데이터 · Asia/Seoul 일별 집계 · 실제 수집 연결 전</p><details className="diagnostics"><summary>화면 상태 확인</summary><label htmlFor="display-state">샘플 조회 상태</label><select id="display-state" value={displayState} onChange={event => setDisplayState(event.target.value as DisplayState)}>{Object.entries(stateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></details></>}</footer>
+      <footer className="prototype-footer">{mode === 'api' ? <p className="context-note">API 연결 · 같은 출처 /v1 조회 · 토큰은 메모리에만 · 프로젝트 권한은 서버에서 확인</p> : <><p className="context-note">샘플 데이터 · Asia/Seoul 일별 집계 · 실제 수집 연결 전</p><details className="diagnostics"><summary>화면 상태 확인</summary><label htmlFor="display-state">샘플 조회 상태</label><select id="display-state" value={displayState} onChange={event => setDisplayState(event.target.value as DisplayState)}>{Object.entries(stateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></details></>}</footer>
     </main>
   </div>;
 }

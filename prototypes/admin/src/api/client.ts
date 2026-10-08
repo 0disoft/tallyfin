@@ -122,19 +122,23 @@ export class ApiClient {
   #fetch: FetchLike;
   #controllers = new Set<AbortController>();
   #destroyed = false;
+  #getBearer: (() => Promise<string>) | undefined;
+  #onDestroy: (() => void) | undefined;
 
-  constructor(options: { token?: string; basePath?: string; fetchImpl?: FetchLike } = {}) {
+  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike } = {}) {
     const basePath = options.basePath ?? API_BASE_PATH;
     if (basePath !== API_BASE_PATH) {
       throw new ApiError('invalid_request', `같은 출처의 ${API_BASE_PATH} 경로만 사용할 수 있어요.`);
     }
     this.#token = options.token ?? '';
+    this.#getBearer = options.getBearer;
+    this.#onDestroy = options.onDestroy;
     this.#basePath = basePath;
     this.#fetch = options.fetchImpl ?? defaultFetch;
   }
 
   get hasToken(): boolean {
-    return this.#token.length > 0;
+    return this.#token.length > 0 || this.#getBearer !== undefined;
   }
 
   toString(): string {
@@ -146,10 +150,14 @@ export class ApiClient {
   }
 
   destroy(): void {
+    if (this.#destroyed) return;
     this.#token = '';
     this.#destroyed = true;
     for (const controller of this.#controllers) controller.abort();
     this.#controllers.clear();
+    this.#getBearer = undefined;
+    this.#onDestroy?.();
+    this.#onDestroy = undefined;
   }
 
   async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {
@@ -257,7 +265,6 @@ export class ApiClient {
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
     const url = `${this.#basePath}${path}${suffix}`;
     const headers: Record<string, string> = { Accept: 'application/json' };
-    if (this.#token) headers.Authorization = `Bearer ${this.#token}`;
     const controller = new AbortController();
     const forward = () => controller.abort();
     if (signal) {
@@ -266,6 +273,28 @@ export class ApiClient {
     }
     this.#controllers.add(controller);
     try {
+      controller.signal.throwIfAborted();
+      let bearer = this.#token;
+      if (this.#getBearer) {
+        try {
+          const getBearer = this.#getBearer;
+          bearer = await new Promise<string>((resolve, reject) => {
+            const aborted = () => reject(controller.signal.reason);
+            controller.signal.addEventListener('abort', aborted, { once: true });
+            // Cancelling this request must not cancel a refresh shared by others.
+            Promise.resolve().then(getBearer).then(resolve, reject).finally(() => {
+              controller.signal.removeEventListener('abort', aborted);
+            });
+          });
+          if (!bearer) throw new Error();
+        }
+        catch {
+          controller.signal.throwIfAborted();
+          throw new ApiError('unauthorized', KIND_MESSAGE.unauthorized, { status: 401 });
+        }
+      }
+      controller.signal.throwIfAborted();
+      if (bearer) headers.Authorization = `Bearer ${bearer}`;
       let response: { ok: boolean; status: number; json: () => Promise<unknown> };
       try {
         response = await this.#fetch(url, {

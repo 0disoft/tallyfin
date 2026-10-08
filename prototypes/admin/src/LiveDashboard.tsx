@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { BrowserLogin } from './auth/client';
 import { ArrowRight, CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import { Trend } from './Dashboard';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
@@ -13,6 +14,8 @@ type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse
 type MainData = { registry: Registry; summary: SummaryResponse; workflows: WorkflowLoad[]; range: { from: string; to: string } };
 type EventRow = { definition: EventDefinition; source: 'browser' | 'server' | null; count: number | null };
 type ActiveProject = { name: string; timeZone: string };
+type Session = { basePath: string; token?: string; login?: BrowserLogin };
+const OidcLogin = lazy(() => import('./auth/OidcLogin'));
 
 const MAX_SCHEMA_VERSION = 2147483647;
 
@@ -25,7 +28,7 @@ function toApiError(error: unknown): ApiError {
 function describeError(error: ApiError): { title: string; detail: string } {
   switch (error.kind) {
     case 'unauthorized':
-      return { title: '인증이 필요해요', detail: '관리자 bearer 토큰을 넣고 연결해 주세요. 검증기가 없으면 API는 401을 돌려줘요.' };
+      return { title: '인증이 필요해요', detail: '연결을 끊고 다시 로그인해 주세요. 관리자 토큰으로 직접 연결할 수도 있어요.' };
     case 'forbidden':
       return { title: '이 프로젝트를 볼 권한이 없어요', detail: '서버에서 이 프로젝트에 대한 관리자 grant를 확인해 주세요.' };
     case 'not_found':
@@ -61,7 +64,7 @@ function workflowRecords(load: WorkflowLoad): DailyRecord[] {
 
 export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate }: { view: View; period: Period; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void }) {
   const currentOrigin = useMemo(() => window.location.origin, []);
-  const [session, setSession] = useState<{ token: string; basePath: string } | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [token, setToken] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [endpointError, setEndpointError] = useState<string | null>(null);
@@ -78,7 +81,9 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [main, setMain] = useState<Load<MainData>>({ status: 'idle' });
   const [series, setSeries] = useState<Load<EventSeriesResponse>>({ status: 'idle' });
 
-  const client = useMemo(() => (session ? new ApiClient({ token: session.token, basePath: session.basePath }) : null), [session]);
+  const client = useMemo(() => (session ? new ApiClient({ basePath: session.basePath,
+    ...(session.login ? { getBearer: () => session.login!.getAccessToken(), onDestroy: () => session.login!.destroy() } : { token: session.token ?? '' }),
+  }) : null), [session]);
   const sessionRef = useRef(0);
   const clientRef = useRef<ApiClient | null>(null);
   const moreControllerRef = useRef<AbortController | null>(null);
@@ -91,6 +96,12 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const activeProjectId = activeProject?.id ?? null;
   const activeTimeZone = activeProject?.timeZone ?? null;
   const retry = useCallback(() => setRefreshTick(tick => tick + 1), []);
+  const connected = useCallback((login: BrowserLogin) => {
+    sessionRef.current += 1;
+    setToken(''); setProjectId(null); setSelectedEvent(null); setProjects({ status: 'idle' });
+    setMain({ status: 'idle' }); setSeries({ status: 'idle' });
+    setSession({ login, basePath: API_BASE_PATH });
+  }, []);
 
   function connect() {
     const resolved = resolveApiEndpoint(endpoint, currentOrigin);
@@ -104,6 +115,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setProjectId(null);
     setSelectedEvent(null);
     setSession({ token, basePath: resolved.basePath });
+    setToken('');
   }
   function disconnect() {
     sessionRef.current += 1;
@@ -219,7 +231,9 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   }
 
   if (!client) {
-    return <section className="settings-section">
+    return <>
+    <Suspense fallback={<p className="context-note" role="status">로그인 화면을 준비하고 있어요.</p>}><OidcLogin onConnected={connected} /></Suspense>
+    <details className="manual-connection"><summary>관리자 토큰으로 직접 연결</summary><section className="settings-section">
       <h2>API 연결</h2>
       <p className="context-note">이 프로토타입은 같은 출처(same-origin)의 관리자 API만 조회해요. 기본 엔드포인트는 현재 출처의 {API_BASE_PATH}예요. 다른 출처는 이번 범위가 아니라 연결하지 않아요.</p>
       <form className="settings-form" onSubmit={event => { event.preventDefault(); connect(); }}>
@@ -231,7 +245,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
         {endpointError && <p className="form-error" role="alert">{endpointError}</p>}
         <div className="form-actions"><button className="primary-button" type="submit"><PlugsConnected size={22} weight="fill" />연결</button></div>
       </form>
-    </section>;
+    </section></details></>;
   }
 
   const data = main.status === 'ready' ? main.data ?? null : null;

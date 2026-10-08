@@ -201,3 +201,56 @@ test('the default fetch keeps the global receiver instead of the client', async 
     globalThis.fetch = original;
   }
 });
+
+test('each request reads the current bearer and destroy disposes the login once', async () => {
+  const { calls, fetchImpl } = capture(() => jsonResponse(200, { data: [], page: { limit: 25, nextCursor: null } }));
+  let current = TOKEN;
+  let destroyed = 0;
+  const client = new ApiClient({ getBearer: async () => current, onDestroy: () => { destroyed++; }, fetchImpl });
+  assert.equal(client.hasToken, true);
+  await client.listProjects();
+  current = `${TOKEN}-rotated`;
+  await client.listProjects();
+  assert.deepEqual(calls.map(call => call.init.headers.Authorization), [`Bearer ${TOKEN}`, `Bearer ${current}`]);
+  assert.ok(!JSON.stringify(client).includes(TOKEN));
+  client.destroy(); client.destroy();
+  assert.equal(destroyed, 1);
+  assert.equal(client.hasToken, false);
+});
+
+test('failed or empty token providers return a fixed 401 without calling the API', async () => {
+  for (const getBearer of [async () => { throw new Error(TOKEN); }, async () => '']) {
+    const { calls, fetchImpl } = capture(() => { throw new Error('API must not be called'); });
+    const client = new ApiClient({ getBearer, fetchImpl });
+    await assert.rejects(client.listProjects(), error => error.kind === 'unauthorized' && error.status === 401 && !error.message.includes(TOKEN));
+    assert.equal(calls.length, 0);
+    client.destroy();
+  }
+});
+
+test('abort while awaiting shared refresh ends only that request and destroy prevents late fetch', async () => {
+  let release;
+  const waiting = new Promise(resolve => { release = resolve; });
+  const { calls, fetchImpl } = capture(() => jsonResponse(200, { data: [], page: { limit: 25, nextCursor: null } }));
+  const client = new ApiClient({ getBearer: () => waiting, fetchImpl });
+  const controller = new AbortController();
+  const aborted = client.listProjects({ signal: controller.signal });
+  const surviving = client.listProjects();
+  controller.abort();
+  await assert.rejects(aborted, error => error.name === 'AbortError');
+  assert.equal(calls.length, 0);
+  release(TOKEN);
+  await surviving;
+  assert.equal(calls.length, 1);
+  client.destroy();
+
+  let lateRelease;
+  const late = new Promise(resolve => { lateRelease = resolve; });
+  const disconnected = new ApiClient({ getBearer: () => late, fetchImpl });
+  const pending = disconnected.listProjects();
+  disconnected.destroy();
+  await assert.rejects(pending, error => error.name === 'AbortError');
+  lateRelease(TOKEN);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(calls.length, 1);
+});
