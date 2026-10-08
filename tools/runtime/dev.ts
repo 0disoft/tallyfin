@@ -19,7 +19,7 @@ try {
     if (!/^\d{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) throw Error();
     const settings: unknown = options.has('--settings') ? JSON.parse(await readFile(options.get('--settings')!, 'utf8')) : DEFAULT_SETTINGS;
     if (!settings || typeof settings !== 'object' || Array.isArray(settings) ||
-      Object.keys(settings).some(key => !(key in DEFAULT_SETTINGS))) throw Error();
+      Object.keys(settings).some(key => !Object.hasOwn(DEFAULT_SETTINGS, key))) throw Error();
     const local = await startLocal(options.get('--state-dir')!, { ...DEFAULT_SETTINGS, ...settings }, Number(port));
     console.log(JSON.stringify({ local: true, url: local.url.origin, cleanupIntervalSeconds: 60 }));
     let closing = false;

@@ -74,6 +74,41 @@ OpenAPI·DBML·SQL 마이그레이션·브라우저 SDK·CI 변경은 없다.
 실행하지 않았다. UI 검사는 이번 CLI 범위 밖이므로 반복하지 않았다.
 원격 푸시·배포·마이그레이션은 실행하지 않았다.
 
+## 수집기 실행·배포 구성 — 2026-10-08
+
+런타임 코드 커밋 `3eda6ef`: `apps/collector/src/runtime.ts`가 D1·OIDC 환경 설정을
+검사하고 같은 설정의 검증기 캐시를 재사용한다. 공통 팩토리·닫힌 기본 export는
+유지한다. `collector:dev`는 등록 CLI와 같은 영속 로컬 D1을 열고 초기화 상태를
+확인한다. 127.0.0.1에서 구동하고 60초마다 정리를 예약하며 겹친 실행을 막고 종료 시
+진행 중 정리·타이머·런타임을 정리한다. 코드·설정 변경 후 재시작이 필요하다.
+
+`npm run check` 통과: Wrangler 생성 타입·공통/호스트 타입 검사, 전체 테스트 111/111,
+브라우저 크기 검사. 추가한 config/runtime 검사 3/3은 설정 오류·네트워크 없는 검증,
+환경 바인딩을 통한 실제 테스트 서명·401/200·grant 회수 후 403·scheduled 호출,
+등록 CLI에서 만든 DB 재사용·초기화 없는 DB 거부·종료 후 리스너 해제를 확인했다.
+60초 타이머 자체의 장시간 관측은 반복하지 않았고 정리 호출은 직접 검증했다.
+
+`collector:config`는 입력한 계정·DB ID와 OIDC 설정의 형식을 검사하고 새 파일만 만든다.
+원격 요청·리소스 생성·덮어쓰기는 없다. 이후 대상 준비 도구의 타입 검사와 관련 테스트
+3/3 통과. 현재 테스트는 114개이며 전체 114개를 다시 돌리지 않았다(전체 111 + 추가 3).
+`npm run collector:dev -- --help` 통과. `npm run collector:dry-run`으로 업로드 없이
+기본 Worker 번들을 검사했다: 97.63KiB, gzip 24.61KiB. 실제 운영 대상 값이 없어
+운영 설정으로 묶음을 만들거나 원격 ID 존재·소유권을 확인하지 않았다.
+
+개발 의존성 `wrangler ^4`(설치 4.148.0)를 추가했다. 검증된 compatibility date
+2026-08-06은 유지한다. 루트 타입 검사는 `.tmp`에 플랫폼 타입을 생성하고 별도 호스트
+tsconfig로 검사한다. SDK gzip 2667 bytes, SDK+Sembom gzip 2949 bytes로 유지된다.
+OpenAPI·DBML·SQL 마이그레이션·브라우저 SDK·CI 변경은 없다. `.wrangler`·`.dev.vars`
+무시 규칙을 추가했다. 실행 설정·로그 정책은 `wrangler.jsonc`와
+`docs/backend/runtime.md`, 운영 설정 문서는 `docs/ops/config-and-env.md`에 반영했다.
+구조화 앱 로그만 켜고 요청 URL을 담는 호출 로그·자동 traces는 프라이버시 계약에 따라
+끈다. 플랫폼 자체 로그의 저장·반출은 원격 환경에서 추가로 검토해야 한다.
+
+원격 인증 제공자 연결·D1 마이그레이션·grant 등록·Cron Trigger·배포·부하는 실제
+리소스/설정과 승인 범위가 없어 실행하지 않았다. UI 검사는 변경 범위 밖이다.
+푸시·배포·원격 리소스 변경은 실행하지 않았다. 계약 검사 27/27,
+`git diff --check`, `ssealed update . --yes`·`ssealed doctor . --strict` 통과.
+
 ## 검증 이름
 스캐폴드 `ssealed update . --yes`, `ssealed doctor . --strict` 통과.
 매니페스트의 기존 키 정렬을 유지해 체크섬 갱신만 남겼다.

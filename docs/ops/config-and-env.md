@@ -1,6 +1,12 @@
 # Config and Environment
 
-- Status: Draft
+- Status: Collector runtime locally implemented and validated; remote rollout not performed.
+
+Collector settings, local commands, D1/OIDC binding validation, target config generation and
+privacy-aware logging are defined in [Collector runtime](../backend/runtime.md).
+`wrangler.jsonc` is the source for generated binding types and packaging checks. Remote
+account/database identifiers and OIDC provider values must be supplied by the operator.
+Generated target files validate syntax; ownership and availability require a separate remote check.
 
 ## Operational Contract
 

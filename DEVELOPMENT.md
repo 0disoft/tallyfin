@@ -50,6 +50,11 @@ npm run check:browser-size
 Sample/API 연결 관리자 UI의 실행과 검증 명령은 [프로토타입 README](./prototypes/admin/README.md)에 있다. API 연결은 같은 출처의 `/v1` GET 조회만 사용한다.
 
 ## 가짜 명령 금지
+수집기는 `npm run collector:dev -- --local --state-dir .tmp/collector-db`로 실행한다.
+같은 디렉터리를 등록 CLI에서 먼저 초기화하고 프로젝트를 등록한다.
+실행 설정·배포 파일 준비·업로드 없는 묶음 검사는 [수집기 실행](./docs/backend/runtime.md)을 따른다.
+`typecheck`는 Wrangler 바인딩 타입을 생성하고 공통 코드와 플랫폼 연결 코드를 검사한다.
+
 로컬 프로젝트 등록·권한 관리는 `npm run provision -- --help`로 시작한다.
 기본은 미리보기이며 초기화·등록·권한 변경에는 `--apply`가 필요하다.
 입력 형식·명령·복구 절차는 [등록·권한 관리 CLI](./docs/backend/provisioning.md)를 따른다.
