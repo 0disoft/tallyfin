@@ -1,23 +1,11 @@
-# Backend
+# Tallyfin 백엔드 계약
 
-- Status: Draft
+상태: v0.1 설계 확정, 런타임 구현 전.
 
-## Backend Contract
+공개 브라우저 수집과 인증된 관리자 조회를 분리한다. 요청/응답은
+[OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
+동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다.
 
-This backend document covers API server boundary, authentication, authorization, persistence model,
-HTTP API policy, error response, logging and observability, migration strategy,
-and backend security as applicable.
-
-## Required Decisions
-
-- API owner: UNASSIGNED
-- Auth model: UNDECIDED
-- Authorization checks: UNDECIDED
-- Persistence model: UNDECIDED
-- Error response policy: docs/backend/05-error-response.md
-
-## Merge Blockers
-
-- OpenAPI drift from api/openapi.yaml.
-- Authorization behavior hidden in one handler or UI.
-- Migration plan missing rollback or forward-fix path.
+원문과 방문자 테이블은 없으며 일별 이벤트/시작 cohort를 집계한다.
+서버 수집·설정 쓰기 API·인증 제공자·토큰 발급과 배포 설정은 후속 구현이다.
+형식 검증의 통과는 API 실행·원자적 저장·운영 권한 검증의 통과가 아니다.

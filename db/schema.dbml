@@ -1,26 +1,117 @@
-Table users {
-  id uuid [pk]
-  email varchar [not null, unique]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+Project tallyfin {
+  Note: 'Logical v0.1 D1 adapter contract, not an applied migration. UTC epoch milliseconds and ISO project-local dates; no visitor, content or raw event table.'
 }
 
-Table organizations {
-  id uuid [pk]
-  name varchar [not null]
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
+Table projects {
+  id text [pk, not null, note: 'Public routing ID, never a credential']
+  name text [not null]
+  status text [not null, note: 'active | paused']
+  time_zone text [not null, note: 'Validated IANA zone, immutable after creation']
+  allowed_origins_json text [not null, note: 'Exact scheme/host/port, no paths or wildcard; <=16']
+  requests_per_minute integer [not null, note: '1..600; deployment admission control']
+  new_receipts_per_utc_day integer [not null, note: '1..1000000; default 100000']
+  latest_received_at bigint [note: 'Latest committed new receipt, not complete-delivery evidence']
+  created_at bigint [not null]
 }
 
-Table organization_members {
-  organization_id uuid [not null, ref: > organizations.id]
-  user_id uuid [not null, ref: > users.id]
-  role varchar [not null]
-  created_at timestamp [not null]
-
+Table project_grants {
+  project_id text [not null, ref: > projects.id]
+  issuer text [not null, note: 'Trusted admin issuer, control plane only']
+  subject text [not null, note: 'Opaque admin principal, no email or visitor identity']
+  role text [not null, note: 'reader | owner']
+  created_at bigint [not null]
   indexes {
-    (organization_id, user_id) [pk]
-    user_id
-    (organization_id, role)
+    (project_id, issuer, subject) [pk]
+    (issuer, subject, project_id)
   }
 }
+
+Table project_schemas {
+  project_id text [not null, ref: > projects.id]
+  version integer [not null]
+  status text [not null, note: 'active | retired; definitions immutable']
+  definitions_json text [not null, note: 'Validated events/workflows snapshot <=32 KiB']
+  published_at bigint [not null]
+  retired_at bigint
+  indexes {
+    (project_id, version) [pk]
+  }
+}
+
+Table event_receipts {
+  project_id text [not null]
+  source text [not null, note: 'browser in v0.1']
+  event_id text [not null, note: 'Random UUIDv4 per event, never a visitor ID']
+  schema_version integer [not null]
+  payload_hash text [not null, note: 'SHA-256 of canonical event/project/version/source; no raw payload']
+  received_at bigint [not null]
+  expires_at bigint [not null, note: 'received_at + 48h']
+  indexes {
+    (project_id, source, event_id) [pk]
+    expires_at
+  }
+}
+Ref: event_receipts.(project_id, schema_version) > project_schemas.(project_id, version)
+
+Table workflow_attempts {
+  project_id text [not null]
+  source text [not null]
+  attempt_id text [not null, note: 'Random per-operation UUIDv4; not reusable across versions/flows']
+  schema_version integer [not null]
+  workflow_id text [not null]
+  started_at bigint [not null]
+  cohort_date text [not null, note: 'Project-local date of started_at']
+  dimension_key text [not null, note: 'Canonical typed JSON of workflow dimensions <=512 bytes']
+  start_seen boolean [not null, default: false]
+  terminal_kind text [note: 'success | failure | null, first committed terminal wins']
+  terminal_at bigint
+  expires_at bigint [not null, note: 'started_at + 72h']
+  indexes {
+    (project_id, source, attempt_id) [pk]
+    expires_at
+  }
+}
+Ref: workflow_attempts.(project_id, schema_version) > project_schemas.(project_id, version)
+
+Table ingest_daily_usage {
+  project_id text [not null, ref: > projects.id]
+  utc_date text [not null, note: 'UTC receipt date, not event/cohort date']
+  new_receipts integer [not null, default: 0, note: 'Includes new IDs for already-counted workflow phases']
+  expires_at bigint [not null, note: 'UTC day end + 72h']
+  indexes {
+    (project_id, utc_date) [pk]
+    expires_at
+  }
+}
+
+Table event_daily_counts {
+  project_id text [not null]
+  schema_version integer [not null]
+  source text [not null]
+  event_date text [not null, note: 'Project-local date of occurredAt']
+  event_name text [not null]
+  dimension_key text [not null, note: 'Canonical sorted typed properties; absence differs from false/0']
+  count integer [not null, default: 0, note: 'Nonnegative safe integer']
+  updated_at bigint [not null]
+  indexes {
+    (project_id, schema_version, source, event_date, event_name, dimension_key) [pk]
+  }
+}
+Ref: event_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)
+
+Table workflow_daily_counts {
+  project_id text [not null]
+  schema_version integer [not null]
+  source text [not null]
+  cohort_date text [not null]
+  workflow_id text [not null]
+  dimension_key text [not null]
+  started_count integer [not null, default: 0]
+  succeeded_count integer [not null, default: 0]
+  failed_count integer [not null, default: 0]
+  updated_at bigint [not null]
+  indexes {
+    (project_id, schema_version, source, cohort_date, workflow_id, dimension_key) [pk]
+  }
+}
+Ref: workflow_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)

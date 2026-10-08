@@ -1,23 +1,12 @@
-# Authentication
+# 인증 경계
 
-- Status: Draft
+상태: 경계 확정, 인증 제공자와 구현은 미정.
 
-## Backend Contract
+관리자 bearer는 신뢰하는 검증기를 거쳐 issuer/subject로 변환한다. 검증기는
+서명·신뢰하는 발급자·대상·유효기간을 확인해야 한다. 단순 decode로 인증하지 않는다.
+인증 제공자/검증기가 설정되지 않은 배포는 관리자 API를 비공개로 닫는다.
+Tallyfin이 자체 가입·토큰 발급 시스템을 구현한다고 가정하지 않는다.
 
-This backend document covers API server boundary, authentication, authorization, persistence model,
-HTTP API policy, error response, logging and observability, migration strategy,
-and backend security as applicable.
-
-## Required Decisions
-
-- API owner: UNASSIGNED
-- Auth model: UNDECIDED
-- Authorization checks: UNDECIDED
-- Persistence model: UNDECIDED
-- Error response policy: docs/backend/05-error-response.md
-
-## Merge Blockers
-
-- OpenAPI drift from api/openapi.yaml.
-- Authorization behavior hidden in one handler or UI.
-- Migration plan missing rollback or forward-fix path.
+공개 browser 수집에는 관리자 토큰을 보내지 않으며 projectId·Origin은 인증이 아니다.
+server 수집은 v0.1에서 거부하고 서버 자격증명 설계는 후속이다.
+[이벤트 계약](./event-contract.md)을 참고한다.

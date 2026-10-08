@@ -1,0 +1,33 @@
+{
+  "meta": {
+    "projectId": "sembom",
+    "schemaVersion": 1,
+    "source": "browser",
+    "from": "2026-10-08",
+    "to": "2026-10-09",
+    "timeZone": "Asia/Seoul",
+    "generatedAt": "2026-10-09T00:00:00Z",
+    "latestReceivedAt": "2026-10-08T15:00:11Z",
+    "coverage": "observed-only"
+  },
+  "eventName": "calculation_success",
+  "groupBy": "tool",
+  "totalEvents": 1,
+  "days": [
+    {
+      "date": "2026-10-08",
+      "count": 0,
+      "breakdown": []
+    },
+    {
+      "date": "2026-10-09",
+      "count": 1,
+      "breakdown": [
+        {
+          "value": "loan",
+          "count": 1
+        }
+      ]
+    }
+  ]
+}

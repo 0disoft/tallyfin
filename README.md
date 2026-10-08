@@ -2,7 +2,7 @@
 
 Tallyfin은 Rodisoft의 여러 서비스에서 공통으로 사용하는 가벼운 제품 이벤트 분석 플랫폼이다. 프로젝트별 설정으로 회원가입·파일 변환·구매·계산 등 서로 다른 행동을 분석하며, 개인정보 수집을 최소화한다. Sembom은 첫 적용 사례다.
 
-현재 저장소에는 설계 문서와 [실행 가능한 샘플 관리자 UI](prototypes/admin/README.md)가 있다. 개요·이벤트 분석·목표·설정 화면을 가상 데이터로 검토할 수 있다. 아래 운영 구성은 계획이며 실제 수집기·SDK·API·DB와 벤치마크는 아직 없다.
+현재 저장소에는 설계 문서, v0.1 이벤트/API/논리 DB 계약과 [샘플 관리자 UI](prototypes/admin/README.md)가 있다. 실제 수집기·SDK·조회 서버와 적용된 DB 마이그레이션은 아직 없다.
 
 MVP는 프로젝트별로 등록한 이벤트의 건수·추이·허용 속성별 집계와 작업 흐름의 완료/오류를 다룬다. 서비스별 이벤트 연결은 각 서비스가 담당하고, 공통 SDK에는 특정 서비스 이벤트명을 내장하지 않는다. 브라우저부터 구현하며 서버 연동은 계약에서 발행 출처를 구분한 뒤 후속으로 구현한다.
 
@@ -12,4 +12,4 @@ MVP는 프로젝트별로 등록한 이벤트의 건수·추이·허용 속성�
 
 문서: [제품 개요](docs/product/00-product-brief.md), [제품 명세](docs/product/02-spec.md), [화면 설계](docs/frontend/FRONTEND_DESIGN.md), [아키텍처](ARCHITECTURE.md), [ADR 0004](docs/adr/0004-general-product-analytics.md), [Sembom 연동 예시](docs/integrations/sembom.md), [성능 목표](docs/engineering/03-performance-budget.md), [로드맵](docs/product/01-roadmap.md).
 
-원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. 인증 방식·보관 기간·도메인·라이선스는 미정이다. `api/openapi.yaml`과 `db/schema.dbml`은 아직 일반 스캐폴드 예제이며 실제 계약으로 교체한 뒤 구현한다.
+원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. [이벤트·집계 계약](docs/backend/event-contract.md)에 따라 OpenAPI와 DBML 예제를 v0.1 계약으로 교체했다. 수집기·SDK·SQL 마이그레이션은 아직 없으며 운영 인증 제공자·IP 보호 정책·도메인·라이선스는 미정이다.

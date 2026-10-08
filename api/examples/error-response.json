@@ -1,7 +1,7 @@
 {
   "error": {
-    "code": "UNDECIDED_ERROR",
-    "message": "A safe public error message.",
-    "requestId": "req_UNDECIDED"
+    "code": "invalid_event",
+    "message": "Event does not match the registered schema.",
+    "requestId": "33333333-3333-4333-8333-333333333333"
   }
 }

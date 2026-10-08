@@ -14,7 +14,7 @@
 공개 프로젝트 ID는 라우팅 메타데이터이며 비밀/인증이 아니다. 비공개 ZDP/Cloudflare 의존성은 core/SDK에 넣지 않는다.
 
 ## 기준 문서
-제품 범위는 제품 명세, API 전송 형식은 OpenAPI, DB 구조는 DBML을 기준으로 구현한다. 향후 core는 계약에 맞는 검증 코드를 제공하며 [ADR 0002](../adr/0002-contract-source-of-truth.md)를 따른다. api/openapi.yaml, db/schema.dbml은 현재 제네릭 예시이며 실제 계약이 아니다.
+제품 범위는 제품 명세, API 형식은 OpenAPI, 저장 구조는 DBML을 따른다. v0.1 계약은 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)에 확정했으며 코어 검증·저장 구현은 후속이다. tools/contracts는 개발 전용 계약 검사이며 core/SDK의 런타임 의존성이 아니다.
 
 ## 버전 계획
 이벤트에 스키마 버전을 포함한다. 패키지 버전/배포 방식은 미결정.

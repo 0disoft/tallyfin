@@ -1,163 +1,1261 @@
 openapi: 3.1.0
 info:
-  title: UNDECIDED Resource API
-  version: 0.0.0
-servers:
-  - url: https://api.example.invalid
-    description: UNDECIDED
+  title: Tallyfin API
+  version: 0.1.0
+  description: Design contract only; no endpoints deployed. Browser ingestion is public and untrusted.
+    Administrator reads require a verified principal and project grant. Registry snapshots are provisioned out
+    of band; write API and server ingestion are deferred.
+tags:
+  - name: Collection
+    description: Explicit browser events; no visitor identifiers or free text.
+  - name: Administration
+    description: Authenticated project-scoped definitions and aggregates.
+security:
+  - adminBearer: []
 components:
   securitySchemes:
-    bearerAuth:
+    adminBearer:
       type: http
       scheme: bearer
+      description: Administrator credential only. Deployment must configure a trusted verifier that maps
+        issuer/subject to project grants. Anonymous access and decode-only JWT handling are forbidden.
+        Identity provider is not selected by this contract.
   parameters:
-    Limit:
-      name: limit
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        $ref: "#/components/schemas/ProjectId"
+    SchemaVersion:
+      name: schemaVersion
       in: query
+      required: true
       schema:
         type: integer
         minimum: 1
-        maximum: 100
-        default: 25
-    Cursor:
-      name: cursor
+        maximum: 2147483647
+    From:
+      name: from
       in: query
-      schema:
-        type:
-          - string
-          - "null"
-    IdempotencyKey:
-      name: Idempotency-Key
-      in: header
       required: true
       schema:
         type: string
+        format: date
+      description: Inclusive project-local date; retained within 90 days. At most 31 days including both endpoints.
+    To:
+      name: to
+      in: query
+      required: true
+      schema:
+        type: string
+        format: date
+    EventName:
+      name: eventName
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9_]{0,47}$
+        maxLength: 48
+    WorkflowId:
+      name: workflowId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9_]{0,47}$
+        maxLength: 48
   schemas:
-    Resource:
+    ProjectId:
+      type: string
+      pattern: ^[a-z][a-z0-9-]{0,47}$
+      maxLength: 48
+    PropertyValue:
+      oneOf:
+        - type: boolean
+        - type: integer
+          minimum: -1000000
+          maximum: 1000000
+        - type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,31}$
+          maxLength: 32
+    EventProperties:
       type: object
-      required: [id, type]
+      maxProperties: 4
+      propertyNames:
+        type: string
+        pattern: ^[a-z][a-z0-9_]{0,47}$
+        maxLength: 48
+      additionalProperties:
+        oneOf:
+          - type: boolean
+          - type: integer
+            minimum: -1000000
+            maximum: 1000000
+          - type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,31}$
+            maxLength: 32
+    Attempt:
+      type: object
+      additionalProperties: false
+      required:
+        - workflowId
+        - attemptId
+        - startedAt
+      properties:
+        workflowId:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        attemptId:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+        startedAt:
+          type: string
+          format: date-time
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+          maxLength: 30
+    Event:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - name
+        - occurredAt
+        - properties
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        occurredAt:
+          type: string
+          format: date-time
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+          maxLength: 30
+        properties:
+          $ref: "#/components/schemas/EventProperties"
+        attempt:
+          $ref: "#/components/schemas/Attempt"
+    BrowserBatch:
+      type: object
+      additionalProperties: false
+      required:
+        - schemaVersion
+        - source
+        - events
+      properties:
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        source:
+          type: string
+          const: browser
+        events:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/Event"
+    BatchResult:
+      type: object
+      additionalProperties: false
+      required:
+        - accepted
+        - duplicates
+      properties:
+        accepted:
+          type: integer
+          minimum: 0
+          maximum: 20
+        duplicates:
+          type: integer
+          minimum: 0
+          maximum: 20
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+            - code
+            - message
+            - requestId
+          properties:
+            code:
+              type: string
+              enum:
+                - invalid_request
+                - invalid_event
+                - unknown_schema
+                - origin_denied
+                - project_unavailable
+                - event_conflict
+                - attempt_conflict
+                - quota_exceeded
+                - unauthorized
+                - forbidden
+                - not_found
+                - storage_unavailable
+            message:
+              type: string
+              minLength: 1
+              maxLength: 160
+            requestId:
+              type: string
+              format: uuid
+              pattern: ^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$
+    Project:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - status
+        - timeZone
       properties:
         id:
           type: string
-        type:
+          pattern: ^[a-z][a-z0-9-]{0,47}$
+          maxLength: 48
+        name:
           type: string
-          const: Resource
-    CreateResourceRequest:
-      type: object
-      required: [type]
-      properties:
-        type:
+          minLength: 1
+          maxLength: 80
+        status:
           type: string
-          const: Resource
-    SuccessResponse:
+          enum:
+            - active
+            - paused
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+    ProjectPage:
       type: object
-      required: [data]
-      properties:
-        data:
-          $ref: "#/components/schemas/Resource"
-    PaginatedResponse:
-      type: object
-      required: [data, page]
+      additionalProperties: false
+      required:
+        - data
+        - page
       properties:
         data:
           type: array
+          minItems: 0
+          maxItems: 100
           items:
-            $ref: "#/components/schemas/Resource"
+            $ref: "#/components/schemas/Project"
         page:
           type: object
-          required: [limit, nextCursor]
+          additionalProperties: false
+          required:
+            - limit
+            - nextCursor
           properties:
             limit:
               type: integer
               minimum: 1
               maximum: 100
             nextCursor:
-              type:
-                - string
-                - "null"
-    ErrorResponse:
+              anyOf:
+                - type: string
+                  pattern: ^[a-z][a-z0-9-]{0,47}$
+                  maxLength: 48
+                - type: "null"
+    BooleanProperty:
       type: object
-      required: [error]
+      additionalProperties: false
+      required:
+        - type
+        - required
+        - purpose
       properties:
-        error:
+        type:
+          type: string
+          const: boolean
+        required:
+          type: boolean
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 240
+    EnumProperty:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - required
+        - purpose
+        - values
+      properties:
+        type:
+          type: string
+          const: enum
+        required:
+          type: boolean
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 240
+        values:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9_-]{0,31}$
+            maxLength: 32
+          uniqueItems: true
+    IntegerProperty:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - required
+        - purpose
+        - minimum
+        - maximum
+      properties:
+        type:
+          type: string
+          const: integer
+        required:
+          type: boolean
+        purpose:
+          type: string
+          minLength: 1
+          maxLength: 240
+        minimum:
+          type: integer
+          minimum: -1000000
+          maximum: 1000000
+        maximum:
+          type: integer
+          minimum: -1000000
+          maximum: 1000000
+    PropertyDefinition:
+      oneOf:
+        - $ref: "#/components/schemas/BooleanProperty"
+        - $ref: "#/components/schemas/EnumProperty"
+        - $ref: "#/components/schemas/IntegerProperty"
+    EventDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - label
+        - source
+        - properties
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        source:
+          type: string
+          enum:
+            - browser
+            - server
+        properties:
           type: object
-          required: [code, message]
+          maxProperties: 4
+          propertyNames:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,47}$
+            maxLength: 48
+          additionalProperties:
+            $ref: "#/components/schemas/PropertyDefinition"
+    WorkflowDefinition:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - label
+        - source
+        - startEvent
+        - successEvent
+        - failureEvent
+        - dimensions
+      properties:
+        id:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        label:
+          type: string
+          minLength: 1
+          maxLength: 80
+        source:
+          type: string
+          const: browser
+        startEvent:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        successEvent:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        failureEvent:
+          anyOf:
+            - type: string
+              pattern: ^[a-z][a-z0-9_]{0,47}$
+              maxLength: 48
+            - type: "null"
+        dimensions:
+          type: array
+          minItems: 0
+          maxItems: 4
+          items:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,47}$
+            maxLength: 48
+          uniqueItems: true
+    Registry:
+      type: object
+      additionalProperties: false
+      required:
+        - project
+        - schemaVersion
+        - schemaStatus
+        - allowedOrigins
+        - limits
+        - events
+        - workflows
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        schemaStatus:
+          type: string
+          enum:
+            - active
+            - retired
+        allowedOrigins:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: string
+            format: uri
+            maxLength: 256
+          uniqueItems: true
+          description: Exact origins; no path/wildcard/null. HTTPS in production; development HTTP only by explicit
+            local configuration.
+        limits:
+          type: object
+          additionalProperties: false
+          required:
+            - requestsPerMinute
+            - newReceiptsPerUtcDay
           properties:
-            code:
-              type: string
-            message:
-              type: string
-            requestId:
-              type: string
-security:
-  - bearerAuth: []
+            requestsPerMinute:
+              type: integer
+              minimum: 1
+              maximum: 600
+            newReceiptsPerUtcDay:
+              type: integer
+              minimum: 1
+              maximum: 1000000
+              description: UTC receipt-date budget; includes new IDs for compatible repeated workflow phases.
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/EventDefinition"
+        workflows:
+          type: array
+          minItems: 0
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/WorkflowDefinition"
+    QueryMeta:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - schemaVersion
+        - source
+        - from
+        - to
+        - timeZone
+        - generatedAt
+        - latestReceivedAt
+        - coverage
+      properties:
+        projectId:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,47}$
+          maxLength: 48
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        source:
+          type: string
+          const: browser
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+        generatedAt:
+          type: string
+          format: date-time
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+          maxLength: 30
+        latestReceivedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+              maxLength: 30
+            - type: "null"
+        coverage:
+          type: string
+          const: observed-only
+          description: Counts of received events only. Does not prove delivery completeness or visitor authenticity.
+    EventCount:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - count
+      properties:
+        name:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        count:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    SummaryResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+        - totalEvents
+        - events
+      properties:
+        meta:
+          $ref: "#/components/schemas/QueryMeta"
+        totalEvents:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/EventCount"
+    PropertyBucket:
+      type: object
+      additionalProperties: false
+      required:
+        - value
+        - count
+      properties:
+        value:
+          anyOf:
+            - $ref: "#/components/schemas/PropertyValue"
+            - type: "null"
+        count:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    EventDay:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - count
+        - breakdown
+      properties:
+        date:
+          type: string
+          format: date
+        count:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        breakdown:
+          type: array
+          minItems: 0
+          maxItems: 33
+          items:
+            $ref: "#/components/schemas/PropertyBucket"
+    EventSeriesResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+        - eventName
+        - groupBy
+        - totalEvents
+        - days
+      properties:
+        meta:
+          $ref: "#/components/schemas/QueryMeta"
+        eventName:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        groupBy:
+          anyOf:
+            - type: string
+              pattern: ^[a-z][a-z0-9_]{0,47}$
+              maxLength: 48
+            - type: "null"
+        totalEvents:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        days:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            $ref: "#/components/schemas/EventDay"
+    WorkflowDay:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - startedAttempts
+        - succeededAttempts
+        - failedAttempts
+        - pendingAttempts
+        - completionRate
+        - provisional
+      properties:
+        date:
+          type: string
+          format: date
+        startedAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        succeededAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        failedAttempts:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            - type: "null"
+        pendingAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        completionRate:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 100
+            - type: "null"
+        provisional:
+          type: boolean
+    WorkflowSummary:
+      type: object
+      additionalProperties: false
+      required:
+        - startedAttempts
+        - succeededAttempts
+        - failedAttempts
+        - pendingAttempts
+        - completionRate
+      properties:
+        startedAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        succeededAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        failedAttempts:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            - type: "null"
+        pendingAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        completionRate:
+          anyOf:
+            - type: number
+              minimum: 0
+              maximum: 100
+            - type: "null"
+    WorkflowResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+        - workflowId
+        - cohortBasis
+        - summary
+        - days
+      properties:
+        meta:
+          $ref: "#/components/schemas/QueryMeta"
+        workflowId:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        cohortBasis:
+          type: string
+          const: startedAt
+        summary:
+          $ref: "#/components/schemas/WorkflowSummary"
+        days:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            $ref: "#/components/schemas/WorkflowDay"
 paths:
-  /health:
-    get:
-      security: []
-      responses:
-        "200":
-          description: Health check
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    const: ok
-  /v1/resources:
-    get:
-      parameters:
-        - $ref: "#/components/parameters/Limit"
-        - $ref: "#/components/parameters/Cursor"
-      responses:
-        "200":
-          description: List resources
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PaginatedResponse"
+  /v1/projects/{projectId}/batches:
     post:
+      tags:
+        - Collection
+      operationId: collectBrowserBatch
+      summary: Atomically ingest a browser batch
+      description: "At most 20 events and 16 KiB UTF-8 body. Validate all events before a single atomic
+        receipt/attempt/aggregate transaction. Any conflict rejects the entire batch. Event IDs provide
+        idempotency without custom headers, including sendBeacon. Origin allowlisting is admission control,
+        not authentication or proof that events are genuine. Responses include CORS headers only for an
+        allowed origin; all responses use Cache-Control: no-store. Unknown origin receives no CORS
+        permission."
+      security: []
       parameters:
-        - $ref: "#/components/parameters/IdempotencyKey"
+        - $ref: "#/components/parameters/ProjectId"
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+            maxLength: 256
+          description: Exact registered origin; missing/null origins are rejected. CORS allows matching origins only,
+            without credentials.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateResourceRequest"
+              $ref: "#/components/schemas/BrowserBatch"
+          text/plain:
+            schema:
+              type: string
+              maxLength: 16384
+              description: UTF-8 JSON serialization of BrowserBatch, not arbitrary text. Decoded bytes remain limited to 16
+                KiB.
       responses:
-        "201":
-          description: Create resource
+        "200":
+          description: Transaction committed. accepted + duplicates equals request event count; duplicates include
+            already-counted compatible workflow phases.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        default:
-          description: Error
+                $ref: "#/components/schemas/BatchResult"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "400":
+          description: Malformed encoding, JSON or envelope; unknown fields rejected.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /v1/resources/{resourceId}:
-    get:
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "403":
+          description: Origin denied or project paused.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "404":
+          description: Unknown project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "409":
+          description: Reused event ID with different content or conflicting attempt metadata/terminal outcome.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "413":
+          description: UTF-8 body exceeds 16 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "415":
+          description: Unsupported media type or content encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "422":
+          description: Unknown/retired schema, invalid event properties, time window or workflow binding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "429":
+          description: Admission rate or daily accepted-event quota reached.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Retry-After:
+              description: Integer delay in seconds; SDK applies bounded retries.
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 3600
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+        "503":
+          description: Storage unavailable. Retry with original IDs; earlier commit outcome may be unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Access-Control-Allow-Origin:
+              description: Exact allowed request origin, no wildcard.
+              schema:
+                type: string
+            Vary:
+              description: Cache partition.
+              schema:
+                type: string
+                const: Origin
+    options:
+      tags:
+        - Collection
+      operationId: preflightBrowserBatch
+      summary: Check the registered origin for CORS
+      security: []
       parameters:
-        - name: resourceId
-          in: path
+        - $ref: "#/components/parameters/ProjectId"
+        - name: Origin
+          in: header
           required: true
           schema:
             type: string
+            format: uri
+            maxLength: 256
+        - name: Access-Control-Request-Method
+          in: header
+          required: true
+          schema:
+            type: string
+            const: POST
+        - name: Access-Control-Request-Headers
+          in: header
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+          description: Case-insensitive header list; only Content-Type is permitted.
+      responses:
+        "204":
+          description: Exact allowed origin; POST and Content-Type allowed, credentials disabled.
+          headers:
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+              description: Exact registered request origin, never wildcard.
+            Vary:
+              schema:
+                type: string
+                const: Origin
+              description: Cache partition by origin.
+            Access-Control-Allow-Methods:
+              schema:
+                type: string
+                const: POST
+              description: Accepted collection method.
+            Access-Control-Allow-Headers:
+              schema:
+                type: string
+                const: Content-Type
+              description: No administrator credentials accepted for collection.
+        "403":
+          description: Unknown project or denied origin; no CORS permission.
+  /v1/projects:
+    get:
+      tags:
+        - Administration
+      operationId: listProjects
+      summary: List accessible projects
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[a-z][a-z0-9-]{0,47}$
+            maxLength: 48
+          description: Last project ID returned; stable lexical order and authorization reapplied on every page.
       responses:
         "200":
-          description: Get resource
+          description: Only projects granted to the verified principal.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SuccessResponse"
-        default:
-          description: Error
+                $ref: "#/components/schemas/ProjectPage"
+        "400":
+          description: Invalid pagination.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/schemas/{schemaVersion}:
+    get:
+      tags:
+        - Administration
+      operationId: getProjectSchema
+      summary: Read an immutable registry snapshot
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: schemaVersion
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      responses:
+        "200":
+          description: Bounded project-scoped query.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Registry"
+        "400":
+          description: Invalid date range, schema or grouping.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated principal lacks this project grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; no fabricated zero response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/summary:
+    get:
+      tags:
+        - Administration
+      operationId: getEventSummary
+      summary: Read event counts for one version and period
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/SchemaVersion"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+      responses:
+        "200":
+          description: Bounded project-scoped query.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SummaryResponse"
+        "400":
+          description: Invalid date range, schema or grouping.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated principal lacks this project grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; no fabricated zero response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/events/{eventName}/daily:
+    get:
+      tags:
+        - Administration
+      operationId: getEventDailySeries
+      summary: Read daily counts and optional registered-property buckets
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/SchemaVersion"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/EventName"
+        - name: groupBy
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: ^[a-z][a-z0-9_]{0,47}$
+            maxLength: 48
+          description: One registered property of this event. Values are bounded enum, boolean or integer buckets; null
+            means absent optional property.
+      responses:
+        "200":
+          description: Bounded project-scoped query.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventSeriesResponse"
+        "400":
+          description: Invalid date range, schema or grouping.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated principal lacks this project grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; no fabricated zero response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/workflows/{workflowId}/daily:
+    get:
+      tags:
+        - Administration
+      operationId: getWorkflowCohorts
+      summary: Read start-date workflow cohorts
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/SchemaVersion"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/WorkflowId"
+      responses:
+        "200":
+          description: Bounded project-scoped query.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowResponse"
+        "400":
+          description: Invalid date range, schema or grouping.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated principal lacks this project grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; no fabricated zero response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+servers:
+  - url: /
+    description: Same-origin API mount; deployment host is configured separately.

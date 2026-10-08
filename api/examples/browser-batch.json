@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "source": "browser",
+  "events": [
+    {
+      "eventId": "11111111-1111-4111-8111-111111111111",
+      "name": "input_start",
+      "occurredAt": "2026-10-08T14:59:50Z",
+      "properties": {
+        "tool": "loan"
+      },
+      "attempt": {
+        "workflowId": "calculation",
+        "attemptId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "startedAt": "2026-10-08T14:59:50Z"
+      }
+    },
+    {
+      "eventId": "22222222-2222-4222-8222-222222222222",
+      "name": "calculation_success",
+      "occurredAt": "2026-10-08T15:00:10Z",
+      "properties": {
+        "tool": "loan"
+      },
+      "attempt": {
+        "workflowId": "calculation",
+        "attemptId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "startedAt": "2026-10-08T14:59:50Z"
+      }
+    }
+  ]
+}

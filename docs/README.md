@@ -12,6 +12,9 @@
 - [ADR 0002 계약 기준 문서](./adr/0002-contract-source-of-truth.md)
 - [ADR 0003 최소·프라이버시 이벤트](./adr/0003-minimal-privacy-preserving-events.md)
 - [ADR 0004 범용 제품 분석](./adr/0004-general-product-analytics.md)
+- [ADR 0005 이벤트·집계 계약](./adr/0005-event-and-aggregation-contract.md)
+- [전송·집계 계약](./backend/event-contract.md)
+- [OpenAPI](../api/openapi.yaml), [DBML](../db/schema.dbml)
 - [Sembom 연동 예시](./integrations/sembom.md)
 - [워크스페이스 경계](./monorepo/workspace-boundaries.md)
 - [패키지 소유권](./monorepo/package-ownership.md)
@@ -23,4 +26,4 @@
 - [검증](../VALIDATION.md)
 
 ## 채워지지 않은 템플릿
-api/openapi.yaml, db/schema.dbml은 제네릭 resource/users/org 예시이며 Tallyfin 계약이 아니다. 기존 ops/auth 문서는 템플릿으로 남는다.
+운영 ops/auth 문서 중 아직 채우지 않은 항목은 템플릿이다. OpenAPI·DBML은 v0.1 Tallyfin 계약으로 교체했으나 런타임 구현과 운영 인증을 뜻하지 않는다.

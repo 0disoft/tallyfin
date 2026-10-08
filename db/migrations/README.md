@@ -1,28 +1,11 @@
-# Migrations
+# 저장 계약과 마이그레이션 상태
 
-- Status: Draft
-- Owner: UNASSIGNED
+상태: 논리 DBML만 작성했다. SQL 마이그레이션은 아직 없고 적용하지 않았다.
 
-## Purpose
+저장 구조는 [schema.dbml](../schema.dbml), 의미는
+[이벤트 계약](../../docs/backend/event-contract.md)을 따른다.
 
-This document captures the durable design contract for Migrations.
-It is intentionally a scaffold and should be filled with project-specific decisions as they become known.
-
-## Source of Truth
-
-- Product decision: UNDECIDED
-- Technical owner: UNASSIGNED
-- Related ADR: UNDECIDED
-
-## Required Decisions
-
-- Boundary: UNDECIDED
-- Data ownership: UNDECIDED
-- Failure and recovery behavior: UNDECIDED
-- Validation needed before merge: VALIDATION.md
-
-## Review Blockers
-
-- The change invents a product domain without a source.
-- The change weakens validation or skips required evidence.
-- The change relies on generated, cache, or build output as source truth.
+SQL 구현에서는 프로젝트를 포함한 복합 키·외래 키, 값의 CHECK 제약과
+영수증/시도/할당량/집계의 단일 트랜잭션 반영을 검증한다. 실패·동시 요청·만료
+정리를 확인하기 전에는 운영에 적용하지 않는다. 기존 데이터를 변경하는 이관이나
+롤백도 이번 작업에서는 실행하지 않았다.

@@ -1,0 +1,42 @@
+{
+  "meta": {
+    "projectId": "sembom",
+    "schemaVersion": 1,
+    "source": "browser",
+    "from": "2026-10-08",
+    "to": "2026-10-09",
+    "timeZone": "Asia/Seoul",
+    "generatedAt": "2026-10-09T00:00:00Z",
+    "latestReceivedAt": "2026-10-08T15:00:11Z",
+    "coverage": "observed-only"
+  },
+  "workflowId": "calculation",
+  "cohortBasis": "startedAt",
+  "summary": {
+    "startedAttempts": 1,
+    "succeededAttempts": 1,
+    "failedAttempts": null,
+    "pendingAttempts": 0,
+    "completionRate": 100
+  },
+  "days": [
+    {
+      "date": "2026-10-08",
+      "startedAttempts": 1,
+      "succeededAttempts": 1,
+      "failedAttempts": null,
+      "pendingAttempts": 0,
+      "completionRate": 100,
+      "provisional": true
+    },
+    {
+      "date": "2026-10-09",
+      "startedAttempts": 0,
+      "succeededAttempts": 0,
+      "failedAttempts": null,
+      "pendingAttempts": 0,
+      "completionRate": null,
+      "provisional": true
+    }
+  ]
+}

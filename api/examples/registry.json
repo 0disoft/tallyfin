@@ -1,0 +1,143 @@
+{
+  "project": {
+    "id": "sembom",
+    "name": "Sembom",
+    "status": "active",
+    "timeZone": "Asia/Seoul"
+  },
+  "schemaVersion": 1,
+  "schemaStatus": "active",
+  "allowedOrigins": [
+    "https://sembom.example.invalid"
+  ],
+  "limits": {
+    "requestsPerMinute": 120,
+    "newReceiptsPerUtcDay": 100000
+  },
+  "events": [
+    {
+      "name": "tool_view",
+      "label": "도구 조회",
+      "source": "browser",
+      "properties": {
+        "tool": {
+          "type": "enum",
+          "purpose": "공개 도구 종류",
+          "required": true,
+          "values": [
+            "grade",
+            "loan",
+            "timer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "input_start",
+      "label": "입력 시작",
+      "source": "browser",
+      "properties": {
+        "tool": {
+          "type": "enum",
+          "purpose": "공개 도구 종류",
+          "required": true,
+          "values": [
+            "grade",
+            "loan",
+            "timer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "calculation_success",
+      "label": "계산 완료",
+      "source": "browser",
+      "properties": {
+        "tool": {
+          "type": "enum",
+          "purpose": "공개 도구 종류",
+          "required": true,
+          "values": [
+            "grade",
+            "loan",
+            "timer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "validation_error",
+      "label": "입력 검증 오류",
+      "source": "browser",
+      "properties": {
+        "tool": {
+          "type": "enum",
+          "purpose": "공개 도구 종류",
+          "required": true,
+          "values": [
+            "grade",
+            "loan",
+            "timer"
+          ]
+        },
+        "error": {
+          "type": "enum",
+          "purpose": "고정 오류 종류",
+          "required": false,
+          "values": [
+            "required",
+            "range"
+          ]
+        }
+      }
+    },
+    {
+      "name": "result_copy",
+      "label": "결과 복사",
+      "source": "browser",
+      "properties": {
+        "tool": {
+          "type": "enum",
+          "purpose": "공개 도구 종류",
+          "required": true,
+          "values": [
+            "grade",
+            "loan",
+            "timer"
+          ]
+        }
+      }
+    },
+    {
+      "name": "feedback_submit",
+      "label": "피드백 제출",
+      "source": "browser",
+      "properties": {
+        "tool": {
+          "type": "enum",
+          "purpose": "공개 도구 종류",
+          "required": true,
+          "values": [
+            "grade",
+            "loan",
+            "timer"
+          ]
+        }
+      }
+    }
+  ],
+  "workflows": [
+    {
+      "id": "calculation",
+      "label": "계산 완료",
+      "source": "browser",
+      "startEvent": "input_start",
+      "successEvent": "calculation_success",
+      "failureEvent": null,
+      "dimensions": [
+        "tool"
+      ]
+    }
+  ]
+}

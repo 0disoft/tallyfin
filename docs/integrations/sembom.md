@@ -17,11 +17,11 @@ Sembom은 Tallyfin의 첫 파일럿이며, 이 문서는 Tallyfin 코어가 아�
 
 ## 속성
 
-tool, locale, mode, error, field 같은 속성을 선택적으로 둔다. 이는 프로젝트별 속성이며 코어 필수 필드가 아니다. error와 field는 검증 오류 맥락을 설명하기 위한 선택 항목이다.
+tool, locale, mode, error, field는 선택 속성 후보이며 코어 필수 필드가 아니다. v0.1 [등록 예시](../../api/examples/registry.json)는 tool의 작은 enum과 validation_error의 고정 error enum만 사용한다. 전체 도구 목록은 256 조합 한도에 맞게 별도 등록하며 이 예시는 운영 설정이 아니다.
 
 ## 수명주기와 소스 경계
 
-input_start는 해당 도구 방문의 첫 사용자 입력에, calculation_success는 그 입력 이후 첫 성공에 한 번씩 기록한다. 자동 계산의 초기 결과는 성공으로 세지 않는다. result_copy는 복사가 성공했을 때만, feedback_submit은 제출이 성공했을 때만 보낸다. 각 행동을 확정하는 발행 출처는 브라우저 또는 서버 중 하나로 정해 이중 집계를 피한다.
+input_start는 해당 도구 방문의 첫 사용자 입력에서 무작위 attemptId와 startedAt을 만들고, 이후 첫 calculation_success에 같은 값을 붙인다. 자동 초기 결과는 완료로 세지 않는다. 입력 검증 오류는 일반 이벤트이며 작업 종료 실패로 세지 않는다. 이 예시의 목표에는 실패 단계가 없어 failedAttempts=null이다. result_copy와 feedback_submit은 동작이 성공했을 때만 보내고 서버에서도 같은 업무를 중복 기록하지 않는다.
 
 ## 경계
 

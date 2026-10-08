@@ -1,6 +1,6 @@
 # 개발 가이드
 
-상태: 설계 문서와 샘플 관리자 UI가 있다. 실제 API·DB 계약과 수집 런타임은 아직 구현하지 않았다.
+상태: 설계 문서·v0.1 계약·샘플 관리자 UI가 있다. 수집·조회 런타임과 적용된 DB 마이그레이션은 아직 없다.
 
 ## 읽기 순서
 
@@ -14,7 +14,7 @@
 8. [VALIDATION.md](./VALIDATION.md)
 
 ## 다음 구현
-다음 슬라이스는 API/DB 계약 확정과 런타임 이전 스키마 교체다.
+다음 슬라이스는 확정된 [전송·집계 계약](./docs/backend/event-contract.md)을 따르는 코어 검증·원자적 저장·최소 수집기다. 계약 검사 명령은 [VALIDATION.md](./VALIDATION.md)에 있다.
 샘플 UI의 실행과 검증 명령은 [프로토타입 README](./prototypes/admin/README.md)에 있다.
 
 ## 가짜 명령 금지

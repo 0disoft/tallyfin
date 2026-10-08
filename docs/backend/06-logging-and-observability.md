@@ -1,23 +1,9 @@
-# Logging and Observability
+# 수집기의 로그 경계
 
-- Status: Draft
+상태: 정책 계약, 런타임 미구현.
 
-## Backend Contract
-
-This backend document covers API server boundary, authentication, authorization, persistence model,
-HTTP API policy, error response, logging and observability, migration strategy,
-and backend security as applicable.
-
-## Required Decisions
-
-- API owner: UNASSIGNED
-- Auth model: UNDECIDED
-- Authorization checks: UNDECIDED
-- Persistence model: UNDECIDED
-- Error response policy: docs/backend/05-error-response.md
-
-## Merge Blockers
-
-- OpenAPI drift from api/openapi.yaml.
-- Authorization behavior hidden in one handler or UI.
-- Migration plan missing rollback or forward-fix path.
+요청 본문·토큰·IP·Origin·전체 URL·속성 값을 로그나 분석 DB에 남기지 않는다.
+진단에는 임시 requestId·고정 오류 코드·허용된 운영 카운터만 사용한다.
+일별 제품 집계와 인프라 운영 관측은 분리한다. 악용 방지용 IP 처리와 보존 정책은
+운영 활성화 전에 정하며, 그 목적의 IP를 제품 분석으로 재사용하지 않는다.
+[이벤트 계약](./event-contract.md)을 참고한다.

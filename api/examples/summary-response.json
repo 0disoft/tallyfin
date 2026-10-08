@@ -1,0 +1,40 @@
+{
+  "meta": {
+    "projectId": "sembom",
+    "schemaVersion": 1,
+    "source": "browser",
+    "from": "2026-10-08",
+    "to": "2026-10-09",
+    "timeZone": "Asia/Seoul",
+    "generatedAt": "2026-10-09T00:00:00Z",
+    "latestReceivedAt": "2026-10-08T15:00:11Z",
+    "coverage": "observed-only"
+  },
+  "totalEvents": 2,
+  "events": [
+    {
+      "name": "tool_view",
+      "count": 0
+    },
+    {
+      "name": "input_start",
+      "count": 1
+    },
+    {
+      "name": "calculation_success",
+      "count": 1
+    },
+    {
+      "name": "validation_error",
+      "count": 0
+    },
+    {
+      "name": "result_copy",
+      "count": 0
+    },
+    {
+      "name": "feedback_submit",
+      "count": 0
+    }
+  ]
+}
