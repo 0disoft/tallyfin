@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tallyfin-collector",
+  "main": "apps/collector/src/runtime.ts",
+  "compatibility_date": "2026-08-06",
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  // Actual remote IDs must be supplied by collector:config before deployment.
+  "d1_databases": [{ "binding": "DB", "database_name": "tallyfin", "migrations_dir": "db/migrations" }],
+  "vars": {
+    "ADMIN_AUTH_MODE": "disabled",
+    "ALLOW_LOCAL_HTTP": "false",
+    "OIDC_ISSUER": "",
+    "OIDC_AUDIENCE": "",
+    "OIDC_JWKS_URI": "",
+    "OIDC_ALGORITHMS": "RS256",
+    "OIDC_TOKEN_TYPE": "at+jwt",
+    "OIDC_CLOCK_TOLERANCE_SECONDS": "5"
+  },
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": false, "head_sampling_rate": 1 },
+    // Automatic traces carry request URLs; preserve the product privacy contract.
+    "traces": { "enabled": false }
+  }
+}

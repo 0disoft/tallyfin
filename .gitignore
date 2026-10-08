@@ -20,4 +20,7 @@ coverage/
 .tmp/
 tmp/
 *.tsbuildinfo
+.wrangler/
+.dev.vars
+.dev.vars.*
 # <<< ssealed ignore patterns <<<
