@@ -1,0 +1,17 @@
+{
+  "name": "tallyfin-contract-checks",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "redocly lint ../../api/openapi.yaml --extends minimal",
+    "check": "node check.mjs"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2",
+    "@dbml/core": "^7",
+    "ajv": "^8",
+    "ajv-formats": "^3",
+    "yaml": "^2"
+  }
+}
