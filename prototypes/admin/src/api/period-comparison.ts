@@ -6,6 +6,22 @@ import { ContractError } from './validate.ts';
 export type DateRange = { from: string; to: string };
 export type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
 export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad[]; range: DateRange };
+export type ComparisonRow = { key: string; label: string; current: number | null; previous: number | null; rate?: boolean };
+export function comparisonRows(current: PeriodSnapshot, previous: PeriodSnapshot, view: string): ComparisonRow[] {
+  const rows: ComparisonRow[] = [{ key: 'total', label: '수집 이벤트', current: current.summary.totalEvents, previous: previous.summary.totalEvents }];
+  if (view === 'events') {
+    const before = new Map(previous.summary.events.map(event => [event.name, event.count]));
+    rows.push(...current.summary.events.map(event => ({ key: `event:${event.name}`, label: event.name, current: event.count, previous: before.get(event.name) ?? null })));
+  } else {
+    const flows = view === 'overview' ? current.workflows.slice(0, 1) : current.workflows;
+    for (const flow of flows) {
+      const before = previous.workflows.find(item => item.definition.id === flow.definition.id)?.response.summary;
+      for (const [key, label, rate] of [['startedAttempts', '시작', false], ['succeededAttempts', '성공', false], ['completionRate', '완료율', true]] as const)
+        rows.push({ key: `${flow.definition.id}:${key}`, label: `${flow.definition.label} · ${label}`, current: flow.response.summary[key], previous: before?.[key] ?? null, rate });
+    }
+  }
+  return rows;
+}
 
 function invalid(): never { throw new ContractError('기간 비교 응답의 날짜·정의·합계가 요청과 맞지 않아요.'); }
 function count(value: number): number { if (!Number.isSafeInteger(value) || value < 0) invalid(); return value; }

@@ -7,6 +7,64 @@ import { periodRange, todayInZone } from './dates.ts';
 import { SettingsEditor } from './settings-editor.ts';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './event-analysis.ts';
 import { previousRange, countChange, rateChange, validateSnapshot, loadPeriod } from './period-comparison.ts';
+import { analyticsCsv, csvCell, serializeCsv, CSV_COLUMNS } from './csv-export.ts';
+
+// Fixtures below use no multiline fields; csvCell has a dedicated multiline/escaping check.
+function exportRows(file) {
+  return file.text.slice(1).trimEnd().split('\r\n').slice(1).map(line => {
+    const cells = [...line.matchAll(/"((?:[^"]|"")*)"(?:,|$)/g)].map(match => match[1].replaceAll('""','"'));
+    assert.equal(cells.length,CSV_COLUMNS.length);
+    return Object.fromEntries(CSV_COLUMNS.map((key,index)=>[key,cells[index]]));
+  });
+}
+test('CSV quotes delimiters, newlines and formula-like text; numeric negative, false, zero and blank remain distinct', () => {
+  assert.equal(csvCell('한글,"이름"\n줄'), '"한글,""이름""\n줄"');
+  for (const value of ['=1+1',' +2','-1','@SUM(A1)','\tplain','\rtext','\ntext','＝1','＋2','－3','＠A1']) assert.equal(csvCell(value),`"'${value}"`);
+  assert.equal(csvCell(-10),'"-10"'); assert.equal(csvCell(false),'"false"'); assert.equal(csvCell(0),'"0"'); assert.equal(csvCell(null),'""');
+  assert.equal(serializeCsv([['값','count'],['가',0]]),'\uFEFF"값","count"\r\n"가","0"\r\n');
+  assert.throws(()=>csvCell(NaN));
+});
+test('CSV records view, project, schema, range and raw counts, includes comparison and workflow days without inventing rates', () => {
+  const {registry,snapshot}=comparisonFixture(); registry.project.name='=1+2';
+  const previous=structuredClone(snapshot); previous.range=previousRange(snapshot.range);
+  previous.summary.meta={...previous.summary.meta,...previous.range}; previous.summary.totalEvents=0; previous.summary.events.forEach(event=>event.count=0);
+  const flow=previous.workflows[0].response; flow.meta=previous.summary.meta;
+  flow.summary={startedAttempts:0,succeededAttempts:0,failedAttempts:null,pendingAttempts:0,completionRate:null};
+  flow.days=flow.days.map((day,index)=>({...day,date:index===0?previous.range.from:previous.range.to,...flow.summary}));
+  const file=analyticsCsv({registry,current:snapshot,previous,view:'goals'}); const rows=exportRows(file);
+  assert.equal(file.filename,'tallyfin-sembom-v1-goals-2026-10-07-2026-10-08.csv');
+  rows.forEach(row=>{assert.equal(row.project_id,'sembom');assert.equal(row.project_name,"'=1+2");assert.equal(row.schema_version,'1');assert.equal(row.time_zone,'Asia/Seoul');});
+  assert.equal(rows.filter(row=>row.record_type==='workflow_day').length,4);
+  const comparison=rows.find(row=>row.record_type==='comparison_metric' && row.name==='convert:completionRate');
+  assert.equal(comparison.value,'80');assert.equal(comparison.previous_value,'');assert.equal(comparison.change,'');assert.equal(comparison.change_unit,'percentage_point');assert.equal(comparison.availability,'not_available');
+  const empty=rows.find(row=>row.period==='previous' && row.record_type==='workflow_total'); assert.equal(empty.started_attempts,'0');assert.equal(empty.completion_rate_percent,'');
+  assert.equal(rows.some(row=>row.record_type==='event_total'),false);
+  assert.equal(rows.some(row=>Object.hasOwn(row,'token')),false);
+});
+test('CSV event search and selected property analysis preserve all typed buckets and their daily values', () => {
+  const {registry,snapshot}=comparisonFixture(); const event=analysisEvent(); registry.events.push(event);
+  snapshot.summary.events.push({name:'view',count:10});snapshot.summary.totalEvents+=10;
+  const series=analysisSeries();series.groupBy='range';series.days[0].breakdown=[{value:0,count:4},{value:1,count:2}];series.days[1].breakdown=[{value:0,count:3},{value:2,count:1}];
+  const rows=exportRows(analyticsCsv({registry,current:snapshot,view:'events',filter:' View ',selection:{eventName:'view',groupBy:'range',series}}));
+  assert.deepEqual(rows.filter(row=>row.record_type==='event_total').map(row=>row.name),['view']);
+  assert.equal(rows.filter(row=>row.record_type==='property_day').length,6);
+  assert.deepEqual(rows.filter(row=>row.record_type==='property_total').map(row=>[row.value_type,row.value,row.count]),[['number','0','7'],['number','1','2'],['number','2','1']]);
+  rows.forEach(row=>{assert.equal(row.event_filter,'View');assert.equal(row.selected_event,'view');assert.equal(row.selected_group_by,'range');});
+  series.groupBy='flag';series.days[0].breakdown=[{value:false,count:4},{value:true,count:2}];series.days[1].breakdown=[{value:false,count:3},{value:null,count:1}];
+  const flags=exportRows(analyticsCsv({registry,current:snapshot,view:'events',selection:{eventName:'view',groupBy:'flag',series}})).filter(row=>row.record_type==='property_total');
+  assert.deepEqual(flags.map(row=>[row.value_type,row.value]),[['boolean','false'],['boolean','true'],['null','']]);
+});
+test('CSV rejects stale schema, range, grouping and broken snapshots; unsupported server counts stay blank', () => {
+  const {registry,snapshot}=comparisonFixture(); registry.events.push(analysisEvent(),{name:'backend',label:'Backend',source:'server'});
+  snapshot.summary.events.push({name:'view',count:10});snapshot.summary.totalEvents+=10;
+  const input={registry,current:snapshot,view:'events',selection:{eventName:'view',groupBy:'format',series:analysisSeries()}};
+  for (const edit of [r=>r.selection.series.meta.schemaVersion=2,r=>r.selection.series.meta.projectId='other',r=>r.selection.series.meta.timeZone='UTC',
+    r=>r.selection.series.meta.to='2026-10-09',r=>r.selection.series.meta.source='server',r=>r.selection.series.meta.coverage='all',
+    r=>r.selection.groupBy='flag',r=>r.current.summary.totalEvents++,r=>r.previous=structuredClone(r.current)]) {
+    const copy=structuredClone(input); edit(copy); assert.throws(()=>analyticsCsv(copy));
+  }
+  const server=exportRows(analyticsCsv(input)).find(row=>row.name==='backend');assert.equal(server.count,'');assert.equal(server.availability,'unsupported');
+});
 
 test('comparison windows have equal inclusive length across month, leap-year and year boundaries', () => {
   for (const [range, expected] of [

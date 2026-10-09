@@ -1,27 +1,15 @@
 import { formatCount, formatRate, type View } from './data';
-import { countChange, rateChange, type PeriodSnapshot } from './api/period-comparison';
+import { comparisonRows, countChange, rateChange, type ComparisonRow, type PeriodSnapshot } from './api/period-comparison';
 import { rangeLabel } from './api/dates';
 
-type Row = { key: string; label: string; current: number | null; previous: number | null; rate?: boolean };
-function difference(row: Row): string {
+function difference(row: ComparisonRow): string {
   const change = row.rate ? rateChange(row.current, row.previous) : countChange(row.current, row.previous);
   if (change === null) return row.rate ? '완료율 비교 불가' : row.previous === 0 ? '이전 0건 · 증감률 계산 불가' : '비교 불가';
   const rounded = Math.round(change * 10) / 10;
   return `${rounded > 0 ? '+' : ''}${Object.is(rounded, -0) ? '0.0' : rounded.toFixed(1)}${row.rate ? '%p' : '%'}`;
 }
 export default function PeriodComparison({ current, previous, view }: { current: PeriodSnapshot; previous: PeriodSnapshot; view: View }) {
-  const rows: Row[] = [{ key: 'total', label: '수집 이벤트', current: current.summary.totalEvents, previous: previous.summary.totalEvents }];
-  if (view === 'events') {
-    const before = new Map(previous.summary.events.map(event => [event.name, event.count]));
-    rows.push(...current.summary.events.map(event => ({ key: `event:${event.name}`, label: event.name, current: event.count, previous: before.get(event.name) ?? null })));
-  } else {
-    const flows = view === 'overview' ? current.workflows.slice(0, 1) : current.workflows;
-    for (const flow of flows) {
-      const before = previous.workflows.find(item => item.definition.id === flow.definition.id)?.response.summary;
-      for (const [key, label, rate] of [['startedAttempts', '시작', false], ['succeededAttempts', '성공', false], ['completionRate', '완료율', true]] as const)
-        rows.push({ key: `${flow.definition.id}:${key}`, label: `${flow.definition.label} · ${label}`, current: flow.response.summary[key], previous: before?.[key] ?? null, rate });
-    }
-  }
+  const rows = comparisonRows(current, previous, view);
   const provisional = [...current.workflows, ...previous.workflows].some(flow => flow.response.days.some(day => day.provisional));
   return <section className="table-section period-comparison" aria-labelledby="comparison-heading">
     <h2 id="comparison-heading">직전 기간 비교</h2>

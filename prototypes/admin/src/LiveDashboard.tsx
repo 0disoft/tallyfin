@@ -9,6 +9,7 @@ import LiveSdkSetup from './LiveSdkSetup';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
+import CsvDownload from './CsvDownload';
 import { loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
@@ -340,6 +341,13 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
   const startLabel = startDefinition?.label ?? '시작 시도';
   const successLabel = successDefinition?.label ?? '성공 시도';
+  const exportUnavailable = !data || !validVersion ? '현재 기간 조회를 마쳐야 CSV를 내려받을 수 있어요.'
+    : compare && (currentComparison?.status !== 'ready' || !currentComparison.data) ? '직전 기간 비교를 마치거나 비교를 꺼 주세요.'
+    : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.' : null;
+  const exportInput = data && registry && view !== 'settings' ? { registry, current: data, view,
+    filter: query, ...(compare && currentComparison?.status === 'ready' ? { previous: currentComparison.data } : {}),
+    ...(view === 'events' && selectedEvent && seriesData ? { selection: { eventName: selectedEvent, groupBy: groupBy || null, series: seriesData } } : {}),
+  } : null;
 
   function countCell(row: EventRow) {
     if (row.count !== null) return formatCount(row.count);
@@ -358,6 +366,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     </div>
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
     {view !== 'settings' && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
+    {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey])} input={exportInput} unavailable={exportUnavailable} />}
     {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
