@@ -364,6 +364,36 @@ DB 스키마·마이그레이션·위생 정책은 변경하지 않았다. 문�
 UI 변경이 없어 브라우저 UI 검증을 생략했고, 운영 설정이 없어 실제 OIDC 제공자·원격
 D1·배포 smoke는 실행하지 않았다. 푸시·배포·Sembom 연동은 실행하지 않았다.
 
+## 2026-10-09 스키마 목록·새 버전 발행 API
+
+`GET /v1/projects/{projectId}/schemas`로 최고 버전과 최신순 메타데이터를 reader/owner에
+반환한다. limit 25/최대 100과 배타적 beforeVersion 커서를 사용하고 매 페이지 grant를
+확인한다. owner 전용 `PUT /v1/projects/{projectId}/schemas/{schemaVersion}`은
+expectedLatestVersion·privacyReviewed=true·events·workflows를 받아 새 active 버전을
+발행한다. 프로젝트·기존 정의·집계·수집 사용량은 유지하고 ingest_revision만 1 증가한다.
+새 버전 정의로 실제 이벤트 저장이 가능한 것도 확인했다.
+
+owner·최고 번호 조건부 INSERT와 revision 갱신을 같은 원자 D1 batch에서 실행한다.
+동시 다른 버전 발행은 한 번만 성공하고 다른 요청은 schema_conflict 409다.
+같은 버전·같은 canonical 내용의 재요청은 200과 기존 메타데이터를 반환하고 추가
+저장·revision 증가가 없다. 이후 버전이 생기거나 해당 버전이 retired여도 재요청은
+기존 상태를 반환하고 재활성화하지 않는다. 저장 직전 권한 회수는 403, revision
+오버플로는 삽입까지 rollback하고 503이다. 본문은 33KiB, 정의 자체는 32KiB 상한이다.
+
+`npm run typecheck`, 전체 `npm test` 144/144, 계약 검사 32/32,
+OpenAPI lint, `git diff --check` 통과. 신규 발행 테스트 8개와 기존 실제 Miniflare
+Worker 테스트를 확장해 발행·재시도·동시 요청·권한 회수·페이지·전송 상한·rollback을
+확인했다. 초기 관련 테스트 7/8은 예전 시도 ID를 재사용한 합성 데이터 오류였고 새
+시도 ID로 수정했다. 초기 전체 143/144는 기존 테스트의 Allow: GET 기대값이 새
+GET, PUT 계약과 달라서 수정했고 최종 144/144를 통과했다.
+
+변경한 source of truth는 `api/openapi.yaml`, `docs/product/02-spec.md`다.
+이벤트·관리자 문서와 로드맵을 갱신했다. DB 스키마·마이그레이션·의존성·CI·러너·
+저장소 위생 정책은 바꾸지 않았다. UI 변경이 없어 브라우저 UI 검증을 생략했고,
+SDK 소스/빌드 경계를 바꾸지 않아 이전 브라우저 크기 검증을 재사용했다.
+실제 OIDC 제공자·원격 DB·운영 배포 smoke는 운영 설정이 없어 실행하지 않았다.
+스키마 편집 화면은 다음 작업이며 푸시·배포·Sembom 연동은 하지 않았다.
+
 ## 아직 실행하지 않음
 - 실제 서비스의 SDK 초기 실행 비용·지연·처리량, 모바일·원격 배포
 - 서버 발행 수집과 실제 인증 제공자 연결, 운영 관리자 조회 배포(로컬 grant 강제는 관리자 테스트로 확인)

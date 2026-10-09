@@ -139,6 +139,23 @@ check('settings updates reject unsafe shapes and require a hash plus a mutable f
     assert.equal(validate('ProjectSettingsUpdate', value), false);
   assert.ok(validate('ProjectSettingsUpdate', { expectedSettingsHash: valid.expectedSettingsHash, limits: { requestsPerMinute: 1 } }));
 });
+check('schema publication requires reviewed definitions and listing/publication metadata are bounded', () => {
+  const input = { expectedLatestVersion: 1, privacyReviewed: true, events: registry.events, workflows: registry.workflows };
+  assert.ok(validate('SchemaPublication', input));
+  assert.ok(validate('SchemaPublication', { ...input, expectedLatestVersion: null }));
+  for (const value of [{ ...input, privacyReviewed: false }, { ...input, expectedLatestVersion: 0 },
+    { ...input, schemaVersion: 2 }, { ...input, events: [] }, { ...input, workflows: null }])
+    assert.equal(validate('SchemaPublication', value), false);
+  const metadata = { schemaVersion: 2, schemaStatus: 'active', publishedAt: '2026-10-09T00:00:00.000Z' };
+  const published = { ...metadata, projectId: 'sembom', definitionHash: 'a'.repeat(64) };
+  assert.ok(validate('PublishedSchema', published));
+  const page = { projectId: 'sembom', latestVersion: 2, data: [metadata], page: { limit: 25, beforeVersion: null } };
+  assert.ok(validate('SchemaPage', page));
+  assert.equal(validate('SchemaPage', { ...page, data: Array(101).fill(metadata) }), false);
+  const operation = spec.paths['/v1/projects/{projectId}/schemas/{schemaVersion}'].put;
+  for (const code of ['401', '403', '409', '413', '415', '503']) assert.ok(operation.responses[code]);
+  assert.equal(operation.responses['405'].headers.Allow.schema.const, 'GET, PUT');
+});
 check('all changed document relative links resolve', () => {
   const documents=['README.md','DEVELOPMENT.md','VALIDATION.md','ARCHITECTURE.md','docs/README.md','docs/product/02-spec.md','docs/product/01-roadmap.md','docs/adr/0002-contract-source-of-truth.md','docs/adr/0003-minimal-privacy-preserving-events.md','docs/adr/0005-event-and-aggregation-contract.md','docs/backend/event-contract.md','docs/backend/collector.md','docs/backend/README.md','docs/backend/03-persistence-model.md','docs/backend/04-http-api-policy.md','docs/integrations/backend-api.md','docs/integrations/sembom.md','docs/monorepo/package-ownership.md','docs/monorepo/workspace-boundaries.md','db/migrations/README.md'];
   for (const document of documents) for (const match of read(document).matchAll(/\]\(([^)]+)\)/g)) {

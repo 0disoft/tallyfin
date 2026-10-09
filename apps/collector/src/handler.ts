@@ -9,6 +9,7 @@ const messages: Record<ErrorCode, string> = {
   origin_denied: 'Origin is not allowed.', project_unavailable: 'Project is unavailable.',
   event_conflict: 'Event ID conflicts with a previous event.', attempt_conflict: 'Attempt conflicts with previous state.',
   settings_conflict: 'Project settings changed. Reload before saving.',
+  schema_conflict: 'Schema version conflicts. Reload and review before publishing.',
   quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Administrator authentication is required.',
   forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
 };
@@ -79,6 +80,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
       if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow',
         /^\/v1\/projects\/[^/]+\/schemas\/validate$/.test(new URL(request.url).pathname) ? 'POST' :
+        /^\/v1\/projects\/[^/]+\/schemas\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PUT' :
         /^\/v1\/projects\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PATCH' : 'GET');
       if (failure.status === 429) {
         // Admission resumes at the next fixed minute; daily quota resumes at UTC midnight.

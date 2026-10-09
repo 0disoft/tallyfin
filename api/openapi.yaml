@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: Tallyfin API
   version: 0.1.0
-  description: Browser collection and administrator read/settings update boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
+  description: Browser collection and administrator query/settings/schema publication boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
     Administrator reads require a verified principal and project grant; settings updates require an owner grant.
-    Project/schema creation and grants are provisioned out of band; server ingestion is deferred.
+    Schema publication requires an owner grant and explicit privacy review. Project creation and grants are provisioned out of band; server ingestion is deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
@@ -204,6 +204,7 @@ components:
                 - event_conflict
                 - attempt_conflict
                 - settings_conflict
+                - schema_conflict
                 - quota_exceeded
                 - unauthorized
                 - forbidden
@@ -505,6 +506,105 @@ components:
             pattern: ^[a-z][a-z0-9_]{0,47}$
             maxLength: 48
           uniqueItems: true
+    SchemaPublication:
+      type: object
+      additionalProperties: false
+      required: [expectedLatestVersion, privacyReviewed, events, workflows]
+      properties:
+        expectedLatestVersion:
+          description: Highest published version from schema listing; null only when no schema exists.
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 2147483647
+            - type: "null"
+        privacyReviewed:
+          type: boolean
+          const: true
+          description: Owner attests that definitions have been reviewed for private data; automated validation cannot establish this.
+        events:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/EventDefinition"
+        workflows:
+          type: array
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/WorkflowDefinition"
+    SchemaMetadata:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, schemaStatus, publishedAt]
+      properties:
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        schemaStatus:
+          type: string
+          enum: [active, retired]
+        publishedAt:
+          type: string
+          format: date-time
+    PublishedSchema:
+      type: object
+      additionalProperties: false
+      required: [projectId, schemaVersion, schemaStatus, publishedAt, definitionHash]
+      properties:
+        projectId:
+          $ref: "#/components/schemas/ProjectId"
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        schemaStatus:
+          type: string
+          enum: [active, retired]
+        publishedAt:
+          type: string
+          format: date-time
+        definitionHash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          minLength: 64
+          maxLength: 64
+          description: SHA-256 of canonical JSON of events and workflows; excludes version and project settings.
+    SchemaPage:
+      type: object
+      additionalProperties: false
+      required: [projectId, latestVersion, data, page]
+      properties:
+        projectId:
+          $ref: "#/components/schemas/ProjectId"
+        latestVersion:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 2147483647
+            - type: "null"
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/SchemaMetadata"
+        page:
+          type: object
+          additionalProperties: false
+          required: [limit, beforeVersion]
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 100
+            beforeVersion:
+              description: Exclusive version cursor for the next page; null when no more rows remain.
+              anyOf:
+                - type: integer
+                  minimum: 1
+                  maximum: 2147483647
+                - type: "null"
     SchemaDraft:
       type: object
       additionalProperties: false
@@ -1333,6 +1433,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/schemas:
+    get:
+      tags: [Administration]
+      operationId: listProjectSchemas
+      summary: List published schema metadata newest first
+      description: Reader/owner grant required. Includes retired schemas and paused projects. Cursor is a position, not authorization; latestVersion is the highest version in this snapshot, regardless of the page cursor.
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: beforeVersion
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      responses:
+        "200":
+          description: Bounded schema metadata and latest version.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchemaPage"
+        "400":
+          description: Invalid parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Project grant required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/projects/{projectId}/schemas/validate:
     post:
       tags: [Administration]
@@ -1457,18 +1620,112 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "405":
-          description: Only GET is supported for administrator reads.
+          description: Only GET and PUT are supported for versioned schemas.
           headers:
             Allow:
               schema:
                 type: string
-                const: GET
+                const: GET, PUT
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable; no fabricated zero response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Administration]
+      operationId: publishProjectSchema
+      summary: Publish a new immutable schema version
+      description: >-
+        Owner grant and privacyReviewed=true required. The body is at most 33792
+        UTF-8 bytes; canonical event/workflow definitions remain limited to 32768.
+        New versions must exceed the highest published version and match
+        expectedLatestVersion. Same-version identical-definition retries return
+        existing metadata, even after later versions are published or the target
+        is retired. Retry does not reactivate it. A conflicting definition or
+        stale highest-version snapshot returns schema_conflict (409).
+        Versioned PUT is idempotent and requires no separate idempotency key.
+        Authorization is rechecked inside the atomic write. Project settings,
+        earlier versions and aggregates are preserved; earlier schemas remain
+        active until retired separately. SDKs must explicitly select the new version.
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: schemaVersion
+          in: path
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2147483647
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchemaPublication"
+          text/plain:
+            schema:
+              $ref: "#/components/schemas/SchemaPublication"
+      responses:
+        "200":
+          description: Published or existing identical version metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishedSchema"
+        "400":
+          description: Invalid JSON, envelope, definitions, privacy review or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Owner grant required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Schema version or latest-version conflict.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request exceeds 33792 UTF-8 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported content type, charset or encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; read the target version before retrying after a lost response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET and PUT are supported for versioned schemas.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, PUT
           content:
             application/json:
               schema:

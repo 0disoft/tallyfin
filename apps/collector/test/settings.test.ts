@@ -106,8 +106,8 @@ test('body size, content type, malformed JSON, parameters and route methods rema
   assert.equal((await handler()(request({ expectedSettingsHash: settingsHash, name: 'x' }, '/v1/projects/sembom?extra=1'))).status, 400);
   const denied = await handler()(request({}, undefined, 'POST'));
   assert.equal(denied.status, 405); assert.equal(denied.headers.get('Allow'), 'GET, PATCH');
-  const readOnly = await handler()(request({}, '/v1/projects/sembom/schemas/1'));
-  assert.equal(readOnly.status, 405); assert.equal(readOnly.headers.get('Allow'), 'GET');
+  const unsupported = await handler()(request({}, '/v1/projects/sembom/schemas/1'));
+  assert.equal(unsupported.status, 405); assert.equal(unsupported.headers.get('Allow'), 'GET, PUT');
 });
 test('stale hash returns 409; ingestion revisions alone do not prevent settings updates', async () => {
   const original = await settings();

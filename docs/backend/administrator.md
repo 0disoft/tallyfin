@@ -9,8 +9,8 @@
 null을 돌려준다. `apps/collector/src/index.ts`의 기본 export는 검증기 없이 만들어져
 관리자 경로를 401로 닫는다. 검증기가 없거나 bearer·issuer·subject가 비면 401이다.
 프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 초안 검증
-경로는 POST만 받고 그 밖은 405(Allow: POST), 나머지 조회 경로는 GET이 아니면
-405(Allow: GET)다.
+경로는 POST만 받고 그 밖은 405(Allow: POST), 버전별 스키마 경로는 GET·PUT을
+받으며 나머지 조회 경로는 GET이 아니면 405(Allow: GET)다.
 
 저장소 루트의 호스트 어댑터 파일 예시다. `@tallyfin/collector` 패키지에는 `exports`가
 없으므로 소스 경로로 가져온다. `hostVerify`는 호스트가 채워야 할 자리이고 이 저장소에는
@@ -31,12 +31,14 @@ export default createWorker(bearer => hostVerify(bearer));
 화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이
 없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
 
-지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 설정 PATCH 하나뿐이다. 초안 검증
-POST는 저장하지 않는 읽기 작업이다.
+지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 설정 PATCH와 버전별 스키마 PUT이다.
+초안 검증 POST는 저장하지 않는 읽기 작업이다.
 
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
 - `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
+- `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
+- `PUT /v1/projects/{projectId}/schemas/{schemaVersion}` — owner의 새 버전 발행.
 - `POST /v1/projects/{projectId}/schemas/validate` — owner 전용 초안 검증, 저장 없음.
 - `GET /v1/projects/{projectId}/summary` — 한 버전·기간의 이벤트별 건수.
 - `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷.
@@ -95,9 +97,44 @@ browser_event_required, invalid_reference, dimension_mismatch다.
 종류 수/가능 조합 한도·흐름 참조·필수 차원 일치를 확인한다. 이벤트 출처는 browser/server
 문자열만 허용한다. 검증 성공 후에도 enum의 개인정보 포함 여부는 운영자가 검토해야 한다.
 초안·스키마·설정·사용량·집계는 쓰지 않으므로 반복 요청에 idempotency key가 필요 없다.
-버전 예약이나 발행 가능성을 확정하지 않으며, 발행 때 다시 검증·권한 확인해야 한다.
+버전 예약이나 발행 가능성을 확정하지 않으며, 발행 때 다시 검증·권한 확인한다.
 
-프로젝트 생성·불변 스키마 새 버전 발행·grant 관리는 기존 provisioning CLI가 맡는다.
+## 새 스키마 버전 발행
+
+목록 GET은 버전 번호 내림차순으로 메타데이터를 반환한다. limit 기본 25·최대 100,
+beforeVersion은 이전 페이지 마지막 버전보다 작은 번호를 조회하는 배타적 커서다.
+latestVersion은 커서와 무관하게 해당 snapshot의 최고 번호이며, 등록된 스키마가
+없으면 null이다. 매 페이지에서 grant를 다시 검사하고 paused 프로젝트·retired 버전도
+표시한다. 정의 전체는 기존 버전별 GET으로 읽는다.
+
+발행 PUT 본문은 `{expectedLatestVersion, privacyReviewed: true, events, workflows}`다.
+identity 인코딩의 application/json 또는 text/plain을 받고 본문은 UTF-8 33KiB,
+정의 자체는 32KiB가 상한이다. 이벤트·흐름 규칙은 초안 검증과 같은 함수로 다시 검사한다.
+privacyReviewed는 owner의 검토 확인이며 자동 개인정보 탐지가 아니다. 프로젝트·상태·
+허용 출처·수집 한도는 본문에 넣을 수 없다. 닫힌 입력·잘못된 정의는 400이다.
+
+새 번호는 모든 기존 버전보다 커야 하고 expectedLatestVersion이 현재 최고 번호와
+같아야 한다. 스키마가 없을 때만 null로 첫 버전을 발행한다. owner 조건·최고 번호 검사·
+삽입·ingest_revision 증가는 한 D1 batch에서 수행한다. 저장 직전에 권한이 회수되면
+403, 다른 내용으로 같은 번호를 쓰거나 최고 번호가 바뀌면 schema_conflict(409)다.
+설정이나 수집에 의한 revision 변화만으로 발행을 거부하지 않는다.
+
+같은 버전·같은 canonical 정의로 재요청하면 200과 기존 발행 메타데이터를 반환하고
+추가 저장·revision 증가가 없다. 따라서 응답 유실 후에도 같은 PUT을 재시도할 수 있다.
+이후 더 높은 버전이 생기거나 해당 버전이 retired 상태여도 같은 정의의 재요청은
+현재 상태를 반환하며 재활성화하지 않는다. 별도 Idempotency-Key는 요구하지 않는다.
+동일성은 객체 키 순서만 정규화하고 배열 순서는 보존한다.
+
+기존 버전·집계·설정은 유지하고 새 버전만 active로 만든다. 이전 버전은 자동으로
+retired 처리하지 않는다. 발행이 SDK의 선택 버전을 바꾸지는 않으므로 적용 제품에서
+새 정의를 확인하고 버전을 명시적으로 전환해야 한다. 응답은 projectId·schemaVersion·
+schemaStatus·publishedAt과 canonical `{events,workflows}`의 SHA-256 definitionHash다.
+
+D1 batch의 rollback·실행 순서는 [공식 D1 문서](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch),
+직전 삽입 여부에 따른 revision 변경은 [SQLite changes()](https://www.sqlite.org/lang_corefunc.html#changes)를
+기준으로 구현하고 Miniflare에서 발행·재요청·동시 발행·실패 rollback을 확인했다.
+
+프로젝트 생성·grant 관리와 스키마 상태 변경은 기존 provisioning CLI가 맡는다.
 grant provisioning API, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
 [OpenAPI](../../api/openapi.yaml)를 따르고, 동작 의미는
 [이벤트·집계 계약](./event-contract.md)을 따른다.

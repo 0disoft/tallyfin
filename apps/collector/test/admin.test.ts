@@ -171,6 +171,11 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
     });
     assert.equal(validated.status, 200);
     assert.deepEqual(await validated.json(), { valid: true, issues: [], privacyReviewRequired: true });
+    const published = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/sembom/schemas/2', {
+      method: 'PUT', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedLatestVersion: 1, privacyReviewed: true, events: registry.events, workflows: registry.workflows }),
+    });
+    assert.equal(published.status, 200); assert.equal((await published.json() as { schemaVersion: number }).schemaVersion, 2);
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
   } finally { await runtime.dispose(); }

@@ -1,5 +1,6 @@
 import { addCounts, closed, CollectionError, count, dateEnd, DAY, dateMillis, integer, NAME, PROJECT_ID, queryDates, validateRegistry, workflowCounts } from '@tallyfin/core';
-import type { AdminPrincipal, AdminQuery, AdminStore, ProjectSettingsUpdate, Properties, QueryMeta, Registry } from '@tallyfin/core';
+import type { AdminPrincipal, AdminQuery, AdminStore, ProjectSettingsUpdate, Properties, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
+import { listSchemas, publishSchema } from './schema.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 
@@ -12,6 +13,12 @@ export class D1Queries implements AdminStore {
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = options; }
+  schemas(principal: AdminPrincipal, id: string, limit: number, beforeVersion: number | null) {
+    return listSchemas(this.db, principal, id, limit, beforeVersion);
+  }
+  publishSchema(principal: AdminPrincipal, id: string, version: number, input: SchemaPublication, now: number) {
+    return publishSchema(this.db, principal, id, version, input, now);
+  }
   settings(principal: AdminPrincipal, id: string) { return projectSettings(this.db, principal, id, this.options); }
   updateSettings(principal: AdminPrincipal, id: string, update: ProjectSettingsUpdate) {
     return updateProjectSettings(this.db, principal, id, update, this.options);

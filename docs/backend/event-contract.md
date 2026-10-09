@@ -17,8 +17,8 @@
 프로젝트에는 활성 상태·정확한 오리진 목록·고정 IANA 시간대·분당 요청 한도·UTC
 수신일당 신규 영수증 한도를 둔다. 기본 한도는 120회/분, 신규 ID 100,000개/일이다.
 오리진은 scheme/host/port만 비교하며 경로·와일드카드·null은 금지한다. 운영은 HTTPS,
-로컬 개발만 HTTP를 허용한다. 설정 등록과 변경은 owner 권한으로 검증한다. 프로젝트 생성·
-불변 스키마 새 버전 발행·grant 관리는 별도 provisioning CLI가 맡는다. 기존 프로젝트
+로컬 개발만 HTTP를 허용한다. 설정 등록과 변경은 owner 권한으로 검증한다.
+새 스키마 버전은 owner 전용 PUT으로도 발행하며 프로젝트 생성·grant 관리는 별도 provisioning CLI가 맡는다. 기존 프로젝트
 설정은 관리자 API에서도 변경할 수 있다([관리자 조회·설정 경계](./administrator.md)).
 
 스키마 버전의 events/workflows는 불변이며 변경은 새 버전으로 발행한다. active만

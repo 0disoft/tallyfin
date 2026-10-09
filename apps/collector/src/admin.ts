@@ -1,4 +1,4 @@
-import { closed, CollectionError, dateMillis, DAY, MAX_SCHEMA_BYTES, NAME, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
+import { closed, CollectionError, dateMillis, DAY, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 
@@ -17,6 +17,14 @@ export async function administrator(request: Request, access: AdministratorAcces
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
   const settings = /^\/v1\/projects\/([^/]+)$/.exec(url.pathname);
+  const schemas = /^\/v1\/projects\/([^/]+)\/schemas$/.exec(url.pathname);
+  if (schemas) {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    if (!PROJECT_ID.test(schemas[1]!)) throw new CollectionError('invalid_request', 400);
+    parameters(url, ['limit', 'beforeVersion']);
+    return access.store.schemas(principal, schemas[1]!, positive(url.searchParams.get('limit') ?? '25', 100),
+      url.searchParams.has('beforeVersion') ? positive(url.searchParams.get('beforeVersion')!, 2147483647) : null);
+  }
   const draft = /^\/v1\/projects\/([^/]+)\/schemas\/validate$/.exec(url.pathname);
   if (draft) {
     if (request.method !== 'POST') throw new CollectionError('invalid_request', 405);
@@ -31,6 +39,18 @@ export async function administrator(request: Request, access: AdministratorAcces
     if (!closed(value, ['events', 'workflows']) || !Array.isArray(value.events) || !Array.isArray(value.workflows))
       throw new CollectionError('invalid_request', 400);
     return validateSchemaDraft(value);
+  }
+  const publication = /^\/v1\/projects\/([^/]+)\/schemas\/([^/]+)$/.exec(url.pathname);
+  if (request.method === 'PUT' && publication) {
+    if (!PROJECT_ID.test(publication[1]!)) throw new CollectionError('invalid_request', 400);
+    const version = positive(publication[2]!, 2147483647);
+    parameters(url, []);
+    const project = await access.store.settings(principal, publication[1]!);
+    if (!project.canEdit) throw new CollectionError('forbidden', 403);
+    const body = await readBody(request, MAX_PUBLICATION_BYTES);
+    let value: unknown;
+    try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
+    return access.store.publishSchema(principal, publication[1]!, version, parseSchemaPublication(value), now);
   }
   if (request.method !== 'GET' && !(request.method === 'PATCH' && settings)) throw new CollectionError('invalid_request', 405);
   if (settings) {
