@@ -131,6 +131,14 @@ test('CLI uses persistent local D1, defaults to preview and compares reviewed pl
     assert.equal((await invoke(['init', ...flags])).applied, false);
     assert.equal((await invoke(['init', ...flags, '--apply'])).applied, true);
     assert.equal((await invoke(['init', ...flags, '--apply'])).applied, false);
+    const creatorFile = join(directory, 'creator.json');
+    await writeFile(creatorFile, JSON.stringify({ issuer, subject: 'test-creator', maxProjects: 5 }));
+    const creatorPreview = await invoke(['creator-grant', ...flags, '--file', creatorFile]);
+    assert.equal(creatorPreview.preview, true); assert.equal(creatorPreview.plan.changes.length, 1);
+    assert.equal((await invoke(['creator-grant', ...flags, '--file', creatorFile, '--apply', '--expect-plan', creatorPreview.plan.planHash])).result.applied, true);
+    assert.equal((await invoke(['creator-grant', ...flags, '--file', creatorFile, '--apply'])).result.applied, false);
+    await writeFile(creatorFile, JSON.stringify({ issuer, subject: 'test-creator' }));
+    assert.equal((await invoke(['creator-revoke', ...flags, '--file', creatorFile, '--apply'])).result.applied, true);
     const preview = await invoke(['register', ...flags, '--file', file]);
     assert.equal(preview.preview, true); assert.ok(preview.plan.changes.length > 0);
     await assert.rejects(invoke(['register', ...flags, '--file', file, '--apply', '--expect-plan', '0'.repeat(64)]), { code: 'plan_changed' });

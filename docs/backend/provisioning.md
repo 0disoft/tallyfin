@@ -23,7 +23,7 @@ npm run provision -- register --local --state-dir .tmp/provision-db --file api/e
 
 ## init
 
-`init --apply`가 저장소 마이그레이션 `0001_initial.sql`, `0002_retention_cleanup.sql` 중 테이블이 아직 없는 마이그레이션을 로컬 DB에 적용한다. 적용할 마이그레이션이 없으면 변경하지 않는다. 한 마이그레이션의 테이블이 일부만 있는 상태면 `partial_database`로 멈춘다.
+`init --apply`가 저장소 마이그레이션 `0001_initial.sql`, `0002_retention_cleanup.sql`, `0003_project_creation.sql` 중 테이블이 아직 없는 마이그레이션을 로컬 DB에 적용한다. 적용할 마이그레이션이 없으면 변경하지 않는다. 한 마이그레이션의 테이블이 일부만 있는 상태면 `partial_database`로 멈춘다.
 
 ## register
 
@@ -36,6 +36,15 @@ grant JSON은 projectId, issuer, subject, role(`reader`|`owner`)를 담는다. r
 이 도구는 사용자 로그인을 확인하지 않는다. D1의 reader/owner grant는 관리자 조회를 허용하는 것이지 CLI 접근 권한이 아니다. 첫 owner 등록은 허용하지만 마지막 owner를 빼거나 강등하는 건 막힌다. 자세한 권한 모델은 [02-authorization.md](./02-authorization.md)에 있다.
 
 ## 동시성과 적용
+
+### creator-grant / creator-revoke
+
+프로젝트 생성 권한은 프로젝트 owner와 별개로 운영자가 부여한다. `creator-grant`의
+JSON은 실제 확인한 issuer·subject·maxProjects(1~1000)를 받는다. `creator-revoke`는
+issuer·subject만 받는다. 명령의 --local·--file·미리보기·--expect-plan·--apply 방식은
+기존 grant와 같다. 출력에는 원본 issuer/subject 대신 principalHash를 넣는다.
+생성 권한·생성 개수를 적용 직전에 비교하며, 권한 회수는 기존 프로젝트 grant와
+생성 이력을 지우지 않는다. 한도를 사용 개수 이하로 낮추면 추가 생성만 막힌다.
 
 모든 수정 SQL은 하나의 트랜잭션 D1 배치로 돈다. 충돌하면 롤백한다. 적용 전에 ingest 리비전과 스키마·grant 스냅샷을 CAS로 검사한다. no-op 계획도 스냅샷을 다시 확인한다. 계획에는 issuer/subject 대신 해시된 principal이 나온다. planHash는 입력과 DB 스냅샷을 비교한 값이다. 출력 해시는 비교용이고 암호화가 아니다. 수집이 동시에 돌면 계획이 무효가 될 수 있으니 미리보기를 다시 뜬다.
 

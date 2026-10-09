@@ -33,6 +33,24 @@ Table project_grants {
   }
 }
 
+Table project_creators {
+  issuer text [not null, note: 'Trusted admin issuer; separate creation permission']
+  subject text [not null, note: 'Verified administrator subject; never a visitor identity']
+  max_projects integer [not null, note: '1..1000; projects created through the API by this principal']
+  created_at bigint [not null]
+  indexes { (issuer, subject) [pk] }
+}
+
+Table project_creations {
+  project_id text [pk, not null, ref: > projects.id]
+  issuer text [not null]
+  subject text [not null]
+  request_hash text [not null, note: 'Immutable canonical initial creation request SHA-256; persists after settings edits']
+  created_at bigint [not null]
+  indexes { (issuer, subject, project_id) }
+  Note: 'Control plane only. Retained for the project lifetime; creation permission revocation does not reset quota history.'
+}
+
 Table project_schemas {
   project_id text [not null, ref: > projects.id]
   version integer [not null]

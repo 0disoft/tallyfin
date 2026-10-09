@@ -10,6 +10,8 @@ const messages: Record<ErrorCode, string> = {
   event_conflict: 'Event ID conflicts with a previous event.', attempt_conflict: 'Attempt conflicts with previous state.',
   settings_conflict: 'Project settings changed. Reload before saving.',
   schema_conflict: 'Schema version conflicts. Reload and review before publishing.',
+  project_conflict: 'Project ID conflicts with an existing project.',
+  project_limit_reached: 'Project creation limit reached.',
   quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Administrator authentication is required.',
   forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
 };

@@ -7,3 +7,4 @@ export * from './batch.ts';
 export * from './ingest.ts';
 export * from './query.ts';
 export * from './settings.ts';
+export * from './project-creation.ts';

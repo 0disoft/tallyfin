@@ -3,11 +3,13 @@ import { pathToFileURL } from 'node:url';
 import { openLocal, initialize } from './local.ts';
 import { operation, ProvisionError } from './input.ts';
 import { Provisioner } from './store.ts';
+import { CreatorProvisioner, creatorOperation } from './creators.ts';
 
 export const HELP = `Tallyfin local provisioning (Node 24)
-npm run provision -- <init|register|grant|revoke> --local --state-dir <directory> [--file <json>] [--apply] [--expect-plan <sha256>] [--allow-local-http]
+npm run provision -- <init|register|grant|revoke|creator-grant|creator-revoke> --local --state-dir <directory> [--file <json>] [--apply] [--expect-plan <sha256>] [--allow-local-http]
 Default: preview only. init --apply creates local tables; other commands require an initialized DB.
 register reads the registry JSON. grant/revoke read projectId, issuer, subject and (grant only) role.
+creator-grant/revoke read issuer, subject and (grant only) maxProjects (1..1000).
 No remote mode, bearer token, cloud login or deployment. Use filesystem access only as a trusted local DB operator.`;
 
 export async function runCli(argv: string[], write = (line: string) => process.stdout.write(`${line}\n`)): Promise<void> {
@@ -21,7 +23,7 @@ export async function runCli(argv: string[], write = (line: string) => process.s
     else if (['--state-dir', '--file', '--expect-plan'].includes(flag) && flags[i + 1] && !flags[i + 1]!.startsWith('--')) options.set(flag, flags[++i]!);
     else throw new ProvisionError('invalid_arguments', '지원하지 않는 옵션이에요. --help를 확인해 주세요.');
   }
-  if (!command || !['init', 'register', 'grant', 'revoke'].includes(command) || options.get('--local') !== true ||
+  if (!command || !['init', 'register', 'grant', 'revoke', 'creator-grant', 'creator-revoke'].includes(command) || options.get('--local') !== true ||
     typeof options.get('--state-dir') !== 'string' || (command === 'init' && (options.has('--file') || options.has('--expect-plan') || options.has('--allow-local-http'))) ||
     (command !== 'init' && typeof options.get('--file') !== 'string') ||
     (options.has('--expect-plan') && (options.get('--apply') !== true || !/^[0-9a-f]{64}$/.test(String(options.get('--expect-plan'))))))
@@ -36,11 +38,18 @@ export async function runCli(argv: string[], write = (line: string) => process.s
       input = JSON.parse(bytes.toString('utf8'));
     } catch { throw new ProvisionError('invalid_input', '입력 JSON 파일은 유효한 형식의 64KiB 이하여야 해요.'); }
     finally { await file.close(); }
-    operation(command, input, options.has('--allow-local-http')); // Validate before opening a DB.
+    if (command.startsWith('creator-')) creatorOperation(command, input);
+    else operation(command, input, options.has('--allow-local-http')); // Validate before opening a DB.
   }
   const local = await openLocal(String(options.get('--state-dir')));
   try {
     if (command === 'init') { write(JSON.stringify({ local: true, operation: 'init', ...await initialize(local.db, options.has('--apply')) })); return; }
+    if (command.startsWith('creator-')) {
+      const tool = new CreatorProvisioner(local.db), plan = await tool.plan(command, input);
+      if (options.has('--expect-plan') && plan.planHash !== options.get('--expect-plan')) throw new ProvisionError('plan_changed', '미리보기 이후 상태가 달라졌어요. 새 계획을 확인해 주세요.');
+      const result = options.has('--apply') ? await tool.apply(plan) : { applied: false, changes: 0 };
+      write(JSON.stringify({ local: true, preview: !options.has('--apply'), plan, result })); return;
+    }
     const tool = new Provisioner(local.db, options.has('--allow-local-http'));
     const plan = await tool.plan(command, input);
     if (options.has('--expect-plan') && plan.planHash !== options.get('--expect-plan'))
