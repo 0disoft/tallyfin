@@ -6,6 +6,7 @@ import LiveSettings from './LiveSettings';
 import LiveSchemas from './LiveSchemas';
 import LiveProjectCreate from './LiveProjectCreate';
 import LiveSdkSetup from './LiveSdkSetup';
+import CollectionDiagnostics from './CollectionDiagnostics';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
@@ -91,6 +92,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [showCreate, setShowCreate] = useState(false);
   const [newProjectId, setNewProjectId] = useState<string | null>(null);
   const [setupRefreshTick, setSetupRefreshTick] = useState(0);
+  const [diagnosticsRevision, setDiagnosticsRevision] = useState(0);
   const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [main, setMain] = useState<Load<MainData> & { key?: string }>({ status: 'idle' });
@@ -138,6 +140,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   }, [view]);
   const settingsSaved = useCallback((settings: ProjectSettings) => {
     setProjects(previous => previous.data ? { ...previous, data: previous.data.map(project => project.id === settings.project.id ? settings.project : project) } : previous);
+    setDiagnosticsRevision(tick => tick + 1);
   }, []);
   const projectCreated = useCallback((settings: ProjectSettings) => {
     sessionRef.current += 1;
@@ -388,6 +391,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
         <h2>프로젝트 생성을 확인했어요</h2><ol className="setup-steps"><li>1 프로젝트 완료</li><li aria-current={settingsRegistry ? undefined : 'step'}>2 이벤트 스키마</li><li aria-current={settingsRegistry ? 'step' : undefined}>3 SDK 연결</li></ol>
         <p>먼저 이벤트 스키마를 검증·발행한 뒤 SDK를 연결하세요.</p><a href="#schema-heading">이벤트 스키마로 이동</a> · <a href="#sdk-setup">SDK 연결 안내</a>
       </section>}
+      <CollectionDiagnostics key={`diagnostics-${activeProjectId}`} client={client} projectId={activeProjectId} version={validVersion ? version : null} refreshTick={settingsRefreshTick + setupRefreshTick + diagnosticsRevision} />
       <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />
       <LiveSchemas key={`schemas-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={settingsRefreshTick} onVersionChange={schemaVersionChanged} />
       <LiveSdkSetup key={`setup-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={setupRefreshTick + settingsRefreshTick} />
