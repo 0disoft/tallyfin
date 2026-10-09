@@ -2,12 +2,13 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { BrowserLogin } from './auth/client';
 import { ArrowRight, CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import { Trend } from './Dashboard';
+import LiveSettings from './LiveSettings';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import { missingBrowserEvents } from './api/coverage';
 import { appendPage, shouldApplyPage } from './api/pagination';
 import { periodRange, rangeLabel, todayInZone } from './api/dates';
-import type { EventDefinition, EventSeriesResponse, Project, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse } from './api/types';
+import type { EventDefinition, EventSeriesResponse, Project, ProjectSettings, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse } from './api/types';
 
 type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
 type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
@@ -74,6 +75,8 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [query, setQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
+  const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
+  const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
   const [more, setMore] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
@@ -95,7 +98,13 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
   const activeTimeZone = activeProject?.timeZone ?? null;
-  const retry = useCallback(() => setRefreshTick(tick => tick + 1), []);
+  const retry = useCallback(() => {
+    if (view === 'settings') setSettingsRefreshTick(tick => tick + 1);
+    else setRefreshTick(tick => tick + 1);
+  }, [view]);
+  const settingsSaved = useCallback((settings: ProjectSettings) => {
+    setProjects(previous => previous.data ? { ...previous, data: previous.data.map(project => project.id === settings.project.id ? settings.project : project) } : previous);
+  }, []);
   const connected = useCallback((login: BrowserLogin) => {
     sessionRef.current += 1;
     setToken(''); setProjectId(null); setSelectedEvent(null); setProjects({ status: 'idle' });
@@ -169,7 +178,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   }, [activeProject, onActiveProjectChange]);
 
   useEffect(() => {
-    if (!client || !activeProjectId || !activeTimeZone || !validVersion) { setMain({ status: 'idle' }); return; }
+    if (view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion) { setMain({ status: 'idle' }); return; }
     const controller = new AbortController();
     setMain({ status: 'loading' });
     const range = periodRange(todayInZone(activeTimeZone), period);
@@ -193,10 +202,10 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       }
     })();
     return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick]);
+  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view]);
 
   useEffect(() => {
-    if (!client || !activeProjectId || !activeTimeZone || !validVersion || !selectedEvent) { setSeries({ status: 'idle' }); return; }
+    if (view !== 'events' || !client || !activeProjectId || !activeTimeZone || !validVersion || !selectedEvent) { setSeries({ status: 'idle' }); return; }
     const controller = new AbortController();
     setSeries({ status: 'loading' });
     const range = periodRange(todayInZone(activeTimeZone), period);
@@ -204,7 +213,17 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       .then(next => { if (!controller.signal.aborted) setSeries({ status: 'ready', data: next }); })
       .catch(error => { if (!controller.signal.aborted) setSeries({ status: 'error', error: toApiError(error) }); });
     return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, selectedEvent, groupBy, version, validVersion, period, refreshTick]);
+  }, [client, activeProjectId, activeTimeZone, selectedEvent, groupBy, version, validVersion, period, refreshTick, view]);
+
+  useEffect(() => {
+    setSettingsRegistry(null);
+    if (view !== 'settings' || !client || !activeProjectId || !validVersion) return;
+    const controller = new AbortController();
+    client.getSchema(activeProjectId, version, { signal: controller.signal })
+      .then(schema => { if (!controller.signal.aborted) setSettingsRegistry(schema); })
+      .catch(() => { /* Settings remain independent of optional schema definitions. */ });
+    return () => controller.abort();
+  }, [view, client, activeProjectId, version, validVersion, settingsRefreshTick]);
 
   async function loadMore() {
     if (!client || !nextCursor || more) return;
@@ -235,7 +254,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     <Suspense fallback={<p className="context-note" role="status">로그인 화면을 준비하고 있어요.</p>}><OidcLogin onConnected={connected} /></Suspense>
     <details className="manual-connection"><summary>관리자 토큰으로 직접 연결</summary><section className="settings-section">
       <h2>API 연결</h2>
-      <p className="context-note">이 프로토타입은 같은 출처(same-origin)의 관리자 API만 조회해요. 기본 엔드포인트는 현재 출처의 {API_BASE_PATH}예요. 다른 출처는 이번 범위가 아니라 연결하지 않아요.</p>
+      <p className="context-note">같은 출처의 관리자 API에 연결해요. 프로젝트 설정은 소유자만 저장할 수 있어요. 기본 엔드포인트는 현재 출처의 {API_BASE_PATH}예요. 다른 출처는 이번 범위가 아니라 연결하지 않아요.</p>
       <form className="settings-form" onSubmit={event => { event.preventDefault(); connect(); }}>
         <label className="field-label" htmlFor="api-endpoint">엔드포인트</label>
         <input id="api-endpoint" className="text-input" value={endpoint} placeholder={`${currentOrigin}${API_BASE_PATH}`} onChange={event => { setEndpoint(event.target.value); setEndpointError(null); }} />
@@ -290,10 +309,11 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
     {projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>서버가 이 토큰에 부여한 프로젝트 grant가 없어요. 다른 토큰으로 연결해 주세요.</p></section>}
-    {!validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
-    {validVersion && main.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
-    {validVersion && main.status === 'error' && main.error && <ErrorPanel error={main.error} onRetry={retry} />}
-    {validVersion && data && registry && <>
+    {view === 'settings' && activeProjectId && <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />}
+    {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
+    {view !== 'settings' && validVersion && main.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
+    {view !== 'settings' && validVersion && main.status === 'error' && main.error && <ErrorPanel error={main.error} onRetry={retry} />}
+    {view !== 'settings' && validVersion && data && registry && <>
       {view === 'overview' && <>
         <section className="metric-grid" aria-label="주요 지표">
           {([
@@ -339,24 +359,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
           </dl>
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
         </section>))}
-      {view === 'settings' && <section className="settings-section">
-        <h2>API 연결 정보 (읽기 전용)</h2>
-        <p className="context-note">API 모드에서는 프로젝트 이름을 저장하지 않아요. 여기 값은 서버가 준 정의예요.</p>
-        <dl className="definition-list">
-          <div><dt>엔드포인트</dt><dd>{currentOrigin}{session?.basePath ?? API_BASE_PATH}</dd></div>
-          <div><dt>프로젝트</dt><dd>{registry.project.id}<span>{registry.project.name} · {registry.project.status}</span></dd></div>
-          <div><dt>스키마</dt><dd>v{registry.schemaVersion}<span>{registry.schemaStatus === 'retired' ? '사용 중지(retired)' : '운영 중(active)'}</span></dd></div>
-          <div><dt>시간대</dt><dd>{registry.project.timeZone}</dd></div>
-          <div><dt>허용 출처</dt><dd>{registry.allowedOrigins.join(', ')}</dd></div>
-          <div><dt>수집 한도</dt><dd>분당 {formatCount(registry.limits.requestsPerMinute)}회<span>UTC 하루 신규 {formatCount(registry.limits.newReceiptsPerUtcDay)}건</span></dd></div>
-        </dl>
-        <p className="context-note">교차 출처는 이번 범위가 아니라 연결하지 않아요. 교차 출처 연결에는 HTTPS와 서버 측 명시적 CORS 허용이 필요하고, 로컬 개발에서만 http://localhost 예외를 둘 수 있어요.</p>
-        <div className="form-actions"><button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button></div>
-        <h3>등록 이벤트 정의</h3>
-        <div className="table-scroll" tabIndex={0} aria-label="등록 정의 표"><table className="event-table"><thead><tr><th scope="col">이벤트</th><th scope="col">출처</th><th scope="col">허용 속성</th></tr></thead><tbody>{registry.events.map(definition => <tr key={definition.name}><th scope="row" className="event-name">{definition.name}<div className="event-label">{definition.label}</div></th><td>{definition.source}</td><td>{Object.keys(definition.properties).join(', ') || '—'}</td></tr>)}</tbody></table></div>
-        <h3>작업 흐름 정의</h3>
-        <div className="table-scroll" tabIndex={0} aria-label="작업 흐름 정의 표"><table className="event-table"><thead><tr><th scope="col">흐름</th><th scope="col">시작</th><th scope="col">성공</th><th scope="col">실패</th></tr></thead><tbody>{registry.workflows.length === 0 ? <tr><th scope="row">—</th><td>—</td><td>—</td><td>—</td></tr> : registry.workflows.map(definition => <tr key={definition.id}><th scope="row" className="event-name">{definition.id}<div className="event-label">{definition.label}</div></th><td>{definition.startEvent}</td><td>{definition.successEvent}</td><td>{definition.failureEvent ?? '—'}</td></tr>)}</tbody></table></div>
-      </section>}
+
     </>}
   </>;
 }

@@ -7,6 +7,7 @@ import type {
   EventSeriesResponse,
   Project,
   ProjectPage,
+  ProjectSettings,
   PropertyDefinition,
   QueryMeta,
   Registry,
@@ -92,6 +93,31 @@ function parseProject(value: unknown, path: string): Project {
     status: expectEnum(record.status, ['active', 'paused'], `${path}.status`) as Project['status'],
     timeZone: expectString(record.timeZone, `${path}.timeZone`),
   };
+}
+
+export function parseProjectSettings(value: unknown): ProjectSettings {
+  const record = expectRecord(value, 'response');
+  const project = parseProject(record.project, 'response.project');
+  if (!/^[a-z][a-z0-9-]{0,47}$/.test(project.id) || project.name.length < 1 || project.name.length > 80)
+    fail('response.project', 'invalid identity or name');
+  const limits = expectRecord(record.limits, 'response.limits');
+  const allowedOrigins = expectArray(record.allowedOrigins, 'response.allowedOrigins').map((value, index) => {
+    const origin = expectString(value, `response.allowedOrigins[${index}]`);
+    let url: URL;
+    try { url = new URL(origin); } catch { fail('response.allowedOrigins', 'invalid origin'); }
+    if (origin.length > 256 || url.origin !== origin || url.username || url.password || origin.includes('*') ||
+      !(url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))))
+      fail('response.allowedOrigins', 'invalid origin');
+    return origin;
+  });
+  if (allowedOrigins.length < 1 || allowedOrigins.length > 16 || new Set(allowedOrigins).size !== allowedOrigins.length)
+    fail('response.allowedOrigins', 'invalid origin count');
+  const hash = expectString(record.settingsHash, 'response.settingsHash');
+  if (!/^[0-9a-f]{64}$/.test(hash)) fail('response.settingsHash', 'invalid hash');
+  return { project, allowedOrigins, limits: {
+    requestsPerMinute: expectMax(expectMin(expectInteger(limits.requestsPerMinute, 'response.limits.requestsPerMinute'), 1, 'response.limits.requestsPerMinute'), 600, 'response.limits.requestsPerMinute'),
+    newReceiptsPerUtcDay: expectMax(expectMin(expectInteger(limits.newReceiptsPerUtcDay, 'response.limits.newReceiptsPerUtcDay'), 1, 'response.limits.newReceiptsPerUtcDay'), 1_000_000, 'response.limits.newReceiptsPerUtcDay'),
+  }, settingsHash: hash, canEdit: expectBoolean(record.canEdit, 'response.canEdit') };
 }
 
 export function parseProjectPage(value: unknown): ProjectPage {

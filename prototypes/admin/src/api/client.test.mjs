@@ -4,6 +4,7 @@ import { API_BASE_PATH, ApiClient, ApiError, clampLimit, resolveApiEndpoint } fr
 import { missingBrowserEvents } from './coverage.ts';
 import { appendPage, shouldApplyPage } from './pagination.ts';
 import { periodRange, todayInZone } from './dates.ts';
+import { SettingsEditor } from './settings-editor.ts';
 
 const TOKEN = 'test-bearer-token-value';
 const REQUEST_ID = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
@@ -18,6 +19,113 @@ function capture(handler) {
 
 const project = id => ({ id, name: `Project ${id}`, status: 'active', timeZone: 'Asia/Seoul' });
 const meta = (projectId, schemaVersion, from, to) => ({ projectId, schemaVersion, source: 'browser', from, to, timeZone: 'Asia/Seoul', generatedAt: '2026-10-08T00:00:00Z', latestReceivedAt: null, coverage: 'observed-only' });
+
+const settings = (overrides = {}) => ({ project: project('sembom'), allowedOrigins: ['https://example.invalid'],
+  limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: true, ...overrides });
+
+test('settings PATCH uses the protected transport, returned capability and submitted values are checked', async () => {
+  const current = settings();
+  const saved = settings({ project: { ...current.project, name: 'New name' }, settingsHash: 'b'.repeat(64) });
+  const { calls, fetchImpl } = capture((url, init) => jsonResponse(200, init.method === 'PATCH' ? saved : current));
+  const client = new ApiClient({ token: TOKEN, fetchImpl });
+  assert.deepEqual(await client.getSettings('sembom'), current);
+  const update = { expectedSettingsHash: current.settingsHash, name: 'New name' };
+  assert.deepEqual(await client.updateSettings('sembom', update), saved);
+  assert.equal(calls[1].url, '/v1/projects/sembom'); assert.equal(calls[1].init.method, 'PATCH');
+  assert.equal(calls[1].init.headers['Content-Type'], 'application/json');
+  assert.equal(calls[1].init.headers.Authorization, `Bearer ${TOKEN}`);
+  assert.equal(calls[1].init.credentials, 'omit'); assert.equal(calls[1].init.cache, 'no-store');
+  assert.equal(calls[1].init.referrerPolicy, 'no-referrer'); assert.deepEqual(JSON.parse(calls[1].init.body), update);
+  assert.ok(!calls[1].init.body.includes(TOKEN));
+  for (const response of [settings({ canEdit: undefined }), settings({ canEdit: 'owner' }), settings({ settingsHash: 'bad' }),
+    settings({ project: project('other') }), settings({ canEdit: false }), current]) {
+    const invalid = new ApiClient({ token: TOKEN, fetchImpl: async () => jsonResponse(200, response) });
+    await assert.rejects(() => invalid.updateSettings('sembom', update), error => error.kind === 'contract');
+  }
+});
+
+test('settings editor sends only changed fields, validates inputs and blocks duplicate submissions', async () => {
+  let resolveWrite;
+  const { calls, fetchImpl } = capture((url, init) => init.method === 'PATCH'
+    ? new Promise(resolve => { resolveWrite = resolve; }) : jsonResponse(200, settings()));
+  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom');
+  await editor.load(); editor.edit('name', ''); await editor.save();
+  assert.ok(editor.state.errors.name); assert.equal(calls.length, 1);
+  editor.edit('name', 'Changed'); editor.edit('requestsPerMinute', '0'); await editor.save();
+  assert.ok(editor.state.errors.requestsPerMinute); assert.equal(calls.length, 1);
+  editor.edit('requestsPerMinute', '60');
+  const pending = editor.save(); await editor.save();
+  assert.equal(editor.state.phase, 'saving'); assert.equal(calls.length, 2);
+  assert.deepEqual(JSON.parse(calls[1].init.body), { expectedSettingsHash: 'a'.repeat(64), name: 'Changed', limits: { requestsPerMinute: 60 } });
+  resolveWrite(jsonResponse(200, settings({ project: { ...project('sembom'), name: 'Changed' },
+    limits: { requestsPerMinute: 60, newReceiptsPerUtcDay: 100000 }, settingsHash: 'b'.repeat(64) })));
+  await pending; assert.equal(editor.state.phase, 'ready'); assert.equal(editor.state.draft.name, 'Changed');
+  editor.destroy();
+});
+
+test('conflict preserves input until explicit review, and untouched remote fields survive rebasing', async () => {
+  let reads = 0;
+  const original = settings(), latest = settings({ project: { ...project('sembom'), status: 'paused' },
+    limits: { requestsPerMinute: 50, newReceiptsPerUtcDay: 300 }, settingsHash: 'b'.repeat(64) });
+  const { calls, fetchImpl } = capture((url, init) => init.method === 'PATCH'
+    ? jsonResponse(409, { error: { code: 'settings_conflict', requestId: REQUEST_ID } })
+    : jsonResponse(200, ++reads === 1 ? original : latest));
+  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom');
+  await editor.load(); editor.edit('name', 'My edit'); await editor.save();
+  assert.equal(editor.state.phase, 'review'); assert.equal(editor.state.draft.name, 'My edit');
+  await editor.save(); assert.equal(calls.length, 2);
+  await editor.checkLatest(); assert.equal(editor.state.draft.status, 'active'); assert.equal(editor.state.latest.project.status, 'paused');
+  editor.keepChanges(); assert.equal(editor.state.draft.name, 'My edit'); assert.equal(editor.state.draft.status, 'paused');
+  assert.equal(editor.state.draft.requestsPerMinute, '50'); assert.equal(editor.state.snapshot.settingsHash, latest.settingsHash);
+  await editor.save(); assert.deepEqual(JSON.parse(calls.at(-1).init.body), { expectedSettingsHash: latest.settingsHash, name: 'My edit' });
+  editor.destroy();
+});
+
+test('uncertain write is not retried and read-back can recover a committed update', async () => {
+  let reads = 0;
+  const original = settings(), latest = settings({ project: { ...project('sembom'), name: 'Committed' }, settingsHash: 'b'.repeat(64) });
+  const { calls, fetchImpl } = capture((url, init) => {
+    if (init.method === 'PATCH') throw new TypeError('connection dropped');
+    return jsonResponse(200, ++reads === 1 ? original : latest);
+  });
+  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom');
+  await editor.load(); editor.edit('name', 'Committed'); await editor.save();
+  assert.equal(editor.state.phase, 'review'); assert.equal(editor.state.draft.name, 'Committed');
+  await editor.save(); assert.equal(calls.length, 2);
+  await editor.checkLatest(); editor.useServer();
+  assert.equal(editor.state.draft.name, 'Committed'); assert.equal(editor.state.snapshot.settingsHash, latest.settingsHash);
+  await editor.save(); assert.equal(calls.filter(call => call.init.method === 'PATCH').length, 1);
+  editor.destroy();
+});
+
+test('reader and revoked owner cannot save, and refresh preserves a dirty form', async () => {
+  let current = settings({ canEdit: false });
+  const { calls, fetchImpl } = capture((url, init) => init.method === 'PATCH'
+    ? jsonResponse(403, { error: { code: 'forbidden', requestId: REQUEST_ID } }) : jsonResponse(200, current));
+  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom');
+  await editor.load(); editor.edit('name', 'Denied'); await editor.save();
+  assert.equal(editor.state.draft.name, current.project.name); assert.equal(calls.length, 1);
+  current = settings(); await editor.refresh(); editor.edit('name', 'Keep me');
+  current = settings({ limits: { requestsPerMinute: 99, newReceiptsPerUtcDay: 400 }, settingsHash: 'b'.repeat(64) });
+  await editor.refresh(); assert.equal(editor.state.phase, 'review'); assert.equal(editor.state.draft.name, 'Keep me');
+  editor.keepChanges(); await editor.save(); assert.equal(editor.state.blocked, true);
+  assert.equal(editor.state.draft.name, 'Keep me'); await editor.save();
+  assert.equal(calls.filter(call => call.init.method === 'PATCH').length, 1);
+  current = { ...current, canEdit: false }; await editor.checkLatest(); editor.keepChanges();
+  assert.equal(editor.state.phase, 'review'); editor.useServer(); assert.equal(editor.state.blocked, true);
+  editor.destroy();
+});
+
+test('disposed editor aborts the write and ignores its late response', async () => {
+  let resolveWrite; let callbacks = 0;
+  const { calls, fetchImpl } = capture((url, init) => init.method === 'PATCH'
+    ? new Promise(resolve => { resolveWrite = resolve; }) : jsonResponse(200, settings()));
+  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom', () => { callbacks++; });
+  await editor.load(); editor.edit('name', 'Late'); const pending = editor.save(); editor.destroy();
+  assert.equal(calls[1].init.signal.aborted, true);
+  resolveWrite(jsonResponse(200, settings({ project: { ...project('sembom'), name: 'Late' }, settingsHash: 'b'.repeat(64) })));
+  await pending; assert.equal(callbacks, 1); assert.equal(editor.state.snapshot.project.name, project('sembom').name);
+});
 
 test('list requests keep the token in the header only and disable storage and caching', async () => {
   const { calls, fetchImpl } = capture(() => jsonResponse(200, { data: [project('modufile')], page: { limit: 25, nextCursor: null } }));

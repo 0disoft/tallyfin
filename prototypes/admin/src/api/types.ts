@@ -6,6 +6,11 @@ export type Project = { id: string; name: string; status: 'active' | 'paused'; t
 
 export type ProjectPage = { data: Project[]; page: { limit: number; nextCursor: string | null } };
 
+export type CollectionLimits = { requestsPerMinute: number; newReceiptsPerUtcDay: number };
+export type ProjectSettings = { project: Project; allowedOrigins: string[]; limits: CollectionLimits; settingsHash: string; canEdit: boolean };
+export type ProjectSettingsUpdate = { expectedSettingsHash: string; name?: string; status?: Project['status'];
+  allowedOrigins?: string[]; limits?: Partial<CollectionLimits> };
+
 export type PropertyDefinition =
   | { type: 'boolean'; required: boolean; purpose: string }
   | { type: 'enum'; required: boolean; purpose: string; values: string[] }

@@ -6,6 +6,8 @@
 import type {
   EventSeriesResponse,
   ProjectPage,
+  ProjectSettings,
+  ProjectSettingsUpdate,
   QueryMeta,
   Registry,
   SummaryResponse,
@@ -15,6 +17,7 @@ import {
   ContractError,
   parseEventSeriesResponse,
   parseProjectPage,
+  parseProjectSettings,
   parseRegistry,
   parseSummaryResponse,
   parseWorkflowResponse,
@@ -34,6 +37,7 @@ export type ApiErrorKind =
   | 'not_found'
   | 'invalid_request'
   | 'storage_unavailable'
+  | 'settings_conflict'
   | 'http'
   | 'network'
   | 'contract';
@@ -59,6 +63,7 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   not_found: '프로젝트나 스키마를 찾지 못했어요. (HTTP 404)',
   invalid_request: '요청 범위가 계약과 맞지 않아요. (HTTP 400)',
   storage_unavailable: '저장소를 사용할 수 없어요. (HTTP 503)',
+  settings_conflict: '다른 변경 사항이 있어요. 최신 설정을 확인해 주세요. (HTTP 409)',
   http: '요청이 실패했어요.',
   network: 'API 서버에 연결하지 못했어요.',
   contract: 'API 응답이 계약과 맞지 않아요.',
@@ -70,6 +75,7 @@ const STATUS_KIND: Record<number, ApiErrorKind> = {
   403: 'forbidden',
   404: 'not_found',
   503: 'storage_unavailable',
+  409: 'settings_conflict',
 };
 
 export function clampLimit(limit?: number): number {
@@ -102,6 +108,7 @@ export type FetchOption = {
   credentials?: 'omit';
   cache?: 'no-store';
   referrerPolicy?: 'no-referrer';
+  body?: string;
 };
 
 export type FetchLike = (
@@ -162,17 +169,36 @@ export class ApiClient {
 
   async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {
     const params = { limit: clampLimit(options.limit), cursor: options.cursor ?? undefined };
-    return this.#parse(await this.#get('/projects', params, options.signal), parseProjectPage);
+    return this.#parse(await this.#request('/projects', params, options.signal), parseProjectPage);
   }
 
   async getSchema(projectId: string, schemaVersion: number, options: { signal?: AbortSignal } = {}): Promise<Registry> {
     const version = this.#version(schemaVersion);
     const path = `/projects/${encodeURIComponent(projectId)}/schemas/${version}`;
-    const registry = this.#parse(await this.#get(path, {}, options.signal), parseRegistry);
+    const registry = this.#parse(await this.#request(path, {}, options.signal), parseRegistry);
     if (registry.project.id !== projectId || registry.schemaVersion !== version) {
       throw new ApiError('contract', '응답이 요청한 프로젝트나 스키마 버전과 맞지 않아요.');
     }
     return registry;
+  }
+
+  async getSettings(projectId: string, options: { signal?: AbortSignal } = {}): Promise<ProjectSettings> {
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}`, {}, options.signal), parseProjectSettings);
+    if (result.project.id !== projectId) throw new ApiError('contract', '응답 프로젝트가 요청과 달라요.');
+    return result;
+  }
+
+  async updateSettings(projectId: string, update: ProjectSettingsUpdate, options: { signal?: AbortSignal } = {}): Promise<ProjectSettings> {
+    const body = JSON.stringify(update);
+    if (new TextEncoder().encode(body).byteLength > 16 * 1024) throw new ApiError('invalid_request', '설정 요청이 너무 커요.');
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}`, {}, options.signal, body), parseProjectSettings);
+    if (result.project.id !== projectId || !result.canEdit) throw new ApiError('contract', '저장 응답이 요청과 맞지 않아요.');
+    if ((update.name !== undefined && result.project.name !== update.name) ||
+      (update.status !== undefined && result.project.status !== update.status) ||
+      (update.allowedOrigins !== undefined && JSON.stringify(result.allowedOrigins) !== JSON.stringify(update.allowedOrigins)) ||
+      Object.entries(update.limits ?? {}).some(([key, value]) => result.limits[key as keyof typeof result.limits] !== value))
+      throw new ApiError('contract', '저장 응답에 변경한 값이 반영되지 않았어요.');
+    return result;
   }
 
   async getSummary(
@@ -182,7 +208,7 @@ export class ApiClient {
     const version = this.#version(options.schemaVersion);
     const params = { schemaVersion: version, from: options.from, to: options.to };
     const path = `/projects/${encodeURIComponent(projectId)}/summary`;
-    const response = this.#parse(await this.#get(path, params, options.signal), parseSummaryResponse);
+    const response = this.#parse(await this.#request(path, params, options.signal), parseSummaryResponse);
     this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
     return response;
   }
@@ -200,7 +226,7 @@ export class ApiClient {
       groupBy: options.groupBy ? options.groupBy : undefined,
     };
     const path = `/projects/${encodeURIComponent(projectId)}/events/${encodeURIComponent(eventName)}/daily`;
-    const response = this.#parse(await this.#get(path, params, options.signal), parseEventSeriesResponse);
+    const response = this.#parse(await this.#request(path, params, options.signal), parseEventSeriesResponse);
     this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
     if (response.eventName !== eventName) throw new ApiError('contract', '응답 이벤트가 요청과 달라요.');
     if ((response.groupBy ?? null) !== (options.groupBy ?? null)) {
@@ -217,7 +243,7 @@ export class ApiClient {
     const version = this.#version(options.schemaVersion);
     const params = { schemaVersion: version, from: options.from, to: options.to };
     const path = `/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/daily`;
-    const response = this.#parse(await this.#get(path, params, options.signal), parseWorkflowResponse);
+    const response = this.#parse(await this.#request(path, params, options.signal), parseWorkflowResponse);
     this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
     if (response.workflowId !== workflowId) throw new ApiError('contract', '응답 작업 흐름이 요청과 달라요.');
     return response;
@@ -252,10 +278,11 @@ export class ApiClient {
     }
   }
 
-  async #get(
+  async #request(
     path: string,
     params: Record<string, string | number | undefined> = {},
     signal?: AbortSignal,
+    body?: string,
   ): Promise<unknown> {
     if (this.#destroyed) throw new ApiError('network', KIND_MESSAGE.network);
     const query = new URLSearchParams();
@@ -265,6 +292,7 @@ export class ApiClient {
     const suffix = query.size > 0 ? `?${query.toString()}` : '';
     const url = `${this.#basePath}${path}${suffix}`;
     const headers: Record<string, string> = { Accept: 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
     const controller = new AbortController();
     const forward = () => controller.abort();
     if (signal) {
@@ -298,7 +326,8 @@ export class ApiClient {
       let response: { ok: boolean; status: number; json: () => Promise<unknown> };
       try {
         response = await this.#fetch(url, {
-          method: 'GET',
+          method: body === undefined ? 'GET' : 'PATCH',
+          ...(body === undefined ? {} : { body }),
           headers,
           signal: controller.signal,
           credentials: 'omit',
