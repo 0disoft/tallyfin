@@ -165,6 +165,12 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
     });
     assert.equal(patched.status, 200);
     assert.equal((await patched.json() as { project: { name: string } }).project.name, 'Worker settings update');
+    const validated = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/sembom/schemas/validate', {
+      method: 'POST', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ events: registry.events, workflows: registry.workflows }),
+    });
+    assert.equal(validated.status, 200);
+    assert.deepEqual(await validated.json(), { valid: true, issues: [], privacyReviewRequired: true });
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
   } finally { await runtime.dispose(); }

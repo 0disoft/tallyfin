@@ -1,6 +1,6 @@
 import { CollectionError, MAX_BODY_BYTES } from '@tallyfin/core';
 
-export async function readBody(request: Request): Promise<string> {
+export async function readBody(request: Request, maximum = MAX_BODY_BYTES): Promise<string> {
   const encoding = request.headers.get('Content-Encoding');
   if (encoding && encoding.toLowerCase() !== 'identity') throw new CollectionError('invalid_request', 415);
   const type = request.headers.get('Content-Type') ?? '';
@@ -8,15 +8,15 @@ export async function readBody(request: Request): Promise<string> {
   const length = request.headers.get('Content-Length');
   if (length !== null) {
     if (!/^\d+$/.test(length)) throw new CollectionError('invalid_request', 400);
-    if (Number(length) > MAX_BODY_BYTES) throw new CollectionError('invalid_request', 413);
+    if (Number(length) > maximum) throw new CollectionError('invalid_request', 413);
   }
   if (!request.body) throw new CollectionError('invalid_request', 400);
   const reader = request.body.getReader();
-  const buffer = new Uint8Array(MAX_BODY_BYTES); let size = 0;
+  const buffer = new Uint8Array(maximum); let size = 0;
   try {
     while (true) {
       const chunk = await reader.read(); if (chunk.done) break;
-      if (size + chunk.value.byteLength > MAX_BODY_BYTES) {
+      if (size + chunk.value.byteLength > maximum) {
         try { await reader.cancel(); } catch { /* preserve the body-limit error */ }
         throw new CollectionError('invalid_request', 413);
       }

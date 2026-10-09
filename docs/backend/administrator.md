@@ -8,8 +8,9 @@
 서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
 null을 돌려준다. `apps/collector/src/index.ts`의 기본 export는 검증기 없이 만들어져
 관리자 경로를 401로 닫는다. 검증기가 없거나 bearer·issuer·subject가 비면 401이다.
-프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 나머지 조회
-경로는 GET이 아니면 405(Allow: GET)다.
+프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 초안 검증
+경로는 POST만 받고 그 밖은 405(Allow: POST), 나머지 조회 경로는 GET이 아니면
+405(Allow: GET)다.
 
 저장소 루트의 호스트 어댑터 파일 예시다. `@tallyfin/collector` 패키지에는 `exports`가
 없으므로 소스 경로로 가져온다. `hostVerify`는 호스트가 채워야 할 자리이고 이 저장소에는
@@ -30,11 +31,13 @@ export default createWorker(bearer => hostVerify(bearer));
 화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이
 없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
 
-지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 설정 PATCH 하나뿐이다.
+지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 설정 PATCH 하나뿐이다. 초안 검증
+POST는 저장하지 않는 읽기 작업이다.
 
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
 - `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
+- `POST /v1/projects/{projectId}/schemas/validate` — owner 전용 초안 검증, 저장 없음.
 - `GET /v1/projects/{projectId}/summary` — 한 버전·기간의 이벤트별 건수.
 - `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷.
 - `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — 시작일 cohort.
@@ -68,6 +71,31 @@ UPDATE로 반영한다. owner 자격이 회수되면 403, 해시가 오래됐거
 아니다. 설정 변경은 ingest_revision을 1 올려 진행 중인 수집의 충돌 검사와 맞물린다. 응답이
 유실되거나 409를 받으면 현재 설정을 다시 읽어 비교한 뒤 재시도하고, 새 해시를 그대로
 덮어쓰지 않는다.
+
+## 스키마 초안 검증
+
+기존 `GET /v1/projects/{projectId}/schemas/{schemaVersion}`로 발행된 정의를 읽고,
+`POST /v1/projects/{projectId}/schemas/validate`에 `{events, workflows}`만 보내 검증한다.
+프로젝트·버전·상태·허용 출처 등 다른 필드는 받지 않는다. POST는 인증한 뒤 프로젝트
+설정과 owner grant를 같은 DB 조회에서 확인하며, 권한이 없으면 본문을 읽기 전에 403을
+반환한다. 일시정지된 프로젝트도 검증할 수 있다. reader는 발행된 스키마 조회만 가능하다.
+
+본문은 identity 인코딩의 `application/json` 또는 `text/plain`이며 UTF-8 32KiB가
+상한이다. 다른 수집·설정 경로의 16KiB 상한은 그대로다. 쿼리 파라미터는 받지 않는다.
+JSON 오류·닫힌 envelope 위반·배열이 아닌 events/workflows는 400, 크기 초과는 413,
+지원하지 않는 미디어·인코딩은 415다.
+
+정의의 의미 검증 결과는 200으로 `{valid, issues, privacyReviewRequired: true}`를
+반환한다. 정상 초안의 issues는 빈 배열이고, 오류가 있으면 첫 오류 하나의 JSON pointer
+`path`와 안정된 `code`를 반환한다. 입력값·DB 오류를 응답이나 로그에 넣지 않는다.
+코드는 invalid_definition, definition_limit, duplicate, cardinality_limit,
+browser_event_required, invalid_reference, dimension_mismatch다.
+
+검증은 실제 등록과 같은 코어 함수로 이벤트 1~50개·흐름 최대 10개·속성 최대 4개·
+종류 수/가능 조합 한도·흐름 참조·필수 차원 일치를 확인한다. 이벤트 출처는 browser/server
+문자열만 허용한다. 검증 성공 후에도 enum의 개인정보 포함 여부는 운영자가 검토해야 한다.
+초안·스키마·설정·사용량·집계는 쓰지 않으므로 반복 요청에 idempotency key가 필요 없다.
+버전 예약이나 발행 가능성을 확정하지 않으며, 발행 때 다시 검증·권한 확인해야 한다.
 
 프로젝트 생성·불변 스키마 새 버전 발행·grant 관리는 기존 provisioning CLI가 맡는다.
 grant provisioning API, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는

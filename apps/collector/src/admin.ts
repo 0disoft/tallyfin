@@ -1,4 +1,4 @@
-import { CollectionError, dateMillis, DAY, NAME, parseSettingsUpdate, PROJECT_ID } from '@tallyfin/core';
+import { closed, CollectionError, dateMillis, DAY, MAX_SCHEMA_BYTES, NAME, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 
@@ -17,6 +17,21 @@ export async function administrator(request: Request, access: AdministratorAcces
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
   const settings = /^\/v1\/projects\/([^/]+)$/.exec(url.pathname);
+  const draft = /^\/v1\/projects\/([^/]+)\/schemas\/validate$/.exec(url.pathname);
+  if (draft) {
+    if (request.method !== 'POST') throw new CollectionError('invalid_request', 405);
+    if (!PROJECT_ID.test(draft[1]!)) throw new CollectionError('invalid_request', 400);
+    parameters(url, []);
+    // Read-only validation uses the same granted project snapshot as settings, without writing a draft.
+    const project = await access.store.settings(principal, draft[1]!);
+    if (!project.canEdit) throw new CollectionError('forbidden', 403);
+    let value: unknown;
+    const body = await readBody(request, MAX_SCHEMA_BYTES);
+    try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
+    if (!closed(value, ['events', 'workflows']) || !Array.isArray(value.events) || !Array.isArray(value.workflows))
+      throw new CollectionError('invalid_request', 400);
+    return validateSchemaDraft(value);
+  }
   if (request.method !== 'GET' && !(request.method === 'PATCH' && settings)) throw new CollectionError('invalid_request', 405);
   if (settings) {
     if (!PROJECT_ID.test(settings[1]!)) throw new CollectionError('invalid_request', 400);

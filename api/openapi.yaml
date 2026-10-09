@@ -505,6 +505,63 @@ components:
             pattern: ^[a-z][a-z0-9_]{0,47}$
             maxLength: 48
           uniqueItems: true
+    SchemaDraft:
+      type: object
+      additionalProperties: false
+      required: [events, workflows]
+      description: >-
+        Unpublished definitions only. Array contents may be invalid and are checked
+        by the validator using the same rules as registration. Project settings,
+        version selection and publication are not part of this request.
+      properties:
+        events:
+          type: array
+          items: {}
+        workflows:
+          type: array
+          items: {}
+    SchemaValidation:
+      type: object
+      additionalProperties: false
+      required: [valid, issues, privacyReviewRequired]
+      description: >-
+        Reports the first definition error as a JSON pointer and stable code, without
+        echoing values. A valid report is syntax/reference validation only; it does
+        not approve privacy, reserve a version, store a draft or authorize publication.
+      properties:
+        valid:
+          type: boolean
+        privacyReviewRequired:
+          type: boolean
+          const: true
+        issues:
+          type: array
+          maxItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, code]
+            properties:
+              path:
+                type: string
+                maxLength: 160
+                description: JSON pointer relative to the draft; empty means the entire draft.
+              code:
+                type: string
+                enum: [invalid_definition, definition_limit, duplicate, cardinality_limit, browser_event_required, invalid_reference, dimension_mismatch]
+      oneOf:
+        - properties:
+            valid:
+              const: true
+            issues:
+              type: array
+              maxItems: 0
+        - properties:
+            valid:
+              const: false
+            issues:
+              type: array
+              minItems: 1
     Registry:
       type: object
       additionalProperties: false
@@ -1272,6 +1329,83 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable; read settings before retrying because the earlier outcome may be unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/schemas/validate:
+    post:
+      tags: [Administration]
+      operationId: validateProjectSchemaDraft
+      summary: Validate unpublished definitions without saving them
+      description: >-
+        Owner grant required, including for paused projects. Authentication and
+        project ownership are checked before reading the body. Accepts at most
+        32768 UTF-8 bytes with identity encoding and no query parameters. Semantic
+        definition errors return 200 with valid=false; malformed envelopes return
+        400. No drafts, schemas, settings, quotas or aggregates are written.
+        Repeating this read-only operation has no side effects and needs no idempotency key.
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SchemaDraft"
+          text/plain:
+            schema:
+              $ref: "#/components/schemas/SchemaDraft"
+      responses:
+        "200":
+          description: Validation report, including the first semantic error if invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SchemaValidation"
+        "400":
+          description: Invalid JSON, envelope, project identifier or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated principal lacks this project's owner grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only POST is supported for draft validation.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: POST
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request body exceeds 32768 UTF-8 bytes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported content type, charset or encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Project settings or storage unavailable.
           content:
             application/json:
               schema:

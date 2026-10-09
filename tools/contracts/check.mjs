@@ -108,10 +108,27 @@ check('DBML parses with project-scoped storage and no raw visitor tables', () =>
 check('API auth declarations remain explicit', () => {
   assert.deepEqual(spec.paths['/v1/projects/{projectId}/batches'].post.security,[]);
   assert.deepEqual(spec.security,[{adminBearer:[]}]);
-  for (const path of Object.keys(spec.paths).filter(p=>p!=='/v1/projects/{projectId}/batches')) assert.ok(spec.paths[path].get.responses['401']);
+  for (const path of Object.keys(spec.paths).filter(p=>p!=='/v1/projects/{projectId}/batches'))
+    for (const [method, operation] of Object.entries(spec.paths[path]).filter(([method])=>['get','post','patch','put','delete'].includes(method)))
+      assert.ok(operation.responses['401'], `${method} ${path}`);
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['401']);
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['403']);
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['409']);
+});
+check('schema drafts separate malformed envelopes from semantic errors and reports have consistent validity', () => {
+  const draft = { events: registry.events, workflows: registry.workflows };
+  assert.ok(validate('SchemaDraft', draft));
+  assert.ok(validate('SchemaDraft', { events: [null], workflows: [] }));
+  for (const value of [null, {}, { ...draft, schemaVersion: 2 }, { ...draft, events: null }])
+    assert.equal(validate('SchemaDraft', value), false);
+  const valid = { valid: true, issues: [], privacyReviewRequired: true };
+  const invalid = { valid: false, issues: [{ path: '/events/0/name', code: 'duplicate' }], privacyReviewRequired: true };
+  assert.ok(validate('SchemaValidation', valid)); assert.ok(validate('SchemaValidation', invalid));
+  for (const value of [{ ...valid, valid: false }, { ...invalid, valid: true }, { ...valid, privacyReviewRequired: false },
+    { ...invalid, issues: [{ path: '', code: 'unknown' }] }, { ...invalid, issues: [invalid.issues[0], invalid.issues[0]] }])
+    assert.equal(validate('SchemaValidation', value), false);
+  const operation = spec.paths['/v1/projects/{projectId}/schemas/validate'].post;
+  assert.ok(operation.responses['403']); assert.ok(operation.responses['413']); assert.ok(operation.responses['415']);
 });
 check('settings updates reject unsafe shapes and require a hash plus a mutable field', () => {
   const valid = example('project-settings-update');
