@@ -1127,3 +1127,25 @@ button {
 .schema-workflow-notice { font-size: 1rem; margin-top: .5rem; }
 @media (max-width: 900px) { .schema-workflow-fields, .schema-workflow-phases { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 480px) { .schema-workflow-row { padding: .75rem; } .schema-workflow-dimensions { padding: .5rem; } }
+
+/* ==========================================================================
+   Event property breakdown (analysis sidecar)
+   ========================================================================== */
+.property-analysis { min-width: 0; margin-top: 1.5rem; }
+.property-grouping { width: 20rem; max-width: 100%; }
+.property-grouping .project-select-wrap { min-width: 0; }
+.property-analysis .context-note { margin-top: 1rem; }
+.property-analysis-scroll { margin-top: 1rem; min-width: 0; }
+.property-analysis-table { min-width: 0; }
+.property-analysis-table th:first-child { white-space: normal; }
+.property-analysis-value { min-width: 0; max-width: 100%; font-size: 1rem; font-weight: 600; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.property-analysis-value[aria-pressed='true'] { color: #0f172a; text-decoration: underline; }
+.property-analysis-empty { min-width: 0; margin-top: 1rem; padding: 1.5rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; color: #0f172a; }
+.property-analysis-empty h3 { margin: 0 0 .5rem; font-size: 1.125rem; font-weight: 700; }
+.property-analysis-empty p { color: #475569; font-size: 1rem; line-height: 1.6; }
+.property-analysis-trend { min-width: 0; margin-top: 1.5rem; }
+.property-analysis-trend h3 { font-size: 1.125rem; font-weight: 700; overflow-wrap: anywhere; }
+.property-analysis-trend .trend-figure { min-width: 0; margin-top: .5rem; }
+@media (max-width: 450px) {
+  .property-analysis-table th, .property-analysis-table td { padding: 0 12px; }
+}

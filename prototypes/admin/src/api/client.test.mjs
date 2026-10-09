@@ -5,6 +5,7 @@ import { missingBrowserEvents } from './coverage.ts';
 import { appendPage, shouldApplyPage } from './pagination.ts';
 import { periodRange, todayInZone } from './dates.ts';
 import { SettingsEditor } from './settings-editor.ts';
+import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './event-analysis.ts';
 
 const TOKEN = 'test-bearer-token-value';
 const REQUEST_ID = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
@@ -22,6 +23,55 @@ const meta = (projectId, schemaVersion, from, to) => ({ projectId, schemaVersion
 
 const settings = (overrides = {}) => ({ project: project('sembom'), allowedOrigins: ['https://example.invalid'],
   limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: true, ...overrides });
+
+const analysisEvent = () => ({ name: 'view', label: 'View', source: 'browser', properties: {
+  format: { type: 'enum', required: false, purpose: 'Public format', values: ['pdf', 'png'] },
+  flag: { type: 'boolean', required: false, purpose: 'Flag' },
+  range: { type: 'integer', required: true, purpose: 'Range', minimum: 0, maximum: 2 },
+} });
+const analysisSeries = () => ({ meta: meta('sembom', 1, '2026-10-07', '2026-10-08'), eventName: 'view', groupBy: 'format', totalEvents: 10,
+  days: [{ date: '2026-10-07', count: 6, breakdown: [{ value: 'pdf', count: 4 }, { value: 'png', count: 2 }] },
+    { date: '2026-10-08', count: 4, breakdown: [{ value: 'pdf', count: 3 }, { value: null, count: 1 }] }] });
+
+test('event grouping uses only the selected browser event and never reuses another project or schema selection', () => {
+  const event = analysisEvent(), registry = { project: project('sembom'), schemaVersion: 1 };
+  const selection = { context: eventContext(registry, event), property: 'format' };
+  assert.deepEqual(eventPropertyNames(event), ['format', 'flag', 'range']);
+  assert.deepEqual(eventPropertyNames({ ...event, source: 'server' }), []);
+  assert.equal(selectedGrouping(registry, event, selection), 'format');
+  for (const next of [{ ...registry, schemaVersion: 2 }, { ...registry, project: project('other') }]) assert.equal(selectedGrouping(next, event, selection), '');
+  assert.equal(selectedGrouping(registry, { ...event, name: 'other' }, selection), '');
+  assert.equal(selectedGrouping(registry, { ...event, properties: {} }, selection), '');
+  assert.equal(selectedGrouping(registry, event, { ...selection, property: 'unregistered' }), '');
+});
+
+test('property analysis aggregates values, shares and daily counts without confusing null, false or zero', () => {
+  const result = analyzeEventSeries(analysisSeries(), analysisEvent());
+  assert.equal(result.total, 10); assert.deepEqual(result.rows.map(row => [row.value, row.count, row.share]), [['pdf', 7, 70], ['png', 2, 20], [null, 1, 10]]);
+  assert.deepEqual(result.rows[1].daily.map(day => day.count), [2, 0]);
+  const flags = analysisSeries(); flags.groupBy = 'flag'; flags.days[0].breakdown = [{ value: false, count: 4 }, { value: true, count: 2 }];
+  flags.days[1].breakdown = [{ value: false, count: 3 }, { value: null, count: 1 }];
+  assert.deepEqual(analyzeEventSeries(flags, analysisEvent()).rows.map(row => row.value), [false, true, null]);
+  const numbers = analysisSeries(); numbers.groupBy = 'range'; numbers.days[0].breakdown = [{ value: 0, count: 4 }, { value: 1, count: 2 }];
+  numbers.days[1].breakdown = [{ value: 0, count: 3 }, { value: 2, count: 1 }];
+  assert.equal(analyzeEventSeries(numbers, analysisEvent()).rows[0].value, 0);
+  const empty = analysisSeries(); empty.totalEvents = 0; empty.days.forEach(day => { day.count = 0; day.breakdown = []; });
+  assert.deepEqual(analyzeEventSeries(empty, analysisEvent()), { total: 0, rows: [] });
+  const totalOnly = analysisSeries(); totalOnly.groupBy = null; totalOnly.days.forEach(day => { day.breakdown = []; });
+  assert.equal(analyzeEventSeries(totalOnly, analysisEvent()), null);
+});
+
+test('partial, duplicate, unsafe and invalid property buckets fail before displaying plausible percentages', () => {
+  const edits = [r => r.days.pop(), r => r.days.reverse(), r => { r.days[1].date = r.days[0].date; },
+    r => { r.totalEvents = 9; }, r => { r.days[0].breakdown[0].count = 5; },
+    r => { r.days[0].breakdown = [{ value: 'pdf', count: 3 }, { value: 'pdf', count: 3 }]; },
+    r => { r.days[0].breakdown[0].value = 'private'; }, r => { r.days[0].breakdown[0].value = false; },
+    r => { r.groupBy = 'unknown'; }, r => { r.eventName = 'foreign'; },
+    r => { r.totalEvents = Number.MAX_SAFE_INTEGER + 1; }];
+  for (const edit of edits) { const next = analysisSeries(); edit(next); assert.throws(() => analyzeEventSeries(next, analysisEvent())); }
+  const event = analysisEvent(); event.properties.format.required = true;
+  assert.throws(() => analyzeEventSeries(analysisSeries(), event));
+});
 
 test('settings PATCH uses the protected transport, returned capability and submitted values are checked', async () => {
   const current = settings();

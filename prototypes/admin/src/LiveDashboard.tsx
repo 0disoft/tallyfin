@@ -9,6 +9,9 @@ import LiveSdkSetup from './LiveSdkSetup';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import { missingBrowserEvents } from './api/coverage';
+import EventPropertyBreakdown from './EventPropertyBreakdown';
+import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
+import type { EventGrouping, PropertyAnalysis } from './api/event-analysis';
 import { appendPage, shouldApplyPage } from './api/pagination';
 import { periodRange, rangeLabel, todayInZone } from './api/dates';
 import type { EventDefinition, EventSeriesResponse, Project, ProjectSettings, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse } from './api/types';
@@ -74,7 +77,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [endpointError, setEndpointError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [versionInput, setVersionInput] = useState('1');
-  const [groupBy, setGroupBy] = useState('');
+  const [grouping, setGrouping] = useState<EventGrouping>(null);
   const [query, setQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
   const [refreshTick, setRefreshTick] = useState(0);
@@ -88,7 +91,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [main, setMain] = useState<Load<MainData>>({ status: 'idle' });
-  const [series, setSeries] = useState<Load<EventSeriesResponse>>({ status: 'idle' });
+  const [series, setSeries] = useState<Load<EventSeriesResponse> & { key?: string; analysis?: PropertyAnalysis | null }>({ status: 'idle' });
 
   const client = useMemo(() => (session ? new ApiClient({ basePath: session.basePath,
     ...(session.login ? { getBearer: () => session.login!.getAccessToken(), onDestroy: () => session.login!.destroy() } : { token: session.token ?? '' }),
@@ -105,6 +108,15 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
   const activeTimeZone = activeProject?.timeZone ?? null;
+  const currentRange = activeTimeZone ? periodRange(todayInZone(activeTimeZone), period) : null;
+  const analysisRegistry = main.status === 'ready' && main.data?.registry.project.id === activeProjectId &&
+    main.data.registry.schemaVersion === version && main.data.range.from === currentRange?.from && main.data.range.to === currentRange?.to
+    ? main.data.registry : null;
+  const analysisEvent = analysisRegistry?.events.find(event => event.name === selectedEvent && event.source === 'browser') ?? null;
+  const groupBy = analysisRegistry && analysisEvent ? selectedGrouping(analysisRegistry, analysisEvent, grouping) : '';
+  const propertyNames = eventPropertyNames(analysisEvent);
+  const seriesKey = analysisRegistry && analysisEvent && currentRange
+    ? JSON.stringify([eventContext(analysisRegistry, analysisEvent), groupBy, currentRange.from, currentRange.to, refreshTick]) : null;
   const retry = useCallback(() => {
     if (view === 'settings') setSettingsRefreshTick(tick => tick + 1);
     else setRefreshTick(tick => tick + 1);
@@ -116,14 +128,14 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     sessionRef.current += 1;
     projectsControllerRef.current?.abort(); moreControllerRef.current?.abort(); setMore(false);
     setProjects(previous => ({ status: 'ready', data: [...(previous.data ?? []).filter(p => p.id !== settings.project.id), settings.project].sort((a, b) => a.id.localeCompare(b.id)) }));
-    setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
+    setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setGrouping(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setNewProjectId(settings.project.id); setShowCreate(false); setPageError(null);
     onNavigate?.('settings');
   }, [onNavigate]);
   const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, []);
   const connected = useCallback((login: BrowserLogin) => {
     sessionRef.current += 1;
-    setToken(''); setProjectId(null); setSelectedEvent(null); setProjects({ status: 'idle' });
+    setToken(''); setProjectId(null); setSelectedEvent(null); setGrouping(null); setProjects({ status: 'idle' });
     setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setSession({ login, basePath: API_BASE_PATH });
     setShowCreate(false); setNewProjectId(null);
@@ -140,6 +152,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setSeries({ status: 'idle' });
     setProjectId(null);
     setSelectedEvent(null);
+    setGrouping(null);
     setSession({ token, basePath: resolved.basePath });
     setShowCreate(false); setNewProjectId(null);
     setToken('');
@@ -158,7 +171,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setSeries({ status: 'idle' });
     setProjectId(null);
     setSelectedEvent(null);
-    setGroupBy('');
+    setGrouping(null);
     setQuery('');
     setPageError(null);
     setEndpointError(null);
@@ -225,15 +238,18 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view]);
 
   useEffect(() => {
-    if (view !== 'events' || !client || !activeProjectId || !activeTimeZone || !validVersion || !selectedEvent) { setSeries({ status: 'idle' }); return; }
+    if (view !== 'events' || !client || !analysisEvent || !analysisRegistry || !currentRange || !seriesKey) { setSeries({ status: 'idle' }); return; }
     const controller = new AbortController();
-    setSeries({ status: 'loading' });
-    const range = periodRange(todayInZone(activeTimeZone), period);
-    client.getEventDaily(activeProjectId, selectedEvent, { schemaVersion: version, from: range.from, to: range.to, groupBy: groupBy.trim() || undefined, signal: controller.signal })
-      .then(next => { if (!controller.signal.aborted) setSeries({ status: 'ready', data: next }); })
-      .catch(error => { if (!controller.signal.aborted) setSeries({ status: 'error', error: toApiError(error) }); });
+    setSeries({ status: 'loading', key: seriesKey });
+    client.getEventDaily(analysisRegistry.project.id, analysisEvent.name, { schemaVersion: version, from: currentRange.from, to: currentRange.to, groupBy: groupBy || undefined, signal: controller.signal })
+      .then(next => {
+        if (controller.signal.aborted) return;
+        const analysis = analyzeEventSeries(next, analysisEvent);
+        setSeries({ status: 'ready', key: seriesKey, data: next, analysis });
+      })
+      .catch(error => { if (!controller.signal.aborted) setSeries({ status: 'error', key: seriesKey, error: toApiError(error) }); });
     return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, selectedEvent, groupBy, version, validVersion, period, refreshTick, view]);
+  }, [client, analysisRegistry, analysisEvent, currentRange?.from, currentRange?.to, seriesKey, groupBy, version, view]);
 
   useEffect(() => {
     setSettingsRegistry(null);
@@ -307,7 +323,8 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const browserCount = registeredEvents.filter(row => row.definition.source === 'browser').length;
   const serverCount = registeredEvents.filter(row => row.definition.source === 'server').length;
   const filteredEvents = eventRows.filter(item => `${item.definition.name} ${item.definition.label}`.toLowerCase().includes(query.trim().toLowerCase()));
-  const seriesData = series.status === 'ready' ? series.data ?? null : null;
+  const currentSeries = seriesKey && series.key === seriesKey ? series : null;
+  const seriesData = currentSeries?.status === 'ready' ? currentSeries.data ?? null : null;
   const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
   const startLabel = startDefinition?.label ?? '시작 시도';
   const successLabel = successDefinition?.label ?? '성공 시도';
@@ -319,8 +336,8 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
 
   return <>
     <div className="toolbar api-toolbar">
-      <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => { setProjectId(event.target.value || null); setSelectedEvent(null); }} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
-      <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => setVersionInput(event.target.value)} /></label>
+      <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => { setProjectId(event.target.value || null); setSelectedEvent(null); setGrouping(null); }} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
+      <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
@@ -361,18 +378,21 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       {view === 'events' && <>
         <div className="toolbar">
           <label className="search-control"><MagnifyingGlass size={20} /><span className="sr-only">이벤트 검색</span><input type="search" placeholder="이벤트 이름 검색" value={query} onChange={event => setQuery(event.target.value)} /></label>
-          <label className="api-field"><span>groupBy (선택)</span><input className="text-input" aria-label="groupBy 속성" value={groupBy} placeholder="등록 속성 이름" onChange={event => setGroupBy(event.target.value)} /></label>
+          <span className="context-note">이벤트를 선택하면 등록된 속성별로 나눠 볼 수 있어요.</span>
           <span className="context-note">스키마 v{registry.schemaVersion} · 브라우저 {browserCount}개 · {registry.schemaStatus === 'retired' ? '사용 중지(retired)' : '운영 중(active)'}</span>
         </div>
-        <div className="table-scroll" tabIndex={0} aria-label="등록 이벤트 표"><table className="event-table"><caption className="sr-only">선택 기간의 등록 이벤트 수신 건수</caption><thead><tr><th scope="col">이벤트</th><th scope="col">발행 출처</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{filteredEvents.map(row => <tr key={row.definition.name}><th scope="row">{row.definition.source === 'browser' ? <button className="text-button event-name" type="button" aria-pressed={selectedEvent === row.definition.name} onClick={() => setSelectedEvent(row.definition.name)}>{row.definition.name}<ArrowRight size={16} /></button> : <span className="event-name">{row.definition.name}</span>}<div className="event-label">{row.definition.label}</div></th><td>{row.source ?? '—'}</td><td className="number-cell">{countCell(row)}</td></tr>)}</tbody><tfoot><tr><th scope="row" colSpan={2}>표시된 브라우저 이벤트 합계</th><td className="number-cell">{formatCount(filteredEvents.reduce((total, row) => total + (row.count ?? 0), 0))}</td></tr></tfoot></table></div>
+        <div className="table-scroll" tabIndex={0} aria-label="등록 이벤트 표"><table className="event-table"><caption className="sr-only">선택 기간의 등록 이벤트 수신 건수</caption><thead><tr><th scope="col">이벤트</th><th scope="col">발행 출처</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{filteredEvents.map(row => <tr key={row.definition.name}><th scope="row">{row.definition.source === 'browser' ? <button className="text-button event-name" type="button" aria-pressed={selectedEvent === row.definition.name} onClick={() => { setSelectedEvent(row.definition.name); setGrouping(null); }}>{row.definition.name}<ArrowRight size={16} /></button> : <span className="event-name">{row.definition.name}</span>}<div className="event-label">{row.definition.label}</div></th><td>{row.source ?? '—'}</td><td className="number-cell">{countCell(row)}</td></tr>)}</tbody><tfoot><tr><th scope="row" colSpan={2}>표시된 브라우저 이벤트 합계</th><td className="number-cell">{formatCount(filteredEvents.reduce((total, row) => total + (row.count ?? 0), 0))}</td></tr></tfoot></table></div>
         {filteredEvents.length === 0 && <div className="state-panel" role="status"><h2>검색 결과가 없어요</h2><button className="secondary-button" type="button" onClick={() => setQuery('')}>검색 초기화</button></div>}
         {selectedEvent && <section className="event-detail">
-          <div className="section-header"><h2>{selectedEvent} 일별 건수</h2><button className="text-button" type="button" onClick={() => setSelectedEvent(null)}>상세 닫기</button></div>
-          <p className="context-note">{groupBy.trim() ? `groupBy: ${groupBy.trim()}` : 'groupBy 없음 · 일별 총계만 조회해요'}</p>
-          {series.status === 'loading' && <p className="context-note" role="status">일별 시계열을 조회하는 중이에요.</p>}
-          {series.status === 'error' && series.error && <ErrorPanel error={series.error} onRetry={retry} />}
+          <div className="section-header"><h2>{selectedEvent} 일별 건수</h2><button className="text-button" type="button" onClick={() => { setSelectedEvent(null); setGrouping(null); }}>상세 닫기</button></div>
+          <label className="api-field property-grouping"><span>분류 기준</span><div className="project-select-wrap"><select className="text-input settings-select" aria-label="분류 기준" value={groupBy} disabled={!propertyNames.length}
+            onChange={event => setGrouping(analysisRegistry && analysisEvent && event.target.value ? { context: eventContext(analysisRegistry, analysisEvent), property: event.target.value } : null)} aria-describedby="event-grouping-help">
+            <option value="">전체 건수</option>{propertyNames.map(name => <option key={name} value={name}>{name}</option>)}</select><CaretDown size={16} aria-hidden="true" /></div></label>
+          <p className="context-note" id="event-grouping-help">{!analysisEvent ? '이 스키마에 등록된 브라우저 이벤트만 분석할 수 있어요.' : !propertyNames.length ? '등록된 속성이 없어 일별 전체 건수만 보여줘요.' : groupBy ? `${groupBy} 값별로 나눠 봐요. ${analysisEvent.properties[groupBy].purpose}` : '분류 기준을 고르면 속성 값별 건수·비중·추이를 볼 수 있어요.'}</p>
+          {analysisEvent && (!currentSeries || currentSeries.status === 'loading') && <p className="context-note" role="status">일별 시계열을 조회하는 중이에요.</p>}
+          {currentSeries?.status === 'error' && currentSeries.error && <ErrorPanel error={currentSeries.error} onRetry={retry} />}
           {seriesData && <><Trend records={seriesRecords} event={seriesData.eventName} />
-            {groupBy.trim() && <div className="table-scroll series-breakdown" tabIndex={0} aria-label="속성 버킷 표"><table className="event-table"><caption className="sr-only">일별 속성 버킷</caption><thead><tr><th scope="col">날짜</th><th scope="col">속성 값</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{seriesData.days.flatMap(day => day.breakdown.map((bucket, index) => <tr key={`${day.date}-${index}`}><th scope="row">{day.date}</th><td>{bucket.value === null ? '(없음)' : String(bucket.value)}</td><td className="number-cell">{formatCount(bucket.count)}</td></tr>))}</tbody></table></div>}
+            {currentSeries?.analysis && <EventPropertyBreakdown key={`${seriesKey}`} analysis={currentSeries.analysis} propertyName={groupBy} />}
           </>}
         </section>}
       </>}
