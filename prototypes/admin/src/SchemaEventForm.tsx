@@ -36,7 +36,7 @@ export default function SchemaEventForm({ draft, editable, onChange, onOpenJson,
   }
   return <section className="schema-event-form" aria-labelledby="schema-event-heading">
     <div className="settings-head"><h3 id="schema-event-heading">이벤트 편집</h3><span className="settings-badge">{form.events.length} / 50</span></div>
-    <p className="field-help" id="schema-event-help">이름은 코드에서 사용할 영문 이름, 표시 이름은 관리자 화면에서 볼 이름이에요. 각 이벤트의 속성 편집을 펼쳐 속성을 설정하세요. 작업 흐름은 JSON에서 설정해요.</p>
+    <p className="field-help" id="schema-event-help">이름은 코드에서 사용할 영문 이름, 표시 이름은 관리자 화면에서 볼 이름이에요. 각 이벤트의 속성 편집을 펼쳐 속성을 설정하세요. 작업 흐름은 아래 폼에서 연결해요.</p>
     {form.events.length === 0 && <p className="notice">아직 이벤트가 없어요. 이벤트를 추가한 뒤 정의를 검증하세요.</p>}
     <div className="schema-event-list">{form.events.map((event, index) => {
       const linked = eventIsLinked(form, index), base = `schema-event-${index}`, help = `${base}-help`;

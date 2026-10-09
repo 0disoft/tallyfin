@@ -7,6 +7,8 @@ import type { SchemaIssueCode } from './api/schema-contract.ts';
 import SchemaEventForm from './SchemaEventForm.tsx';
 import { eventIssueTarget } from './api/schema-event-form.ts';
 import { propertyIssueTarget } from './api/schema-property-form.ts';
+import SchemaWorkflowForm from './SchemaWorkflowForm.tsx';
+import { workflowIssueTarget } from './api/schema-workflow-form.ts';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름 최대 10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -35,7 +37,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   const issue = state?.report?.issues[0];
   useEffect(() => {
     if (!state?.formError && !issue) return;
-    const target = issue && state ? propertyIssueTarget(state.draft, issue) ?? eventIssueTarget(state.draft, issue) : null;
+    const target = issue && state ? workflowIssueTarget(state.draft, issue) ?? propertyIssueTarget(state.draft, issue) ?? eventIssueTarget(state.draft, issue) : null;
     if (target) { const frame = requestAnimationFrame(() => document.getElementById(target)?.focus()); return () => cancelAnimationFrame(frame); }
     setJsonOpen(true);
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
@@ -89,8 +91,10 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
         <p className="field-help" id="schema-version-help">최신 버전보다 큰 정수. 최대 2,147,483,647.</p></div>
       <SchemaEventForm draft={state.draft} editable={editable} issue={issue} onChange={next => editorRef.current?.edit('draft', next)}
         onOpenJson={() => { setJsonOpen(true); requestAnimationFrame(() => inputRef.current?.focus()); }} />
+      <SchemaWorkflowForm draft={state.draft} editable={editable} issue={issue} onChange={next => editorRef.current?.edit('draft', next)}
+        onOpenJson={() => { setJsonOpen(true); requestAnimationFrame(() => inputRef.current?.focus()); }} />
       <details className="schema-json-editor" open={jsonOpen} onToggle={event => setJsonOpen(event.currentTarget.open)}>
-        <summary>JSON 직접 편집 · 속성·작업 흐름</summary>
+        <summary>JSON 직접 편집</summary>
       <div className="settings-field"><label className="field-label" htmlFor="schema-draft">스키마 정의 (JSON)</label>
         <textarea id="schema-draft" ref={inputRef} className="text-input schema-textarea" rows={18} spellCheck={false} value={state.draft} readOnly={!editable}
           onChange={e => editorRef.current?.edit('draft', e.target.value)} aria-invalid={Boolean(state.formError || issue) || undefined} aria-describedby="schema-draft-help schema-errors" />

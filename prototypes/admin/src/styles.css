@@ -1107,3 +1107,23 @@ button {
 .schema-property-required { display: flex; align-items: center; gap: .5rem; margin-block: .75rem; font-size: 1rem; }
 .schema-property-required input { width: 1.125rem; height: 1.125rem; margin: 0; }
 @media (max-width: 600px) { .schema-property-fields { grid-template-columns: minmax(0, 1fr); } }
+.schema-workflow-form { min-width: 0; }
+.schema-workflow-form h3 { margin: 0; font-size: 1.125rem; }
+.schema-workflow-list { display: grid; gap: 1rem; margin-block: 1rem; }
+.schema-workflow-row { min-width: 0; margin: 0; padding: 1rem; border: 1px solid #dfe6ef; border-radius: 6px; }
+.schema-workflow-row legend { padding-inline: .4rem; font-size: 1rem; font-weight: 600; }
+.schema-workflow-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.schema-workflow-phases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin-top: 1rem; }
+.schema-workflow-fields .text-input, .schema-workflow-phases .text-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.schema-workflow-row input:read-only, .schema-workflow-row select:disabled { background: #f1f5f9; color: #475569; }
+.schema-workflow-dimension-field { margin-top: 1rem; }
+.schema-workflow-dimensions { display: flex; flex-wrap: wrap; gap: .5rem .75rem; margin-top: .25rem; padding: .5rem .75rem; min-width: 0; border: 1px solid #dfe6ef; border-radius: 6px; }
+.schema-workflow-dimensions:focus-visible { outline: 2px solid #155eef; outline-offset: 2px; }
+.schema-workflow-dimensions .field-help { flex: 1 1 100%; margin: 0; }
+.schema-workflow-dimension { display: flex; align-items: center; gap: .4rem; min-width: 0; font-size: 1rem; overflow-wrap: anywhere; }
+.schema-workflow-dimension input { width: 1.125rem; height: 1.125rem; margin: 0; flex-shrink: 0; }
+.schema-workflow-dimension-name { min-width: 0; font-family: ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
+.schema-workflow-warning { margin: .4rem 0 0; color: #b45309; font-size: .9rem; overflow-wrap: anywhere; }
+.schema-workflow-notice { font-size: 1rem; margin-top: .5rem; }
+@media (max-width: 900px) { .schema-workflow-fields, .schema-workflow-phases { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 480px) { .schema-workflow-row { padding: .75rem; } .schema-workflow-dimensions { padding: .5rem; } }

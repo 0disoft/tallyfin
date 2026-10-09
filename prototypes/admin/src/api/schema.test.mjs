@@ -5,6 +5,7 @@ import { SchemaEditor } from './schema-editor.ts';
 import { definitionHash, parseSchemaValidation, parseSchemaPage } from './schema-contract.ts';
 import { changeEventForm, eventIsLinked, eventIssueTarget, readEventForm } from './schema-event-form.ts';
 import { changePropertyForm, propertyChoices, propertyIsDimension, propertyIssueTarget, readPropertyForm } from './schema-property-form.ts';
+import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflowWarnings, workflowIssueTarget, workflowFocusAfterChange } from './schema-workflow-form.ts';
 import { validateSchemaDraft } from '../../../../packages/core/src/schema.ts';
 
 const definitions = () => ({ events: [{ name: 'operation_completed', label: '작업 완료', source: 'browser', properties: {} }], workflows: [] });
@@ -223,5 +224,108 @@ test('valid property form output passes the actual core validator, invalid input
   await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish(); assert.equal(f.schemas.has(3), false);
   f.config.owner = false; await f.editor.refresh(); const saved = f.editor.state.draft;
   f.editor.edit('draft', changePropertyForm(saved, 0, { kind: 'remove', name: 'format' })); assert.equal(f.editor.state.draft, saved);
+  f.editor.destroy(); f.client.destroy();
+});
+
+const workflowDraft = () => {
+  const property = { type: 'enum', required: true, purpose: 'Public format', values: ['pdf', 'png'] };
+  return { events: ['started', 'completed', 'failed', 'other_started', 'other_completed'].map(name => ({ name, label: name, source: 'browser', properties: { format: structuredClone(property) } })),
+    workflows: [{ id: 'conversion', label: 'Conversion', source: 'browser', startEvent: 'started', successEvent: 'completed', failureEvent: null, dimensions: ['format'] }] };
+};
+
+test('workflow edits preserve event definitions, extra keys and incomplete references; duplicate IDs cannot overwrite', () => {
+  const draft = workflowDraft(); draft.workflows[0].extra = { preserved: true };
+  let text = changeWorkflowForm(JSON.stringify(draft), { kind: 'add' });
+  assert.deepEqual(JSON.parse(text).workflows[1], { id: 'workflow_1', label: '', source: 'browser', startEvent: '', successEvent: '', failureEvent: null, dimensions: [] });
+  assert.throws(() => changeWorkflowForm(text, { kind: 'edit', index: 1, field: 'id', value: 'conversion' }), /덮어쓰지/);
+  text = changeWorkflowForm(text, { kind: 'edit', index: 0, field: 'label', value: 'New label' });
+  text = changeWorkflowForm(text, { kind: 'edit', index: 0, field: 'failureEvent', value: '' });
+  assert.equal(JSON.parse(text).workflows[0].failureEvent, '');
+  text = changeWorkflowForm(text, { kind: 'edit', index: 0, field: 'failureEvent', value: null });
+  text = changeWorkflowForm(text, { kind: 'edit', index: 0, field: 'startEvent', value: '' });
+  assert.deepEqual(JSON.parse(text).events, draft.events); assert.deepEqual(JSON.parse(text).workflows[0].extra, draft.workflows[0].extra);
+  assert.equal(JSON.parse(text).workflows[0].startEvent, '');
+  assert.deepEqual(JSON.parse(changeWorkflowForm(text, { kind: 'remove', index: 1 })).workflows.length, 1);
+  for (const field of ['id', 'label', 'startEvent', 'successEvent']) assert.throws(() => changeWorkflowForm(text, { kind: 'edit', index: 0, field, value: null }));
+});
+
+test('workflow phase overlap, missing/server events and dimension signatures warn and fail actual core validation', () => {
+  const draft = workflowDraft(); const text = JSON.stringify(draft);
+  assert.equal(validateSchemaDraft(draft).valid, true); assert.deepEqual(workflowWarnings(readWorkflowForm(text), 0), []);
+  draft.events[1].properties.format.values.reverse();
+  assert.deepEqual(workflowWarnings(readWorkflowForm(JSON.stringify(draft)), 0), []);
+  draft.workflows.push({ ...draft.workflows[0], id: 'another', startEvent: 'started', successEvent: 'other_completed', dimensions: [] });
+  const overlap = JSON.stringify(draft), issue = validateSchemaDraft(draft).issues[0];
+  assert.equal(issue.code, 'invalid_reference'); assert.equal(workflowIssueTarget(overlap, issue), 'schema-workflow-1-startEvent');
+  assert.ok(workflowWarnings(readWorkflowForm(overlap), 0).some(w => w.field === 'startEvent'));
+  draft.workflows.pop(); draft.workflows[0].successEvent = 'started';
+  assert.equal(validateSchemaDraft(draft).issues[0].path, '/workflows/0/successEvent');
+  draft.workflows[0].successEvent = 'completed'; draft.events[1].properties.format.values = ['different'];
+  const mismatch = JSON.stringify(draft), mismatchIssue = validateSchemaDraft(draft).issues[0];
+  assert.equal(mismatchIssue.code, 'dimension_mismatch'); assert.equal(workflowIssueTarget(mismatch, mismatchIssue), 'schema-workflow-0-dimensions');
+  assert.ok(workflowWarnings(readWorkflowForm(mismatch), 0).some(w => w.field === 'dimensions'));
+  draft.events[1].properties.format = structuredClone(draft.events[0].properties.format); draft.events[1].properties.format.required = false;
+  assert.equal(validateSchemaDraft(draft).issues[0].code, 'dimension_mismatch');
+  draft.events[1].source = 'server';
+  assert.ok(workflowWarnings(readWorkflowForm(JSON.stringify(draft)), 0).some(w => w.field === 'successEvent'));
+  draft.workflows[0].successEvent = 'missing';
+  assert.equal(validateSchemaDraft(draft).issues[0].code, 'invalid_reference');
+});
+
+test('workflow dimension choices retain unavailable selections and identity/property locks track workflow changes', () => {
+  const draft = workflowDraft(); draft.events[0].properties.other = { type: 'boolean', required: true, purpose: 'Other' };
+  draft.events[0].properties.optional = { type: 'boolean', required: false, purpose: 'Optional' };
+  draft.workflows[0].dimensions.push('missing');
+  const text = JSON.stringify(draft);
+  assert.deepEqual(workflowDimensionChoices(readWorkflowForm(text), 0), ['format', 'missing', 'other']);
+  assert.equal(eventIsLinked(readEventForm(text), 0), true); assert.equal(propertyIsDimension(readEventForm(text), 0, 'format'), true);
+  let next = changeWorkflowForm(text, { kind: 'dimensions', index: 0, value: [] });
+  assert.equal(propertyIsDimension(readEventForm(next), 0, 'format'), false);
+  next = changeWorkflowForm(next, { kind: 'edit', index: 0, field: 'startEvent', value: 'other_started' });
+  assert.equal(eventIsLinked(readEventForm(next), 0), false);
+  next = changeWorkflowForm(next, { kind: 'remove', index: 0 });
+  assert.equal(eventIsLinked(readEventForm(next), 1), false);
+});
+
+test('workflow limits, unsupported structures and invalid fields preserve JSON and focus the relevant control', () => {
+  const draft = workflowDraft(), text = JSON.stringify(draft);
+  const full = { ...draft, workflows: Array.from({ length: 10 }, (_, i) => ({ ...draft.workflows[0], id: `flow_${i}` })) };
+  assert.throws(() => changeWorkflowForm(JSON.stringify(full), { kind: 'add' }));
+  for (const dimensions of [['a', 'b', 'c', 'd', 'e'], ['format', 'format'], ['Invalid']])
+    assert.throws(() => changeWorkflowForm(text, { kind: 'dimensions', index: 0, value: dimensions }));
+  for (const patch of [{ source: 'server' }, { dimensions: null }, { failureEvent: 1 }])
+    assert.throws(() => readWorkflowForm(JSON.stringify({ ...draft, workflows: [{ ...draft.workflows[0], ...patch }] })));
+  assert.throws(() => readWorkflowForm('{')); assert.throws(() => changeWorkflowForm(text, { kind: 'remove', index: -1 }));
+  assert.throws(() => changeWorkflowForm(text, { kind: 'edit', index: 0, field: 'label', value: 'a'.repeat(32768) }));
+  for (const [patch, expected] of [[{ id: 'INVALID' }, 'id'], [{ label: '' }, 'label'], [{ dimensions: ['format', 'format'] }, 'dimensions']]) {
+    const invalid = { ...draft, workflows: [{ ...draft.workflows[0], ...patch }] };
+    assert.equal(workflowIssueTarget(JSON.stringify(invalid), validateSchemaDraft(invalid).issues[0]), `schema-workflow-0-${expected}`);
+  }
+  draft.workflows.push({ ...draft.workflows[0] });
+  assert.equal(workflowIssueTarget(JSON.stringify(draft), validateSchemaDraft(draft).issues[0]), 'schema-workflow-1-id');
+  assert.equal(workflowIssueTarget(text, { path: '/workflows', code: 'definition_limit' }), 'schema-workflow-heading');
+  assert.equal(workflowIssueTarget(text, { path: '/events/0', code: 'invalid_definition' }), null);
+  assert.equal(workflowIssueTarget(text, { path: '/workflows/0', code: 'invalid_definition' }), null); // Unknown keys belong in JSON.
+  assert.equal(workflowFocusAfterChange({ kind: 'add' }, 0), 'schema-workflow-0-id');
+  assert.equal(workflowFocusAfterChange({ kind: 'remove', index: 0 }, 1), 'schema-workflow-add');
+  assert.equal(workflowFocusAfterChange({ kind: 'remove', index: 2 }, 3), 'schema-workflow-1-id');
+});
+
+test('workflow form output publishes only after renewed validation/privacy and reader, review and busy states stay locked', async () => {
+  const f = fixture(); f.schemas.set(1, workflowDraft());
+  f.config.validate = async (_url, init) => response(200, validateSchemaDraft(JSON.parse(init.body)));
+  await ready(f.editor);
+  const next = changeWorkflowForm(f.editor.state.draft, { kind: 'edit', index: 0, field: 'failureEvent', value: 'failed' });
+  f.editor.edit('draft', next); assert.equal(f.editor.state.validatedKey, null); assert.equal(f.editor.state.privacyReviewed, false);
+  await f.editor.publish(); assert.equal(f.schemas.has(2), false);
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish(); assert.equal(f.schemas.get(2).workflows[0].failureEvent, 'failed');
+  f.editor.edit('draft', changeWorkflowForm(f.editor.state.draft, { kind: 'edit', index: 0, field: 'successEvent', value: '' }));
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish(); assert.equal(f.schemas.has(3), false);
+  await f.editor.refresh(); assert.equal(f.editor.state.phase, 'review'); const pending = f.editor.state.draft;
+  f.editor.edit('draft', changeWorkflowForm(pending, { kind: 'remove', index: 0 })); assert.equal(f.editor.state.draft, pending);
+  f.editor.useServer(); f.editor.state.more = true; const saved = f.editor.state.draft;
+  f.editor.edit('draft', changeWorkflowForm(saved, { kind: 'remove', index: 0 })); assert.equal(f.editor.state.draft, saved);
+  f.editor.state.more = false; f.config.owner = false; await f.editor.refresh();
+  f.editor.edit('draft', changeWorkflowForm(saved, { kind: 'remove', index: 0 })); assert.equal(f.editor.state.draft, saved);
   f.editor.destroy(); f.client.destroy();
 });
