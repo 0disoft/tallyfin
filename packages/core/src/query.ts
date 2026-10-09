@@ -8,7 +8,7 @@ import { DAY, integer, localDate } from './value.ts';
 /** Supplied only by a host verifier, never derived from an unverified request claim. */
 export interface AdminPrincipal { issuer: string; subject: string }
 export type Project = Registry['project'];
-export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow';
+export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown';
 export interface AdminQuery {
   projectId: string; version: number; kind: QueryKind;
   from?: string; to?: string; name?: string; groupBy?: string;

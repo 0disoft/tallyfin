@@ -734,3 +734,23 @@ CDP에서 다운로드 전후 새 Network.requestWillBeSent 이벤트가0개였�
 스프레드시트 앱에서 재저장/재열기는 범위 밖이라 미검증이다. CSV 수식 방어가 모든 앱과
 재저장까지 보편적으로 보장되지는 않으며 참고 근거는 프론트엔드 설계에 기록했다.
 푸시·배포·Sembom 연동은 하지 않았다.
+
+## 2026-10-10 작업 흐름 속성별 조회 API
+
+GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}을 추가했다.
+등록된 필수 workflow.dimensions 한 속성의 시작 시점 차원 키를 사용하고 같은 값의
+다른 차원 조합을 합산한다. 응답 summary와 최대32개 typed bucket별 summary·31일
+days를 제공한다. 성공/시작으로 완료율을 계산하며0시도는 null, 빈 결과는 buckets=[]다.
+기존 daily 응답과 DB는 그대로다. 기존 reader/owner grant를 정의·집계와 같은 D1 batch
+에서 다시 검사한다. 원본7936행 상한을 넘거나 차원/집계가 손상되면503으로 실패한다.
+
+관리자 API 테스트12/12(실제 Worker/D1 runtime 포함)를 통과했다. 이후 다른 차원 합산/
+실패 수 유지 테스트를 추가하고 관련5/5를 통과했다. 변경 없는 나머지 관리자 테스트는
+재사용했다. 코어·D1 저장·수집기 회귀72/72와 루트 npm run typecheck를 통과했다.
+OpenAPI는 처음 시도한 Node yaml/Python yaml 모듈이 없어 해당 명령은 실패했으나
+설치된 Bun.YAML.parse로 새 경로/스키마를 확인했다. git diff --check를 통과했다.
+새 OpenAPI 응답 예제와 관리자 API 문서·제품 명세를 갱신했다. 프론트 연결은 다음 커밋이다.
+
+API 계약(OpenAPI)과 core QueryKind를 확장했다. DB·마이그레이션·SDK·의존성·위생·
+CI·러너는 변경하지 않았다. lint 명령은 없어 생략했다. 운영 인증/원격 DB/배포는
+범위 밖이라 실행하지 않았다. 푸시·배포·Sembom 연동은 없다.

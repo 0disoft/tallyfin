@@ -78,11 +78,11 @@ export async function administrator(request: Request, access: AdministratorAcces
     if (cursor && !PROJECT_ID.test(cursor)) throw new CollectionError('invalid_request', 400);
     return access.store.list(principal, limit, cursor);
   }
-  const match = /^\/v1\/projects\/([^/]+)\/(?:schemas\/([^/]+)|(summary)|events\/([^/]+)\/daily|workflows\/([^/]+)\/daily)$/.exec(url.pathname);
+  const match = /^\/v1\/projects\/([^/]+)\/(?:schemas\/([^/]+)|(summary)|events\/([^/]+)\/daily|workflows\/([^/]+)\/(daily|breakdown))$/.exec(url.pathname);
   if (!match) throw new CollectionError('not_found', 404);
   if (!PROJECT_ID.test(match[1]!)) throw new CollectionError('invalid_request', 400);
-  const kind = match[2] ? 'registry' : match[3] ? 'summary' : match[4] ? 'event' : 'workflow';
-  parameters(url, kind === 'registry' ? [] : kind === 'event' ? ['schemaVersion', 'from', 'to', 'groupBy'] : ['schemaVersion', 'from', 'to']);
+  const kind = match[2] ? 'registry' : match[3] ? 'summary' : match[4] ? 'event' : match[6] === 'breakdown' ? 'workflow-breakdown' : 'workflow';
+  parameters(url, kind === 'registry' ? [] : kind === 'event' || kind === 'workflow-breakdown' ? ['schemaVersion', 'from', 'to', 'groupBy'] : ['schemaVersion', 'from', 'to']);
   const query: AdminQuery = { projectId: match[1]!, version: positive(match[2] ?? url.searchParams.get('schemaVersion') ?? '', 2147483647), kind };
   if (kind !== 'registry') {
     query.from = url.searchParams.get('from') ?? ''; query.to = url.searchParams.get('to') ?? '';
@@ -91,6 +91,7 @@ export async function administrator(request: Request, access: AdministratorAcces
     const name = match[4] ?? match[5];
     if (name !== undefined) { if (!NAME.test(name)) throw new CollectionError('invalid_request', 400); query.name = name; }
     const groupBy = url.searchParams.get('groupBy');
+    if (kind === 'workflow-breakdown' && groupBy === null) throw new CollectionError('invalid_request', 400);
     if (groupBy !== null) { if (!NAME.test(groupBy)) throw new CollectionError('invalid_request', 400); query.groupBy = groupBy; }
   }
   return access.store.query(principal, query, now);

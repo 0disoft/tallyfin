@@ -1,5 +1,7 @@
 import { addCounts, closed, CollectionError, count, dateEnd, DAY, dateMillis, integer, NAME, PROJECT_ID, queryDates, validateRegistry, workflowCounts } from '@tallyfin/core';
-import type { AdminPrincipal, AdminQuery, AdminStore, ProjectSettingsUpdate, Properties, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
+import type { AdminPrincipal, AdminQuery, AdminStore, ProjectSettingsUpdate, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
+import { readDimensions } from './dimensions.ts';
+import { workflowBreakdown, type WorkflowDimensionRow } from './workflow-breakdown.ts';
 import { listSchemas, publishSchema } from './schema.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
@@ -37,7 +39,7 @@ export class D1Queries implements AdminStore {
       page: { limit, nextCursor: rows.length > limit ? rows[limit - 1]!.id : null } };
   }
   async query(principal: AdminPrincipal, input: AdminQuery, now: number) {
-    if (!PROJECT_ID.test(input.projectId) || !integer(input.version, 1, 2147483647) || !['registry', 'summary', 'event', 'workflow'].includes(input.kind))
+    if (!PROJECT_ID.test(input.projectId) || !integer(input.version, 1, 2147483647) || !['registry', 'summary', 'event', 'workflow', 'workflow-breakdown'].includes(input.kind))
       throw new CollectionError('invalid_request', 400);
     if (input.kind !== 'registry') {
       const start = dateMillis(input.from ?? ''), end = dateMillis(input.to ?? '');
@@ -54,12 +56,15 @@ export class D1Queries implements AdminStore {
     else if (input.kind === 'event') statements.push(this.db.prepare(`SELECT event_date, dimension_key, count FROM event_daily_counts
       WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND event_name = ? AND event_date BETWEEN ? AND ? AND ${access}
       ORDER BY event_date, dimension_key LIMIT 7937`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
+    else if (input.kind === 'workflow-breakdown') statements.push(this.db.prepare(`SELECT cohort_date, dimension_key, started_count, succeeded_count, failed_count FROM workflow_daily_counts
+      WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND ${access}
+      ORDER BY cohort_date, dimension_key LIMIT 7937`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
     else if (input.kind === 'workflow') statements.push(this.db.prepare(`SELECT cohort_date, SUM(started_count) AS started_count,
       SUM(succeeded_count) AS succeeded_count, SUM(failed_count) AS failed_count FROM workflow_daily_counts
       WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND ${access}
       GROUP BY cohort_date LIMIT 32`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
     // Every read carries the grant predicate; all definitions, permission and counts share one batch snapshot.
-    const result = await this.db.batch<ProjectState | SchemaRow | EventRow | WorkflowRow>(statements);
+    const result = await this.db.batch<ProjectState | SchemaRow | EventRow | WorkflowRow | WorkflowDimensionRow>(statements);
     if (result.length !== statements.length || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
     const p = result[0]?.results[0] as ProjectState | undefined;
     if (!p) throw new CollectionError('forbidden', 403);
@@ -84,6 +89,7 @@ export class D1Queries implements AdminStore {
       return { meta, totalEvents: events.reduce((sum, e) => addCounts(sum, e.count), 0), events };
     }
     if (input.kind === 'event') return this.series(registry, input, meta, dates, rows as EventRow[]);
+    if (input.kind === 'workflow-breakdown') return workflowBreakdown(registry, input, meta, dates, rows as WorkflowDimensionRow[], now);
     const definition = registry.workflows.find(w => w.id === input.name);
     if (!definition) throw new CollectionError('not_found', 404);
     if (rows.length > 31) throw new CollectionError('storage_unavailable', 503);
@@ -120,20 +126,4 @@ export class D1Queries implements AdminStore {
     return { meta, eventName: definition.name, groupBy: input.groupBy ?? null,
       totalEvents: days.reduce((sum, day) => addCounts(sum, day.count), 0), days };
   }
-}
-function readDimensions(key: string, definitions: Registry['events'][number]['properties']): Properties {
-  const tuples: unknown = JSON.parse(key);
-  if (!Array.isArray(tuples) || tuples.length !== Object.keys(definitions).length) throw new CollectionError('storage_unavailable', 503);
-  const result: Properties = {}; const seen = new Set();
-  for (const tuple of tuples) {
-    if (!Array.isArray(tuple) || !Object.hasOwn(definitions, tuple[0]) || seen.has(tuple[0])) throw new CollectionError('storage_unavailable', 503);
-    seen.add(tuple[0]); const rule = definitions[tuple[0]]!;
-    if (tuple[1] === 'absent' && tuple.length === 2 && !rule.required) continue;
-    const value: unknown = tuple[2];
-    if (tuple.length !== 3 || tuple[1] !== typeof value || !(rule.type === 'boolean' ? typeof value === 'boolean' : rule.type === 'enum'
-      ? typeof value === 'string' && rule.values.includes(value) : typeof value === 'number' && Number.isSafeInteger(value) && value >= rule.minimum && value <= rule.maximum))
-      throw new CollectionError('storage_unavailable', 503);
-    result[tuple[0]] = value as string | number | boolean;
-  }
-  return result;
 }

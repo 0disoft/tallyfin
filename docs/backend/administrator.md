@@ -45,11 +45,21 @@ export default createWorker(bearer => hostVerify(bearer));
 - `GET /v1/projects/{projectId}/summary` — 한 버전·기간의 이벤트별 건수.
 - `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷.
 - `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — 시작일 cohort.
+- `GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}` — 시작 시점 속성별 cohort.
 
 집계 조회는 정확한 schemaVersion, 프로젝트 시간대의 from/to, 보존 90일 안에서 최대
 31일을 요구한다. retired 버전과 paused 프로젝트도 같은 grant로 조회한다. 빈 날짜는 0으로
 채우고, 흐름 완료율은 시작 cohort의 succeeded/started이며 실패 단계가 없으면
 failedAttempts는 null, 날짜 끝 + 48시간까지 provisional=true다.
+
+속성별 흐름 조회는 등록 workflow.dimensions 중 한 속성만 groupBy로 받는다. 시작
+시점에 저장한 차원 키를 사용하고 이벤트 발생일별 건수로 완료율을 추론하지 않는다.
+기존 daily 응답은 바꾸지 않는다. 응답은 meta·workflowId·cohortBasis·groupBy·summary와
+최대32개 buckets다. 각 bucket은 자료형을 유지한 value·summary·최대31일 days를 담는다.
+다른 차원 조합은 같은 값에 합산하며 완료율은 합산된 성공/시작이다. 필수 차원이므로
+null 버킷은 없고 관찰된 값만 반환한다. 빈 결과는 buckets=[], 0시도 완료율은 null이다.
+기존 reader/owner grant를 정의·집계와 같은 D1 batch에서 다시 확인한다. 최대7936개
+원본 행을 읽고 초과·손상 데이터는503으로 실패한다. 저장/마이그레이션 변경은 없다.
 
 ## 프로젝트 설정 조회·변경
 
