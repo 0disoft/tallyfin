@@ -277,7 +277,7 @@ components:
     ProjectSettings:
       type: object
       additionalProperties: false
-      required: [project, allowedOrigins, limits, settingsHash]
+      required: [project, allowedOrigins, limits, settingsHash, canEdit]
       properties:
         project:
           $ref: "#/components/schemas/Project"
@@ -287,6 +287,9 @@ components:
           $ref: "#/components/schemas/CollectionLimits"
         settingsHash:
           $ref: "#/components/schemas/SettingsHash"
+        canEdit:
+          type: boolean
+          description: Current principal has an owner grant in the read snapshot. Excluded from settingsHash; authorization is always rechecked on PATCH.
     ProjectSettingsUpdate:
       type: object
       additionalProperties: false

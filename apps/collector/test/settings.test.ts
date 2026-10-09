@@ -49,6 +49,7 @@ function interleave(action: () => Promise<unknown>): D1Queries {
 }
 test('owner updates all settings, preserves identity/schema, and partial limits preserve omitted values', async () => {
   const original = await settings();
+  assert.equal(original.canEdit, true);
   const result = await patch({ expectedSettingsHash: original.settingsHash, name: 'Renamed project', status: 'paused',
     allowedOrigins: ['https://new.example.invalid'], limits: { requestsPerMinute: 50 } });
   assert.equal(result.project.name, 'Renamed project'); assert.equal(result.project.status, 'paused');
@@ -63,7 +64,8 @@ test('owner updates all settings, preserves identity/schema, and partial limits 
 test('reader can read but cannot write; revoked, foreign and missing project grants deny access', async () => {
   const { settingsHash } = await settings();
   await fixture.db.prepare("UPDATE project_grants SET role='reader'").run();
-  await settings(); assert.equal((await patch({ expectedSettingsHash: settingsHash, name: 'denied' }, 403)).error.code, 'forbidden');
+  const readOnly = await settings(); assert.equal(readOnly.canEdit, false); assert.equal(readOnly.settingsHash, settingsHash);
+  assert.equal((await patch({ expectedSettingsHash: settingsHash, name: 'denied' }, 403)).error.code, 'forbidden');
   await fixture.db.prepare('DELETE FROM project_grants').run();
   assert.equal((await handler()(request(null, undefined, 'GET'))).status, 403);
   await patch({ expectedSettingsHash: settingsHash, name: 'denied' }, 403);
@@ -125,7 +127,7 @@ test('concurrent configuration change cannot be overwritten; owner revocation/de
   const current = await settings();
   const revoked = interleave(() => fixture.db.prepare("UPDATE project_grants SET role='reader'").run());
   assert.equal((await handler(revoked)(request({ expectedSettingsHash: current.settingsHash, name: 'denied' }))).status, 403);
-  assert.deepEqual(await settings(), current);
+  assert.deepEqual(await settings(), { ...current, canEdit: false });
 });
 test('paused/origin/limit changes affect ingestion and invalidate an already prepared registry', async () => {
   const oldRegistry = await fixture.store.loadRegistry('sembom', 1);

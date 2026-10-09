@@ -7,7 +7,7 @@ export interface MutableProjectSettings {
   allowedOrigins: string[]; limits: Registry['limits'];
 }
 export interface ProjectSettings {
-  project: Registry['project']; allowedOrigins: string[]; limits: Registry['limits']; settingsHash: string;
+  project: Registry['project']; allowedOrigins: string[]; limits: Registry['limits']; settingsHash: string; canEdit: boolean;
 }
 export interface ProjectSettingsUpdate {
   expectedSettingsHash: string;
@@ -43,4 +43,4 @@ export function parseSettingsUpdate(value: unknown): ProjectSettingsUpdate {
     throw new CollectionError('invalid_request', 400);
   return structuredClone(value) as unknown as ProjectSettingsUpdate;
 }
-export const settingsHash = (settings: Omit<ProjectSettings, 'settingsHash'>): Promise<string> => sha256(canonicalJson(settings));
+export const settingsHash = (settings: Omit<ProjectSettings, 'settingsHash' | 'canEdit'>): Promise<string> => sha256(canonicalJson(settings));
