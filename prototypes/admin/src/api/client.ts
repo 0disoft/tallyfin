@@ -24,6 +24,8 @@ import {
 } from './validate.ts';
 import { definitionHash, parsePublishedSchema, parseSchemaPage, parseSchemaValidation } from './schema-contract.ts';
 import type { PublishedSchema, SchemaDraft, SchemaPage, SchemaPublication, SchemaValidation } from './schema-contract.ts';
+import { creationHash, parseCreatedProject } from './project-creation.ts';
+import type { CreatedProject, ProjectCreation } from './project-creation.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -41,6 +43,8 @@ export type ApiErrorKind =
   | 'storage_unavailable'
   | 'settings_conflict'
   | 'schema_conflict'
+  | 'project_conflict'
+  | 'project_limit_reached'
   | 'http'
   | 'network'
   | 'contract';
@@ -68,6 +72,8 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   storage_unavailable: '저장소를 사용할 수 없어요. (HTTP 503)',
   settings_conflict: '다른 변경 사항이 있어요. 최신 설정을 확인해 주세요. (HTTP 409)',
   schema_conflict: '발행된 스키마가 바뀌었어요. 최신 버전을 확인해 주세요. (HTTP 409)',
+  project_conflict: '이미 사용 중이거나 다른 내용으로 생성된 프로젝트 ID예요. (HTTP 409)',
+  project_limit_reached: '프로젝트 생성 개수 한도에 도달했어요. 운영자에게 한도를 확인해 주세요. (HTTP 409)',
   http: '요청이 실패했어요.',
   network: 'API 서버에 연결하지 못했어요.',
   contract: 'API 응답이 계약과 맞지 않아요.',
@@ -184,6 +190,15 @@ export class ApiClient {
       throw new ApiError('contract', '응답이 요청한 프로젝트나 스키마 버전과 맞지 않아요.');
     }
     return registry;
+  }
+
+  async createProject(input: ProjectCreation, options: { signal?: AbortSignal } = {}): Promise<CreatedProject> {
+    const body = JSON.stringify(input);
+    if (new TextEncoder().encode(body).length > 16384) throw new ApiError('invalid_request', '생성 요청은 16KiB 이하여야 해요.');
+    const hash = await creationHash(input);
+    const result = this.#parse(await this.#request('/projects', {}, options.signal, body, 'POST'), parseCreatedProject);
+    if (result.projectId !== input.id || result.creationHash !== hash) throw new ApiError('contract', '생성 응답이 요청한 프로젝트·내용과 달라요.');
+    return result;
   }
 
   async getSettings(projectId: string, options: { signal?: AbortSignal } = {}): Promise<ProjectSettings> {
@@ -395,7 +410,8 @@ export class ApiClient {
     } catch {
       // Body is not JSON; keep the fixed status-based message.
     }
-    const kind = response.status === 409 && code === 'schema_conflict' ? 'schema_conflict' : STATUS_KIND[response.status] ?? 'http';
+    const kind = response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached'].includes(code)
+      ? code as ApiErrorKind : STATUS_KIND[response.status] ?? 'http';
     const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
     return new ApiError(kind, message, { status: response.status, code, requestId });
   }
