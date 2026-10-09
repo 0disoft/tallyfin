@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/model.test.mjs src/api/client.test.mjs src/auth/client.test.mjs tests/local-proxy.test.mjs"
+    "test": "node --test src/model.test.mjs src/api/client.test.mjs src/api/schema.test.mjs src/auth/client.test.mjs tests/local-proxy.test.mjs"
   },
   "dependencies": {
     "@fontsource/inter": "^5",

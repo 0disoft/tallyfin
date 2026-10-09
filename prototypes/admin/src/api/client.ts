@@ -22,6 +22,8 @@ import {
   parseSummaryResponse,
   parseWorkflowResponse,
 } from './validate.ts';
+import { definitionHash, parsePublishedSchema, parseSchemaPage, parseSchemaValidation } from './schema-contract.ts';
+import type { PublishedSchema, SchemaDraft, SchemaPage, SchemaPublication, SchemaValidation } from './schema-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -38,6 +40,7 @@ export type ApiErrorKind =
   | 'invalid_request'
   | 'storage_unavailable'
   | 'settings_conflict'
+  | 'schema_conflict'
   | 'http'
   | 'network'
   | 'contract';
@@ -64,6 +67,7 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   invalid_request: '요청 범위가 계약과 맞지 않아요. (HTTP 400)',
   storage_unavailable: '저장소를 사용할 수 없어요. (HTTP 503)',
   settings_conflict: '다른 변경 사항이 있어요. 최신 설정을 확인해 주세요. (HTTP 409)',
+  schema_conflict: '발행된 스키마가 바뀌었어요. 최신 버전을 확인해 주세요. (HTTP 409)',
   http: '요청이 실패했어요.',
   network: 'API 서버에 연결하지 못했어요.',
   contract: 'API 응답이 계약과 맞지 않아요.',
@@ -188,6 +192,30 @@ export class ApiClient {
     return result;
   }
 
+  async listSchemas(projectId: string, options: { limit?: number; beforeVersion?: number | null; signal?: AbortSignal } = {}): Promise<SchemaPage> {
+    const limit = clampLimit(options.limit), beforeVersion = options.beforeVersion == null ? undefined : this.#version(options.beforeVersion);
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas`, { limit, beforeVersion }, options.signal), parseSchemaPage);
+    if (result.projectId !== projectId || result.page.limit !== limit || (beforeVersion !== undefined && result.data.some(r => r.schemaVersion >= beforeVersion)))
+      throw new ApiError('contract', '스키마 목록이 요청과 맞지 않아요.');
+    return result;
+  }
+
+  async validateSchema(projectId: string, draft: SchemaDraft, options: { signal?: AbortSignal } = {}): Promise<SchemaValidation> {
+    const body = JSON.stringify(draft);
+    if (new TextEncoder().encode(body).byteLength > 32768) throw new ApiError('invalid_request', '정의는 32KiB 이하여야 해요.');
+    return this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas/validate`, {}, options.signal, body, 'POST'), parseSchemaValidation);
+  }
+
+  async publishSchema(projectId: string, schemaVersion: number, input: SchemaPublication, options: { signal?: AbortSignal } = {}): Promise<PublishedSchema> {
+    const version = this.#version(schemaVersion), body = JSON.stringify(input);
+    if (new TextEncoder().encode(body).byteLength > 33792) throw new ApiError('invalid_request', '발행 요청이 너무 커요.');
+    const hash = await definitionHash({ events: input.events, workflows: input.workflows });
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas/${version}`, {}, options.signal, body, 'PUT'), parsePublishedSchema);
+    if (result.projectId !== projectId || result.schemaVersion !== version || result.definitionHash !== hash)
+      throw new ApiError('contract', '발행 응답이 요청한 정의·프로젝트·버전과 맞지 않아요.');
+    return result;
+  }
+
   async updateSettings(projectId: string, update: ProjectSettingsUpdate, options: { signal?: AbortSignal } = {}): Promise<ProjectSettings> {
     const body = JSON.stringify(update);
     if (new TextEncoder().encode(body).byteLength > 16 * 1024) throw new ApiError('invalid_request', '설정 요청이 너무 커요.');
@@ -250,7 +278,7 @@ export class ApiClient {
   }
 
   #version(schemaVersion: number): number {
-    if (!Number.isInteger(schemaVersion) || schemaVersion < 1) {
+    if (!Number.isInteger(schemaVersion) || schemaVersion < 1 || schemaVersion > 2147483647) {
       throw new ApiError('invalid_request', '스키마 버전을 1 이상의 정수로 입력해 주세요.');
     }
     return schemaVersion;
@@ -283,6 +311,7 @@ export class ApiClient {
     params: Record<string, string | number | undefined> = {},
     signal?: AbortSignal,
     body?: string,
+    method?: 'POST' | 'PUT',
   ): Promise<unknown> {
     if (this.#destroyed) throw new ApiError('network', KIND_MESSAGE.network);
     const query = new URLSearchParams();
@@ -326,7 +355,7 @@ export class ApiClient {
       let response: { ok: boolean; status: number; json: () => Promise<unknown> };
       try {
         response = await this.#fetch(url, {
-          method: body === undefined ? 'GET' : 'PATCH',
+          method: method ?? (body === undefined ? 'GET' : 'PATCH'),
           ...(body === undefined ? {} : { body }),
           headers,
           signal: controller.signal,
@@ -366,7 +395,7 @@ export class ApiClient {
     } catch {
       // Body is not JSON; keep the fixed status-based message.
     }
-    const kind = STATUS_KIND[response.status] ?? 'http';
+    const kind = response.status === 409 && code === 'schema_conflict' ? 'schema_conflict' : STATUS_KIND[response.status] ?? 'http';
     const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
     return new ApiError(kind, message, { status: response.status, code, requestId });
   }
