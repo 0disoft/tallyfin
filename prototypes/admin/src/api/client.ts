@@ -12,6 +12,7 @@ import type {
   Registry,
   SummaryResponse,
   WorkflowResponse,
+  WorkflowBreakdownResponse,
 } from './types.ts';
 import {
   ContractError,
@@ -20,6 +21,7 @@ import {
   parseProjectSettings,
   parseRegistry,
   parseSummaryResponse,
+  parseWorkflowBreakdownResponse,
   parseWorkflowResponse,
 } from './validate.ts';
 import { definitionHash, parsePublishedSchema, parseSchemaPage, parseSchemaValidation } from './schema-contract.ts';
@@ -292,6 +294,15 @@ export class ApiClient {
     return response;
   }
 
+  async getWorkflowBreakdown(projectId: string, workflowId: string,
+    options: { schemaVersion: number; from: string; to: string; groupBy: string; signal?: AbortSignal }): Promise<WorkflowBreakdownResponse> {
+    const version = this.#version(options.schemaVersion);
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/workflows/${encodeURIComponent(workflowId)}/breakdown`,
+      { schemaVersion: version, from: options.from, to: options.to, groupBy: options.groupBy }, options.signal), parseWorkflowBreakdownResponse);
+    this.#assertMeta(result.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
+    if (result.workflowId !== workflowId || result.groupBy !== options.groupBy) throw new ApiError('contract', '흐름이나 분류 기준이 요청과 달라요.');
+    return result;
+  }
   #version(schemaVersion: number): number {
     if (!Number.isInteger(schemaVersion) || schemaVersion < 1 || schemaVersion > 2147483647) {
       throw new ApiError('invalid_request', '스키마 버전을 1 이상의 정수로 입력해 주세요.');

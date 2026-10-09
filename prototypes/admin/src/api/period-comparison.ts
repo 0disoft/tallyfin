@@ -40,44 +40,44 @@ export function countChange(current: number | null, previous: number | null): nu
 export function rateChange(current: number | null, previous: number | null): number | null {
   return current === null || previous === null ? null : current - previous;
 }
-function assertMeta(meta: QueryMeta, registry: Registry, range: DateRange) {
+export function assertMeta(meta: QueryMeta, registry: Registry, range: DateRange) {
   if (meta.projectId !== registry.project.id || meta.schemaVersion !== registry.schemaVersion ||
     meta.timeZone !== registry.project.timeZone || meta.from !== range.from || meta.to !== range.to ||
     meta.source !== 'browser' || meta.coverage !== 'observed-only') invalid();
 }
+export function validateWorkflowSummary(value: WorkflowSummary, definition: WorkflowDefinition): void {
+  const start = count(value.startedAttempts), success = count(value.succeededAttempts), pending = count(value.pendingAttempts);
+  if ((value.failedAttempts === null) !== (definition.failureEvent === null)) invalid();
+  const failed = value.failedAttempts === null ? 0 : count(value.failedAttempts);
+  if (count(success + failed + pending) !== start) invalid();
+  const rate = start === 0 ? null : success / start * 100;
+  if ((rate === null) !== (value.completionRate === null) ||
+    (rate !== null && (value.completionRate === null || !Number.isFinite(value.completionRate) || Math.abs(rate - value.completionRate) > 0.000001))) invalid();
+}
+export function validateWorkflowLoad({ definition, response }: WorkflowLoad, registry: Registry, range: DateRange): void {
+  if (!registry.workflows.some(item => item.id === definition.id) || response.workflowId !== definition.id || response.cohortBasis !== 'startedAt') invalid();
+  assertMeta(response.meta, registry, range); validateWorkflowSummary(response.summary, definition);
+  if (response.days.length !== days(range)) invalid();
+  const totals = { startedAttempts: 0, succeededAttempts: 0, pendingAttempts: 0, failedAttempts: 0 };
+  response.days.forEach((day, index) => {
+    if (day.date !== shiftDate(range.from, index) || typeof day.provisional !== 'boolean') invalid();
+    validateWorkflowSummary(day, definition);
+    for (const key of ['startedAttempts', 'succeededAttempts', 'pendingAttempts', 'failedAttempts'] as const)
+      totals[key] = count(totals[key] + (day[key] ?? 0));
+  });
+  for (const key of ['startedAttempts', 'succeededAttempts', 'pendingAttempts', 'failedAttempts'] as const)
+    if (totals[key] !== (response.summary[key] ?? 0)) invalid();
+}
 export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry): void {
   const { summary, workflows, range } = snapshot;
   assertMeta(summary.meta, registry, range);
+  days(range);
   const expected = registry.events.filter(event => event.source === 'browser').map(event => event.name);
   if (summary.events.length !== expected.length || new Set(summary.events.map(event => event.name)).size !== expected.length ||
     summary.events.some(event => !expected.includes(event.name)) ||
     summary.events.reduce((total, event) => count(total + count(event.count)), 0) !== count(summary.totalEvents)) invalid();
-  const length = days(range);
   if (workflows.length !== registry.workflows.length || new Set(workflows.map(load => load.definition.id)).size !== workflows.length) invalid();
-  for (const { definition, response } of workflows) {
-    if (!registry.workflows.some(item => item.id === definition.id) || response.workflowId !== definition.id || response.cohortBasis !== 'startedAt') invalid();
-    assertMeta(response.meta, registry, range);
-    const validateCounts = (value: WorkflowSummary) => {
-      const start = count(value.startedAttempts), success = count(value.succeededAttempts), pending = count(value.pendingAttempts);
-      if ((value.failedAttempts === null) !== (definition.failureEvent === null)) invalid();
-      const failed = value.failedAttempts === null ? 0 : count(value.failedAttempts);
-      if (count(success + failed + pending) !== start) invalid();
-      const rate = start === 0 ? null : success / start * 100;
-      if ((rate === null) !== (value.completionRate === null) ||
-        (rate !== null && (value.completionRate === null || !Number.isFinite(value.completionRate) || Math.abs(rate - value.completionRate) > 0.000001))) invalid();
-    };
-    validateCounts(response.summary);
-    if (response.days.length !== length) invalid();
-    const totals = { startedAttempts: 0, succeededAttempts: 0, pendingAttempts: 0, failedAttempts: 0 };
-    response.days.forEach((day, index) => {
-      if (day.date !== shiftDate(range.from, index)) invalid();
-      validateCounts(day);
-      for (const key of ['startedAttempts', 'succeededAttempts', 'pendingAttempts', 'failedAttempts'] as const)
-        totals[key] = count(totals[key] + (day[key] ?? 0));
-    });
-    for (const key of ['startedAttempts', 'succeededAttempts', 'pendingAttempts', 'failedAttempts'] as const)
-      if (totals[key] !== (response.summary[key] ?? 0)) invalid();
-  }
+  for (const workflow of workflows) validateWorkflowLoad(workflow, registry, range);
 }
 /** Separate requests keep each window within the API's 31-day limit. */
 export async function loadPeriod(client: ApiClient, registry: Registry, range: DateRange, signal: AbortSignal): Promise<PeriodSnapshot> {

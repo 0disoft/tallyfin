@@ -88,3 +88,5 @@ export type WorkflowResponse = {
   summary: WorkflowSummary;
   days: WorkflowDay[];
 };
+export type WorkflowBreakdownResponse = Omit<WorkflowResponse, 'days'> & { groupBy: string;
+  buckets: { value: string | number | boolean; summary: WorkflowSummary; days: WorkflowDay[] }[] };

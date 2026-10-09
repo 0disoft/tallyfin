@@ -10,6 +10,8 @@ import { formatCount, formatRate, type DailyRecord, type Period, type View } fro
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
+import WorkflowPropertyBreakdown from './WorkflowPropertyBreakdown';
+import type { WorkflowGroupingState } from './api/workflow-analysis';
 import { loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
@@ -95,6 +97,12 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [compare, setCompare] = useState(false);
   const [comparison, setComparison] = useState<Load<PeriodSnapshot> & { key?: string }>({ status: 'idle' });
   const [comparisonRetry, setComparisonRetry] = useState(0);
+  const [workflowDetails, setWorkflowDetails] = useState<Record<string, WorkflowGroupingState>>({});
+  const workflowContext = useRef('');
+  const workflowStateChanged = useCallback((id: string, state: WorkflowGroupingState) => {
+    if (state.context !== workflowContext.current) return;
+    setWorkflowDetails(previous => ({ ...Object.fromEntries(Object.entries(previous).filter(([, value]) => value.context === state.context)), [id]: state }));
+  }, []);
   const [series, setSeries] = useState<Load<EventSeriesResponse> & { key?: string; analysis?: PropertyAnalysis | null }>({ status: 'idle' });
 
   const client = useMemo(() => (session ? new ApiClient({ basePath: session.basePath,
@@ -115,6 +123,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const currentRange = activeTimeZone ? periodRange(todayInZone(activeTimeZone), period) : null;
   const mainKey = JSON.stringify([activeProjectId, activeTimeZone, versionText, currentRange?.from, currentRange?.to, refreshTick, view]);
   const currentMain = main.key === mainKey ? main : null;
+  workflowContext.current = mainKey;
   const analysisRegistry = currentMain?.status === 'ready' && main.data?.registry.project.id === activeProjectId &&
     main.data.registry.schemaVersion === version && main.data.range.from === currentRange?.from && main.data.range.to === currentRange?.to
     ? main.data.registry : null;
@@ -341,11 +350,14 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
   const startLabel = startDefinition?.label ?? '시작 시도';
   const successLabel = successDefinition?.label ?? '성공 시도';
+  const currentWorkflowDetails = view === 'goals' ? Object.values(workflowDetails).filter(detail => detail.context === mainKey && detail.groupBy) : [];
   const exportUnavailable = !data || !validVersion ? '현재 기간 조회를 마쳐야 CSV를 내려받을 수 있어요.'
     : compare && (currentComparison?.status !== 'ready' || !currentComparison.data) ? '직전 기간 비교를 마치거나 비교를 꺼 주세요.'
-    : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.' : null;
+    : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.'
+    : currentWorkflowDetails.some(detail => detail.status !== 'ready') ? '속성별 완료율 조회를 마치거나 해당 분류를 해제해 주세요.' : null;
   const exportInput = data && registry && view !== 'settings' ? { registry, current: data, view,
-    filter: query, ...(compare && currentComparison?.status === 'ready' ? { previous: currentComparison.data } : {}),
+    filter: query, workflowSelections: currentWorkflowDetails.flatMap(detail => detail.status === 'ready' && detail.data ? [detail.data] : []),
+    ...(compare && currentComparison?.status === 'ready' ? { previous: currentComparison.data } : {}),
     ...(view === 'events' && selectedEvent && seriesData ? { selection: { eventName: selectedEvent, groupBy: groupBy || null, series: seriesData } } : {}),
   } : null;
 
@@ -366,7 +378,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     </div>
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
     {view !== 'settings' && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
-    {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey])} input={exportInput} unavailable={exportUnavailable} />}
+    {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status])])} input={exportInput} unavailable={exportUnavailable} />}
     {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
@@ -436,6 +448,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
             <div><dt>대기</dt><dd>pending<span>{formatCount(load.response.summary.pendingAttempts)}건</span></dd></div>
           </dl>
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
+          <WorkflowPropertyBreakdown key={`${mainKey}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={data.range} context={mainKey} onState={workflowStateChanged} />
         </section>))}
 
     </>}

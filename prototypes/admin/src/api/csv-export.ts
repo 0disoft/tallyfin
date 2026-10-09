@@ -1,13 +1,14 @@
 import { analyzeEventSeries } from './event-analysis.ts';
 import { comparisonRows, countChange, rateChange, previousRange, validateSnapshot, type PeriodSnapshot } from './period-comparison.ts';
-import type { EventSeriesResponse, QueryMeta, Registry, WorkflowSummary } from './types.ts';
+import type { EventSeriesResponse, QueryMeta, Registry, WorkflowSummary, WorkflowBreakdownResponse } from './types.ts';
+import { validateWorkflowBreakdown } from './workflow-analysis.ts';
 import { ContractError } from './validate.ts';
 
 type Cell = string | number | boolean | null | undefined;
 type Row = Partial<Record<typeof CSV_COLUMNS[number], Cell>>;
 export type ExportView = 'overview' | 'events' | 'goals';
 export type ExportInput = { registry: Registry; current: PeriodSnapshot; previous?: PeriodSnapshot;
-  view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse } };
+  view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse }; workflowSelections?: WorkflowBreakdownResponse[] };
 export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'time_zone', 'view', 'event_filter',
   'selected_event', 'selected_group_by', 'period', 'from', 'to', 'generated_at', 'coverage', 'source',
   'record_type', 'name', 'label', 'cohort_basis', 'date', 'group_by', 'value_type', 'value', 'count', 'share_percent',
@@ -93,6 +94,22 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
       const value = { value_type: row.value === null ? 'null' : typeof row.value, value: row.value };
       emit(series.meta, 'current', { ...base, ...value, record_type: 'property_total', count: row.count, share_percent: row.share });
       for (const day of row.daily) emit(series.meta, 'current', { ...base, ...value, record_type: 'property_day', date: day.date, count: day.count });
+    }
+  }
+  if (input.workflowSelections?.length && view !== 'goals') invalid();
+  const workflowsSeen = new Set<string>();
+  for (const selection of input.workflowSelections ?? []) {
+    if (workflowsSeen.has(selection.workflowId)) invalid(); workflowsSeen.add(selection.workflowId);
+    validateWorkflowBreakdown(selection, registry, current.range, selection.workflowId, selection.groupBy);
+    const label = registry.workflows.find(flow => flow.id === selection.workflowId)!.label;
+    emit(selection.meta, 'current', { record_type: 'workflow_property_summary', name: selection.workflowId, label,
+      cohort_basis: selection.cohortBasis, group_by: selection.groupBy, ...workflowFields(selection.summary) });
+    for (const bucket of selection.buckets) {
+      const base: Row = { name: selection.workflowId, label, cohort_basis: selection.cohortBasis, group_by: selection.groupBy,
+        value_type: typeof bucket.value, value: bucket.value };
+      emit(selection.meta, 'current', { ...base, record_type: 'workflow_property_total', ...workflowFields(bucket.summary), provisional: bucket.days.some(day => day.provisional) });
+      for (const day of bucket.days) emit(selection.meta, 'current', { ...base, record_type: 'workflow_property_day', date: day.date,
+        ...workflowFields(day), provisional: day.provisional });
     }
   }
   const safeId = registry.project.id.replace(/[^a-zA-Z0-9_-]/g, '_');

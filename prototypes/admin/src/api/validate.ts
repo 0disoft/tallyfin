@@ -14,6 +14,7 @@ import type {
   SummaryResponse,
   WorkflowDefinition,
   WorkflowResponse,
+  WorkflowBreakdownResponse,
   WorkflowSummary,
 } from './types.ts';
 
@@ -318,4 +319,19 @@ export function parseWorkflowResponse(value: unknown): WorkflowResponse {
       };
     }),
   };
+}
+export function parseWorkflowBreakdownResponse(value: unknown): WorkflowBreakdownResponse {
+  const record = expectRecord(value, 'response');
+  const buckets = expectArray(record.buckets, 'response.buckets');
+  if (buckets.length > 32) throw new ContractError('response.buckets exceeds 32');
+  return { meta: parseMeta(record.meta, 'response.meta'), workflowId: expectString(record.workflowId, 'response.workflowId'),
+    cohortBasis: expectEnum(record.cohortBasis, ['startedAt'], 'response.cohortBasis') as 'startedAt',
+    groupBy: expectString(record.groupBy, 'response.groupBy'), summary: parseWorkflowSummary(record.summary, 'response.summary'),
+    buckets: buckets.map((item, index) => {
+      const bucket = expectRecord(item, `response.buckets[${index}]`), bucketValue = bucket.value;
+      if (typeof bucketValue !== 'string' && typeof bucketValue !== 'boolean' && !(typeof bucketValue === 'number' && Number.isSafeInteger(bucketValue)))
+        throw new ContractError('Invalid workflow property value');
+      const flow = parseWorkflowResponse({ ...record, summary: bucket.summary, days: bucket.days });
+      return { value: bucketValue as string | number | boolean, summary: flow.summary, days: flow.days };
+    }) };
 }
