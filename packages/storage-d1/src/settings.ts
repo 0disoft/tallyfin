@@ -1,0 +1,56 @@
+import { CollectionError, parseSettingsUpdate, PROJECT_ID, settingsHash, validateMutableSettings } from '@tallyfin/core';
+import type { AdminPrincipal, ProjectSettings, ProjectSettingsUpdate } from '@tallyfin/core';
+import type { ProjectRow, SqlDatabase } from './sql.ts';
+
+const reader = "EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = p.id AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))";
+const owner = "EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = p.id AND g.issuer = ? AND g.subject = ? AND g.role = 'owner')";
+type Options = { allowLocalHttp?: boolean };
+async function read(db: SqlDatabase, principal: AdminPrincipal, id: string, write: boolean): Promise<ProjectRow> {
+  if (!PROJECT_ID.test(id)) throw new CollectionError('invalid_request', 400);
+  const result = await db.batch<ProjectRow>([db.prepare(`SELECT p.* FROM projects p WHERE p.id = ? AND ${write ? owner : reader}`)
+    .bind(id, principal.issuer, principal.subject)]);
+  if (result.length !== 1 || !result[0]?.success || !Array.isArray(result[0].results)) throw new CollectionError('storage_unavailable', 503);
+  const row = result[0].results[0];
+  if (!row) throw new CollectionError('forbidden', 403);
+  return row;
+}
+async function response(row: ProjectRow, options: Options): Promise<ProjectSettings> {
+  try {
+    const settings = validateMutableSettings({ name: row.name, status: row.status, allowedOrigins: JSON.parse(row.allowed_origins_json),
+      limits: { requestsPerMinute: row.requests_per_minute, newReceiptsPerUtcDay: row.new_receipts_per_utc_day } }, options);
+    const result = { project: { id: row.id, name: settings.name, status: settings.status, timeZone: row.time_zone },
+      allowedOrigins: settings.allowedOrigins, limits: settings.limits };
+    return { ...result, settingsHash: await settingsHash(result) };
+  } catch { throw new CollectionError('storage_unavailable', 503); }
+}
+export async function projectSettings(db: SqlDatabase, principal: AdminPrincipal, id: string, options: Options): Promise<ProjectSettings> {
+  return response(await read(db, principal, id, false), options);
+}
+export async function updateProjectSettings(db: SqlDatabase, principal: AdminPrincipal, id: string, input: ProjectSettingsUpdate, options: Options): Promise<ProjectSettings> {
+  const update = parseSettingsUpdate(input);
+  const before = await read(db, principal, id, true);
+  const current = await response(before, options);
+  if (current.settingsHash !== update.expectedSettingsHash) throw new CollectionError('settings_conflict', 409);
+  let next;
+  try {
+    next = validateMutableSettings({ name: update.name ?? current.project.name, status: update.status ?? current.project.status,
+      allowedOrigins: update.allowedOrigins ?? current.allowedOrigins, limits: { ...current.limits, ...update.limits } }, options);
+  } catch { throw new CollectionError('invalid_request', 400); }
+  // Compare settings, not ingest_revision: regular ingestion advances that revision too.
+  // Recheck ownership in the write itself; the second statement distinguishes revoked access from a stale edit.
+  const result = await db.batch<ProjectRow>([
+    db.prepare(`UPDATE projects AS p SET name = ?, status = ?, allowed_origins_json = ?, requests_per_minute = ?,
+      new_receipts_per_utc_day = ?, ingest_revision = ingest_revision + 1
+      WHERE p.id = ? AND ${owner} AND name = ? AND status = ? AND time_zone = ? AND allowed_origins_json = ?
+      AND requests_per_minute = ? AND new_receipts_per_utc_day = ? RETURNING *`)
+      .bind(next.name, next.status, JSON.stringify(next.allowedOrigins), next.limits.requestsPerMinute, next.limits.newReceiptsPerUtcDay,
+        id, principal.issuer, principal.subject, before.name, before.status, before.time_zone, before.allowed_origins_json,
+        before.requests_per_minute, before.new_receipts_per_utc_day),
+    db.prepare(`SELECT p.* FROM projects p WHERE p.id = ? AND ${owner}`).bind(id, principal.issuer, principal.subject),
+  ]);
+  if (result.length !== 2 || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
+  if (!result[1]!.results[0]) throw new CollectionError('forbidden', 403);
+  if (result[0]!.meta.changes === 0) throw new CollectionError('settings_conflict', 409);
+  if (result[0]!.meta.changes !== 1 || result[0]!.results.length !== 1) throw new CollectionError('storage_unavailable', 503);
+  return response(result[0]!.results[0]!, options);
+}

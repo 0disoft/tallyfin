@@ -20,7 +20,8 @@ const check = (name, action) => { action(); checks++; console.log(`OK ${name}`);
 
 for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batch':'BrowserBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
-  'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse' })) {
+  'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
+  'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 const batch = example('browser-batch');
@@ -108,6 +109,18 @@ check('API auth declarations remain explicit', () => {
   assert.deepEqual(spec.paths['/v1/projects/{projectId}/batches'].post.security,[]);
   assert.deepEqual(spec.security,[{adminBearer:[]}]);
   for (const path of Object.keys(spec.paths).filter(p=>p!=='/v1/projects/{projectId}/batches')) assert.ok(spec.paths[path].get.responses['401']);
+  assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['401']);
+  assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['403']);
+  assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['409']);
+});
+check('settings updates reject unsafe shapes and require a hash plus a mutable field', () => {
+  const valid = example('project-settings-update');
+  for (const value of [null, [], {}, { expectedSettingsHash: valid.expectedSettingsHash }, { name: 'missing hash' },
+    { ...valid, expectedSettingsHash: 'bad' }, { ...valid, timeZone: 'UTC' }, { ...valid, status: 'retired' },
+    { ...valid, name: null }, { ...valid, limits: {} }, { ...valid, limits: { requestsPerMinute: 601 } },
+    { ...valid, limits: { newReceiptsPerUtcDay: 0 } }, { ...valid, allowedOrigins: [] }])
+    assert.equal(validate('ProjectSettingsUpdate', value), false);
+  assert.ok(validate('ProjectSettingsUpdate', { expectedSettingsHash: valid.expectedSettingsHash, limits: { requestsPerMinute: 1 } }));
 });
 check('all changed document relative links resolve', () => {
   const documents=['README.md','DEVELOPMENT.md','VALIDATION.md','ARCHITECTURE.md','docs/README.md','docs/product/02-spec.md','docs/product/01-roadmap.md','docs/adr/0002-contract-source-of-truth.md','docs/adr/0003-minimal-privacy-preserving-events.md','docs/adr/0005-event-and-aggregation-contract.md','docs/backend/event-contract.md','docs/backend/collector.md','docs/backend/README.md','docs/backend/03-persistence-model.md','docs/backend/04-http-api-policy.md','docs/integrations/backend-api.md','docs/integrations/sembom.md','docs/monorepo/package-ownership.md','docs/monorepo/workspace-boundaries.md','db/migrations/README.md'];

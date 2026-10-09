@@ -1,0 +1,16 @@
+{
+  "project": {
+    "id": "sembom",
+    "name": "Sembom",
+    "status": "active",
+    "timeZone": "Asia/Seoul"
+  },
+  "allowedOrigins": [
+    "https://sembom.example.invalid"
+  ],
+  "limits": {
+    "requestsPerMinute": 120,
+    "newReceiptsPerUtcDay": 100000
+  },
+  "settingsHash": "f0c7237f7cc611779eee58ff7462a5fa5f2760b67131a5faae79cf2803eb8199"
+}

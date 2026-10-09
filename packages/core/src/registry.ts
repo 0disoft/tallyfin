@@ -1,4 +1,5 @@
 import type { PropertyDefinition, Registry } from './types.ts';
+import { validateMutableSettings } from './settings.ts';
 import { closed, ENUM_VALUE, has, integer, matches, NAME, PROJECT_ID, record, text } from './value.ts';
 
 function cardinality(definition: unknown): number {
@@ -27,15 +28,8 @@ export function validateRegistry(value: unknown, options: { allowLocalHttp?: boo
     !integer(value.limits.newReceiptsPerUtcDay, 1, 1_000_000)) throw Error('invalid registry');
   if (!/^[A-Za-z][A-Za-z0-9_+./-]*$/.test(value.project.timeZone)) throw Error('invalid registry');
   new Intl.DateTimeFormat('en', { timeZone: value.project.timeZone });
-  if (!Array.isArray(value.allowedOrigins) || value.allowedOrigins.length < 1 || value.allowedOrigins.length > 16 ||
-    new Set(value.allowedOrigins).size !== value.allowedOrigins.length) throw Error('invalid registry');
-  for (const origin of value.allowedOrigins) {
-    if (!text(origin, 1, 256)) throw Error('invalid registry');
-    const url = new URL(origin);
-    const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
-    if (url.origin !== origin || origin.includes('*') || url.username || url.password ||
-      !(url.protocol === 'https:' || (options.allowLocalHttp && local && url.protocol === 'http:'))) throw Error('invalid registry');
-  }
+  validateMutableSettings({ name: value.project.name, status: value.project.status,
+    allowedOrigins: value.allowedOrigins, limits: value.limits }, options);
   if (!Array.isArray(value.events) || value.events.length < 1 || value.events.length > 50 ||
     !Array.isArray(value.workflows) || value.workflows.length > 10 ||
     new TextEncoder().encode(JSON.stringify({ events: value.events, workflows: value.workflows })).byteLength > 32 * 1024) throw Error('invalid registry');

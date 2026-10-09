@@ -2,9 +2,9 @@ openapi: 3.1.0
 info:
   title: Tallyfin API
   version: 0.1.0
-  description: Browser collection and administrator read boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
-    Administrator reads require a verified principal and project grant. Registry snapshots are provisioned out
-    of band; write API and server ingestion are deferred.
+  description: Browser collection and administrator read/settings update boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
+    Administrator reads require a verified principal and project grant; settings updates require an owner grant.
+    Project/schema creation and grants are provisioned out of band; server ingestion is deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
@@ -203,6 +203,7 @@ components:
                 - project_unavailable
                 - event_conflict
                 - attempt_conflict
+                - settings_conflict
                 - quota_exceeded
                 - unauthorized
                 - forbidden
@@ -242,6 +243,82 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+    SettingsHash:
+      type: string
+      pattern: ^[0-9a-f]{64}$
+      minLength: 64
+      maxLength: 64
+      description: SHA-256 of canonical JSON of project, allowedOrigins and limits. Excludes ingest revision and collected data.
+    AllowedOrigins:
+      type: array
+      minItems: 1
+      maxItems: 16
+      uniqueItems: true
+      items:
+        type: string
+        format: uri
+        minLength: 1
+        maxLength: 256
+      description: Exact origins; no path, wildcard, userinfo or null. HTTPS in production; loopback HTTP only by explicit local configuration.
+    CollectionLimits:
+      type: object
+      additionalProperties: false
+      required: [requestsPerMinute, newReceiptsPerUtcDay]
+      properties:
+        requestsPerMinute:
+          type: integer
+          minimum: 1
+          maximum: 600
+        newReceiptsPerUtcDay:
+          type: integer
+          minimum: 1
+          maximum: 1000000
+          description: UTC receipt-date budget; includes new IDs for compatible repeated workflow phases.
+    ProjectSettings:
+      type: object
+      additionalProperties: false
+      required: [project, allowedOrigins, limits, settingsHash]
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        allowedOrigins:
+          $ref: "#/components/schemas/AllowedOrigins"
+        limits:
+          $ref: "#/components/schemas/CollectionLimits"
+        settingsHash:
+          $ref: "#/components/schemas/SettingsHash"
+    ProjectSettingsUpdate:
+      type: object
+      additionalProperties: false
+      required: [expectedSettingsHash]
+      minProperties: 2
+      description: Partial update. Omitted fields are preserved; origins replace the full list and limits merge supplied keys.
+        Project ID, timeZone, schemas, grants and aggregates cannot be changed. Read settings first and send the returned hash.
+      properties:
+        expectedSettingsHash:
+          $ref: "#/components/schemas/SettingsHash"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        status:
+          type: string
+          enum: [active, paused]
+        allowedOrigins:
+          $ref: "#/components/schemas/AllowedOrigins"
+        limits:
+          type: object
+          additionalProperties: false
+          minProperties: 1
+          properties:
+            requestsPerMinute:
+              type: integer
+              minimum: 1
+              maximum: 600
+            newReceiptsPerUtcDay:
+              type: integer
+              minimum: 1
+              maximum: 1000000
     ProjectPage:
       type: object
       additionalProperties: false
@@ -449,32 +526,9 @@ components:
             - active
             - retired
         allowedOrigins:
-          type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            type: string
-            format: uri
-            maxLength: 256
-          uniqueItems: true
-          description: Exact origins; no path/wildcard/null. HTTPS in production; development HTTP only by explicit
-            local configuration.
+          $ref: "#/components/schemas/AllowedOrigins"
         limits:
-          type: object
-          additionalProperties: false
-          required:
-            - requestsPerMinute
-            - newReceiptsPerUtcDay
-          properties:
-            requestsPerMinute:
-              type: integer
-              minimum: 1
-              maximum: 600
-            newReceiptsPerUtcDay:
-              type: integer
-              minimum: 1
-              maximum: 1000000
-              description: UTC receipt-date budget; includes new IDs for compatible repeated workflow phases.
+          $ref: "#/components/schemas/CollectionLimits"
         events:
           type: array
           minItems: 1
@@ -1087,6 +1141,134 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [Administration]
+      operationId: getProjectSettings
+      summary: Read current project settings and hash
+      description: Requires a reader or owner grant. No query parameters. Includes paused projects and does not require a schema version.
+      responses:
+        "200":
+          description: Current settings; no-store.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSettings"
+        "400":
+          description: Invalid project ID or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No project grant, including missing projects.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET and PATCH are supported for project settings.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      tags: [Administration]
+      operationId: updateProjectSettings
+      summary: Update project settings as owner
+      description: Requires a verified principal and owner grant rechecked atomically at write time. No query parameters.
+        A stale hash or concurrent settings edit returns settings_conflict (409); ingestion alone does not cause a conflict.
+        After a lost response or 409, read current settings and compare before retrying; never blindly replace the hash.
+        Updates advance the ingestion guard revision, preserve all aggregates and do not reset consumed quotas.
+      requestBody:
+        required: true
+        description: UTF-8 JSON, at most 16 KiB; identity content encoding only.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectSettingsUpdate"
+          text/plain:
+            schema:
+              $ref: "#/components/schemas/ProjectSettingsUpdate"
+      responses:
+        "200":
+          description: Saved settings and new hash; no-store. Identical settings keep the same content hash.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSettings"
+        "400":
+          description: Invalid JSON, settings, hash, project ID or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No owner grant, including missing projects or revoked ownership.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET and PATCH are supported for project settings.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, PATCH
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Settings conflict; reload and reconcile the edit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Body exceeds 16 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported content type or encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; read settings before retrying because the earlier outcome may be unknown.
           content:
             application/json:
               schema:

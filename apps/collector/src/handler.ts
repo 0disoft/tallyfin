@@ -8,6 +8,7 @@ const messages: Record<ErrorCode, string> = {
   invalid_request: 'Invalid request.', invalid_event: 'Invalid or unregistered event.', unknown_schema: 'Schema is unavailable.',
   origin_denied: 'Origin is not allowed.', project_unavailable: 'Project is unavailable.',
   event_conflict: 'Event ID conflicts with a previous event.', attempt_conflict: 'Attempt conflicts with previous state.',
+  settings_conflict: 'Project settings changed. Reload before saving.',
   quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Administrator authentication is required.',
   forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
 };
@@ -76,7 +77,8 @@ export function createCollector(store: CollectionStore, options: CollectorOption
     } catch (error) {
       const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503);
       if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
-      if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow', 'GET');
+      if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow',
+        /^\/v1\/projects\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PATCH' : 'GET');
       if (failure.status === 429) {
         // Admission resumes at the next fixed minute; daily quota resumes at UTC midnight.
         headers.set('Retry-After', String(retryAfter ?? Math.max(1, Math.ceil((86_400_000 - receivedAt % 86_400_000) / 1000))));

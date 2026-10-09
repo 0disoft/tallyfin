@@ -1,4 +1,5 @@
-import { CollectionError, dateMillis, DAY, NAME, PROJECT_ID } from '@tallyfin/core';
+import { CollectionError, dateMillis, DAY, NAME, parseSettingsUpdate, PROJECT_ID } from '@tallyfin/core';
+import { readBody } from './body.ts';
 import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 
 /** The host must verify signature, issuer, audience and expiry before returning a principal. */
@@ -14,8 +15,18 @@ export async function administrator(request: Request, access: AdministratorAcces
   if (!principal || typeof principal.issuer !== 'string' || typeof principal.subject !== 'string' ||
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
-  if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
   const url = new URL(request.url);
+  const settings = /^\/v1\/projects\/([^/]+)$/.exec(url.pathname);
+  if (request.method !== 'GET' && !(request.method === 'PATCH' && settings)) throw new CollectionError('invalid_request', 405);
+  if (settings) {
+    if (!PROJECT_ID.test(settings[1]!)) throw new CollectionError('invalid_request', 400);
+    parameters(url, []);
+    if (request.method === 'GET') return access.store.settings(principal, settings[1]!);
+    let value: unknown;
+    const body = await readBody(request);
+    try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
+    return access.store.updateSettings(principal, settings[1]!, parseSettingsUpdate(value));
+  }
   if (url.pathname === '/v1/projects') {
     parameters(url, ['limit', 'cursor']);
     const limit = positive(url.searchParams.get('limit') ?? '25', 100);

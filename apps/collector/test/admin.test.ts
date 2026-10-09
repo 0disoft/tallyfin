@@ -151,11 +151,20 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
     for (const sql of migrationStatements()) await db.prepare(sql).run();
     await seed(db);
     await db.prepare('INSERT INTO project_grants (project_id,issuer,subject,role,created_at) VALUES (?,?,?,?,?)')
-      .bind('sembom', principal.issuer, principal.subject, 'reader', now).run();
+      .bind('sembom', principal.issuer, principal.subject, 'owner', now).run();
     const get = () => runtime.dispatchFetch('https://collector.example.invalid/v1/projects/sembom/schemas/1',
       { headers: { Authorization: 'Bearer not-a-credential' } });
     const response = await get(); assert.equal(response.status, 200);
     assert.equal((await response.json() as { project: { id: string } }).project.id, 'sembom');
+    const settings = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/sembom',
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    const snapshot = await settings.json() as { settingsHash: string };
+    const patched = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/sembom', {
+      method: 'PATCH', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedSettingsHash: snapshot.settingsHash, name: 'Worker settings update' }),
+    });
+    assert.equal(patched.status, 200);
+    assert.equal((await patched.json() as { project: { name: string } }).project.name, 'Worker settings update');
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
   } finally { await runtime.dispose(); }

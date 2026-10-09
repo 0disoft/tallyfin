@@ -1,5 +1,6 @@
 import { CollectionError } from './types.ts';
 import type { Registry } from './types.ts';
+import type { ProjectSettings, ProjectSettingsUpdate } from './settings.ts';
 import { DAY, integer, localDate } from './value.ts';
 
 /** Supplied only by a host verifier, never derived from an unverified request claim. */
@@ -15,6 +16,8 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  settings(principal: AdminPrincipal, projectId: string): Promise<ProjectSettings>;
+  updateSettings(principal: AdminPrincipal, projectId: string, update: ProjectSettingsUpdate): Promise<ProjectSettings>;
   list(principal: AdminPrincipal, limit: number, cursor: string): Promise<{ data: Project[]; page: { limit: number; nextCursor: string | null } }>;
   query(principal: AdminPrincipal, query: AdminQuery, now: number): Promise<unknown>;
 }

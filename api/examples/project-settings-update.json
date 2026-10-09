@@ -1,0 +1,7 @@
+{
+  "expectedSettingsHash": "f0c7237f7cc611779eee58ff7462a5fa5f2760b67131a5faae79cf2803eb8199",
+  "name": "Updated project",
+  "limits": {
+    "requestsPerMinute": 60
+  }
+}
