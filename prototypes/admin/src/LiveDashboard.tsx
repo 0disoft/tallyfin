@@ -8,17 +8,17 @@ import LiveProjectCreate from './LiveProjectCreate';
 import LiveSdkSetup from './LiveSdkSetup';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
-import { missingBrowserEvents } from './api/coverage';
+import PeriodComparison from './PeriodComparison';
+import { loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
 import type { EventGrouping, PropertyAnalysis } from './api/event-analysis';
 import { appendPage, shouldApplyPage } from './api/pagination';
 import { periodRange, rangeLabel, todayInZone } from './api/dates';
-import type { EventDefinition, EventSeriesResponse, Project, ProjectSettings, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse } from './api/types';
+import type { EventDefinition, EventSeriesResponse, Project, ProjectSettings, Registry } from './api/types';
 
 type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
-type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
-type MainData = { registry: Registry; summary: SummaryResponse; workflows: WorkflowLoad[]; range: { from: string; to: string } };
+type MainData = PeriodSnapshot & { registry: Registry };
 type EventRow = { definition: EventDefinition; source: 'browser' | 'server' | null; count: number | null };
 type ActiveProject = { name: string; timeZone: string };
 type Session = { basePath: string; token?: string; login?: BrowserLogin };
@@ -90,7 +90,10 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [setupRefreshTick, setSetupRefreshTick] = useState(0);
   const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [main, setMain] = useState<Load<MainData>>({ status: 'idle' });
+  const [main, setMain] = useState<Load<MainData> & { key?: string }>({ status: 'idle' });
+  const [compare, setCompare] = useState(false);
+  const [comparison, setComparison] = useState<Load<PeriodSnapshot> & { key?: string }>({ status: 'idle' });
+  const [comparisonRetry, setComparisonRetry] = useState(0);
   const [series, setSeries] = useState<Load<EventSeriesResponse> & { key?: string; analysis?: PropertyAnalysis | null }>({ status: 'idle' });
 
   const client = useMemo(() => (session ? new ApiClient({ basePath: session.basePath,
@@ -109,7 +112,9 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const activeProjectId = activeProject?.id ?? null;
   const activeTimeZone = activeProject?.timeZone ?? null;
   const currentRange = activeTimeZone ? periodRange(todayInZone(activeTimeZone), period) : null;
-  const analysisRegistry = main.status === 'ready' && main.data?.registry.project.id === activeProjectId &&
+  const mainKey = JSON.stringify([activeProjectId, activeTimeZone, versionText, currentRange?.from, currentRange?.to, refreshTick, view]);
+  const currentMain = main.key === mainKey ? main : null;
+  const analysisRegistry = currentMain?.status === 'ready' && main.data?.registry.project.id === activeProjectId &&
     main.data.registry.schemaVersion === version && main.data.range.from === currentRange?.from && main.data.range.to === currentRange?.to
     ? main.data.registry : null;
   const analysisEvent = analysisRegistry?.events.find(event => event.name === selectedEvent && event.source === 'browser') ?? null;
@@ -150,6 +155,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setNextCursor(null);
     setMain({ status: 'idle' });
     setSeries({ status: 'idle' });
+    setCompare(false); setComparison({ status: 'idle' });
     setProjectId(null);
     setSelectedEvent(null);
     setGrouping(null);
@@ -164,6 +170,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setMore(false);
     client?.destroy();
     setSession(null);
+    setCompare(false); setComparison({ status: 'idle' });
     setToken('');
     setProjects({ status: 'idle' });
     setNextCursor(null);
@@ -213,29 +220,33 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   useEffect(() => {
     if (view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion) { setMain({ status: 'idle' }); return; }
     const controller = new AbortController();
-    setMain({ status: 'loading' });
+    setMain({ status: 'loading', key: mainKey });
     const range = periodRange(todayInZone(activeTimeZone), period);
     (async () => {
       try {
         const registry = await client.getSchema(activeProjectId, version, { signal: controller.signal });
-        const summary = await client.getSummary(activeProjectId, { schemaVersion: version, from: range.from, to: range.to, signal: controller.signal });
-        const missing = missingBrowserEvents(registry, summary);
-        if (missing.length > 0) {
-          throw new ApiError('contract', `집계 응답에 등록된 브라우저 이벤트가 빠져 있어요: ${missing.join(', ')}`);
-        }
-        const workflows = await Promise.all(registry.workflows.map(async definition => ({
-          definition,
-          response: await client.getWorkflowDaily(activeProjectId, definition.id, { schemaVersion: version, from: range.from, to: range.to, signal: controller.signal }),
-        })));
+        const snapshot = await loadPeriod(client, registry, range, controller.signal);
         if (controller.signal.aborted) return;
-        setMain({ status: 'ready', data: { registry, summary, workflows, range } });
+        setMain({ status: 'ready', key: mainKey, data: { registry, ...snapshot } });
       } catch (error) {
         if (controller.signal.aborted) return;
-        setMain({ status: 'error', error: toApiError(error) });
+        setMain({ status: 'error', key: mainKey, error: toApiError(error) });
       }
     })();
     return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view]);
+  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey]);
+
+  const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
+  const comparisonKey = JSON.stringify([mainKey, comparisonRetry]);
+  useEffect(() => {
+    if (!compare || view === 'settings' || !client || !mainData) { setComparison({ status: 'idle' }); return; }
+    const controller = new AbortController();
+    setComparison({ status: 'loading', key: comparisonKey });
+    loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal)
+      .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
+      .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
+    return () => controller.abort();
+  }, [client, compare, mainData, comparisonKey, view]);
 
   useEffect(() => {
     if (view !== 'events' || !client || !analysisEvent || !analysisRegistry || !currentRange || !seriesKey) { setSeries({ status: 'idle' }); return; }
@@ -303,7 +314,8 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     </section></details></>;
   }
 
-  const data = main.status === 'ready' ? main.data ?? null : null;
+  const data = mainData ?? null;
+  const currentComparison = comparison.key === comparisonKey ? comparison : null;
   const range = data?.range ?? null;
   const registry = data?.registry ?? null;
   const primary = data?.workflows[0] ?? null;
@@ -339,11 +351,13 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => { setProjectId(event.target.value || null); setSelectedEvent(null); setGrouping(null); }} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
       <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
+      {view !== 'settings' && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />직전 기간과 비교</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
     </div>
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
+    {view !== 'settings' && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
     {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
@@ -358,9 +372,14 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       <LiveSdkSetup key={`setup-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={setupRefreshTick + settingsRefreshTick} />
     </>}
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
-    {view !== 'settings' && validVersion && main.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
-    {view !== 'settings' && validVersion && main.status === 'error' && main.error && <ErrorPanel error={main.error} onRetry={retry} />}
+    {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
+    {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
     {view !== 'settings' && validVersion && data && registry && <>
+      {compare && <>
+        {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">직전 기간을 조회하는 중이에요.</p>}
+        {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
+        {currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
+      </>}
       {view === 'overview' && <>
         <section className="metric-grid" aria-label="주요 지표">
           {([

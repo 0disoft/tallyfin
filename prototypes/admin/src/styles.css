@@ -996,6 +996,9 @@ button {
 .mode-switch button { border:0; background:transparent; padding:0 14px; min-height:44px; font-size:15px; font-weight:600; color:#64748b; }
 .mode-switch button.active { background:#155eef; color:#fff; }
 .api-toolbar { align-items:flex-end; margin-bottom:10px; }
+.comparison-toggle { display:flex; align-items:center; gap:8px; min-height:44px; font-size:16px; }
+.comparison-toggle input { width:18px; height:18px; accent-color:#155eef; }
+.period-comparison { margin-bottom:28px; }
 .api-field { display:flex; flex-direction:column; gap:6px; font-size:15px; font-weight:600; color:#475569; }
 .api-field select { border:0; appearance:none; background:transparent; min-width:170px; padding:8px 0; font-weight:600; }
 .api-field .text-input { min-height:44px; }

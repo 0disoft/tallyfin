@@ -6,6 +6,52 @@ import { appendPage, shouldApplyPage } from './pagination.ts';
 import { periodRange, todayInZone } from './dates.ts';
 import { SettingsEditor } from './settings-editor.ts';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './event-analysis.ts';
+import { previousRange, countChange, rateChange, validateSnapshot, loadPeriod } from './period-comparison.ts';
+
+test('comparison windows have equal inclusive length across month, leap-year and year boundaries', () => {
+  for (const [range, expected] of [
+    [{from:'2026-10-04',to:'2026-10-10'}, {from:'2026-09-27',to:'2026-10-03'}],
+    [{from:'2024-03-01',to:'2024-03-07'}, {from:'2024-02-23',to:'2024-02-29'}],
+    [{from:'2026-01-01',to:'2026-01-30'}, {from:'2025-12-02',to:'2025-12-31'}],
+  ]) assert.deepEqual(previousRange(range), expected);
+  assert.equal(countChange(150,100),50); assert.equal(countChange(0,100),-100);
+  assert.equal(countChange(0,0),null); assert.equal(countChange(50,0),null);
+  assert.equal(rateChange(86,80),6); assert.equal(rateChange(0,0),0); assert.equal(rateChange(null,80),null);
+  assert.throws(() => previousRange({from:'2026-10-10',to:'2026-10-09'}));
+});
+
+function comparisonFixture() {
+  const range = {from:'2026-10-07',to:'2026-10-08'};
+  const definition = {id:'convert',label:'Convert',source:'browser',startEvent:'start',successEvent:'success',failureEvent:null,dimensions:[]};
+  const registry = {project:project('sembom'),schemaVersion:1,events:[{name:'start',source:'browser'},{name:'success',source:'browser'}],workflows:[definition]};
+  const counts = {startedAttempts:10,succeededAttempts:8,failedAttempts:null,pendingAttempts:2,completionRate:80};
+  const summary = {meta:meta('sembom',1,range.from,range.to),totalEvents:18,events:[{name:'start',count:10},{name:'success',count:8}]};
+  const response = {meta:summary.meta,workflowId:'convert',cohortBasis:'startedAt',summary:counts,days:[
+    {date:range.from,...counts,provisional:false},
+    {date:range.to,startedAttempts:0,succeededAttempts:0,failedAttempts:null,pendingAttempts:0,completionRate:null,provisional:true},
+  ]};
+  return {registry,snapshot:{summary,range,workflows:[{definition,response}]}};
+}
+test('comparison rejects omitted, duplicate, mismatched and inconsistent data rather than filling zeros', () => {
+  const fixture = comparisonFixture(); validateSnapshot(fixture.snapshot,fixture.registry);
+  for (const edit of [s=>s.summary.events.pop(),s=>s.summary.events[1].name='start',s=>s.summary.totalEvents++,
+    s=>s.summary.meta.timeZone='UTC',s=>s.summary.events[0].count=Number.MAX_SAFE_INTEGER+1,
+    s=>s.workflows.pop(),s=>s.workflows[0].response.days.pop(),s=>s.workflows[0].response.days.reverse(),
+    s=>s.workflows[0].response.workflowId='foreign',s=>s.workflows[0].response.summary.completionRate=90,
+    s=>s.workflows[0].response.days[0].pendingAttempts=3,s=>s.workflows[0].response.days[0].failedAttempts=0]) {
+    const copy=structuredClone(fixture.snapshot); edit(copy); assert.throws(()=>validateSnapshot(copy,fixture.registry));
+  }
+});
+test('period loading uses existing endpoints, same schema and signal, propagates failure and abort', async () => {
+  const {registry,snapshot}=comparisonFixture(); const calls=[]; const controller=new AbortController();
+  const client={getSummary:async(id,options)=>{calls.push([id,options]);return snapshot.summary;},
+    getWorkflowDaily:async(id,flow,options)=>{calls.push([id,options,flow]);return snapshot.workflows[0].response;}};
+  assert.deepEqual(await loadPeriod(client,registry,snapshot.range,controller.signal),snapshot);
+  assert.equal(calls.length,2); calls.forEach(([,options])=>{assert.equal(options.schemaVersion,1);assert.equal(options.signal,controller.signal);assert.equal(options.from,snapshot.range.from);});
+  await assert.rejects(loadPeriod({...client,getSummary:async()=>{throw Error('offline');}},registry,snapshot.range,controller.signal),/offline/);
+  const captureAbort=capture(async(_url,init)=>{assert.equal(init.signal.aborted,true);throw new DOMException('Aborted','AbortError');});
+  controller.abort(); await assert.rejects(loadPeriod(new ApiClient({token:TOKEN,fetchImpl:captureAbort.fetchImpl}),registry,snapshot.range,controller.signal),{name:'AbortError'});
+});
 
 const TOKEN = 'test-bearer-token-value';
 const REQUEST_ID = '0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f';
