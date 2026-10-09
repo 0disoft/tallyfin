@@ -1,10 +1,10 @@
 # 이벤트·집계 계약 v0.1
 
 2026-10-08에 v0.1 설계 계약을 확정했다. 코어 검증과 D1 저장 어댑터, 최소 브라우저
-수집기, 관리자 GET 조회(검증기 포트 포함)를 로컬에서 구현·검증했고 서버 수집·운영
-배포는 아직 없다. 실제 인증 제공자와 grant provisioning도 후속이다. 원격에 적용한
-마이그레이션과 운영 데이터도 없다. 구현 상태는 [수집기 구현](./collector.md)과
-[관리자 조회 경계](./administrator.md)에 정리한다. 형태는
+수집기, 관리자 조회와 프로젝트 설정 변경(검증기 포트 포함)을 로컬에서 구현·검증했고
+서버 수집·운영 배포는 아직 없다. 실제 인증 제공자와 grant provisioning도 후속이다.
+원격에 적용한 마이그레이션과 운영 데이터도 없다. 구현 상태는
+[수집기 구현](./collector.md)과 [관리자 조회·설정 경계](./administrator.md)에 정리한다. 형태는
 [OpenAPI](../../api/openapi.yaml)·[DBML](../../db/schema.dbml), 결정은
 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)를 따른다.
 
@@ -17,8 +17,9 @@
 프로젝트에는 활성 상태·정확한 오리진 목록·고정 IANA 시간대·분당 요청 한도·UTC
 수신일당 신규 영수증 한도를 둔다. 기본 한도는 120회/분, 신규 ID 100,000개/일이다.
 오리진은 scheme/host/port만 비교하며 경로·와일드카드·null은 금지한다. 운영은 HTTPS,
-로컬 개발만 HTTP를 허용한다. 설정 등록은 owner의 별도 provisioning에서 검증한다.
-이 계약에는 설정 쓰기 API가 없다.
+로컬 개발만 HTTP를 허용한다. 설정 등록과 변경은 owner 권한으로 검증한다. 프로젝트 생성·
+불변 스키마 새 버전 발행·grant 관리는 별도 provisioning CLI가 맡는다. 기존 프로젝트
+설정은 관리자 API에서도 변경할 수 있다([관리자 조회·설정 경계](./administrator.md)).
 
 스키마 버전의 events/workflows는 불변이며 변경은 새 버전으로 발행한다. active만
 수집하고 retired는 조회만 한다. 여러 active 버전으로 구형 클라이언트를 수용할 수 있다.
@@ -76,8 +77,8 @@ SDK는 메모리 버퍼 40개, 20개마다 또는 5초마다 비동기 전송하
 포함한다. 성공 응답의 accepted + duplicates는 배치 이벤트 수와 같아야 한다.
 
 저장 어댑터는 `projects.ingest_revision` 기반 CAS 가드로 경합을 한 번만 반영한다.
-provisioning에서 설정이나 활성 스키마 정의가 바뀌면 fail-closed로 배치를 거부한다.
-세부는 [수집기 구현](./collector.md)을 따른다.
+provisioning에서 활성 스키마 정의가 바뀌거나 관리자 설정 변경이 일어나면 revision이
+올라가 fail-closed로 배치를 거부한다. 세부는 [수집기 구현](./collector.md)을 따른다.
 
 ## 목표와 날짜
 
@@ -125,10 +126,12 @@ null, pending은 started - succeeded다. 완료율은 그 시작 cohort의 succe
 project_grants를 확인한다. 단순 JWT decode와 화면의 프로젝트 선택은 권한이 아니다.
 목록은 접근 가능한 프로젝트만 ID 오름차순으로 반환하며 cursor를 매번 검사한다.
 인증 제공자·토큰 발급은 후속 구현이며 설정 없이는 관리자 API를 열지 않는다.
-reader/owner는 조회 가능하고 owner만 별도 provisioning을 수행한다.
-관리자 GET 조회와 grant 조건 검사는 로컬에서 구현·검증했다.
+reader/owner는 조회할 수 있고 프로젝트 설정 변경과 provisioning은 owner만 한다.
+설정 변경은 저장 시점에 grant를 다시 확인하고 `expectedSettingsHash`가 현재 canonical
+해시와 다르면 `settings_conflict`(409)로 거부한다. 수집만 일어난 경우는 충돌이 아니다.
+관리자 조회·설정 변경과 grant 조건 검사는 로컬에서 구현·검증했다.
 
-조회는 정확한 schemaVersion, 프로젝트-local from/to, 보존 90일 안에서 최대 31일,
+집계 조회는 정확한 schemaVersion, 프로젝트-local from/to, 보존 90일 안에서 최대 31일,
 from <= to <= 오늘을 요구한다. browser 한 출처/한 버전만 집계한다. 이벤트 표는
 한 이벤트·선택 속성 하나로 그룹화하고 빈 날짜는 0, 빈 목표 날짜의 완료율은 null이다.
 저장 실패·권한 거부를 0으로 위장하지 않는다. coverage는 observed-only이며

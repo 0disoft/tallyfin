@@ -1,6 +1,6 @@
 # 검증
 
-상태: 코어·저장 어댑터·최소 수집기·브라우저 SDK와 관리자 조회 API(GET)·검증기 포트의 로컬 검증, 그리고 v0.1 계약·샘플 UI 검증이 해당한다. 브라우저 SDK는 커밋 `cb3f2ff`(SDK 본체)와 뒤이은 예제·크기 검사·수집기 통합 테스트로 로컬 구현·검증했다. Sembom 예제는 저장소 안에만 두었고 실제 Sembom 저장소에 설치·활성화하지 않았다. 실제 인증 제공자·운영 로그인·원격 DB 마이그레이션·실브라우저 측정은 아직 없다.
+상태: 코어·D1 저장·수집기·브라우저 SDK·관리자 조회/설정 변경 API·OIDC 검증 어댑터와 v0.1 계약·샘플 UI를 로컬에서 검증했다. 브라우저 SDK는 커밋 `cb3f2ff`와 뒤이은 예제·크기 검사·수집기 통합 테스트 및 합성 화면의 실브라우저 측정으로 확인했다. Sembom 예제는 저장소 안에만 두었고 실제 서비스에는 설치·활성화하지 않았다. 실제 인증 제공자·운영 로그인·원격 DB 마이그레이션과 운영 배포는 아직 없다.
 
 2026-10-08 관리자 조회 슬라이스 검증: `apps/collector/src/admin.ts`에 관리자 GET 조회를, `index.ts`에 `createWorker(verifyBearer)` 검증기 포트를 구현했고, 모킹한 trusted 검증기와 실제 D1 grant 경계를 Miniflare에서 확인하는 native Worker 팩토리 smoke 테스트 1개를 추가했다. `node --test`로 `apps/collector/test/admin.test.ts` 9/9 통과. 부모 검증은 루트 `npm run check`(typecheck + 테스트 86개 + SDK+Sembom gzip 2949 bytes 예산)와 `tools/contracts` lint/check 27개 통과다. 이후 추가한 관리자 테스트 1개로 현재 전체 테스트는 87개지만 루트 full check 87은 다시 돌리지 않았다(루트 check 86 → 이후 관리자 9/9). DB 스키마·SQL 마이그레이션 변경은 없고 OpenAPI는 관리자 GET 405 응답 추가와 설명 문구 갱신만 있었다(경로·본문 형태는 그대로). 검증기는 테스트에서만 모킹했고 실제 서명 검증·인증 제공자·토큰 발급은 미구현·미검증이다. 자격증명·토큰은 만들지 않았다. backend 커밋 `404875c`, smoke 추가는 별도 커밋.
 
@@ -271,6 +271,32 @@ Origin 존재, Cookie·Authorization·Referer 부재와 배치 16KiB 상한도 �
 문서는 `DEVELOPMENT.md`, `docs/backend/browser-sdk.md`, 성능 예산과 로드맵을 갱신했다.
 계약·문서 링크 검사 27/27, 측정 명령 `--help`, `git diff --check` 통과.
 푸시·배포는 하지 않았다.
+
+## 2026-10-09 프로젝트 설정 조회·변경 API
+
+`GET /v1/projects/{projectId}`와 owner 전용 `PATCH`를 로컬 구현했다. 이름·상태·
+허용 출처·수집 한도를 부분 변경한다. 읽은 설정의 `expectedSettingsHash`를 필수로
+받고, 저장 SQL에서 기존 설정과 owner grant를 다시 확인한다. 설정이 바뀌면
+`settings_conflict` 409, 권한이 없거나 저장 전에 취소되면 403이다. 이벤트 수집의
+revision 증가만으로 설정 저장을 거부하지 않는다. 설정 저장은 수집 guard revision을
+늘리며, 기존 데이터·정의 버전·소비한 한도를 유지한다.
+
+`npm run typecheck`, `npm test` 127/127, `npm run check --prefix tools/contracts`
+30/30, `npm run lint --prefix tools/contracts`, `npm run check:browser-size`,
+`git diff --check` 통과. 새 설정 테스트 9개는 owner 성공·reader 거부·잘못된 인증·
+닫힌 입력·본문 상한·동시 수정·저장 직전 권한 취소·수집과 설정 간 충돌·로컬 HTTP
+제약을 확인했다. 기존 실제 Worker 런타임 테스트에도 설정 조회·PATCH 저장을 추가했다.
+첫 관련 테스트 실행은 일시정지 시 거부 코드의 기대값을 잘못 지정해 17/18이었다.
+실제 `project_unavailable` 거부에 맞춰 수정한 뒤 위 전체 테스트를 통과했다.
+브라우저 SDK+연동 예제는 gzip 2,949 bytes로 3KiB 예산을 통과했다.
+
+API source of truth `api/openapi.yaml`, 제품 source of truth
+`docs/product/02-spec.md`, 관리자·이벤트 계약과 로드맵을 갱신했다. DB 구조·
+마이그레이션·의존성·러너·CI 설정은 변경하지 않았다. 운영 인증 제공자·원격 D1·
+배포 smoke는 운영 설정이 없어 실행하지 않았다. 관리자 화면의 쓰기 연결과 브라우저
+측정·부하 시험은 이번 API 범위 밖이어서 실행하지 않았다. 화면에서는 아직 기존
+조회 기능만 사용한다. 저장 응답이 유실되면 현재 설정을 다시 읽어 결과를 확인해야 한다.
+원격 푸시·배포·Sembom 연동은 실행하지 않았다.
 
 ## 아직 실행하지 않음
 - 실제 서비스의 SDK 초기 실행 비용·지연·처리량, 모바일·원격 배포
