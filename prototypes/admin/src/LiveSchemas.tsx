@@ -12,9 +12,16 @@ const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   dimension_mismatch: '흐름의 차원은 모든 단계에 필수 속성으로 있어야 하고 허용 값이 같아야 해요.',
 };
 
-export default function LiveSchemas({ client, projectId, refreshTick }: { client: ApiClient; projectId: string; refreshTick: number }) {
+export default function LiveSchemas({ client, projectId, refreshTick, onVersionChange }: { client: ApiClient; projectId: string; refreshTick: number; onVersionChange?: (version: number) => void }) {
   const [state, setState] = useState<SchemaState | null>(null);
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
+  const previousVersion = useRef<number | null | undefined>(undefined);
+  const version = state?.phase === 'ready' ? state.snapshot?.page.latestVersion : undefined;
+  useEffect(() => {
+    if (version === undefined) return;
+    if (previousVersion.current !== undefined && version !== null && version !== previousVersion.current) onVersionChange?.(version);
+    previousVersion.current = version;
+  }, [version, onVersionChange]);
   useEffect(() => {
     const editor = new SchemaEditor(client, projectId); editorRef.current = editor;
     const unsubscribe = editor.subscribe(setState); void editor.load();

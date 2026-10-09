@@ -1065,3 +1065,18 @@ button {
 .schema-comparison > div { min-width: 0; }
 .schema-comparison pre { max-height: 22rem; overflow: auto; padding: 1rem; background: #f6f8fb; border: 1px solid #dfe6ef; border-radius: .5rem; font: 1rem/1.6 ui-monospace, Consolas, monospace; }
 @media (max-width: 640px) { .schema-comparison { grid-template-columns: minmax(0, 1fr); } }
+.project-create { margin: 1.5rem 0; padding: 1.5rem 0; border-block: 1px solid #e2e8f0; min-width: 0; }
+.project-create-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem 1.5rem; margin: 1.5rem 0; }
+.project-create-grid .settings-field { min-width: 0; }
+.project-create-wide { grid-column: 1 / -1; }
+.project-create .text-input { width: 100%; box-sizing: border-box; }
+.project-create .text-input:disabled { background: #f1f5f9; color: #475569; }
+.project-create-limits summary { cursor: pointer; font-size: 1rem; padding: .75rem 0; overflow-wrap: anywhere; }
+.setup-steps { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; padding: 0; margin: 1rem 0; list-style: none; color: #64748b; font-size: 1rem; }
+.setup-steps [aria-current='step'] { color: #155eef; font-weight: 700; }
+.project-onboarding { padding: 1.25rem; background: #f5f9ff; border: 1px solid #cfe0ff; border-radius: 6px; margin-block: 1.5rem; }
+.sdk-setup { border-top: 1px solid #e2e8f0; margin-top: 2rem; padding-top: 2rem; min-width: 0; }
+.sdk-instructions { padding-left: 1.5rem; font-size: 1rem; line-height: 1.8; overflow-wrap: anywhere; }
+.sdk-setup .text-input { width: 100%; box-sizing: border-box; }
+.sdk-code { margin-block: 1rem; font-size: 1rem; }
+@media (max-width: 600px) { .project-create-grid { grid-template-columns: minmax(0, 1fr); } }

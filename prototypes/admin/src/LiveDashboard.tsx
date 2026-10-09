@@ -4,6 +4,8 @@ import { ArrowRight, CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnecte
 import { Trend } from './Dashboard';
 import LiveSettings from './LiveSettings';
 import LiveSchemas from './LiveSchemas';
+import LiveProjectCreate from './LiveProjectCreate';
+import LiveSdkSetup from './LiveSdkSetup';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import { missingBrowserEvents } from './api/coverage';
@@ -80,6 +82,9 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
   const [more, setMore] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newProjectId, setNewProjectId] = useState<string | null>(null);
+  const [setupRefreshTick, setSetupRefreshTick] = useState(0);
   const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [main, setMain] = useState<Load<MainData>>({ status: 'idle' });
@@ -91,6 +96,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const sessionRef = useRef(0);
   const clientRef = useRef<ApiClient | null>(null);
   const moreControllerRef = useRef<AbortController | null>(null);
+  const projectsControllerRef = useRef<AbortController | null>(null);
   clientRef.current = client;
 
   const versionText = versionInput.trim();
@@ -106,11 +112,21 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const settingsSaved = useCallback((settings: ProjectSettings) => {
     setProjects(previous => previous.data ? { ...previous, data: previous.data.map(project => project.id === settings.project.id ? settings.project : project) } : previous);
   }, []);
+  const projectCreated = useCallback((settings: ProjectSettings) => {
+    sessionRef.current += 1;
+    projectsControllerRef.current?.abort(); moreControllerRef.current?.abort(); setMore(false);
+    setProjects(previous => ({ status: 'ready', data: [...(previous.data ?? []).filter(p => p.id !== settings.project.id), settings.project].sort((a, b) => a.id.localeCompare(b.id)) }));
+    setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
+    setNewProjectId(settings.project.id); setShowCreate(false); setPageError(null);
+    onNavigate?.('settings');
+  }, [onNavigate]);
+  const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, []);
   const connected = useCallback((login: BrowserLogin) => {
     sessionRef.current += 1;
     setToken(''); setProjectId(null); setSelectedEvent(null); setProjects({ status: 'idle' });
     setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setSession({ login, basePath: API_BASE_PATH });
+    setShowCreate(false); setNewProjectId(null);
   }, []);
 
   function connect() {
@@ -125,6 +141,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setProjectId(null);
     setSelectedEvent(null);
     setSession({ token, basePath: resolved.basePath });
+    setShowCreate(false); setNewProjectId(null);
     setToken('');
   }
   function disconnect() {
@@ -146,6 +163,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setPageError(null);
     setEndpointError(null);
     setRefreshTick(0);
+    setShowCreate(false); setNewProjectId(null); setSetupRefreshTick(0);
   }
 
   useEffect(() => () => { clientRef.current?.destroy(); }, []);
@@ -154,6 +172,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     if (!client) return;
     const controller = new AbortController();
     setProjects({ status: 'loading' });
+    projectsControllerRef.current = controller;
     setPageError(null);
     client.listProjects({ limit: DEFAULT_PAGE_LIMIT, signal: controller.signal })
       .then(page => {
@@ -303,16 +322,23 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => { setProjectId(event.target.value || null); setSelectedEvent(null); }} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
       <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => setVersionInput(event.target.value)} /></label>
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
+      <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
     </div>
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
+    {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
-    {projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>서버가 이 토큰에 부여한 프로젝트 grant가 없어요. 다른 토큰으로 연결해 주세요.</p></section>}
+    {!showCreate && projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>생성 권한이 있다면 프로젝트 추가로 시작할 수 있어요. 기존 프로젝트를 조회하려면 운영자에게 해당 프로젝트 권한을 확인해 주세요.</p></section>}
     {view === 'settings' && activeProjectId && <>
+      {newProjectId === activeProjectId && <section className="project-onboarding" aria-label="새 프로젝트 연결" role="status">
+        <h2>프로젝트 생성을 확인했어요</h2><ol className="setup-steps"><li>1 프로젝트 완료</li><li aria-current={settingsRegistry ? undefined : 'step'}>2 이벤트 스키마</li><li aria-current={settingsRegistry ? 'step' : undefined}>3 SDK 연결</li></ol>
+        <p>먼저 이벤트 스키마를 검증·발행한 뒤 SDK를 연결하세요.</p><a href="#schema-heading">이벤트 스키마로 이동</a> · <a href="#sdk-setup">SDK 연결 안내</a>
+      </section>}
       <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />
-      <LiveSchemas key={`schemas-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={settingsRefreshTick} />
+      <LiveSchemas key={`schemas-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={settingsRefreshTick} onVersionChange={schemaVersionChanged} />
+      <LiveSdkSetup key={`setup-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={setupRefreshTick + settingsRefreshTick} />
     </>}
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && main.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}

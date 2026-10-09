@@ -4,6 +4,9 @@ import { ApiClient } from './client.ts';
 import { ProjectCreator } from './project-creator.ts';
 import { creationHash, creationInput, parseCreatedProject } from './project-creation.ts';
 import { projectCreationHash, parseProjectCreation } from '../../../../packages/core/src/project-creation.ts';
+import { sdkSetup } from './sdk-setup.ts';
+import { projectBrowserSchema } from '../../../../tools/browser/schema.mjs';
+import { readFileSync } from 'node:fs';
 
 const input = { id: 'new-product', name: 'New product', timeZone: 'Asia/Seoul', allowedOrigins: ['https://z.example.invalid', 'https://a.example.invalid'],
   limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 } };
@@ -73,4 +76,17 @@ test('foreign hashes, malformed dates and response identities never report succe
   await f.creator.create(); assert.equal(f.creator.state.phase, 'uncertain'); assert.equal(f.opened.length, 0);
   for (const value of [{ ...await receipt(input), createdAt: '2026-02-30T00:00:00.000Z' }, { ...await receipt(input), projectId: 'Invalid' }])
     assert.throws(() => parseCreatedProject(value)); f.creator.destroy();
+});
+test('SDK connection code uses the published browser projection and omits admin authority and server-only events', () => {
+  const registry = JSON.parse(readFileSync(new URL('../../../../api/examples/registry.json', import.meta.url), 'utf8'));
+  registry.events.push({ name: 'server_only', label: 'server', source: 'server', properties: {} });
+  const code = sdkSetup(registry, 'https://collector.example.invalid');
+  const config = JSON.parse(code.split('  schema: ')[1].split(',\n});')[0]);
+  assert.deepEqual(config, projectBrowserSchema(registry));
+  assert.ok(code.includes(`/v1/projects/${registry.project.id}/batches`)); assert.ok(!code.includes('server_only'));
+  assert.ok(!code.includes('Authorization')); assert.ok(!code.includes('not-a-credential')); assert.ok(!code.includes('allowLocalHttp'));
+  assert.ok(sdkSetup(registry, 'http://127.0.0.1:5188').includes('allowLocalHttp: true'));
+  for (const origin of ['', 'not a URL', 'https://collector.invalid/path', 'https://user@collector.invalid', 'https://collector.invalid?token=x', 'http://remote.invalid'])
+    assert.throws(() => sdkSetup(registry, origin));
+  assert.throws(() => sdkSetup({ ...registry, schemaStatus: 'retired' }, 'https://collector.invalid'));
 });
