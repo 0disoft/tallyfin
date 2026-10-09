@@ -6,7 +6,10 @@
 관리자 조회마다 검증된 issuer/subject의 project_grants를 확인한다. D1 조회는 매
 statement에 `EXISTS (project_grants ... role IN ('reader','owner'))` 조건을 붙이고
 정의·버전 읽기와 집계를 한 배치 스냅샷으로 처리한다. reader와 owner는 조회 가능하고
-설정 쓰기 HTTP API는 없다. 로컬 [등록·권한 관리 CLI](./provisioning.md)는
+설정 PATCH·스키마 발행 PUT은 owner만 사용할 수 있다. 프로젝트 생성 POST는
+`project_creators`의 별도 권한·개수 한도를 요구하고 기존 owner에게서 추론하지 않는다.
+생성자의 최초 owner 부여는 생성과 같은 원자 저장에서만 수행한다. 생성 권한 회수는
+기존 project_grants를 지우지 않는다. 로컬 [등록·권한 관리 CLI](./provisioning.md)는
 DB 파일 접근 권한이 있는 신뢰된 운영자가 실행하며 로그인과 owner 역할을 검사하지
 않는다. 첫 owner 등록과 마지막 owner 보호를 지원한다. UI
 선택·cursor·공개 projectId로 권한을 얻지 않는다. 프로젝트 목록은 접근 가능한 항목만

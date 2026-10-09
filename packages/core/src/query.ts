@@ -2,6 +2,7 @@ import { CollectionError } from './types.ts';
 import type { Registry } from './types.ts';
 import type { ProjectSettings, ProjectSettingsUpdate } from './settings.ts';
 import type { PublishedSchema, SchemaPage, SchemaPublication } from './schema-publication.ts';
+import type { CreatedProject } from './project-creation.ts';
 import { DAY, integer, localDate } from './value.ts';
 
 /** Supplied only by a host verifier, never derived from an unverified request claim. */
@@ -17,6 +18,8 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  creationAccess(principal: AdminPrincipal): Promise<void>;
+  createProject(principal: AdminPrincipal, input: unknown, now: number): Promise<CreatedProject>;
   schemas(principal: AdminPrincipal, projectId: string, limit: number, beforeVersion: number | null): Promise<SchemaPage>;
   publishSchema(principal: AdminPrincipal, projectId: string, version: number, input: SchemaPublication, now: number): Promise<PublishedSchema>;
   settings(principal: AdminPrincipal, projectId: string): Promise<ProjectSettings>;

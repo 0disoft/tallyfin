@@ -106,7 +106,7 @@ test('unknown schemas/definitions, invalid dates/grouping and duplicate paramete
     await read(`/v1/projects/sembom/summary${suffix}`, 400);
   await read(`/v1/projects/sembom/events/input_start/daily${range}&groupBy=private`, 400);
   await read('/v1/projects?limit=101', 400); await read('/v1/projects?cursor=../../private', 400);
-  const denied = await handler()(request('/v1/projects', 'POST')); assert.equal(denied.status, 405); assert.equal(denied.headers.get('Allow'), 'GET');
+  const denied = await handler()(request('/v1/projects', 'PUT')); assert.equal(denied.status, 405); assert.equal(denied.headers.get('Allow'), 'GET, POST');
 });
 test('grant revoked before the database snapshot cannot reveal a schema or aggregate', async () => {
   const proxy = { prepare: fixture.db.prepare.bind(fixture.db), async batch(statements: any[]) {
@@ -176,6 +176,17 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
       body: JSON.stringify({ expectedLatestVersion: 1, privacyReviewed: true, events: registry.events, workflows: registry.workflows }),
     });
     assert.equal(published.status, 200); assert.equal((await published.json() as { schemaVersion: number }).schemaVersion, 2);
+    await db.prepare('INSERT INTO project_creators VALUES (?,?,2,?)').bind(principal.issuer, principal.subject, now).run();
+    const create = () => runtime.dispatchFetch('https://collector.example.invalid/v1/projects', {
+      method: 'POST', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'worker-created', name: 'Worker created', timeZone: 'UTC', allowedOrigins: ['https://new.example.invalid'],
+        limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 } }),
+    });
+    const created = await create(); assert.equal(created.status, 200);
+    assert.deepEqual(await (await create()).json(), await created.json());
+    const freshSchemas = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/schemas',
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    assert.equal(freshSchemas.status, 200); assert.equal((await freshSchemas.json() as { latestVersion: number | null }).latestVersion, null);
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
   } finally { await runtime.dispose(); }

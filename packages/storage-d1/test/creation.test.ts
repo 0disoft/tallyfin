@@ -4,6 +4,7 @@ import { parseProjectCreation } from '@tallyfin/core';
 import { createProject, projectCreationAccess } from '../src/creation.ts';
 import type { SqlDatabase, SqlStatement } from '../src/sql.ts';
 import { CreatorProvisioner, creatorOperation } from '../../../tools/provision/creators.ts';
+import { initialize } from '../../../tools/provision/local.ts';
 import { setup, now } from './helpers.ts';
 
 let f: Awaited<ReturnType<typeof setup>>;
@@ -101,4 +102,17 @@ test('creator CLI plans redact identity, support CAS and preserve creation histo
   await assert.rejects(createProject(f.db, principal, { ...input, id: 'too-many' }, now), { code: 'project_limit_reached' });
   for (const value of [{ ...args, maxProjects: 0 }, { ...args, maxProjects: 1001 }, { ...args, role: 'owner' }, { ...args, issuer: 'http://unsafe.invalid' }])
     assert.throws(() => creatorOperation('creator-grant', value), { code: 'invalid_input' });
+});
+test('0003 upgrades an existing DB without backfilling authority or changing projects and schemas', async () => {
+  const before = await f.db.prepare("SELECT * FROM projects WHERE id='sembom'").first();
+  const schema = await f.db.prepare("SELECT * FROM project_schemas WHERE project_id='sembom'").all();
+  await f.db.prepare('DROP TABLE project_creations').run();
+  await f.db.prepare('DROP TABLE project_creators').run();
+  assert.deepEqual(await initialize(f.db, false), { migrations: ['0003_project_creation.sql'], applied: false });
+  assert.deepEqual(await initialize(f.db, true), { migrations: ['0003_project_creation.sql'], applied: true });
+  assert.deepEqual(await f.db.prepare("SELECT * FROM projects WHERE id='sembom'").first(), before);
+  assert.deepEqual((await f.db.prepare("SELECT * FROM project_schemas WHERE project_id='sembom'").all()).results, schema.results);
+  assert.equal(await f.db.prepare('SELECT count(*) AS n FROM project_creators').first('n'), 0);
+  assert.equal(await f.db.prepare('SELECT count(*) AS n FROM project_creations').first('n'), 0);
+  assert.deepEqual(await initialize(f.db, true), { migrations: [], applied: false });
 });

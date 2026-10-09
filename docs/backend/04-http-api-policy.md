@@ -1,6 +1,6 @@
 # HTTP API 정책
 
-상태: [OpenAPI](../../api/openapi.yaml) v0.1 계약, 서버 미구현.
+상태: [OpenAPI](../../api/openapi.yaml) v0.1 계약과 수집·관리자 서버를 로컬 구현·검증했다. 운영 배포는 아직 없다.
 
 공개 수집 POST는 20개/16KiB의 JSON 또는 JSON을 담은 text/plain만 받는다.
 Origin을 정확히 허용 목록과 비교하고 CORS credentials를 허용하지 않는다.
@@ -14,3 +14,10 @@ bearer로 공개 수집 권한을 높이지 않는다.
 관리자 GET은 검증된 주체의 프로젝트 grant를 매번 검사한다. 목록은 100개 이하,
 날짜 조회는 보존 범위 안의 31일 이하, 버전/출처는 고정한다. 응답은 no-store이며
 오류를 0으로 대신하지 않는다. [세부 계약](./event-contract.md)을 참고한다.
+
+관리자 프로젝트 생성 POST는 별도 생성 권한을 확인한 뒤 16KiB 이하 닫힌 JSON을 읽는다.
+최초 owner는 인증된 생성자다. 프로젝트 ID·생성자·초기 요청 해시가 같으면 기존 생성
+결과를 200으로 반환하며 현재 설정을 되돌리지 않는다. 설정 PATCH는 owner와 이전
+설정 해시, 스키마 PUT은 owner와 최신 버전·개인정보 검토 확인을 요구한다.
+모든 관리자 응답은 no-store이며 CORS 허용·쿠키 발급은 하지 않는다.
+[관리자 API](./administrator.md)를 따른다.

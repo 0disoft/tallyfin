@@ -9,7 +9,8 @@
 null을 돌려준다. `apps/collector/src/index.ts`의 기본 export는 검증기 없이 만들어져
 관리자 경로를 401로 닫는다. 검증기가 없거나 bearer·issuer·subject가 비면 401이다.
 프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 초안 검증
-경로는 POST만 받고 그 밖은 405(Allow: POST), 버전별 스키마 경로는 GET·PUT을
+경로는 POST만 받고 그 밖은 405(Allow: POST), 프로젝트 목록/생성 경로는 GET·POST
+(Allow: GET, POST), 버전별 스키마 경로는 GET·PUT을
 받으며 나머지 조회 경로는 GET이 아니면 405(Allow: GET)다.
 
 저장소 루트의 호스트 어댑터 파일 예시다. `@tallyfin/collector` 패키지에는 `exports`가
@@ -31,10 +32,11 @@ export default createWorker(bearer => hostVerify(bearer));
 화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이
 없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
 
-지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 설정 PATCH와 버전별 스키마 PUT이다.
+지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 생성 POST·설정 PATCH·버전별 스키마 PUT이다.
 초안 검증 POST는 저장하지 않는 읽기 작업이다.
 
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
+- `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
 - `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
 - `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
@@ -134,7 +136,41 @@ D1 batch의 rollback·실행 순서는 [공식 D1 문서](https://developers.clo
 직전 삽입 여부에 따른 revision 변경은 [SQLite changes()](https://www.sqlite.org/lang_corefunc.html#changes)를
 기준으로 구현하고 Miniflare에서 발행·재요청·동시 발행·실패 rollback을 확인했다.
 
-프로젝트 생성·grant 관리와 스키마 상태 변경은 기존 provisioning CLI가 맡는다.
+프로젝트 생성은 별도 생성 권한 API 또는 provisioning CLI를 사용한다.
+grant 관리와 스키마 상태 변경은 기존 provisioning CLI가 맡는다.
 grant provisioning API, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
 [OpenAPI](../../api/openapi.yaml)를 따르고, 동작 의미는
 [이벤트·집계 계약](./event-contract.md)을 따른다.
+
+## 프로젝트 생성
+
+`POST /v1/projects`는 신뢰하는 검증기가 확인한 issuer/subject와 `project_creators`의
+별도 생성 권한을 요구한다. 프로젝트 reader/owner는 이 권한을 대신하지 못한다.
+권한이 없으면 본문을 읽기 전에 403이다. 운영자는 [provisioning CLI](./provisioning.md)의
+creator-grant/revoke로 권한과 1~1000개 한도를 부여·회수한다. 기존 프로젝트의 owner를
+자동으로 생성자로 등록하거나 클라이언트의 issuer/subject/owner 주장을 받지 않는다.
+
+입력은 `{id,name,timeZone,allowedOrigins,limits}`만 받는다. 두 수집 한도를 모두
+명시하며 설정 API와 같은 이름 길이·HTTPS origin·loopback opt-in 규칙을 사용한다.
+시간대는 IANA 이름을 검증하고 생성 후 변경할 수 없다. name은 공백뿐인 문자열·제어
+문자를 거부한다. 쿼리 파라미터 없이 identity JSON/text/plain, 최대 16KiB다.
+새 프로젝트는 active·스키마 없음으로 만들며 첫 발행은 기존 스키마 PUT을 사용한다.
+스키마가 없으면 수집이 허용되지 않는다.
+
+프로젝트·원본 생성 요청 해시·최초 owner grant를 같은 원자 D1 batch로 저장한다.
+INSERT에서 생성 권한과 해당 principal의 API 생성 기록 개수를 다시 확인하므로
+동시 생성으로 한도를 넘을 수 없다. CLI로 등록한 기존 프로젝트는 이 개수에 포함하지
+않는다. 새 owner는 인증된 생성자이며 다른 프로젝트·스키마·집계·사용량은 변경하지 않는다.
+
+성공은 최초와 재요청 모두 200 `{projectId,createdAt,creationHash}`다. 별도
+Idempotency-Key 대신 공개 프로젝트 ID·인증된 생성자·초기 요청 해시를 사용한다.
+허용 origin 목록만 정렬해 해시를 만들며 나머지 값을 추측하거나 기본값으로 대체하지 않는다.
+같은 생성자의 같은 원본 내용은 설정 수정·스키마 발행·개수 한도 도달 뒤에도 원본
+생성 결과를 반환한다. 현재 생성 권한과 owner grant는 계속 필요하다. 재요청은 변경된
+설정을 되돌리거나 회수된 grant를 복원하지 않는다. 응답 유실은 같은 요청으로 재확인한다.
+
+다른 내용·다른 생성자·CLI가 이미 점유한 ID는 project_conflict(409), 개수 한도는
+project_limit_reached(409)다. 한도 도달과 ID 충돌이 겹치면 한도 오류가 우선할 수 있다.
+두 오류는 기존 프로젝트 내용이나 생성자를 노출하지 않는다. 생성 이력은 프로젝트 수명 동안
+유지하고 생성 권한 회수로 지우지 않는다. 요청 본문·DB 오류는 로그/응답에 넣지 않는다.
+신규 DB는 0001·0002·0003, 기존 DB는 0003 추가 적용이 필요하며 원격 적용은 아직 없다.

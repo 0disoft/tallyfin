@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   description: Browser collection and administrator query/settings/schema publication boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
     Administrator reads require a verified principal and project grant; settings updates require an owner grant.
-    Schema publication requires an owner grant and explicit privacy review. Project creation and grants are provisioned out of band; server ingestion is deferred.
+    Schema publication requires an owner grant and explicit privacy review. Project creation requires a separately provisioned creator permission; grant management is out of band and server ingestion is deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
@@ -205,6 +205,8 @@ components:
                 - attempt_conflict
                 - settings_conflict
                 - schema_conflict
+                - project_conflict
+                - project_limit_reached
                 - quota_exceeded
                 - unauthorized
                 - forbidden
@@ -275,6 +277,46 @@ components:
           minimum: 1
           maximum: 1000000
           description: UTC receipt-date budget; includes new IDs for compatible repeated workflow phases.
+    ProjectCreation:
+      type: object
+      additionalProperties: false
+      required: [id, name, timeZone, allowedOrigins, limits]
+      description: Creates an active project without a schema. Owner is the authenticated creator, never supplied in the body.
+      properties:
+        id:
+          $ref: "#/components/schemas/ProjectId"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+          pattern: '^(?=.*\S)[^\x00-\x1f\x7f]+$'
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: '^[A-Za-z][A-Za-z0-9_+./-]*$'
+          description: Validated IANA time zone, immutable after creation.
+        allowedOrigins:
+          $ref: "#/components/schemas/AllowedOrigins"
+        limits:
+          $ref: "#/components/schemas/CollectionLimits"
+    CreatedProject:
+      type: object
+      additionalProperties: false
+      required: [projectId, createdAt, creationHash]
+      description: Immutable creation receipt, not a snapshot of current settings. Read project settings separately.
+      properties:
+        projectId:
+          $ref: "#/components/schemas/ProjectId"
+        createdAt:
+          type: string
+          format: date-time
+        creationHash:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          minLength: 64
+          maxLength: 64
+          description: SHA-256 of the canonical initial request with allowedOrigins sorted lexically.
     ProjectSettings:
       type: object
       additionalProperties: false
@@ -1247,6 +1289,86 @@ paths:
                 type: string
                 const: Origin
   /v1/projects:
+    post:
+      tags: [Administration]
+      operationId: createProject
+      summary: Create a project with an owner grant for the verified creator
+      description: Requires explicit issuer/subject permission in project_creators; existing project ownership is insufficient.
+        Identity-encoded JSON or text/plain, at most 16KiB; no query parameters.
+        Permission and per-principal 1..1000 project quota are checked at insertion.
+        Project, immutable receipt and owner grant are written atomically. No schema is invented.
+        Idempotency is keyed by project ID plus verified creator and canonical initial request, so no Idempotency-Key header is needed.
+        A matching retry returns the original receipt even after settings edits or quota exhaustion;
+        creator permission and current owner role are still required. Retries never restore revoked grants.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectCreation"
+          text/plain:
+            schema:
+              $ref: "#/components/schemas/ProjectCreation"
+      responses:
+        "200":
+          description: Project created or identical prior creation confirmed; original immutable receipt.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedProject"
+        "400":
+          description: Invalid JSON, closed input, time zone, origin, limit or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Verified administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Explicit creation permission missing or revoked, or replaying creator is no longer an owner.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: project_conflict for an occupied ID or different initial request; project_limit_reached for exhausted creation quota.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET and POST are supported on this path.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, POST
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Body exceeds 16KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported content type or content encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; ambiguous outcomes can be recovered with an identical retry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     get:
       tags:
         - Administration
@@ -1289,12 +1411,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "405":
-          description: Only GET is supported for administrator reads.
+          description: Only GET and POST are supported on this path.
           headers:
             Allow:
               schema:
                 type: string
-                const: GET
+                const: GET, POST
           content:
             application/json:
               schema:

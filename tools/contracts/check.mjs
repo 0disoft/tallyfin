@@ -21,7 +21,7 @@ const check = (name, action) => { action(); checks++; console.log(`OK ${name}`);
 for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batch':'BrowserBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
-  'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate' })) {
+  'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 const batch = example('browser-batch');
@@ -114,6 +114,15 @@ check('API auth declarations remain explicit', () => {
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['401']);
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['403']);
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['409']);
+});
+check('project creation requires explicit authority, closed input and immutable retry metadata', () => {
+  const input = example('project-creation');
+  for (const value of [{ ...input, owner: 'asserted' }, { ...input, status: 'active' }, { ...input, name: ' ' },
+    { ...input, timeZone: '' }, { ...input, limits: { requestsPerMinute: 120 } }]) assert.equal(validate('ProjectCreation', value), false);
+  assert.ok(validate('CreatedProject', { projectId: input.id, createdAt: '2026-10-09T00:00:00.000Z', creationHash: 'a'.repeat(64) }));
+  const route = spec.paths['/v1/projects'].post;
+  assert.ok(route.responses['403']); assert.ok(route.responses['409']); assert.ok(route.responses['413']);
+  assert.equal(spec.paths['/v1/projects'].get.responses['405'].headers.Allow.schema.const, 'GET, POST');
 });
 check('schema drafts separate malformed envelopes from semantic errors and reports have consistent validity', () => {
   const draft = { events: registry.events, workflows: registry.workflows };

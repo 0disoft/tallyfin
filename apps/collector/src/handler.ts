@@ -81,6 +81,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503);
       if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
       if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow',
+        new URL(request.url).pathname === '/v1/projects' ? 'GET, POST' :
         /^\/v1\/projects\/[^/]+\/schemas\/validate$/.test(new URL(request.url).pathname) ? 'POST' :
         /^\/v1\/projects\/[^/]+\/schemas\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PUT' :
         /^\/v1\/projects\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PATCH' : 'GET');

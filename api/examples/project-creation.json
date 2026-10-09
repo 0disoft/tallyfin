@@ -1,0 +1,7 @@
+{
+  "id": "new-product",
+  "name": "New product",
+  "timeZone": "Asia/Seoul",
+  "allowedOrigins": ["https://new.example.invalid"],
+  "limits": { "requestsPerMinute": 120, "newReceiptsPerUtcDay": 100000 }
+}

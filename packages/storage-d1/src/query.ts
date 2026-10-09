@@ -2,6 +2,7 @@ import { addCounts, closed, CollectionError, count, dateEnd, DAY, dateMillis, in
 import type { AdminPrincipal, AdminQuery, AdminStore, ProjectSettingsUpdate, Properties, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
 import { listSchemas, publishSchema } from './schema.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
+import { createProject, projectCreationAccess } from './creation.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 
 const access = "EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = ? AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))";
@@ -13,6 +14,8 @@ export class D1Queries implements AdminStore {
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = options; }
+  creationAccess(principal: AdminPrincipal) { return projectCreationAccess(this.db, principal); }
+  createProject(principal: AdminPrincipal, input: unknown, now: number) { return createProject(this.db, principal, input, now, this.options); }
   schemas(principal: AdminPrincipal, id: string, limit: number, beforeVersion: number | null) {
     return listSchemas(this.db, principal, id, limit, beforeVersion);
   }

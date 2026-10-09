@@ -16,6 +16,15 @@ export async function administrator(request: Request, access: AdministratorAcces
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
+  if (url.pathname === '/v1/projects' && request.method === 'POST') {
+    parameters(url, []);
+    // Creation is a separately provisioned authority, never inferred from any project owner role.
+    await access.store.creationAccess(principal);
+    const body = await readBody(request);
+    let value: unknown;
+    try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
+    return access.store.createProject(principal, value, now);
+  }
   const settings = /^\/v1\/projects\/([^/]+)$/.exec(url.pathname);
   const schemas = /^\/v1\/projects\/([^/]+)\/schemas$/.exec(url.pathname);
   if (schemas) {

@@ -1,5 +1,5 @@
 import { CollectionError, integer, parseProjectCreation, projectCreationHash } from '@tallyfin/core';
-import type { AdminPrincipal, CreatedProject, ProjectCreation } from '@tallyfin/core';
+import type { AdminPrincipal, CreatedProject } from '@tallyfin/core';
 import type { SqlDatabase } from './sql.ts';
 
 type AccessRow = { max_projects: number; created_projects: number };
@@ -16,7 +16,7 @@ export async function projectCreationAccess(db: SqlDatabase, principal: AdminPri
   if (result.length !== 1 || !result[0]?.success || !Array.isArray(result[0].results)) throw new CollectionError('storage_unavailable', 503);
   access(result[0].results[0]);
 }
-export async function createProject(db: SqlDatabase, principal: AdminPrincipal, input: ProjectCreation, now: number,
+export async function createProject(db: SqlDatabase, principal: AdminPrincipal, input: unknown, now: number,
   options: { allowLocalHttp?: boolean } = {}): Promise<CreatedProject> {
   await projectCreationAccess(db, principal);
   const value = parseProjectCreation(input, options), hash = await projectCreationHash(value);
