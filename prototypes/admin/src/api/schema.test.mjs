@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ApiClient, ApiError } from './client.ts';
 import { SchemaEditor } from './schema-editor.ts';
 import { definitionHash, parseSchemaValidation, parseSchemaPage } from './schema-contract.ts';
+import { changeEventForm, eventIsLinked, eventIssueTarget, readEventForm } from './schema-event-form.ts';
 
 const definitions = () => ({ events: [{ name: 'operation_completed', label: '작업 완료', source: 'browser', properties: {} }], workflows: [] });
 const metadata = version => ({ schemaVersion: version, schemaStatus: 'active', publishedAt: '2026-10-09T00:00:00.000Z' });
@@ -96,4 +97,56 @@ test('response validators reject inconsistent reports, unordered/foreign cursors
   for (const input of [{ valid: true, issues: [{ path: '', code: 'duplicate' }], privacyReviewRequired: true },
     { valid: false, issues: [{ path: '/private-input', code: 'duplicate' }], privacyReviewRequired: true }]) assert.throws(() => parseSchemaValidation(input));
   assert.throws(() => parseSchemaPage({ projectId: 'sample', latestVersion: 2, data: [metadata(1), metadata(2)], page: { limit: 25, beforeVersion: null } }));
+});
+
+test('event form edits preserve properties, workflows and unsupported event keys without repairing the draft', () => {
+  const draft = definitions();
+  draft.events[0].properties = { category: { type: 'enum', required: true, purpose: 'Public category', values: ['one', 'two'] } };
+  draft.events[0].extra = { preserve: true };
+  draft.workflows.push({ id: 'unrelated', startEvent: 'different', successEvent: 'other', dimensions: ['category'] });
+  const original = JSON.stringify(draft);
+  const edited = JSON.parse(changeEventForm(original, { kind: 'edit', index: 0, field: 'label', value: '새 표시 이름' }));
+  assert.deepEqual(edited.events[0], { ...draft.events[0], label: '새 표시 이름' });
+  assert.deepEqual(edited.workflows, draft.workflows);
+  const added = changeEventForm(JSON.stringify(edited), { kind: 'add' });
+  assert.deepEqual(JSON.parse(added).events[1], { name: '', label: '', source: 'browser', properties: {} });
+  assert.deepEqual(JSON.parse(changeEventForm(added, { kind: 'remove', index: 1 })), edited);
+  assert.equal(JSON.parse(original).events[0].label, '작업 완료');
+});
+
+test('linked event identity/source/deletion are protected while its label remains editable', () => {
+  const draft = definitions(); draft.workflows.push({ id: 'flow', startEvent: 'start', successEvent: 'operation_completed', failureEvent: null, dimensions: [] });
+  const text = JSON.stringify(draft); assert.equal(eventIsLinked(readEventForm(text), 0), true);
+  for (const action of [{ kind: 'remove', index: 0 }, { kind: 'edit', index: 0, field: 'name', value: 'renamed' }, { kind: 'edit', index: 0, field: 'source', value: 'server' }])
+    assert.throws(() => changeEventForm(text, action), /작업 흐름/);
+  assert.deepEqual(JSON.parse(changeEventForm(text, { kind: 'edit', index: 0, field: 'label', value: '새 이름' })).workflows, draft.workflows);
+});
+
+test('unsupported JSON and event count/byte limits never produce a replacement draft; errors retain a usable focus target', () => {
+  for (const text of ['{', '{"events":[null],"workflows":[]}', '{"events":[{"name":"a","label":"a","source":"unexpected","properties":{}}],"workflows":[]}'])
+    assert.throws(() => changeEventForm(text, { kind: 'add' }));
+  const full = JSON.stringify({ events: Array.from({ length: 50 }, (_, i) => ({ name: `event_${i}`, label: 'Event', source: 'browser', properties: {} })), workflows: [] });
+  assert.throws(() => changeEventForm(full, { kind: 'add' }));
+  assert.throws(() => changeEventForm(JSON.stringify(definitions()), { kind: 'edit', index: 0, field: 'label', value: 'a'.repeat(32768) }));
+  assert.throws(() => changeEventForm(JSON.stringify(definitions()), { kind: 'remove', index: -1 }));
+  assert.equal(eventIssueTarget('{', { path: '/events/0', code: 'invalid_definition' }), null);
+  assert.equal(eventIssueTarget(JSON.stringify(definitions()), { path: '/events/0/name', code: 'duplicate' }), 'schema-event-0-name');
+  assert.equal(eventIssueTarget(JSON.stringify(definitions()), { path: '/events/0/properties', code: 'invalid_definition' }), null);
+  assert.equal(eventIssueTarget('{"events":[],"workflows":[]}', { path: '/events', code: 'definition_limit' }), 'schema-event-add');
+});
+
+test('form changes go through the shared editor draft and invalidate prior approval; reader and review stay locked', async () => {
+  const f = fixture(); await ready(f.editor);
+  const changed = changeEventForm(f.editor.state.draft, { kind: 'edit', index: 0, field: 'label', value: '폼에서 변경' });
+  f.editor.edit('draft', changed); assert.equal(f.editor.state.validatedKey, null); assert.equal(f.editor.state.privacyReviewed, false);
+  await f.editor.publish(); assert.equal(f.calls.some(c => c.init.method === 'PUT'), false);
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish();
+  assert.equal(f.schemas.get(2).events[0].label, '폼에서 변경');
+  f.editor.edit('draft', changeEventForm(f.editor.state.draft, { kind: 'add' }));
+  await f.editor.refresh(); assert.equal(f.editor.state.phase, 'review'); const pending = f.editor.state.draft;
+  f.editor.edit('draft', changeEventForm(pending, { kind: 'remove', index: 1 })); assert.equal(f.editor.state.draft, pending);
+  f.editor.useServer();
+  f.config.owner = false; await f.editor.refresh(); const saved = f.editor.state.draft;
+  f.editor.edit('draft', changeEventForm(saved, { kind: 'add' })); assert.equal(f.editor.state.draft, saved);
+  f.editor.destroy(); f.client.destroy();
 });

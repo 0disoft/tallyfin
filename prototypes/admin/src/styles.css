@@ -1080,3 +1080,17 @@ button {
 .sdk-setup .text-input { width: 100%; box-sizing: border-box; }
 .sdk-code { margin-block: 1rem; font-size: 1rem; }
 @media (max-width: 600px) { .project-create-grid { grid-template-columns: minmax(0, 1fr); } }
+.schema-event-form, .schema-json-editor { min-width: 0; }
+.schema-event-form h3 { margin: 0; font-size: 1.125rem; }
+.schema-event-list { display: grid; gap: 1rem; margin-block: 1rem; }
+.schema-event-row { min-width: 0; margin: 0; padding: 1rem; border: 1px solid #dfe6ef; border-radius: 6px; }
+.schema-event-row legend { padding-inline: .4rem; font-size: 1rem; font-weight: 600; }
+.schema-event-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .9fr); gap: 1rem; }
+.schema-event-fields .text-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.schema-event-fields input:read-only, .schema-event-fields select:disabled { background: #f1f5f9; color: #475569; }
+.schema-event-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.schema-event-footer .field-help { flex: 1 1 12rem; margin: 0; }
+.schema-event-notice { font-size: 1rem; margin-top: .5rem; }
+.schema-json-editor summary { cursor: pointer; font-weight: 600; padding-block: .75rem; }
+.schema-json-editor .settings-field { margin-top: .75rem; }
+@media (max-width: 900px) { .schema-event-fields { grid-template-columns: minmax(0, 1fr); } }

@@ -4,6 +4,8 @@ import { SchemaEditor } from './api/schema-editor.ts';
 import type { SchemaState } from './api/schema-editor.ts';
 import { readDraft } from './api/schema-contract.ts';
 import type { SchemaIssueCode } from './api/schema-contract.ts';
+import SchemaEventForm from './SchemaEventForm.tsx';
+import { eventIssueTarget } from './api/schema-event-form.ts';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름 최대 10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -14,6 +16,7 @@ const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
 
 export default function LiveSchemas({ client, projectId, refreshTick, onVersionChange }: { client: ApiClient; projectId: string; refreshTick: number; onVersionChange?: (version: number) => void }) {
   const [state, setState] = useState<SchemaState | null>(null);
+  const [jsonOpen, setJsonOpen] = useState(false);
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
   const previousVersion = useRef<number | null | undefined>(undefined);
   const version = state?.phase === 'ready' ? state.snapshot?.page.latestVersion : undefined;
@@ -29,7 +32,14 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   }, [client, projectId]);
   useEffect(() => { if (tick.current !== refreshTick) { tick.current = refreshTick; void editorRef.current?.refresh(); } }, [refreshTick]);
   const issue = state?.report?.issues[0];
-  useEffect(() => { if (state?.formError || issue) inputRef.current?.focus(); }, [state?.formError, issue]);
+  useEffect(() => {
+    if (!state?.formError && !issue) return;
+    const target = issue && state ? eventIssueTarget(state.draft, issue) : null;
+    if (target) { document.getElementById(target)?.focus(); return; }
+    setJsonOpen(true);
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [state?.formError, issue]);
   if (!state || !state.snapshot) return <section className="settings-section schema-section" aria-busy={!state || state.phase === 'loading'}>
     <h2>이벤트 스키마</h2>
     <p role={state?.phase === 'error' ? 'alert' : 'status'}>{state?.phase === 'error' ? state.message : '스키마 목록과 권한을 불러오는 중이에요.'}</p>
@@ -76,13 +86,17 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
       <div className="settings-field schema-version-field"><label className="field-label" htmlFor="schema-version">발행할 새 버전</label>
         <input className="text-input" id="schema-version" inputMode="numeric" value={state.target} disabled={!editable} onChange={e => editorRef.current?.edit('target', e.target.value)} aria-describedby="schema-version-help" />
         <p className="field-help" id="schema-version-help">최신 버전보다 큰 정수. 최대 2,147,483,647.</p></div>
+      <SchemaEventForm draft={state.draft} editable={editable} issue={issue} onChange={next => editorRef.current?.edit('draft', next)}
+        onOpenJson={() => { setJsonOpen(true); requestAnimationFrame(() => inputRef.current?.focus()); }} />
+      <details className="schema-json-editor" open={jsonOpen} onToggle={event => setJsonOpen(event.currentTarget.open)}>
+        <summary>JSON 직접 편집 · 속성·작업 흐름</summary>
       <div className="settings-field"><label className="field-label" htmlFor="schema-draft">스키마 정의 (JSON)</label>
         <textarea id="schema-draft" ref={inputRef} className="text-input schema-textarea" rows={18} spellCheck={false} value={state.draft} readOnly={!editable}
           onChange={e => editorRef.current?.edit('draft', e.target.value)} aria-invalid={Boolean(state.formError || issue) || undefined} aria-describedby="schema-draft-help schema-errors" />
         <p className="field-help" id="schema-draft-help">events와 workflows 배열만 입력해요. 이벤트는 1~50개, 흐름은 최대 10개예요. 이름은 영문 소문자·숫자·밑줄로 써요.</p>
+      </div></details>
         <div id="schema-errors">{state.formError && <p className="form-error" role="alert">{state.formError}</p>}
           {issue && <p className="form-error" role="alert"><code>{issue.path || '전체 정의'}</code> — {ISSUE_TEXT[issue.code]}</p>}</div>
-      </div>
       <details className="schema-preview"><summary>초안 미리보기{preview ? ` · 이벤트 ${preview.events.length}개 · 흐름 ${preview.workflows.length}개` : ''}</summary>
         {preview ? <div className="table-scroll" tabIndex={0} aria-label="초안 이벤트 목록"><table className="event-table"><caption className="sr-only">검증 전 초안의 이벤트 목록</caption>
           <thead><tr><th scope="col">이벤트</th><th scope="col">표시 이름</th><th scope="col">출처</th></tr></thead>
