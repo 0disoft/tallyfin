@@ -126,7 +126,8 @@ export class SchemaEditor {
         page: { ...snapshot.page, latestVersion: Math.max(saved.schemaVersion, snapshot.page.latestVersion ?? 0),
           data: [saved, ...snapshot.page.data.filter(r => r.schemaVersion !== saved.schemaVersion)] } },
         target: nextVersion(saved.schemaVersion), validatedKey: null, privacyReviewed: false, report: null,
-        message: `v${saved.schemaVersion}을 발행했어요. 제품 SDK의 사용 버전은 별도로 전환해 주세요.` });
+        message: saved.schemaStatus === 'retired' ? `v${saved.schemaVersion}은 이미 발행된 사용 중지 버전이에요. 활성 상태로 바꾸지 않았어요.`
+          : `v${saved.schemaVersion} 발행을 완료했어요. 제품 SDK의 사용 버전은 별도로 전환해 주세요.` });
     } catch (error) {
       if (!this.#current(generation)) return;
       if (error instanceof ApiError && error.kind === 'invalid_request') this.#set({ phase: 'ready', pending: null, validatedKey: null, privacyReviewed: false, message: message(error) });

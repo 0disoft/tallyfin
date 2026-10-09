@@ -3,6 +3,7 @@ import type { BrowserLogin } from './auth/client';
 import { ArrowRight, CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import { Trend } from './Dashboard';
 import LiveSettings from './LiveSettings';
+import LiveSchemas from './LiveSchemas';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import { missingBrowserEvents } from './api/coverage';
@@ -309,7 +310,10 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
     {projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>서버가 이 토큰에 부여한 프로젝트 grant가 없어요. 다른 토큰으로 연결해 주세요.</p></section>}
-    {view === 'settings' && activeProjectId && <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />}
+    {view === 'settings' && activeProjectId && <>
+      <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />
+      <LiveSchemas key={`schemas-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={settingsRefreshTick} />
+    </>}
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && main.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && main.status === 'error' && main.error && <ErrorPanel error={main.error} onRetry={retry} />}
