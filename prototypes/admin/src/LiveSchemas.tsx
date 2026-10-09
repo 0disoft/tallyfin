@@ -6,6 +6,7 @@ import { readDraft } from './api/schema-contract.ts';
 import type { SchemaIssueCode } from './api/schema-contract.ts';
 import SchemaEventForm from './SchemaEventForm.tsx';
 import { eventIssueTarget } from './api/schema-event-form.ts';
+import { propertyIssueTarget } from './api/schema-property-form.ts';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름 최대 10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -34,8 +35,8 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   const issue = state?.report?.issues[0];
   useEffect(() => {
     if (!state?.formError && !issue) return;
-    const target = issue && state ? eventIssueTarget(state.draft, issue) : null;
-    if (target) { document.getElementById(target)?.focus(); return; }
+    const target = issue && state ? propertyIssueTarget(state.draft, issue) ?? eventIssueTarget(state.draft, issue) : null;
+    if (target) { const frame = requestAnimationFrame(() => document.getElementById(target)?.focus()); return () => cancelAnimationFrame(frame); }
     setJsonOpen(true);
     const frame = requestAnimationFrame(() => inputRef.current?.focus());
     return () => cancelAnimationFrame(frame);

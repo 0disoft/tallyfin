@@ -1094,3 +1094,16 @@ button {
 .schema-json-editor summary { cursor: pointer; font-weight: 600; padding-block: .75rem; }
 .schema-json-editor .settings-field { margin-top: .75rem; }
 @media (max-width: 900px) { .schema-event-fields { grid-template-columns: minmax(0, 1fr); } }
+.schema-property-form { min-width: 0; margin-top: 1rem; border-top: 1px solid #e2e8f0; padding-top: .5rem; }
+.schema-property-form summary { cursor: pointer; font-size: 1rem; font-weight: 600; padding-block: .5rem; }
+.schema-property-form h4 { font-size: 1rem; margin-block: .5rem; }
+.schema-property-list { display: grid; gap: 1rem; margin-block: 1rem; }
+.schema-property-row { min-width: 0; padding: 1rem; margin: 0; border: 1px solid #dfe6ef; border-radius: 6px; }
+.schema-property-row legend { padding-inline: .4rem; font-size: 1rem; }
+.schema-property-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.schema-property-row .text-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.schema-property-row textarea { font: inherit; resize: vertical; padding: .75rem; }
+.schema-property-row input:read-only, .schema-property-row textarea:read-only, .schema-property-row select:disabled { background: #f1f5f9; color: #475569; }
+.schema-property-required { display: flex; align-items: center; gap: .5rem; margin-block: .75rem; font-size: 1rem; }
+.schema-property-required input { width: 1.125rem; height: 1.125rem; margin: 0; }
+@media (max-width: 600px) { .schema-property-fields { grid-template-columns: minmax(0, 1fr); } }

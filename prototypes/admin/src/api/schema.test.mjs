@@ -4,6 +4,8 @@ import { ApiClient, ApiError } from './client.ts';
 import { SchemaEditor } from './schema-editor.ts';
 import { definitionHash, parseSchemaValidation, parseSchemaPage } from './schema-contract.ts';
 import { changeEventForm, eventIsLinked, eventIssueTarget, readEventForm } from './schema-event-form.ts';
+import { changePropertyForm, propertyChoices, propertyIsDimension, propertyIssueTarget, readPropertyForm } from './schema-property-form.ts';
+import { validateSchemaDraft } from '../../../../packages/core/src/schema.ts';
 
 const definitions = () => ({ events: [{ name: 'operation_completed', label: '작업 완료', source: 'browser', properties: {} }], workflows: [] });
 const metadata = version => ({ schemaVersion: version, schemaStatus: 'active', publishedAt: '2026-10-09T00:00:00.000Z' });
@@ -148,5 +150,78 @@ test('form changes go through the shared editor draft and invalidate prior appro
   f.editor.useServer();
   f.config.owner = false; await f.editor.refresh(); const saved = f.editor.state.draft;
   f.editor.edit('draft', changeEventForm(saved, { kind: 'add' })); assert.equal(f.editor.state.draft, saved);
+  f.editor.destroy(); f.client.destroy();
+});
+
+test('property add/rename/edit/remove preserves other properties and workflows and cannot overwrite a name', () => {
+  const draft = definitions(); draft.events[0].properties = { original: { type: 'boolean', required: true, purpose: 'Original', extra: { preserved: true } } };
+  draft.workflows = [{ id: 'unrelated', dimensions: ['other'], startEvent: 'other', successEvent: 'done' }];
+  const original = JSON.stringify(draft), added = changePropertyForm(original, 0, { kind: 'add' });
+  let edited = changePropertyForm(added, 0, { kind: 'rename', name: 'property_1', value: 'format' });
+  assert.throws(() => changePropertyForm(edited, 0, { kind: 'rename', name: 'format', value: 'original' }), /덮어쓰지/);
+  edited = changePropertyForm(edited, 0, { kind: 'purpose', name: 'format', value: 'Public format' });
+  assert.deepEqual(JSON.parse(edited).events[0].properties.original, draft.events[0].properties.original);
+  assert.deepEqual(JSON.parse(edited).workflows, draft.workflows);
+  assert.deepEqual(JSON.parse(changePropertyForm(edited, 0, { kind: 'remove', name: 'format' })), draft);
+  assert.equal(JSON.parse(original).events[0].properties.format, undefined);
+});
+
+test('property type conversion preserves shared metadata, explicitly replaces only old type fields, and retains incomplete numeric/enum input', () => {
+  const draft = definitions(); draft.events[0].properties = { field: { type: 'enum', required: true, purpose: 'Public category', values: ['one', 'two'], extra: true } };
+  let edited = changePropertyForm(JSON.stringify(draft), 0, { kind: 'type', name: 'field', value: 'integer' });
+  assert.deepEqual(JSON.parse(edited).events[0].properties.field, { type: 'integer', required: true, purpose: 'Public category', minimum: 0, maximum: 1, extra: true });
+  for (const value of ['', '-', '9007199254740993', '0.5']) {
+    const next = changePropertyForm(edited, 0, { kind: 'minimum', name: 'field', value });
+    assert.equal(JSON.parse(next).events[0].properties.field.minimum, value);
+    assert.equal(validateSchemaDraft(JSON.parse(next)).valid, false);
+  }
+  edited = changePropertyForm(edited, 0, { kind: 'type', name: 'field', value: 'enum' });
+  edited = changePropertyForm(edited, 0, { kind: 'values', name: 'field', value: 'one\n\none' });
+  assert.deepEqual(JSON.parse(edited).events[0].properties.field.values, ['one', '', 'one']);
+  assert.equal(propertyChoices(JSON.parse(edited).events[0].properties.field), null);
+});
+
+test('workflow dimension properties lock identity and signature but permit purpose and unrelated properties', () => {
+  const draft = definitions(); draft.events[0].properties = { category: { type: 'enum', required: true, purpose: 'Category', values: ['one'] }, other: { type: 'boolean', required: false, purpose: 'Flag' } };
+  draft.workflows = [{ id: 'flow', startEvent: 'start', successEvent: 'operation_completed', failureEvent: null, dimensions: ['category'] }];
+  const text = JSON.stringify(draft); assert.equal(propertyIsDimension(readEventForm(text), 0, 'category'), true);
+  for (const action of [{ kind: 'remove', name: 'category' }, { kind: 'rename', name: 'category', value: 'renamed' }, { kind: 'type', name: 'category', value: 'boolean' },
+    { kind: 'required', name: 'category', value: false }, { kind: 'values', name: 'category', value: 'two' }])
+    assert.throws(() => changePropertyForm(text, 0, action), /비교 기준/);
+  const next = JSON.parse(changePropertyForm(text, 0, { kind: 'purpose', name: 'category', value: 'New purpose' }));
+  assert.deepEqual(next.workflows, draft.workflows); assert.deepEqual(next.events[0].properties.category.values, ['one']);
+  assert.equal(JSON.parse(changePropertyForm(text, 0, { kind: 'required', name: 'other', value: true })).events[0].properties.other.required, true);
+});
+
+test('property count, combinations and unsupported JSON retain server limits and focus mapping', () => {
+  const draft = definitions(); draft.events[0].properties = Object.fromEntries(['a', 'b', 'c', 'd'].map(name => [name, { type: 'boolean', required: false, purpose: 'Flag' }]));
+  const text = JSON.stringify(draft); assert.throws(() => changePropertyForm(text, 0, { kind: 'add' }));
+  const bad = JSON.stringify({ ...draft, events: [{ ...draft.events[0], properties: { unsupported: { type: 'custom' } } }] });
+  assert.throws(() => changePropertyForm(bad, 0, { kind: 'add' })); assert.throws(() => readPropertyForm(readEventForm(text), -1));
+  assert.equal(propertyChoices({ type: 'integer', required: false, purpose: 'Range', minimum: 0, maximum: 31 }), 33);
+  draft.events[0].properties.a = { type: 'integer', required: true, purpose: 'Range', minimum: 0, maximum: 31 };
+  const cardinalityIssue = validateSchemaDraft(draft).issues[0]; assert.equal(cardinalityIssue.code, 'cardinality_limit');
+  assert.equal(propertyIssueTarget(JSON.stringify(draft), cardinalityIssue), 'schema-event-0-properties-heading');
+  assert.equal(propertyIssueTarget(JSON.stringify(draft), { path: '/events/0', code: 'cardinality_limit' }), 'schema-event-0-properties-heading');
+  draft.events[0].properties.a.minimum = '';
+  assert.equal(propertyIssueTarget(JSON.stringify(draft), { path: '/events/0/properties/a', code: 'invalid_definition' }), 'schema-event-0-property-0-minimum');
+  assert.equal(propertyIssueTarget(bad, { path: '/events/0/properties/unsupported', code: 'invalid_definition' }), null);
+});
+
+test('valid property form output passes the actual core validator, invalid inputs cannot reuse publishing approval', async () => {
+  const f = fixture(); await ready(f.editor);
+  let next = changePropertyForm(f.editor.state.draft, 0, { kind: 'add' });
+  next = changePropertyForm(next, 0, { kind: 'rename', name: 'property_1', value: 'format' });
+  next = changePropertyForm(next, 0, { kind: 'type', name: 'format', value: 'enum' });
+  next = changePropertyForm(next, 0, { kind: 'purpose', name: 'format', value: 'Public formats' });
+  next = changePropertyForm(next, 0, { kind: 'values', name: 'format', value: 'pdf\npng' });
+  assert.equal(validateSchemaDraft(JSON.parse(next)).valid, true);
+  f.editor.edit('draft', next); assert.equal(f.editor.state.privacyReviewed, false); await f.editor.publish(); assert.equal(f.schemas.has(2), false);
+  f.config.validate = async (_url, init) => response(200, validateSchemaDraft(JSON.parse(init.body)));
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish(); assert.deepEqual(f.schemas.get(2).events[0].properties.format.values, ['pdf', 'png']);
+  f.editor.edit('draft', changePropertyForm(f.editor.state.draft, 0, { kind: 'values', name: 'format', value: 'pdf\npdf' }));
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish(); assert.equal(f.schemas.has(3), false);
+  f.config.owner = false; await f.editor.refresh(); const saved = f.editor.state.draft;
+  f.editor.edit('draft', changePropertyForm(saved, 0, { kind: 'remove', name: 'format' })); assert.equal(f.editor.state.draft, saved);
   f.editor.destroy(); f.client.destroy();
 });
