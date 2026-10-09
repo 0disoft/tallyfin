@@ -1159,6 +1159,15 @@ button {
 .diagnostic-facts > div { padding: 1rem 0; border-bottom: 1px solid #e2e8f0; min-width: 0; }
 .diagnostic-facts dt { color: #64748b; font-size: 0.95rem; margin-bottom: 0.4rem; }
 .diagnostic-facts dd { margin: 0; font-size: 1.1rem; font-weight: 600; overflow-wrap: anywhere; }
+.collection-rejections { border-block: 1px solid #e2e8f0; padding: 0.75rem 0 1.5rem; margin-block: 1.5rem; }
+.rejection-details { margin-top: 1rem; }
+.rejection-details summary { cursor: pointer; font-weight: 600; padding-block: 0.4rem; }
+.rejection-table-scroll { overflow-x: auto; margin-top: 0.5rem; }
+.rejection-table-scroll table { width: 100%; border-collapse: collapse; font-size: 1rem; }
+.rejection-table-scroll caption { text-align: left; color: #64748b; padding-block: 0.75rem; }
+.rejection-table-scroll th, .rejection-table-scroll td { text-align: left; padding: 0.85rem 0.75rem; border-bottom: 1px solid #e2e8f0; white-space: nowrap; }
+.rejection-table-scroll tbody th { font-weight: 500; }
+.rejection-table-scroll th:nth-child(2), .rejection-table-scroll td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; }
 .diagnostic-origins { padding-left: 1.5rem; overflow-wrap: anywhere; }
 .diagnostic-troubleshooting { margin-top: 1.5rem; }
 .diagnostic-troubleshooting li { margin: 0.65rem 0; }

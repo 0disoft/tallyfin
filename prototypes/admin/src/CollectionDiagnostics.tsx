@@ -3,6 +3,7 @@ import type { ApiClient } from './api/client.ts';
 import { ApiError } from './api/client.ts';
 import { loadCollectionDiagnostics, originMatch, type CollectionDiagnostics as Diagnostics } from './api/collection-diagnostics.ts';
 import { formatCount } from './data.ts';
+import CollectionRejections from './CollectionRejections.tsx';
 
 export default function CollectionDiagnostics({ client, projectId, version, refreshTick }: {
   client: ApiClient; projectId: string; version: number | null; refreshTick: number;
@@ -17,7 +18,7 @@ export default function CollectionDiagnostics({ client, projectId, version, refr
       .then(data => { if (!controller.signal.aborted) setRead({ client, key, data }); })
       .catch(() => { if (!controller.signal.aborted) {
         const error = new ApiError('contract', '진단 결과를 읽지 못했어요. 다시 확인해 주세요.');
-        setRead({ client, key, data: { settings: { error }, schema: { error }, receipt: null } });
+        setRead({ client, key, data: { settings: { error }, schema: { error }, receipt: null, rejections: { error } } });
       } });
     return () => controller.abort();
   }, [client, projectId, version, key]);
@@ -43,6 +44,7 @@ export default function CollectionDiagnostics({ client, projectId, version, refr
       {data.settings.error && <p className="form-error" role="alert">프로젝트 설정 조회 실패: {data.settings.error.message}</p>}
       {data.schema.error && <p className="form-error" role="alert">스키마 조회 실패: {data.schema.error.message}</p>}
       {data.receipt?.error && <p className="form-error" role="alert">수신 기록 조회 실패: {data.receipt.error.message}</p>}
+      <CollectionRejections read={data.rejections} />
       {settings?.project.status === 'paused' && <p className="notice">프로젝트가 일시정지되어 있어요. 새 수집 요청은 거부돼요. {settings.canEdit ? '아래 프로젝트 설정에서 상태를 변경할 수 있어요.' : '프로젝트 소유자에게 수집 재개를 요청해 주세요.'}</p>}
       {schema?.schemaStatus === 'retired' && <p className="notice">이 스키마는 사용 중지 상태예요. SDK가 사용하는 버전과 발행된 활성 스키마를 확인해 주세요.</p>}
       {settings && <>
@@ -55,7 +57,7 @@ export default function CollectionDiagnostics({ client, projectId, version, refr
         <details><summary>현재 허용 출처 {settings.allowedOrigins.length}개</summary><ul className="diagnostic-origins">{settings.allowedOrigins.map(value => <li key={value}><code>{value}</code></li>)}</ul></details>
       </>}
       <details className="diagnostic-troubleshooting"><summary>수집되지 않을 때 확인할 항목</summary>
-        <p className="context-note">거부 건수·거부율·최근 거부 원인은 이 API에서 제공하지 않아요. 아래는 실제 실패 이력이 아닌 확인 순서예요. 설정 한도도 사용량이나 잔여량을 뜻하지 않아요.</p>
+        <p className="context-note">거부 기록에는 누락이 있을 수 있어요. 아래는 실제 실패 이력이 아닌 확인 순서예요. 설정 한도도 사용량이나 잔여량을 뜻하지 않아요.</p>
         <ol><li>프로젝트가 수집 허용 상태인지, 서비스 출처가 허용 목록에 있는지 확인해요.</li>
           <li>SDK의 프로젝트 ID·스키마 버전과 등록된 이벤트 이름·속성 형식이 같은지 확인해요.</li>
           <li>브라우저 개발자 도구의 네트워크에서 수집 응답을 확인해요. 429는 요청 또는 일일 한도에 걸린 경우예요. 응답의 Retry-After에 따라 기다려요.</li>

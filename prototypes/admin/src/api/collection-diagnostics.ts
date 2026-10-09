@@ -3,12 +3,14 @@ import { ApiError } from './client.ts';
 import { todayInZone } from './dates.ts';
 import { assertMeta } from './period-comparison.ts';
 import type { ProjectSettings, Registry, SummaryResponse } from './types.ts';
+import { rejectionRange, type RejectionResponse } from './rejection-diagnostics.ts';
 
 export type DiagnosticRead<T> = { value: T; error?: never } | { value?: never; error: ApiError };
 export type CollectionDiagnostics = {
   settings: DiagnosticRead<ProjectSettings>;
   schema: DiagnosticRead<Registry>;
   receipt: DiagnosticRead<SummaryResponse> | null;
+  rejections: DiagnosticRead<RejectionResponse>;
 };
 
 function errorOf(error: unknown): ApiError {
@@ -43,13 +45,14 @@ export function validateReceipt(summary: SummaryResponse, schema: Registry, date
   return summary;
 }
 
-/** Only explicit reads; no polling, probe event, credential export or rejection inference. */
+/** Independent explicit reads; no polling, probe event or rejection inference. */
 export async function loadCollectionDiagnostics(client: ApiClient, projectId: string, version: number | null,
   signal: AbortSignal, now = new Date()): Promise<CollectionDiagnostics> {
-  const [settings, schema] = await Promise.all([
+  const [settings, schema, rejections] = await Promise.all([
     read(() => client.getSettings(projectId, { signal })),
     read(() => version === null ? Promise.reject(new ApiError('invalid_request', '유효한 스키마 버전을 입력해 주세요.'))
       : client.getSchema(projectId, version, { signal })),
+    read(() => client.getCollectionRejections(projectId, { ...rejectionRange(now), signal })),
   ]);
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
   let receipt: CollectionDiagnostics['receipt'] = null;
@@ -61,7 +64,7 @@ export async function loadCollectionDiagnostics(client: ApiClient, projectId: st
     });
   }
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-  return { settings, schema, receipt };
+  return { settings, schema, receipt, rejections };
 }
 
 export function originMatch(input: string, allowedOrigins: string[]): 'empty' | 'invalid' | 'allowed' | 'denied' {

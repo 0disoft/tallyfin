@@ -28,6 +28,7 @@ import { definitionHash, parsePublishedSchema, parseSchemaPage, parseSchemaValid
 import type { PublishedSchema, SchemaDraft, SchemaPage, SchemaPublication, SchemaValidation } from './schema-contract.ts';
 import { creationHash, parseCreatedProject } from './project-creation.ts';
 import type { CreatedProject, ProjectCreation } from './project-creation.ts';
+import { parseRejectionResponse, type RejectionResponse } from './rejection-diagnostics.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -244,6 +245,15 @@ export class ApiClient {
       Object.entries(update.limits ?? {}).some(([key, value]) => result.limits[key as keyof typeof result.limits] !== value))
       throw new ApiError('contract', '저장 응답에 변경한 값이 반영되지 않았어요.');
     return result;
+  }
+
+  async getCollectionRejections(projectId: string,
+    options: { from: string; to: string; signal?: AbortSignal }): Promise<RejectionResponse> {
+    const response = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/collection/rejections`,
+      { from: options.from, to: options.to }, options.signal), parseRejectionResponse);
+    if (response.meta.projectId !== projectId || response.meta.from !== options.from || response.meta.to !== options.to)
+      throw new ApiError('contract', '거부 집계의 프로젝트·기간이 요청과 달라요.');
+    return response;
   }
 
   async getSummary(

@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ApiError } from './client.ts';
 import { loadCollectionDiagnostics, originMatch, validateReceipt } from './collection-diagnostics.ts';
+import { readFileSync } from 'node:fs';
+import { rejectionRange } from './rejection-diagnostics.ts';
 
 function fixture() {
   const settings = { project: { id: 'example', name: 'Example', status: 'paused', timeZone: 'Asia/Seoul' },
@@ -10,10 +12,12 @@ function fixture() {
   const summary = { meta: { projectId: 'example', schemaVersion: 2, source: 'browser', from: '2026-10-11', to: '2026-10-11', timeZone: 'Asia/Seoul',
     generatedAt: '2026-10-10T15:01:00Z', latestReceivedAt: null, coverage: 'observed-only' }, totalEvents: 0, events: [{ name: 'view', count: 0 }] };
   const calls = [];
+  const rejections = JSON.parse(readFileSync(new URL('../../../../api/examples/collection-rejections-response.json', import.meta.url)));
   const client = { getSettings: async (...args) => { calls.push(['settings', ...args]); return settings; },
     getSchema: async (...args) => { calls.push(['schema', ...args]); return schema; },
-    getSummary: async (...args) => { calls.push(['summary', ...args]); return summary; } };
-  return { settings, schema, summary, client, calls };
+    getSummary: async (...args) => { calls.push(['summary', ...args]); return summary; },
+    getCollectionRejections: async (...args) => { calls.push(['rejections', ...args]); return rejections; } };
+  return { settings, schema, summary, rejections, client, calls };
 }
 const now = new Date('2026-10-10T15:01:00Z');
 test('diagnostics use project-local today, preserve null/zero and paused/retired settings with read-only requests', async () => {
@@ -21,8 +25,9 @@ test('diagnostics use project-local today, preserve null/zero and paused/retired
   const data = await loadCollectionDiagnostics(f.client, 'example', 2, signal, now);
   assert.equal(data.settings.value.project.status, 'paused'); assert.equal(data.schema.value.schemaStatus, 'retired');
   assert.equal(data.receipt.value.meta.latestReceivedAt, null); assert.equal(data.receipt.value.totalEvents, 0);
-  assert.deepEqual(f.calls.map(call => call[0]), ['settings', 'schema', 'summary']);
-  assert.deepEqual(f.calls[2], ['summary', 'example', { schemaVersion: 2, from: '2026-10-11', to: '2026-10-11', signal }]);
+  assert.deepEqual(f.calls.map(call => call[0]), ['settings', 'schema', 'rejections', 'summary']);
+  assert.deepEqual(f.calls[2], ['rejections', 'example', { ...rejectionRange(now), signal }]);
+  assert.deepEqual(f.calls[3], ['summary', 'example', { schemaVersion: 2, from: '2026-10-11', to: '2026-10-11', signal }]);
   f.summary.meta.latestReceivedAt = '2026-10-01T00:00:00Z';
   assert.equal(validateReceipt(f.summary, f.schema, '2026-10-11').meta.latestReceivedAt, '2026-10-01T00:00:00Z');
   f.summary.meta.latestReceivedAt = '2026-10-10T15:01:00.100Z'; // DB read after generatedAt.
@@ -57,7 +62,17 @@ test('cancelled diagnostics cannot publish an old project result or launch its d
   const pending = loadCollectionDiagnostics(f.client, 'example', 2, controller.signal, now);
   controller.abort(); resolve(f.schema);
   await assert.rejects(pending, { name: 'AbortError' });
-  assert.deepEqual(f.calls.map(call => call[0]), ['settings']);
+  assert.deepEqual(f.calls.map(call => call[0]), ['settings', 'rejections']);
+});
+test('rejection failures remain unknown while settings and receipts stay available; no schema still permits rejections', async () => {
+  const f = fixture(), signal = new AbortController().signal;
+  f.client.getCollectionRejections = async () => { throw new ApiError('storage_unavailable', 'Unavailable'); };
+  const partial = await loadCollectionDiagnostics(f.client, 'example', 2, signal, now);
+  assert.ok(partial.settings.value); assert.ok(partial.schema.value); assert.ok(partial.receipt.value);
+  assert.equal(partial.rejections.value, undefined); assert.equal(partial.rejections.error.kind, 'storage_unavailable');
+  const g = fixture();
+  const noSchema = await loadCollectionDiagnostics(g.client, 'example', null, signal, now);
+  assert.equal(noSchema.receipt, null); assert.equal(noSchema.rejections.value.summary.rejectedRequests, 3);
 });
 test('local origin checks extract paths but require exact protocol, host and port without accepting credentials', () => {
   const allowed = ['https://app.example.com', 'http://localhost:5173'];
