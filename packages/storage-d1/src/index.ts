@@ -1,5 +1,5 @@
-import { canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, validateRegistry } from '@tallyfin/core';
-import type { AttemptState, CollectionStore, PreparedBatch, Receipt, Registry } from '@tallyfin/core';
+import { canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validateRegistry } from '@tallyfin/core';
+import type { AttemptState, CollectionStore, PreparedBatch, Receipt, Registry, RejectionReason } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
@@ -26,14 +26,31 @@ export class D1Store implements CollectionStore {
       limits: { requestsPerMinute: row.requests_per_minute, newReceiptsPerUtcDay: row.new_receipts_per_utc_day } };
   }
   async admit(projectId: string, receivedAt: number, limit: number): Promise<boolean> {
+    if (!PROJECT_ID.test(projectId) || !integer(receivedAt, 0, 8_640_000_000_000_000) || !integer(limit, 1, 600)) throw new CollectionError('invalid_request', 400);
     const minute = Math.floor(receivedAt / 60_000) * 60_000;
     const result = await this.db.batch<{ request_count: number }>([this.db.prepare(`
       INSERT INTO ingest_minute_usage (project_id, minute_start, request_count) VALUES (?, ?, 1)
-      ON CONFLICT(project_id, minute_start) DO UPDATE SET request_count = min(request_count + 1, ?)
-      RETURNING request_count`).bind(projectId, minute, limit + 1)]);
+      ON CONFLICT(project_id, minute_start) DO UPDATE SET request_count = min(request_count + 1, ?),
+        rejections_json = CASE WHEN request_count >= ? THEN json_set(rejections_json, '$.minute_limit',
+          json_object('count', min(coalesce(json_extract(rejections_json, '$.minute_limit.count'), 0) + 1, 9007199254740991),
+            'lastRejectedAt', max(coalesce(json_extract(rejections_json, '$.minute_limit.lastRejectedAt'), 0), ?)))
+          ELSE rejections_json END
+      RETURNING request_count`).bind(projectId, minute, limit + 1, limit, receivedAt)]);
     const count = result[0]?.results[0]?.request_count;
     if (count === undefined) throw new CollectionError('storage_unavailable', 503);
     return count <= limit;
+  }
+  /** One update for an admitted, rejected request; no retry or request material retained. */
+  async recordRejection(projectId: string, receivedAt: number, reason: RejectionReason): Promise<void> {
+    if (!PROJECT_ID.test(projectId) || !integer(receivedAt, 0, 8_640_000_000_000_000) || !REJECTION_REASONS.includes(reason) || reason === 'minute_limit')
+      throw new CollectionError('invalid_request', 400);
+    const path = `$.${reason}`;
+    const result = await this.db.batch([this.db.prepare(`UPDATE ingest_minute_usage SET rejections_json =
+      json_set(rejections_json, ?, json_object('count', min(coalesce(json_extract(rejections_json, ?), 0) + 1, 600),
+        'lastRejectedAt', max(coalesce(json_extract(rejections_json, ?), 0), ?)))
+      WHERE project_id = ? AND minute_start = ?`).bind(path, `${path}.count`, `${path}.lastRejectedAt`, receivedAt,
+        projectId, Math.floor(receivedAt / 60_000) * 60_000)]);
+    if (result.length !== 1 || !result[0]?.success || result[0].meta.changes !== 1) throw new CollectionError('storage_unavailable', 503);
   }
   async loadRegistry(projectId: string, version: number): Promise<Registry | null> {
     const snapshot = await this.configuration(projectId, version);
@@ -131,7 +148,9 @@ export class D1Store implements CollectionStore {
     const statements = ['event_receipts', 'workflow_attempts', 'ingest_daily_usage'].map(table => this.db.prepare(
       `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND expires_at <= ? LIMIT ?)`
     ).bind(projectId, now, limit));
-    statements.push(this.db.prepare(`DELETE FROM ingest_minute_usage WHERE rowid IN (SELECT rowid FROM ingest_minute_usage WHERE project_id = ? AND minute_start < ? LIMIT ?)`).bind(projectId, Math.floor(now / 60_000) * 60_000 - 120_000, limit));
+    statements.push(this.db.prepare(`DELETE FROM ingest_minute_usage WHERE rowid IN (SELECT rowid FROM ingest_minute_usage WHERE project_id = ?
+      AND (minute_start < ? OR (rejections_json = '{}' AND minute_start < ?)) LIMIT ?)`).bind(projectId,
+        Math.floor(now / DAY) * DAY - 6 * DAY, Math.floor(now / 60_000) * 60_000 - 120_000, limit));
     for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date']])
       statements.push(this.db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND ${column} < ? LIMIT ?)`).bind(projectId, oldest, limit));
     const result = await this.db.batch(statements);

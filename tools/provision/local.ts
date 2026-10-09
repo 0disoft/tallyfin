@@ -13,20 +13,28 @@ export async function openLocal(stateDir: string) {
 }
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
-  const migrations: { name: string; statements: string[]; tables: string[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql']) {
+  const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
+  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql']) {
     const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
     // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
     const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
     const tables = [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
-    migrations.push({ name, statements, tables });
+    const columns = [...sql.matchAll(/ALTER TABLE ([a-z_]+) ADD COLUMN ([a-z_]+)/g)].map(match => ({ table: match[1]!, name: match[2]! }));
+    migrations.push({ name, statements, tables, columns });
   }
   const result = await db.batch<{ name: string }>([db.prepare("SELECT name FROM sqlite_master WHERE type='table'")]);
   if (!result[0]?.success) throw Error();
   const existing = new Set(result[0].results.map(row => row.name));
+  const existingColumns = new Set<string>();
+  for (const table of new Set(migrations.flatMap(migration => migration.columns.map(column => column.table)))) {
+    if (!existing.has(table)) continue;
+    const columns = await db.batch<{ name: string }>([db.prepare(`PRAGMA table_info(${table})`)]);
+    if (!columns[0]?.success) throw Error();
+    for (const column of columns[0].results) existingColumns.add(`${table}.${column.name}`);
+  }
   const missing = migrations.filter(migration => {
-    const count = migration.tables.filter(table => existing.has(table)).length;
-    if (count && count !== migration.tables.length) throw new ProvisionError('partial_database', '불완전한 DB라 초기화를 중단했어요. DB 상태를 확인해 주세요.');
+    const count = migration.tables.filter(table => existing.has(table)).length + migration.columns.filter(column => existingColumns.has(`${column.table}.${column.name}`)).length;
+    if (count && count !== migration.tables.length + migration.columns.length) throw new ProvisionError('partial_database', '불완전한 DB라 초기화를 중단했어요. DB 상태를 확인해 주세요.');
     return count === 0;
   });
   if (apply && missing.length) {
