@@ -47,9 +47,11 @@ failedAttempts는 null, 날짜 끝 + 48시간까지 provisional=true다.
 ## 프로젝트 설정 조회·변경
 
 `GET /v1/projects/{projectId}`는 reader/owner에게 `{project, allowedOrigins, limits,
-settingsHash}`를 돌려준다. paused 프로젝트도 조회하고 schemaVersion은 요구하지 않는다.
-settingsHash는 `project`·`allowedOrigins`·`limits`의 canonical JSON SHA-256이라
-ingest_revision·집계·스키마는 해시에 들어가지 않는다.
+settingsHash, canEdit}`를 돌려준다. `canEdit`는 요청을 보낸 검증된 principal이 그
+프로젝트의 owner grant를 가졌는지 나타내는 snapshot boolean이라 reader에게는 false다.
+paused 프로젝트도 조회하고 schemaVersion은 요구하지 않는다. settingsHash는
+`project`·`allowedOrigins`·`limits`의 canonical JSON SHA-256이라
+ingest_revision·집계·스키마는 해시에 들어가지 않고 `canEdit`도 해시에서 제외한다.
 
 `PATCH /v1/projects/{projectId}`는 owner 전용이다. 본문은 UTF-8 16KiB 이하
 `application/json` 또는 `text/plain`(identity 인코딩)이고 닫힌 JSON으로 검증한다.
@@ -59,8 +61,9 @@ ingest_revision·집계·스키마는 해시에 들어가지 않는다.
 허용한다. `id`·`timeZone`·`schemas`·`grants`·`aggregates`는 바꿀 수 없고 이미
 사용한 한도와 기존 스키마·데이터는 그대로 둔다.
 
-변경은 저장 시점에 grant를 다시 확인하고 `expectedSettingsHash`를 현재 값과 비교해
-원자 UPDATE로 반영한다. owner 자격이 회수되면 403, 해시가 오래됐거나 다른 설정 변경과
+`canEdit`는 조회 스냅샷의 표시용 값이라 저장 권한 판단에 그대로 쓰지 않는다. 변경은
+저장 시점에 grant를 다시 확인하고 `expectedSettingsHash`를 현재 값과 비교해 원자
+UPDATE로 반영한다. owner 자격이 회수되면 403, 해시가 오래됐거나 다른 설정 변경과
 겹치면 `settings_conflict`(409)다. 수집만 일어나 ingest_revision이 올라간 경우는 충돌이
 아니다. 설정 변경은 ingest_revision을 1 올려 진행 중인 수집의 충돌 검사와 맞물린다. 응답이
 유실되거나 409를 받으면 현재 설정을 다시 읽어 비교한 뒤 재시도하고, 새 해시를 그대로
