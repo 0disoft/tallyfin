@@ -10,6 +10,6 @@ function configured(env: CollectorEnv) {
   return cached.worker;
 }
 export default {
-  fetch(request, env) { return configured(env).fetch(request, env); },
+  fetch(request, env, ctx) { return configured(env).fetch(request, env, ctx); },
   scheduled(controller, env) { return configured(env).scheduled(controller, env); },
 } satisfies ExportedHandler<CollectorEnv>;

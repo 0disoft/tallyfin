@@ -38,6 +38,7 @@ export default createWorker(bearer => hostVerify(bearer));
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
+- `GET /v1/projects/{projectId}/collection/rejections?from={UTC-date}&to={UTC-date}` — reader/owner의 수집 거부 진단. 아래 UTC 진단 규칙을 따른다.
 - `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
 - `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
 - `PUT /v1/projects/{projectId}/schemas/{schemaVersion}` — owner의 새 버전 발행.
@@ -60,6 +61,26 @@ failedAttempts는 null, 날짜 끝 + 48시간까지 provisional=true다.
 null 버킷은 없고 관찰된 값만 반환한다. 빈 결과는 buckets=[], 0시도 완료율은 null이다.
 기존 reader/owner grant를 정의·집계와 같은 D1 batch에서 다시 확인한다. 최대7936개
 원본 행을 읽고 초과·손상 데이터는503으로 실패한다. 저장/마이그레이션 변경은 없다.
+
+## 수집 거부 진단 — UTC 수신일
+
+`from`/`to`는 필수 UTC 날짜이며 오늘과 앞 6일 안에서 최대 7개 날짜를 읽는다.
+프로젝트 시간대·스키마 버전·이벤트 발생일과 무관하다. reader/owner는 중지 프로젝트나
+스키마가 없는 프로젝트도 읽을 수 있고, 같은 D1 batch에서 grant와 집계를 검사한다.
+추가/중복 파라미터는 400, 미인증은 401, grant 없음은 403, 프로젝트 없음은 404,
+GET 아닌 메서드는 405, 손상된 JSON/시각/원인/안전 정수·합계/DB 실패는 503이다.
+
+응답은 `meta`(UTC/receivedAt/retentionDays=7/coverage=best-effort), 전체 `summary`,
+모든 요청 날짜의 `days`다. 각 요약은 거부 요청 수·마지막 거부 요청의 수신 시각과
+고정 10개 원인 버킷을 포함한다. 기록이 없으면 0/null이고 저장 실패를 0으로 채우지
+않는다. minute_limit/daily_limit는 공개 응답에서 모두 quota_exceeded지만 여기서는
+구분한다. OPTIONS·잘못된 메서드의 거부도 포함될 수 있다. 이벤트 수·방문자 수·거부율·
+할당량 사용량을 의미하지 않는다. 원문·출처·IP·토큰·requestId·이벤트 ID를 반환하지 않는다.
+
+추가 진단 기록은 best-effort이며 저장 실패·알 수 없는 프로젝트·관리자/API 인증 실패·
+admission DB 실패·마이그레이션 이전 이력은 포함하지 않는다. 진단이 응답 뒤 저장될 수
+있으므로 직후 조회에는 아직 반영되지 않을 수 있다. 조회는 최대 10080분과 7일/10원인
+출력으로 제한하며 프로토타입 진단 화면 연결은 후속이다. [응답 예제](../../api/examples/collection-rejections-response.json)를 따른다.
 
 ## 프로젝트 설정 조회·변경
 

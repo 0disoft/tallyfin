@@ -1041,7 +1041,179 @@ components:
           description: Only observed start-property values. Required workflow dimensions cannot be null. Each bucket includes all requested calendar days, and zero-start days have a null completionRate.
           items:
             $ref: "#/components/schemas/WorkflowPropertyBucket"
+    CollectionRejectionReason:
+      type: string
+      enum: [minute_limit, daily_limit, origin_denied, project_unavailable, unknown_schema, invalid_request, invalid_event, event_conflict, attempt_conflict, storage_unavailable]
+      description: Fixed diagnostic reason; minute_limit and daily_limit both map to quota_exceeded on the collection HTTP response.
+    CollectionRejectionBucket:
+      type: object
+      additionalProperties: false
+      required: [reason, count, lastRejectedAt]
+      properties:
+        reason:
+          $ref: "#/components/schemas/CollectionRejectionReason"
+        count:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        lastRejectedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+            - type: "null"
+    CollectionRejectionSummary:
+      type: object
+      additionalProperties: false
+      required: [rejectedRequests, lastRejectedAt, reasons]
+      properties:
+        rejectedRequests:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        lastRejectedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+            - type: "null"
+        reasons:
+          type: array
+          minItems: 10
+          maxItems: 10
+          description: Each fixed reason appears once. Zero recorded requests has count zero and null lastRejectedAt.
+          items:
+            $ref: "#/components/schemas/CollectionRejectionBucket"
+    CollectionRejectionDay:
+      type: object
+      additionalProperties: false
+      required: [date, rejectedRequests, lastRejectedAt, reasons]
+      properties:
+        date:
+          type: string
+          format: date
+        rejectedRequests:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        lastRejectedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+            - type: "null"
+        reasons:
+          type: array
+          minItems: 10
+          maxItems: 10
+          items:
+            $ref: "#/components/schemas/CollectionRejectionBucket"
+    CollectionRejectionResponse:
+      type: object
+      additionalProperties: false
+      required: [meta, summary, days]
+      properties:
+        meta:
+          type: object
+          additionalProperties: false
+          required: [projectId, from, to, timeZone, dateBasis, generatedAt, retentionDays, coverage]
+          properties:
+            projectId:
+              $ref: "#/components/schemas/ProjectId"
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+            timeZone:
+              type: string
+              const: UTC
+            dateBasis:
+              type: string
+              const: receivedAt
+            generatedAt:
+              type: string
+              format: date-time
+              pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+            retentionDays:
+              type: integer
+              const: 7
+            coverage:
+              type: string
+              const: best-effort
+              description: Recorded public collection rejection requests only. Missing diagnostic writes, unknown projects, admin failures and pre-migration history are excluded; not a delivery-completeness or visitor metric.
+        summary:
+          $ref: "#/components/schemas/CollectionRejectionSummary"
+        days:
+          type: array
+          minItems: 1
+          maxItems: 7
+          description: Every requested UTC date, including zero-record days, in ascending order.
+          items:
+            $ref: "#/components/schemas/CollectionRejectionDay"
 paths:
+  /v1/projects/{projectId}/collection/rejections:
+    get:
+      tags: [Administration]
+      operationId: getCollectionRejections
+      summary: Read recorded collection rejection reasons for a project
+      description: Reader or owner grant required, including paused projects and projects without a schema. Inclusive UTC receipt dates within today and the preceding six days. Project-wide across schema versions. Fixed-minute records only; no raw request data, Origin, IP, token or requestId. New rejection minutes may arrive after this read; best effort, not a rejection rate or quota usage metric.
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: from
+          in: query
+          required: true
+          description: Inclusive UTC receipt date. Today or within the preceding six UTC dates.
+          schema: {type: string, format: date}
+        - name: to
+          in: query
+          required: true
+          description: Inclusive UTC receipt date, not later than today or earlier than from. Maximum seven dates.
+          schema: {type: string, format: date}
+      responses:
+        "200":
+          description: Recorded request counts with best-effort coverage and null timestamps for empty buckets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CollectionRejectionResponse"
+              examples:
+                recorded:
+                  externalValue: ./examples/collection-rejections-response.json
+        "400":
+          description: Invalid UTC dates, project ID, duplicate or unsupported parameters.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        "403":
+          description: Verified principal has no reader/owner grant for this project.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        "404":
+          description: Project does not exist.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        "405":
+          description: Only GET is supported.
+          headers:
+            Allow:
+              schema: {type: string, const: GET}
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
+        "503":
+          description: Storage unavailable, malformed persisted counters or unsafe aggregate; no fabricated zero response.
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ErrorResponse"}
   /v1/projects/{projectId}/batches:
     options:
       tags:

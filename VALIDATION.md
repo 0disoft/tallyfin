@@ -849,3 +849,39 @@ DB source of truth schema.dbml·0004 SQL·마이그레이션 설명·수집/정�
 갱신했다. API HTTP 계약·SDK·의존성·위생 정책·CI·러너·검증 명령은 변경하지 않는다.
 로컬 초기화의 additive-column 감지를 확장했다. lint 명령은 없어 생략했고 HTTP/Worker
 연결 검증은 다음 단계다. 원격 DB·운영 부하·배포는 미검증이며 푸시·배포·Sembom 연동은 없다.
+
+## 2026-10-10 거부 원인 수집·관리자 조회 연결
+
+GET /v1/projects/{projectId}/collection/rejections?from={UTC-date}&to={UTC-date}를 연결했다.
+reader/owner는 스키마가 없거나 중지된 프로젝트도 조회하며 from/to는 오늘을 포함한
+최근 7개 UTC 날짜 안에서 필수다. meta는 UTC/receivedAt/retentionDays=7/coverage=
+best-effort, 전체 summary와 모든 날짜의 days, 고정 10개 reason/count/lastRejectedAt
+버킷을 반환한다. 기록 수가0이면 시각은 null이고 날짜/권한/저장 손상 실패를0으로
+채우지 않는다. 분당/일일 quota_exceeded는 minute_limit/daily_limit로 구분한다.
+
+실제 수집기에서 admission 통과 뒤 발생한 거부만 추가 기록하며 분당 초과는 이미
+기존 admission SQL에서 기록된다. 알려지지 않은 프로젝트·관리자 실패·admission DB
+실패는 제외한다. 진단 저장은 Worker ctx.waitUntil에 묶고 그 포트가 없는 호스트는
+await한다. 저장 실패는 원래 응답을 바꾸지 않고 재시도/원문 로그를 만들지 않는다.
+정상 요청의 진단 기록 쓰기/DB 왕복은 추가하지 않는다. 같은 분의 카운터를 한도+1로
+낮추는 기존 동작을601 포화로 보완하여 설정을 낮췄다가 올려도 카운터가 줄지 않고
+허용/추가 기록 요청이 최대600개에 머물게 했다. 원문·Origin·IP·토큰·requestId는 진단
+DB/응답에 없다. 응답 뒤 기록·진단 저장소 오류·과거 backfill 없음으로 누락될 수 있어
+완전한 거부율이나 전달 증거로 쓰지 않는다. 프로토타입 화면 연결은 다음 슬라이스다.
+
+루트 npm test171/171, npm run typecheck(생성 Worker 타입 포함), OpenAPI의 Bun.YAML
+파싱·새 경로와 응답 예제 버킷/합계 확인, git diff --check를 통과했다. 새 HTTP 테스트
+4개는 실제 거부 요청과 분당/일일 구분·Retry-After·응답/DB 원문 비포함, reader/owner·
+미인증/다른 프로젝트/없는 프로젝트/날짜/중복 파라미터/메서드·권한 회수, 늦은 sink의
+응답 비차단과 실패 무시·재시도 없음, native Worker 실행 컨텍스트와 실제 D1 기록/조회
+smoke를 확인한다. native smoke의 첫 esbuild 실행은 테스트 문자열의 JSON 반환 괄호가
+없어 실패했고 이를 고친 뒤4/4·최종171/171을 통과했다. 저장 테스트에 설정 변경 시
+카운터 비감소·동시12건 기록의 건수/최종 시각 보존을 추가했다. 전체 검증은 약59.5초였고
+변경 없는 관리자 빌드/브라우저 UI를 반복하지 않았다.
+
+OpenAPI·예제, DBML, 제품 명세(source of truth), 관리자·로그·수집·마이그레이션 문서,
+로드맵과 화면 문서의 API 미지원 표현·이 기록을 갱신했다. 최초 DB 변경은0004 additive
+열 확장이고 원격 적용은 하지 않았다. core의 저장/관리자 포트와 Worker 컨텍스트 전달을
+확장했다. SDK·의존성·위생 정책·CI·러너·검증 명령 변경은 없다. lint는 명령이 없어 생략했다.
+운영 부하/실제 인증 제공자/원격 DB/배포·화면 연결은 미검증/후속이다. 단위 테스트 임시
+Miniflare와 개발 서버는 각 테스트가 정리했다. 푸시·배포·Sembom 연동은 없다.

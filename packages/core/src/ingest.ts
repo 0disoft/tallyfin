@@ -86,6 +86,7 @@ export interface CollectionStore {
     allowedOrigins: string[]; limits: import('./types.ts').Registry['limits'];
   } | null>;
   admit(projectId: string, receivedAt: number, limit: number): Promise<boolean>;
+  recordRejection(projectId: string, receivedAt: number, reason: Exclude<import('./rejections.ts').RejectionReason, 'minute_limit'>): Promise<void>;
   loadRegistry(projectId: string, version: number): Promise<import('./types.ts').Registry | null>;
   commit(batch: PreparedBatch, registry: import('./types.ts').Registry): Promise<{ accepted: number; duplicates: number }>;
 }

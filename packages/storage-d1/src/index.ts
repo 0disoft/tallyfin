@@ -30,12 +30,12 @@ export class D1Store implements CollectionStore {
     const minute = Math.floor(receivedAt / 60_000) * 60_000;
     const result = await this.db.batch<{ request_count: number }>([this.db.prepare(`
       INSERT INTO ingest_minute_usage (project_id, minute_start, request_count) VALUES (?, ?, 1)
-      ON CONFLICT(project_id, minute_start) DO UPDATE SET request_count = min(request_count + 1, ?),
+      ON CONFLICT(project_id, minute_start) DO UPDATE SET request_count = min(request_count + 1, 601),
         rejections_json = CASE WHEN request_count >= ? THEN json_set(rejections_json, '$.minute_limit',
           json_object('count', min(coalesce(json_extract(rejections_json, '$.minute_limit.count'), 0) + 1, 9007199254740991),
             'lastRejectedAt', max(coalesce(json_extract(rejections_json, '$.minute_limit.lastRejectedAt'), 0), ?)))
           ELSE rejections_json END
-      RETURNING request_count`).bind(projectId, minute, limit + 1, limit, receivedAt)]);
+      RETURNING request_count`).bind(projectId, minute, limit, receivedAt)]);
     const count = result[0]?.results[0]?.request_count;
     if (count === undefined) throw new CollectionError('storage_unavailable', 503);
     return count <= limit;

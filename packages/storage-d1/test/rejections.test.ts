@@ -45,6 +45,20 @@ test('minute quota uses one existing admission statement and other failures upda
     await assert.rejects(store.admit('sembom', now, 601));
   } finally { await f.mf.dispose(); }
 });
+test('admission never decreases on limit changes and concurrent rejection writes preserve counts and the latest timestamp', async () => {
+  const f = await setup();
+  try {
+    assert.equal(await f.store.admit('sembom', now, 2), true);
+    assert.equal(await f.store.admit('sembom', now, 2), true);
+    assert.equal(await f.store.admit('sembom', now, 1), false);
+    assert.equal(await f.store.admit('sembom', now, 2), false);
+    assert.equal(await f.db.prepare('SELECT request_count FROM ingest_minute_usage').first('request_count'), 4);
+    await Promise.all(Array.from({ length: 12 }, (_, index) => f.store.recordRejection('sembom', now + 12 - index, 'invalid_event')));
+    const json = JSON.parse(await f.db.prepare('SELECT rejections_json FROM ingest_minute_usage').first<string>('rejections_json') as string);
+    assert.equal(json.invalid_event.count, 12); assert.equal(json.invalid_event.lastRejectedAt, now + 12);
+    assert.equal(json.minute_limit.count, 2);
+  } finally { await f.mf.dispose(); }
+});
 test('project-scoped UTC rejection summary merges multiple minutes and quota scopes, with null empty days', async () => {
   const f = await setup();
   try {

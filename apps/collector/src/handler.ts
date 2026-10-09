@@ -1,5 +1,5 @@
-import { CollectionError, parseBatch, prepareBatch, PROJECT_ID } from '@tallyfin/core';
-import type { CollectionStore, ErrorCode } from '@tallyfin/core';
+import { CollectionError, parseBatch, prepareBatch, PROJECT_ID, REJECTION_REASONS } from '@tallyfin/core';
+import type { CollectionStore, ErrorCode, RejectionReason } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import { administrator } from './admin.ts';
 import type { AdministratorAccess } from './admin.ts';
@@ -19,6 +19,7 @@ export interface CollectorOptions {
   now?: () => number;
   log?: (entry: { requestId: string; code: ErrorCode }) => void;
   admin?: AdministratorAccess;
+  waitUntil?: (task: Promise<void>) => void;
 }
 export function allowedOrigin(origin: string | null, allowed: string[]): origin is string {
   if (!origin || origin.length > 256 || !Array.isArray(allowed) || !allowed.includes(origin)) return false;
@@ -34,6 +35,8 @@ export function createCollector(store: CollectionStore, options: CollectorOption
     const receivedAt = (options.now ?? Date.now)();
     const headers = new Headers({ 'Cache-Control': 'no-store', 'Vary': 'Origin' });
     let retryAfter: number | undefined;
+    let rejectionProjectId: string | null = null;
+    let admitted = false;
     try {
       const path = new URL(request.url).pathname;
       const route = /^\/v1\/projects\/([^/]+)\/batches$/.exec(path);
@@ -48,6 +51,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       if (!PROJECT_ID.test(projectId)) throw new CollectionError('invalid_request', 400);
       const project = await store.loadProject(projectId);
       if (!project) throw new CollectionError('not_found', 404);
+      rejectionProjectId = projectId;
       const origin = request.headers.get('Origin');
       const permitted = allowedOrigin(origin, project.allowedOrigins);
       if (permitted) headers.set('Access-Control-Allow-Origin', origin);
@@ -56,6 +60,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         retryAfter = Math.max(1, Math.ceil((60_000 - receivedAt % 60_000) / 1000));
         throw new CollectionError('quota_exceeded', 429);
       }
+      admitted = true;
       if (!permitted) throw new CollectionError('origin_denied', 403);
       if (project.status !== 'active') throw new CollectionError('project_unavailable', 403);
       if (request.method === 'OPTIONS') {
@@ -91,6 +96,18 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       } else if (failure.status === 503) headers.set('Retry-After', '1');
       // A diagnostic sink failure must not change the outcome or disclose its exception.
       try { options.log?.({ requestId, code: failure.code }); } catch { /* best effort */ }
+      if (admitted && rejectionProjectId) {
+        const reason = failure.code === 'quota_exceeded' ? 'daily_limit' : failure.code as RejectionReason;
+        if (reason !== 'minute_limit' && REJECTION_REASONS.includes(reason)) {
+          const id = rejectionProjectId;
+          const task = (async () => {
+            try { await store.recordRejection(id, receivedAt, reason); } catch { /* bounded best-effort, no retry or raw error logging */ }
+          })();
+          if (options.waitUntil) {
+            try { options.waitUntil(task); } catch { await task; }
+          } else await task;
+        }
+      }
       return Response.json({ error: { code: failure.code, message: messages[failure.code], requestId } }, { status: failure.status, headers });
     }
   };

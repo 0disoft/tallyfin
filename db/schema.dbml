@@ -112,7 +112,7 @@ Table ingest_daily_usage {
 Table ingest_minute_usage {
   project_id text [not null, ref: > projects.id]
   minute_start bigint [not null, note: 'UTC fixed-minute admission window; no IP or visitor key']
-  request_count integer [not null, note: 'Saturates at project limit + 1, including denied/malformed requests']
+  request_count integer [not null, note: 'Saturates at global maximum + 1 (601), including denied/malformed requests; never decreases when project limits change']
   rejections_json text [not null, default: '{}', note: 'At most 2 KiB; fixed rejection reason -> {count,lastRejectedAt}. Minute quota recorded atomically with admission. Other reasons best effort for admitted requests only; no request content. Retain rejection minutes within seven UTC dates; empty minutes expire after two minutes.']
   indexes {
     (project_id, minute_start) [pk]

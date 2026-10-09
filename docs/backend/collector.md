@@ -101,7 +101,8 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 ## 할당량
 
 - 분당 admission: 프로젝트·UTC 고정 분(`minute_start`) 단위로 `ingest_minute_usage`에
-  요청 수를 센다. 중복·잘못된 요청·거부·preflight도 포함하며 한도에서 포화한다.
+  요청 수를 센다. 중복·잘못된 요청·거부·preflight도 포함하며 전체 최대 한도+1인
+  601에서 포화한다. 프로젝트 한도를 바꿔도 같은 분의 카운터는 줄지 않는다.
   고정 분이 바뀌면 새로 센다.
 - 일일 신규 영수증: `projects.new_receipts_per_utc_day`를 프로젝트·UTC 수신일 기준으로
   센다. 같은 ID 재전송은 늘리지 않고, 이미 센 단계의 새 ID 중복은 영수증만 추가하고

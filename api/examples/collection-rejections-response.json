@@ -1,0 +1,127 @@
+{
+  "meta": {
+    "projectId": "example",
+    "from": "2026-10-10",
+    "to": "2026-10-10",
+    "timeZone": "UTC",
+    "dateBasis": "receivedAt",
+    "generatedAt": "2026-10-10T02:01:00.000Z",
+    "retentionDays": 7,
+    "coverage": "best-effort"
+  },
+  "summary": {
+    "rejectedRequests": 3,
+    "lastRejectedAt": "2026-10-10T02:00:01.000Z",
+    "reasons": [
+      {
+        "reason": "minute_limit",
+        "count": 2,
+        "lastRejectedAt": "2026-10-10T02:00:01.000Z"
+      },
+      {
+        "reason": "daily_limit",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "origin_denied",
+        "count": 1,
+        "lastRejectedAt": "2026-10-10T02:00:01.000Z"
+      },
+      {
+        "reason": "project_unavailable",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "unknown_schema",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "invalid_request",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "invalid_event",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "event_conflict",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "attempt_conflict",
+        "count": 0,
+        "lastRejectedAt": null
+      },
+      {
+        "reason": "storage_unavailable",
+        "count": 0,
+        "lastRejectedAt": null
+      }
+    ]
+  },
+  "days": [
+    {
+      "date": "2026-10-10",
+      "rejectedRequests": 3,
+      "lastRejectedAt": "2026-10-10T02:00:01.000Z",
+      "reasons": [
+        {
+          "reason": "minute_limit",
+          "count": 2,
+          "lastRejectedAt": "2026-10-10T02:00:01.000Z"
+        },
+        {
+          "reason": "daily_limit",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "origin_denied",
+          "count": 1,
+          "lastRejectedAt": "2026-10-10T02:00:01.000Z"
+        },
+        {
+          "reason": "project_unavailable",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "unknown_schema",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "invalid_request",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "invalid_event",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "event_conflict",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "attempt_conflict",
+          "count": 0,
+          "lastRejectedAt": null
+        },
+        {
+          "reason": "storage_unavailable",
+          "count": 0,
+          "lastRejectedAt": null
+        }
+      ]
+    }
+  ]
+}

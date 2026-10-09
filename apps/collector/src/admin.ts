@@ -16,6 +16,13 @@ export async function administrator(request: Request, access: AdministratorAcces
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
+  const rejections = /^\/v1\/projects\/([^/]+)\/collection\/rejections$/.exec(url.pathname);
+  if (rejections) {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    if (!PROJECT_ID.test(rejections[1]!)) throw new CollectionError('invalid_request', 400);
+    parameters(url, ['from', 'to']);
+    return access.store.rejections(principal, rejections[1]!, url.searchParams.get('from') ?? '', url.searchParams.get('to') ?? '', now);
+  }
   if (url.pathname === '/v1/projects' && request.method === 'POST') {
     parameters(url, []);
     // Creation is a separately provisioned authority, never inferred from any project owner role.
