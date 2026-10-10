@@ -35,6 +35,7 @@ import { parseProjectGrantPage, parseGrantChangeInput, parseGrantMutationResult 
 import type { GrantChange, GrantMutationResult } from './grants-contract.ts';
 import { changeCursor, parseAdminChangePage, type AdminChangePage } from './admin-changes-contract.ts';
 import { parseFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
+import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -190,6 +191,10 @@ export class ApiClient {
     this.#getBearer = undefined;
     this.#onDestroy?.();
     this.#onDestroy = undefined;
+  }
+
+  async getIdentity(options: { signal?: AbortSignal } = {}): Promise<AdminIdentity> {
+    return this.#parse(await this.#request('/identity', {}, options.signal), parseAdminIdentity);
   }
 
   async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {

@@ -5,6 +5,8 @@
 
 자기 계정만 반환하는 `GET /v1/identity`는 검증된 관리자 bearer가 필요하며 프로젝트
 grant는 요구하지 않는다. 이 경로는 DB 접근·다른 계정 조회·권한 부여를 하지 않는다.
+관리자 앱의 `로그인 계정 확인`에서 명시적으로 조회·복사할 수 있으며 프로젝트 목록이
+비어도 사용할 수 있다. 권한 등록은 신뢰된 운영자가 별도로 수행한다.
 프로젝트 관리자 조회마다 검증된 issuer/subject의 project_grants를 확인한다. D1 조회는 매
 statement에 `EXISTS (project_grants ... role IN ('reader','owner'))` 조건을 붙이고
 정의·버전 읽기와 집계를 한 배치 스냅샷으로 처리한다. reader와 owner는 조회 가능하고

@@ -82,7 +82,9 @@ npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 아닌 등록 audience의 서명된 JWT access token을 발급해야 한다. refresh token을
 사용하면 회전해야 하며, 없으면 만료 후 다시 로그인한다. [OIDC 정책](./oidc.md)을 따른다.
 
-실제 로그인 뒤 확인한 issuer/subject로 관리자 grant를 부여한다. 공개 client ID·
+실제 로그인 뒤 관리자 화면의 `로그인 계정 확인`을 펼쳐 서버가 검증한 issuer/subject를
+읽고 계정 정보 JSON을 복사한다. 프로젝트 권한이 없어도 자기 계정 조회는 가능하다.
+복사한 식별자를 신뢰된 운영자가 확인한 뒤 필요한 생성 권한·관리자 grant를 부여한다. 공개 client ID·
 이메일·브라우저 Origin을 subject로 추측하지 않는다. 첫 운영 적용에는 원격 D1
 마이그레이션·최초 grant 제공 경로·정리 예약·백업/복구도 필요하다. 기존 등록 CLI는
 로컬만 지원하므로 원격 권한 등록을 완료했다고 간주하지 않는다.

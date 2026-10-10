@@ -6,6 +6,7 @@ import DeferredPanel from './DeferredPanel';
 import SourceEventTable, { sourceLabel, type EventRow } from './SourceEventTable';
 import SourceMetrics from './SourceMetrics';
 import DateRangePicker from './DateRangePicker';
+import LiveIdentity from './LiveIdentity';
 import { formatCount, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
@@ -405,6 +406,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       onApply={range => setCustomRange({ scope: dateScope, range })} />}
     {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
+    <LiveIdentity client={client} />
     {view !== 'settings' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 작업 흐름은 브라우저 기준이며, 퍼널은 등록된 단계의 출처를 함께 조회해요.'}</p>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
     {view !== 'settings' && (view !== 'goals' || !!data?.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
