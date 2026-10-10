@@ -49,6 +49,32 @@ npm run install:prepare -- --file .tmp/installation-input.json --out .tmp/instal
 자산 디렉터리에 넣지 않는다. 파일 쓰기 실패 시 이번 실행이 쓴 파일만 정리하고,
 디렉터리에 다른 파일이 있으면 제거하지 않는다. 입력·예외 원문은 로그에 출력하지 않는다.
 
+## 관리자 빌드와 업로드 없는 검사
+
+```powershell
+npm run admin:build-configured -- --dir .tmp/installation
+npm run admin:dry-run -- --config .tmp/installation/admin.wrangler.json
+npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
+```
+
+관리자 빌드는 `installation.json`에서 입력을 다시 검증하고 생성한 네 설정 파일을
+다시 비교한다. 특정 파일만 수정했거나 디렉터리를 옮겨 절대 경로가 달라졌으면 빌드
+전에 거부한다. 값을 바꾸려면 입력을 수정한 뒤 새 설치 디렉터리를 생성한다.
+공개 login JSON만 Vite define으로 넣고 `.env`와 부모 프로세스의 `VITE_` 값을
+읽지 않는다. production 모드로 빌드하고 개발용 proxy 설정도 적용하지 않는다.
+근거는 [Vite 설정](https://vite.dev/config/shared-options.html)과 실제 빌드 검사다.
+
+산출물은 생성한 config가 가리키는 `admin-assets`에만 쓰며 기존 앱의 `dist/client`나
+다른 설치 묶음을 수정하지 않는다. 새 자산 디렉터리만 허용하고 성공한 뒤
+`admin-build.json`을 남긴다. 실패한 빌드의 부분 파일은 보존한다. 기존/실패한 빌드를
+덮어쓰려 하지 말고 새 설치 디렉터리를 준비한다. 다른 호스트에서 사용하려면 그
+호스트에서 다시 설정을 생성하고 빌드한다.
+
+`admin:dry-run`은 선택한 config 하나만 설치된 Wrangler에 전달하고 `--dry-run`을
+고정한다. `--config`·`--outdir` 외 옵션과 중복 옵션은 거부한다. 기본 config는
+타입/패키지 확인용이다. 성공은 로컬 패키징 확인이며 로그인·DNS·원격 바인딩·DB를
+검증한 결과가 아니다. 실제 배포는 검토·승인한 후속 작업이다.
+
 ## 제공자와 운영 확인
 
 `oidc-registration.json`을 기준으로 제공자에 public client·callback·관리자 CORS 출처를

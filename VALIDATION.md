@@ -1,5 +1,32 @@
 # 검증
 
+## 설정 묶음 기반 관리자 빌드 — 2026-10-11
+
+`admin:build-configured`는 설치 스냅샷을 다시 검증하고 네 설정 파일과 비교한 뒤
+공개 로그인 값만 Vite define으로 주입한다. `.env`·부모 `VITE_` 값·개발 proxy는
+제외하고 production 모드로 새 `admin-assets`에 빌드한다. 기존 산출물·기본 앱 dist는
+덮어쓰지 않는다. 성공 기록은 `admin-build.json`이며 실패한 부분 파일은 보존한다.
+admin dry-run은 선택 config 하나만 전달하고 dry-run을 고정하며 원격·중복 옵션을 거부한다.
+
+실행·통과: `node --test --test-timeout=30000 tools/runtime/test/configured-build.test.ts
+apps/admin/tests/local-proxy.test.mjs` 3/3. 실제 관리자 앱을 임시 설치 디렉터리에
+production 빌드했다. 부모 NODE_ENV=development·상이한 VITE client ID·불필요한
+VITE 값·원격 개발 proxy 환경을 넣어도 승인 client/issuer만 번들에 있고 DB/account ID·
+JWKS 설정·환경 sentinel은 없었다. 실제 manifest의 초기 gzip JS는 100KiB 이내이고
+로그인 청크는 지연 로딩이다. 두 설정이 다른 경우·32KiB 초과·누락 설정을 거부하고
+검증 실패 전 자산을 만들지 않았다. 재빌드는 이전 자산/성공 기록을 보존한다.
+
+추가 실행·통과: 루트 `npx --no-install tsc --noEmit`, 로그인·설치 검사 12/12,
+기본 관리자 빌드와 번들 검사 2/2, 계약 검사 53/53, 기본 admin dry-run.
+백엔드 전체 검사는 소스가 바뀌지 않아 반복하지 않았다.
+
+같은 검사는 생성한 관리자 config를 지정해 실제 설치 Wrangler dry-run을 수행했다.
+새 자산과 지정 test collector 바인딩을 패키징했고 업로드는 없었다. 원격 플래그와
+중복 config 옵션은 Wrangler 호출 전에 거부했다. 런타임 키·운영 자격 증명은 쓰지 않았다.
+실제 로그인 제공자·remote D1·grant·DNS·서비스 연결·배포는 설정 미정이라 미실행이다.
+API·DB·SDK·의존성·CI·위생 정책 변경과 푸시는 없다. 설치/앱/개발 안내·로드맵과 검증
+기록을 갱신했다. Vite proxy 변경은 개발 서버에만 적용되며 위 실제 proxy 검사도 통과했다.
+
 ## 운영 설치·로그인 설정 묶음 — 2026-10-11
 
 `install:prepare`는 관리자·수집기·공개 OIDC login 설정을 함께 검증하고 새 디렉터리에

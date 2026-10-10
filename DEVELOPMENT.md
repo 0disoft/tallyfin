@@ -20,7 +20,6 @@
 
 ```sh
 npm ci --ignore-scripts
-npm ci --prefix prototypes/admin --ignore-scripts
 npm run typecheck
 npm test
 npm run check
@@ -29,7 +28,7 @@ npm run check
 `typecheck`는 `tsc --noEmit`로 코어·저장·수집기·브라우저 SDK·서버 발행 SDK 소스와 `examples/sembom` 예제와 `tools/provision` CLI 소스를 검사하고, `test`는 `packages/core`·`packages/storage-d1`·`packages/browser`·`packages/server`·`apps/collector`·`tools/provision` 테스트를 실행한다. `check`는 여기에 `check:browser-size`를 더한다. 저장 어댑터 테스트는 Miniflare D1에 `db/migrations/0001_initial.sql`을 적용해 원자적 커밋·CAS 가드·중복·할당량·정리를 확인하고, 수집기 테스트는 esbuild로 번들한 Worker를 Miniflare에서 호출해 HTTP 경계를 확인하며 Sembom 예제의 여섯 이벤트·작업 흐름 전달과 재전송 duplicate도 검사한다. `test:core`는 코어 테스트만, `test:browser`는 브라우저 SDK 테스트만, `test:server`는 서버 발행 SDK 테스트만 실행한다.
 
 `tools/runtime` 실행기 소스와 테스트도 루트 검사에 포함한다. 통합 실행 테스트가
-관리자 서버를 띄우므로 `prototypes/admin` 의존성도 설치해야 한다.
+관리자 서버를 띄우며 `apps/admin` 의존성은 루트 lockfile로 함께 설치한다.
 
 개발 전용 계약 검사는 별도 패키지다.
 
@@ -53,11 +52,13 @@ npm run check:browser-size
 
 ## 다음 구현
 브라우저 SDK와 관리자 조회 API의 로컬 구현은 끝났고, 남은 것은 운영 요소다. 만료 정리 예약 핸들러와 로컬 등록·권한 관리 CLI도 구현했다. 서버 발행 수집과 서버 발행 SDK도 로컬에서 구현했고 서버 SDK의 로컬 Node·Worker·D1 통합도 검증했다. 실제 인증 제공자 연결, 원격 D1 마이그레이션과 예약 등록은 후속이다. 초기 실행 비용과 실브라우저 지연·처리량·원격 배포는 아직 검증하지 않았다. 계약과 명령 상태는 [VALIDATION.md](./VALIDATION.md)에 기록한다.
-Sample/API 연결 관리자 UI의 실행과 검증 명령은 [프로토타입 README](./prototypes/admin/README.md)에 있다. API 연결은 같은 출처의 `/v1` GET 조회만 사용한다.
+관리자 UI의 실행과 검증 명령은 [관리자 README](./apps/admin/README.md)에 있다.
+API 연결은 같은 출처 `/v1`에서 조회·설정·권한·스키마 발행을 처리한다.
+운영 설정과 공개 로그인 빌드는 [설치 안내](./docs/backend/installation.md)를 따른다.
 
 ## 가짜 명령 금지
 관리자와 수집기를 함께 띄우려면 `npm run dev -- --local --state-dir .tmp/collector-db`를
-실행한다. 루트와 `prototypes/admin` 의존성을 각각 설치하고 아래 등록 CLI로 DB를
+실행한다. 루트 의존성을 설치하고 아래 등록 CLI로 DB를
 먼저 준비한다. 기본 포트는 관리자 5180·수집기 5188이며, 실행·프록시·종료 절차는
 [통합 개발 실행](./docs/backend/runtime.md#통합-개발-실행)을 따른다.
 

@@ -17,6 +17,11 @@ ModuFile·Sembom·Orchid Pass는 가상의 데이터이며 실제 서비스를 �
 [관리자 Worker 배포 준비](../../docs/backend/runtime.md#관리자-worker-배포-준비)를 따른다.
 기본 Sites 패키징에는 collector 바인딩이 없어 API 운영 연결을 제공하지 않는다.
 
+운영 로그인 값까지 함께 준비할 때는 루트 `install:prepare`로 설정 묶음을 만들고
+`admin:build-configured -- --dir <설치 디렉터리>`로 빌드한다. 기존 `.env`·`VITE_` 값을
+섞지 않고 공개 로그인 설정만 사용하며, 산출물은 해당 묶음의 `admin-assets`에 둔다.
+[운영 설치 안내](../../docs/backend/installation.md)를 따른다.
+
 ## 실행
 
 수집기와 함께 실행하려면 저장소 루트에서 Node 24 이상을 사용한다.
