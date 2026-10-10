@@ -1,6 +1,9 @@
 # 프로젝트 등록·권한 관리 CLI
 
-오프라인에서만 도는 운영자용 도구다. Node 24와 Miniflare의 로컬 영속 D1을 쓰고 원격 모드는 없다. 이 도구는 사용자 인증을 하지 않는다.
+이 페이지의 `provision` 명령은 오프라인 운영자용 도구다. Node 24와 Miniflare의 로컬 영속
+D1을 쓰고 원격 모드는 없으며 사용자 인증을 하지 않는다. 별도
+[원격 생성 권한 도구](./remote-creator-provisioning.md)는 검증한 설치 묶음의 원격
+`project_creators` 부여·회수만 지원한다.
 
 ## 명령
 
