@@ -5,6 +5,7 @@ import type { PublishedSchema, SchemaPage, SchemaPublication } from './schema-pu
 import type { CreatedProject } from './project-creation.ts';
 import type { RejectionResponse } from './rejections.ts';
 import type { GrantChange, GrantChangeResult } from './grants.ts';
+import type { AdminChangePage } from './admin-changes.ts';
 import { DAY, integer, localDate } from './value.ts';
 
 /** Supplied only by a host verifier, never derived from an unverified request claim. */
@@ -24,6 +25,7 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  changes(principal: AdminPrincipal, projectId: string, limit: number, cursor: string, now: number): Promise<AdminChangePage>;
   changeGrant(principal: AdminPrincipal, projectId: string, change: GrantChange, now: number): Promise<GrantChangeResult>;
   grants(principal: AdminPrincipal, projectId: string, limit: number, cursor: string): Promise<ProjectGrantPage>;
   rejections(principal: AdminPrincipal, projectId: string, from: string, to: string, now: number): Promise<RejectionResponse>;

@@ -1,8 +1,8 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
 상태: 관리자 조회(GET)·프로젝트 설정 조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수
-(PUT·DELETE)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증
-제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
+(PUT·DELETE)·프로젝트 변경 이력 조회(GET)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서
+구현·검증했다. 실제 인증 제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
 
 호스트는 `createWorker(verifyBearer)`로 신뢰하는 검증기를 연결한다. `verifyBearer`는
 서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
@@ -42,6 +42,7 @@ export default createWorker(bearer => hostVerify(bearer));
 - `GET /v1/projects/{projectId}/grants` — 현재 owner 전용 권한 목록. 아래 목록 규칙을 따른다.
 - `PUT /v1/projects/{projectId}/grants` — owner의 reader/owner grant 등록·역할 변경. 아래 변경 규칙을 따른다.
 - `DELETE /v1/projects/{projectId}/grants` — owner의 grant 회수. 아래 변경 규칙을 따른다.
+- `GET /v1/projects/{projectId}/changes` — 현재 owner 전용 변경 이력 조회. 아래 변경 이력 규칙을 따른다.
 - `GET /v1/projects/{projectId}/collection/rejections?from={UTC-date}&to={UTC-date}` — reader/owner의 수집 거부 진단. 아래 UTC 진단 규칙을 따른다.
 - `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
 - `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
@@ -225,6 +226,37 @@ createdAt도 null이다. 이 API와 관리자 화면의 권한 변경 패널을 
 화면은 후보를 준비만 하고 확인 패널에서만 저장하며, 결과가 불명확하면 같은 요청만 다시
 보내고, 권한을 잃으면 목록과 편집을 잠근다. DB·마이그레이션 변경·배포·운영 identity
 자격 증명은 없다.
+
+## 프로젝트 변경 이력 조회
+
+`GET /v1/projects/{projectId}/changes`는 현재 프로젝트 owner만 읽는다. reader·다른
+프로젝트 owner·없는 프로젝트·회수된 권한은 403이고, owner 권한과 기록을 같은 D1
+batch에서 읽는다. 인증 실패는 401, 잘못된 프로젝트·페이지 파라미터는 400, GET이 아니면
+405(Allow: GET), 손상 저장소는 503이다.
+
+응답은 `{projectId,generatedAt,retentionDays:90,coverage:'recorded-changes-only',data,page}`다.
+각 항목은 id·occurredAt·actor·change만 담고 설정값·스키마 정의·요청 본문·토큰은 넣지
+않는다. actor는 관리자 API 변경이면 검증한 issuer/subject를 담은 administrator이고,
+오프라인 provisioning CLI 변경이면 식별자 없는 local_operator다. 저장된 NULL 식별자는
+응답에 넣지 않는다. change는 action에 필요한 값만 담는다. 프로젝트 생성은 action만,
+설정 변경은 바뀐 필드명 목록, 스키마는 동작과 버전 번호, grant는 대상 issuer/subject와
+이전/이후 역할이다.
+
+기록 대상은 관리자 API의 프로젝트 생성·설정 변경·스키마 발행·grant 변경과 provisioning
+CLI의 register·grant·revoke다. 직접 SQL 쓰기, creator 권한 관리, 시스템 정리, 방문자
+활동은 기록하지 않는다.
+
+limit은 기본 25·최대 100이고 occurredAt 내림차순, 같은 시각이면 기록 UUID
+내림차순이다. 커서는 프로젝트에 묶인 base64url 위치값(최대 512자)으로
+`[1,projectId,timestamp,recordUUID]`를 담고 권한을 부여하지 않는다. 잘못된 형식·다른
+프로젝트 커서·중복/추가 파라미터·512자를 넘는 쿼리는 400이다. 첫 페이지는 cursor를
+생략하거나 빈 값으로 보낸다.
+
+조회 창은 generatedAt 기준 90일 rolling이고 cutoff 시각은 포함하며 미래 기록은 제외한다.
+물리 정리 전이라도 창을 벗어난 만료 행은 숨긴다. coverage는 기록된 변경만 담는다는
+뜻이며 이력이 비어도 과거에 변경이 없었다는 증거는 아니다. 페이지는 살아 있는 DB를
+읽으므로 뒤에 추가된 변경은 처음부터 다시 읽어야 보인다. 관리자 화면 연결은 다음
+슬라이스다. 운영 인증·원격 D1 적용·배포·Sembom 연동은 없다.
 
 ## 프로젝트 생성
 

@@ -1,5 +1,27 @@
 # 검증
 
+## 소유자 전용 변경 이력 조회 API — 2026-10-11
+
+`GET /v1/projects/{projectId}/changes`·코어 AdminChangePage·AdminStore.changes와 D1
+reader를 연결했다. 현재 owner와 기록을 같은 batch에서 검사하고 최신 시각·UUID
+내림차순으로 기본 25·최대 100건을 읽는다. 프로젝트에 묶인 최대 512자 커서는 기록
+시각·UUID만 담고 계정 정보나 권한을 담지 않는다. 물리 정리가 지연돼도 요청 시각 기준
+90일 rolling 밖과 미래 기록은 제외한다. API actor와 식별자 없는 CLI actor를 구분하며
+각 동작의 최소 필드만 투영하고 recorded-changes-only·생성 시각·보존 기간을 반환한다.
+
+루트 `npm run check`의 타입 검사·전체 테스트 199/199·SDK 크기 검사 통과.
+관련 HTTP/기존 관리자 테스트 19/19를 먼저 실행했고, 최대 페이지 검사 추가는 위 전체
+실행에 포함했다. 실제 Miniflare D1에서 동시각 페이지·기준 행 삭제·새 기록 재조회,
+기본/최대 한도, 보존 경계·만료 행 숨김·타 프로젝트 격리, reader/권한 회수·쓰기 직전
+회수, 잘못된 커서/쿼리/메서드, 손상 데이터의 503과 비공개 오류를 확인했다. 기존
+native Worker smoke에 변경 이력 조회·다음 페이지·grant 회수 후 403을 추가해 통과했다.
+OpenAPI lint·계약 39/39·`git diff --check` 통과. SDK gzip 2667 bytes·예제 포함 2949 bytes.
+
+OpenAPI·예제·코어 저장 포트·DBML의 조회 보존 설명·관리자/제품 문서를 변경했다.
+DB 구조·SQL 마이그레이션·SDK·의존성·CI 러너·위생 정책은 변경하지 않았다.
+화면 연결은 다음 단계라 UI 빌드/브라우저 UI 검사는 실행하지 않았다. 원격 D1·운영
+OIDC·부하·푸시·배포·Sembom 활성화는 이번 범위에 포함하지 않았다.
+
 ## 관리자 변경 이력 저장 — 2026-10-11
 
 `0005_admin_changes.sql`과 DBML에 프로젝트별 제어 영역 이력을 추가했다. API의

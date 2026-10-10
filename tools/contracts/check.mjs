@@ -22,7 +22,7 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batc
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
-  'project-grants':'ProjectGrantPage' })) {
+  'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 const batch = example('browser-batch');
@@ -126,6 +126,37 @@ check('project creation requires explicit authority, closed input and immutable 
   const route = spec.paths['/v1/projects'].post;
   assert.ok(route.responses['403']); assert.ok(route.responses['409']); assert.ok(route.responses['413']);
   assert.equal(spec.paths['/v1/projects'].get.responses['405'].headers.Allow.schema.const, 'GET, POST');
+});
+check('admin history projects only bounded typed changes and excludes bodies, values and invented CLI identities', () => {
+  const page = example('admin-changes'), row = page.data[0];
+  for (const action of [
+    { action: 'project.created' },
+    { action: 'project.settings_changed', fields: ['name'] },
+    { action: 'schema.published', schemaVersion: 2 },
+    { action: 'schema.status_changed', schemaVersion: 2 },
+    { ...row.change, action: 'grant.created', beforeRole: null, afterRole: 'reader' },
+    row.change, { ...row.change, beforeRole: 'owner', afterRole: 'reader' },
+    { ...row.change, action: 'grant.revoked', beforeRole: 'owner', afterRole: null },
+  ]) assert.ok(validate('AdminChangeDetail', action), JSON.stringify(ajv.errors));
+  for (const change of [
+    { action: 'project.created', name: 'raw setting' },
+    { action: 'project.settings_changed', fields: [] },
+    { action: 'project.settings_changed', fields: ['name', 'name'] },
+    { action: 'project.settings_changed', fields: ['accessToken'] },
+    { action: 'schema.published', schemaVersion: 0 },
+    { action: 'schema.published', schemaVersion: 2, definition: {} },
+    { ...row.change, action: 'grant.created' }, { ...row.change, action: 'grant.revoked' },
+    { ...row.change, afterRole: 'reader' }, { ...row.change, beforeRole: null },
+  ]) assert.equal(validate('AdminChangeDetail', change), false);
+  for (const value of [{ ...row, actor: { kind: 'local_operator', subject: 'inferred' } },
+    { ...row, actor: { kind: 'administrator' } }, { ...row, requestBody: {} }, { ...row, occurredAt: 'bad' }])
+    assert.equal(validate('AdminChange', value), false);
+  for (const value of [{ ...page, retentionDays: 365 }, { ...page, coverage: 'complete' },
+    { ...page, data: Array(101).fill(row) }, { ...page, page: { limit: 101, nextCursor: null } }])
+    assert.equal(validate('AdminChangePage', value), false);
+  const route = spec.paths['/v1/projects/{projectId}/changes'].get;
+  for (const code of ['200', '400', '401', '403', '405', '503']) assert.ok(route.responses[code]);
+  assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET');
 });
 check('grant list is closed, paginated and owner-protected', () => {
   const page = example('project-grants');

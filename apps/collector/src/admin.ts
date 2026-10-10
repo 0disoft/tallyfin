@@ -16,6 +16,14 @@ export async function administrator(request: Request, access: AdministratorAcces
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
+  const changes = /^\/v1\/projects\/([^/]+)\/changes$/.exec(url.pathname);
+  if (changes) {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    if (!PROJECT_ID.test(changes[1]!)) throw new CollectionError('invalid_request', 400);
+    parameters(url, ['limit', 'cursor']);
+    return access.store.changes(principal, changes[1]!, positive(url.searchParams.get('limit') ?? '25', 100),
+      url.searchParams.get('cursor') ?? '', now);
+  }
   const grants = /^\/v1\/projects\/([^/]+)\/grants$/.exec(url.pathname);
   if (grants) {
     if (!['GET', 'PUT', 'DELETE'].includes(request.method)) throw new CollectionError('invalid_request', 405);

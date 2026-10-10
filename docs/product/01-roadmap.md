@@ -235,3 +235,16 @@ grant 변경은 기존 provisioning CLI로도 할 수 있다.
 1000행). owner 전용 조회 API와 화면은 다음 슬라이스다. 코드·DB 검증은 별도로 실행하고
 결과는
 [검증 기록](../../VALIDATION.md)에 둔다. 원격 DB 적용·푸시·배포는 없다.
+
+2026-10-11 관리자 변경 이력 조회 API: 현재 owner 전용
+`GET /v1/projects/{projectId}/changes`를 로컬 구현했다. 매 페이지 owner 권한과 기록을 같은
+D1 batch에서 읽고, 응답은 `{projectId,generatedAt,retentionDays:90,coverage,data,page}`로
+id·occurredAt·actor·change만 담으며 설정값·정의·본문·토큰은 넣지 않는다. actor는 API
+변경이면 administrator issuer/subject, CLI 변경이면 NULL 식별자를 뺀 local_operator이고,
+change는 action별로 필요한 값만 담는다. limit은 기본 25·최대 100, 시간·기록 UUID
+내림차순, 프로젝트에 묶인 base64url 커서다. reader·없는 프로젝트·회수된 권한은 403, 인증
+실패는 401, 잘못된 프로젝트·페이지 파라미터는 400, GET 외 요청은 405, 손상 저장소는 503이다.
+조회 창은 90일 rolling으로 cutoff를 포함하고 미래 기록을 제외하며 물리 정리 전 만료 행은
+숨긴다. 직접 SQL 쓰기·creator 권한·시스템 정리·방문자 활동은 기록하지 않는다. 관리자 화면
+연결은 다음 슬라이스다. 코드·계약 검증은 별도로 실행하고 결과는
+[검증 기록](../../VALIDATION.md)에 둔다. 운영 인증·원격 D1 적용·배포·Sembom 연동은 없다.

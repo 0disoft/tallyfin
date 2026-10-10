@@ -40,18 +40,22 @@ DELETE는 `{issuer,subject,expectedRole}`로 회수한다. expectedRole은 마�
 권한 변경 UI는 로컬에서 구현·검증했고, 저장 전 확인·불명확 결과의 같은 요청 재확인·권한
 상실 시 잠금을 따른다. DB·마이그레이션 변경은 없다.
 
-관리자 변경 이력은 별도 슬라이스로 프로젝트별 append-only 기록에 남긴다. 프로젝트 생성·
-설정 변경·스키마 발행·grant 변경은 관리자 API가, register·grant 변경은 오프라인
-provisioning CLI가 각각 같은 D1 batch에서 기록한다. 한 동작이 여러 종류를 바꾸면 종류마다
-한 행이 남고 CLI register 한 번은 생성·설정·스키마 행을 함께 만들 수 있다. actor는 API가
-검증한 issuer/subject이고 CLI는 인증된 사람이 없어 NULL 식별자이므로 변경 대상 계정을
-실행자로 추정하지 않는다. 설정은 실제로 바뀐 필드명만, 스키마는 동작과 버전 번호만, grant는
-대상과
+관리자 변경 이력은 프로젝트별 append-only 기록으로 남긴다. 프로젝트 생성·설정 변경·스키마
+발행·grant 변경은 관리자 API가, register·grant·revoke는 오프라인 provisioning CLI가 각각
+같은 D1 batch에서 기록하며, 한 동작이 여러 종류를 바꾸면 종류마다 한 행이 남는다. actor는
+API가 검증한 issuer/subject이고 CLI는 인증된 사람이 없어 NULL 식별자이므로 변경 대상 계정을
+실행자로 추정하지 않는다. 설정은 바뀐 필드명만, 스키마는 동작과 버전 번호만, grant는 대상과
 이전/이후 역할만 남기며 원문 요청 body·설정값·스키마 정의·토큰·방문자 자료는 저장하지
 않는다. 값이 없는 재요청·실패·실제 값이 바뀌지 않은 설정 요청은 이력을 추가하지 않는다.
-설정 필드명은 DB 트리거로 허용 목록과 중복 없음만 통과한다. 기록은 `admin_changes`(0005)에
-90일 rolling으로 보존한다. scheduled 정리는 프로젝트마다 500행, `cleanup`을 직접 호출하면
-최대 1000행까지 지운다. owner 전용 조회 API와 화면은 다음 슬라이스다.
+기록은 `admin_changes`(0005)에 90일 rolling으로 보존하고 정리에서 프로젝트당 최대
+500행(직접 호출 시 1000행)씩 지운다. 현재 owner는 `GET /v1/projects/{projectId}/changes`로
+읽는다. owner 권한과 기록을 같은 D1 batch에서 확인하며, 응답은
+`{projectId,generatedAt,retentionDays:90,coverage,data,page}`로 id·occurredAt·actor·change만
+담고 설정값·정의·본문·토큰은 넣지 않는다. change는 action별로 필요한 값만 담는다. limit은
+기본 25·최대 100, occurredAt 내림차순·기록 UUID 내림차순이고 커서는 프로젝트에 묶인
+위치값이다. 조회 창은 90일 rolling으로 cutoff를 포함하고 미래 기록은 제외하며, 물리 정리 전
+만료 행은 숨긴다. coverage는 기록된 변경만 담는다는 뜻이다. 직접 SQL 쓰기·creator
+권한·시스템 정리·방문자 활동은 기록하지 않는다. 관리자 화면 연결은 다음 슬라이스다.
 
 프로젝트 ID는 공개 라우팅 정보이며 인증 수단이 아니다. 허용 오리진만으로 봇·위조 이벤트를 막을 수 없다. 프로젝트 간 스키마·데이터·설정은 분리하고, 한 프로젝트의 정의를 다른 프로젝트에 암묵적으로 재사용하지 않는다.
 

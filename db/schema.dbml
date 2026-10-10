@@ -56,7 +56,7 @@ Table admin_changes {
   before_role text [note: 'reader | owner | null; only grant actions']
   after_role text [note: 'reader | owner | null; only grant actions']
   indexes { (project_id, occurred_at, id) }
-  Note: 'Append-only control plane history written atomically with API/CLI changes. No backfill, raw request/definition/setting values or capture of direct SQL writes. Owner-only reads are a following slice.'
+  Note: 'Append-only control plane history written atomically with API/CLI changes. No backfill, raw request/definition/setting values or capture of direct SQL writes. Owner-only pages exclude rows outside rolling 90 days even before physical cleanup.'
 }
 
 Table project_creations {

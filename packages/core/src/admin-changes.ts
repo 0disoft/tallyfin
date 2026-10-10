@@ -8,3 +8,9 @@ export type AdminChangeDetail =
   | { action: 'schema.published' | 'schema.status_changed'; schemaVersion: number }
   | { action: 'grant.created' | 'grant.role_changed' | 'grant.revoked';
       target: { issuer: string; subject: string }; beforeRole: 'reader' | 'owner' | null; afterRole: 'reader' | 'owner' | null };
+export type AdminChangeActor = { kind: 'administrator'; issuer: string; subject: string } | { kind: 'local_operator' };
+export interface AdminChange { id: string; occurredAt: string; actor: AdminChangeActor; change: AdminChangeDetail }
+export interface AdminChangePage {
+  projectId: string; generatedAt: string; retentionDays: 90; coverage: 'recorded-changes-only';
+  data: AdminChange[]; page: { limit: number; nextCursor: string | null };
+}

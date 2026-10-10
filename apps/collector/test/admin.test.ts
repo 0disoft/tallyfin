@@ -270,7 +270,20 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
       body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', expectedRole: 'owner' }),
     });
     assert.equal(grantDelete.status, 200); assert.equal((await grantDelete.json() as { role: string | null }).role, null);
+    const history = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/changes?limit=2',
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    assert.equal(history.status, 200); assert.equal(history.headers.get('Cache-Control'), 'no-store');
+    const historyPage = await history.json() as { coverage: string; data: { change: { action: string } }[]; page: { nextCursor: string } };
+    assert.equal(historyPage.coverage, 'recorded-changes-only');
+    assert.deepEqual(historyPage.data.map(row => row.change.action), ['grant.revoked', 'grant.role_changed']);
+    assert.ok(historyPage.page.nextCursor);
+    const olderHistory = await runtime.dispatchFetch(`https://collector.example.invalid/v1/projects/worker-created/changes?cursor=${historyPage.page.nextCursor}`,
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    assert.equal(olderHistory.status, 200);
+    assert.deepEqual((await olderHistory.json() as { data: { change: { action: string } }[] }).data.map(row => row.change.action), ['project.created']);
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
+    assert.equal((await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/changes',
+      { headers: { Authorization: 'Bearer not-a-credential' } })).status, 403);
   } finally { await runtime.dispose(); }
 });

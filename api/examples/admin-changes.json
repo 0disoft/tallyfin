@@ -1,0 +1,32 @@
+{
+  "projectId": "sembom",
+  "generatedAt": "2026-10-11T00:00:00.000Z",
+  "retentionDays": 90,
+  "coverage": "recorded-changes-only",
+  "data": [
+    {
+      "id": "00000000-0000-4000-8000-000000000003",
+      "occurredAt": "2026-10-10T23:00:00.000Z",
+      "actor": { "kind": "administrator", "issuer": "https://identity.example.invalid", "subject": "example-owner" },
+      "change": {
+        "action": "grant.role_changed",
+        "target": { "issuer": "https://identity.example.invalid", "subject": "example-reader" },
+        "beforeRole": "reader",
+        "afterRole": "owner"
+      }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "occurredAt": "2026-10-10T22:00:00.000Z",
+      "actor": { "kind": "local_operator" },
+      "change": { "action": "schema.published", "schemaVersion": 2 }
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "occurredAt": "2026-10-10T21:00:00.000Z",
+      "actor": { "kind": "local_operator" },
+      "change": { "action": "project.settings_changed", "fields": ["allowedOrigins", "name"] }
+    }
+  ],
+  "page": { "limit": 25, "nextCursor": null }
+}
