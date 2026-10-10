@@ -1,11 +1,12 @@
 # 수집기 구현 (apps/collector)
 
-상태: 최소 브라우저 수집기를 구현했고 로컬 Miniflare HTTP 테스트로 확인한다. 워커는
-네이티브 fetch 경계이며 `packages/core`(검증·정규화·해시)와 `packages/storage-d1`
-(D1 원자 저장)을 호출한다. 브라우저 SDK(`packages/browser`)는 별도로 로컬 구현·검증했고
-[브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 GET 조회는 검증기 포트와 함께 로컬에서 구현·검증했고, 실제
-인증 제공자 설정·원격 DB 적용·운영 배포는 아직 없다. 이 문서는 계약을 수집 경계에
-어떻게 적용했는지와 구현/배포 상태만 기록한다.
+상태: 최소 브라우저 수집기와 서버 발행 endpoint를 구현했고 로컬 Miniflare HTTP 테스트로
+확인한다. 워커는 네이티브 fetch 경계이며 `packages/core`(검증·정규화·해시)와
+`packages/storage-d1`(D1 원자 저장)을 호출한다. 브라우저 SDK(`packages/browser`)는
+별도로 로컬 구현·검증했고 [브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 GET 조회와
+발행자 검증기 포트는 로컬에서 구현·검증했고, 실제 인증 제공자 설정·원격 DB 적용·운영
+배포는 아직 없다. 이 문서는 계약을 수집 경계에 어떻게 적용했는지와 구현/배포 상태만
+기록한다.
 
 동작 의미는 [이벤트·집계 계약](./event-contract.md), 요청/응답 형태는
 [OpenAPI](../../api/openapi.yaml), 본문 정책은 [HTTP API 정책](./04-http-api-policy.md),
@@ -23,6 +24,8 @@
 의존하지 않는다.
 
 - `POST /v1/projects/{projectId}/batches` — 공개 수집, 관리자 자격증명 없음.
+- `POST /v1/projects/{projectId}/server-batches` — 발행자 bearer 인증 필수, CORS 없음.
+  계약은 [서버 발행 이벤트](./server-events.md)에 있다.
 - 관리자 GET 조회는 `/v1/projects`,
   `/v1/projects/{projectId}/schemas/{schemaVersion}`, `.../summary`,
   `.../events/{eventName}/daily`, `.../workflows/{workflowId}/daily`다. 검증기를
@@ -30,9 +33,12 @@
 - 그 밖의 경로는 `not_found`(404)이다.
 
 `projectId`는 정규식 `^[a-z][a-z0-9-]{0,47}$`를 통과해야 한다. 등록되지 않은
-프로젝트는 `not_found`(404), paused 프로젝트는 `project_unavailable`(403)이다.
+프로젝트는 브라우저 경로에서 `not_found`(404), server 경로에서 `forbidden`(403)이다.
+paused 프로젝트는 두 경로 모두 `project_unavailable`(403)이다.
 
 ## 요청 처리 순서
+
+아래 1~8은 브라우저 수집 경로 순서다. 서버 발행 경로는 뒤의 별도 절을 따른다.
 
 1. `Origin`과 프로젝트를 먼저 읽어 허용 오리진이면 `Access-Control-Allow-Origin`을
    설정한다. 응답 헤더는 항상 `Cache-Control: no-store`, `Vary: Origin`을 둔다.
@@ -55,6 +61,21 @@
 검증 순서와 시간 경계는 [이벤트 계약](./event-contract.md)과 같다. `occurredAt`은
 수신 시각 기준 과거 24시간~미래 5분만 허용한다.
 
+### 서버 발행 경로 순서
+
+서버 발행 경로는 브라우저 경로와 순서가 다르다.
+
+1. `Authorization: Bearer`를 발행자 검증기(`PublisherAccess.verifyBearer`)로 검증한다.
+   검증기를 주입하지 않았거나 헤더·토큰이 유효하지 않으면 `unauthorized`(401)이고,
+   프로젝트 읽기·admission·본문 읽기 전에 끝난다.
+2. 프로젝트 ID 형식을 확인하고 저장 어댑터의 `publisherAccess`로 `project_publishers`
+   권한을 본다. 권한이 없거나 모르는 프로젝트면 `forbidden`(403)이다.
+3. 프로젝트를 읽고 분당 admission을 확인한 뒤 `POST` 여부, 조회 파라미터,
+   `Content-Type`(`application/json`만)을 검사한다. `OPTIONS` preflight를 처리하지
+   않고 CORS 헤더를 만들지 않는다. `POST`가 아니면 `Allow: POST`와 405다.
+4. `parseServerBatch` → `loadRegistry` → `prepareServerBatch` → `commitServer` 순으로
+   진행한다. 오리진 재확인 단계는 브라우저 경로에만 있다.
+
 ## 오류와 로그
 
 오류는 `{ error: { code, message, requestId } }` 형태다. `code`는 고정 enum, `message`는
@@ -69,6 +90,10 @@ SQL·토큰·IP·Origin·전체 URL은 메시지나 로그에 남기지 않는�
   같은 상한을 쓴다.
 - 관리자 라우트는 호스트가 검증기를 연결하지 않으면 401로 닫는다(기본 export 상태).
   연결 뒤에도 GET 조회만 지원하고 그 밖의 메서드는 405다.
+- 발행자 경로도 검증기가 없으면 401로 닫고, 401에는 `WWW-Authenticate: Bearer`를
+  보낸다. 401 메시지는 관리자·발행자가 같은 문구를 쓴다.
+- server 경로 응답은 `Vary: Authorization`을 쓰고 `Access-Control-Allow-Origin`을
+  넣지 않는다. `Origin`은 인증에 쓰지 않는다.
 
 ## 중복·원자성 (저장 어댑터)
 
@@ -127,15 +152,21 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 ## 구현·배포 상태
 
 - 구현·로컬 검증: `packages/core`(등록·배치·시간·해시), `packages/storage-d1`(D1 원자
-  커밋·CAS·할당량·정리와 grant 조건 조회), `apps/collector`(네이티브 fetch 최소 browser
-  수집, HTTP 경계, 관리자 GET 조회), `packages/browser`(브라우저 SDK)와
+  커밋·CAS·할당량·정리, grant 조건 조회, 발행 권한과 서버 배치 저장), `apps/collector`
+  (네이티브 fetch 최소 browser 수집, HTTP 경계, 관리자 GET 조회, 서버 발행 endpoint),
+  `packages/auth-oidc`(관리자·발행자 OIDC 검증), `packages/browser`(브라우저 SDK)와
   `examples/sembom` 예제, 초기 빈 DB용 SQL `0001_initial.sql`(로컬 Miniflare 전용).
 - 관리자 조회: 검증기 포트 `createWorker(verifyBearer)`와 `admin.ts`의 GET 조회를
   로컬 구현·검증했다. 테스트는 모킹한 trusted 검증기와 D1 grant 경계를 쓴다. 경로는
   [관리자 조회 경계](./administrator.md)에 있다.
-- 아직 없음: 실제 인증 제공자 연결·운영 토큰 발급, 서버 발행 수집, 관리자
-  grant provisioning API, 원격 D1 마이그레이션, 운영 Wrangler 설정과 바인딩·시크릿,
-  원격 정리 Cron Trigger 등록. 정리 스케줄러와 커서는 로컬 구현·검증했다.
+- 서버 발행: `PublisherAccess` 검증기 포트와 `POST .../server-batches`를 로컬
+  구현·검증했다. `createOidcWorker(adminOptions, publisherOptions?)`와
+  `createPublisherOidcWorker(publisherOptions)`가 발행자 검증기를 붙인다. 경로·인증
+  규칙은 [서버 발행 이벤트](./server-events.md)에 있다.
+- 아직 없음: 발행자 OIDC 운영 설정값과 실제 제공자 연결·운영 토큰 발급, 발행자 권한
+  부여·회수 CLI, 서버 SDK, 서버 출처 조회 API·화면, 관리자 grant provisioning API,
+  원격 D1 마이그레이션, 운영 Wrangler 바인딩·시크릿, 원격 정리 Cron Trigger 등록.
+  정리 스케줄러와 커서는 로컬 구현·검증했다.
 - 측정: 브라우저 SDK가 gzip 3KiB 예산 안(실측값은 [VALIDATION.md](../../VALIDATION.md)).
 - 미측정: SDK 초기 실행 비용·실브라우저 지연, 쓰기 처리량·지연, 프로젝트 수·조합 규모별 비용.
 - 배포·활성화: 원격 D1·운영 Worker·도메인·인증 제공자는 설정하지 않았다.

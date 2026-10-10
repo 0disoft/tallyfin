@@ -10,6 +10,8 @@ export interface OidcOptions {
   /** RFC 9068 access tokens by default; JWT requires a dedicated API audience. */
   tokenType?: 'at+jwt' | 'JWT';
   clockToleranceSeconds?: number;
+  /** Machine ingestion requires this one audience only; administrator defaults remain compatible. */
+  exclusiveAudience?: boolean;
   /** Trusted host transport, for service integration or isolated runtime tests. */
   fetchImpl?: typeof fetch;
 }
@@ -28,6 +30,9 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string) => Pr
   if (issuer.length > 512 || !options.audience?.trim() || options.audience.length > 512 || options.audience !== options.audience.trim())
     throw new TypeError('Invalid OIDC issuer or API audience configuration');
   const audience = options.audience;
+  if (options.exclusiveAudience !== undefined && typeof options.exclusiveAudience !== 'boolean')
+    throw new TypeError('Invalid audience policy configuration');
+  const exclusiveAudience = options.exclusiveAudience ?? false;
   const algorithms = [...(options.algorithms ?? ['RS256'])];
   if (!algorithms.length || algorithms.some(alg => !['RS256', 'ES256'].includes(alg)) || new Set(algorithms).size !== algorithms.length)
     throw new TypeError('OIDC algorithms must be RS256 and/or ES256');
@@ -75,6 +80,8 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string) => Pr
         requiredClaims: ['iss', 'sub', 'aud', 'exp', 'iat'],
       });
       const now = Date.now() / 1000;
+      if (exclusiveAudience && payload.aud !== audience &&
+        !(Array.isArray(payload.aud) && payload.aud.length === 1 && payload.aud[0] === audience)) return null;
       if (typeof payload.sub !== 'string' || !payload.sub.trim() || payload.sub.length > 512 ||
         typeof payload.iat !== 'number' || !Number.isFinite(payload.iat) || payload.iat > now + tolerance ||
         typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= payload.iat) return null;

@@ -5,17 +5,18 @@
 ## 현재 진행 순서 — 2026-10-11
 
 - 권한 조회·변경 화면과 관리자 변경 이력 저장·조회·화면 연결은 로컬 구현·검증 완료다.
-- 서버 발행 코어·저장 슬라이스도 완료했다. `parseServerBatch`·`prepareServerBatch`,
-  source별 payload hash, `planIngest`의 서버 지원, `ServerBatch`·`ServerEvent` 계약과
-  함께 `project_publishers`, 0006 마이그레이션, 저장 어댑터의 `publisherAccess`·
-  `commitServer`, 코어 `ServerPrincipal`·`ServerCollectionStore`까지다. 발행자 회수
-  경쟁은 쓰기 batch의 권한 재검사로 롤백한다. HTTP 서버 발행 API·발행자 검증기·CLI
-  권한 관리·서버 SDK·서버 출처 조회 화면은 아직 없다.
+- 서버 발행 코어·저장·endpoint 슬라이스도 완료했다.
+  `parseServerBatch`·`prepareServerBatch`, source별 payload hash, `planIngest`의 서버
+  지원, `ServerBatch`·`ServerEvent` 계약과 `project_publishers`, 0006 마이그레이션,
+  저장 어댑터의 `publisherAccess`·`commitServer`, 코어 `ServerPrincipal`·
+  `ServerCollectionStore`, 전용 `POST .../server-batches`와 `PublisherAccess` 발행자
+  인증 배선까지다. 발행자 회수 경쟁은 쓰기 batch의 권한 재검사로 롤백한다. 발행자
+  OIDC 운영 설정값과 발행자 권한 CLI·서버 SDK·서버 출처 조회 화면은 아직 없다.
   [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
-- 다음 구현은 발행자 검증기와 전용 서버 endpoint다. 서명·issuer·audience·exp를 검증한
-  principal을 넘기는 HTTP 경계와 경로를 확정하고, `project_publishers` 관리 수단·
-  dependency-free server SDK·서버 일별 조회·UI를 잇는다. 브라우저 공개 ID나 Origin을
-  서버의 인증 수단으로 재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도 설계한다.
+- 다음 구현은 발행자 권한 관리와 서버 SDK다. 발행자 OIDC 운영 설정값을 채워 server
+  경로를 켜고 `project_publishers` 부여·회수 수단을 만든 뒤 dependency-free server
+  SDK와 서버 일별 조회·UI를 잇는다. 브라우저 공개 ID나 Origin을 서버의 인증 수단으로
+  재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도 설계한다.
 - 이후 다단계 퍼널의 연결·보존 기준을 설계하고 조회와 화면을 작은 단위로 구현한다.
 - 실제 인증 제공자·원격 DB·정리 작업·복구·부하 검증을 마친 뒤 서비스 파일럿을 진행한다.
 - Sembom과 다른 종류의 서비스 한 곳에서 범용성을 확인하고 라이선스·독립 설치·공개
@@ -298,7 +299,22 @@ batch에서 `EXISTS`로 권한을 다시 확인하며, 발행자가 그 사이 �
 제약을 browser|server로 넓히고 기존 행과 인덱스·외래 키를 유지한다. `workflow_attempts`·
 `workflow_daily_counts`는 browser 전용이다. 분당 admission과 UTC 일일 신규 영수증 한도는
 두 출처가 공유하고 조회는 출처를 섞지 않는다. 발행자 검증기·HTTP endpoint·CLI 권한 관리·
-서버 SDK·서버 출처 조회 화면은 아직 없다. 테이블 복사가 있어 운영 적용 전 수집 중지·
+서버 SDK·서버 출처 조회 화면은 그 단계에 없었다. 테이블 복사가 있어 운영 적용 전 수집 중지·
 백업·행 수·스키마·외래 키 검증이 필요하고, 롤백은 이전 browser 코드와 확장 테이블 유지로
 하며 저장된 server 행을 지우지 않는다. 원격 DB 적용·푸시·배포는 없다.
+검증은 [검증 기록](../../VALIDATION.md)에 둔다.
+2026-10-11 서버 발행 endpoint: `POST /v1/projects/{projectId}/server-batches`와
+`PublisherAccess{store, verifyBearer}` 발행자 인증 배선을 로컬 구현했다. 검증기를
+주입하지 않으면 401이고 관리자 검증기로 fallback하지 않는다. 인증과 `publisherAccess`
+권한 검사가 프로젝트 읽기·admission보다 앞서므로 처음부터 거부된 요청은 프로젝트 분당
+quota를 쓰지 않고, 인증을 통과한 뒤의 잘못된 요청·중복 요청은 분당 admission을 쓴다.
+이 경로는 CORS·preflight를 지원하지 않고 `Origin`을 인증에 쓰지 않으며, `POST` 전용에
+`application/json`만 받고 조회 파라미터를 거부한다. 모르는 프로젝트는 404 대신 403으로
+답한다. 저장은 `commitServer`가 권한을 다시 확인하고 UTC 일일 영수증 한도·분당
+admission을 browser와 공유한다. 발행자 OIDC 검증기는 `exclusiveAudience`로 audience
+하나만 통과시키고 관리자 검증기는 기존 `includes` 정책을 유지하며,
+`createOidcWorker`는 두 audience가 같으면 거부한다. 배포 설정에서 발행자 인증을 켜지
+않으면 server 경로는 닫혀 있다. 발행자 OIDC 운영 설정값과 발행자 권한 CLI, 서버 SDK,
+서버 출처 조회 화면은 아직 없다. server 정의만 있는 레지스트리는 여전히 허용하지
+않는다. 원격 DB 적용·배포·실제 제공자 인증은 없다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.

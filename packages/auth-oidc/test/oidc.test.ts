@@ -57,6 +57,15 @@ test('bad signature, issuer, API audience, time claims and missing claims are re
   assert.deepEqual(await verify(await signed({ aud: ['other', audience] })), { issuer, subject: 'test-admin' });
 });
 
+test('exclusive machine audience accepts only one intended audience while administrator compatibility stays unchanged', async () => {
+  const { verify } = fixture({ exclusiveAudience: true });
+  assert.deepEqual(await verify(await signed()), { issuer, subject: 'test-admin' });
+  assert.deepEqual(await verify(await signed({ aud: [audience] })), { issuer, subject: 'test-admin' });
+  for (const aud of [[audience, 'other'], ['other', audience], [audience, audience], 'other'])
+    assert.equal(await verify(await signed({ aud })), null);
+  assert.throws(() => fixture({ exclusiveAudience: 'yes' as any }), TypeError);
+});
+
 test('malformed, oversized, unsigned and token-controlled key URLs never fetch keys', async () => {
   const { verify, calls } = fixture();
   for (const token of ['', 'invalid', 'x'.repeat(8186), 'eyJhbGciOiJub25lIn0.e30.'])

@@ -16,7 +16,14 @@
     "OIDC_JWKS_URI": "",
     "OIDC_ALGORITHMS": "RS256",
     "OIDC_TOKEN_TYPE": "at+jwt",
-    "OIDC_CLOCK_TOLERANCE_SECONDS": "5"
+    "OIDC_CLOCK_TOLERANCE_SECONDS": "5",
+    "PUBLISHER_AUTH_MODE": "disabled",
+    "PUBLISHER_OIDC_ISSUER": "",
+    "PUBLISHER_OIDC_AUDIENCE": "",
+    "PUBLISHER_OIDC_JWKS_URI": "",
+    "PUBLISHER_OIDC_ALGORITHMS": "RS256",
+    "PUBLISHER_OIDC_TOKEN_TYPE": "at+jwt",
+    "PUBLISHER_OIDC_CLOCK_TOLERANCE_SECONDS": "5"
   },
   "triggers": { "crons": ["* * * * *"] },
   "observability": {

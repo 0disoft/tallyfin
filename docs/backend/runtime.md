@@ -21,7 +21,7 @@ npm run collector:dev -- --local --state-dir .tmp/collector-db
 - 로컬 수집기와 등록 CLI는 같은 상태 디렉터리와 DB 식별자를 사용한다.
 - 127.0.0.1에만 바인딩한다.
 - 구동을 완료하기 전에 초기화된 DB와 실행 설정을 확인한다. 개발 서버는 마이그레이션을 적용하지 않는다.
-- 기본 관리자 인증은 꺼져 있고 관리자 API는 401을 반환한다.
+- 기본 관리자·발행자 인증은 꺼져 있어 관리자 API와 `POST /v1/projects/{projectId}/server-batches`가 둘 다 401을 반환한다.
 - Ctrl+C로 정지하면 예약 타이머·서버·런타임을 정리한다. 코드·설정을 바꾸면 다시 시작한다. 자동 새로고침은 지원하지 않는다.
 - 로컬 정리는 60초마다 실제 scheduled handler를 호출한다. 같은 프로세스에서 정리가 겹치지 않고, close는 진행 중 정리를 기다린다.
 
@@ -78,7 +78,11 @@ Ctrl+C·SIGTERM·부모 IPC 연결 종료·시작 실패·자식의 예기치 �
 - `OIDC_ALGORITHMS`는 콤마 구분, 기본 `RS256`, 허용 `RS256,ES256`, 중복은 안 된다.
 - `OIDC_TOKEN_TYPE`은 `at+jwt` 또는 `JWT`다.
 - `OIDC_CLOCK_TOLERANCE_SECONDS`는 문자열 정수 0..60, 기본 5다.
-- disabled인데 issuer/audience/jwks가 비어 있지 않으면 실패한다.
+- disabled인데 issuer/audience/jwks가 비어 있지 않으면 실패한다. 관리자·발행자 양쪽에 같은 규칙을 적용한다.
+- 발행자는 `PUBLISHER_AUTH_MODE`(`disabled` 기본 또는 `oidc`)와 `PUBLISHER_OIDC_ISSUER`/`PUBLISHER_OIDC_AUDIENCE`/`PUBLISHER_OIDC_JWKS_URI`, `PUBLISHER_OIDC_ALGORITHMS`/`PUBLISHER_OIDC_TOKEN_TYPE`/`PUBLISHER_OIDC_CLOCK_TOLERANCE_SECONDS`로 관리자와 같은 검증 규칙을 쓴다.
+- 발행자 키가 없는 기존 배포는 기본값 `disabled`로 보고, 마이그레이션 없이도 server 경로가 닫힌 상태를 유지한다.
+- 관리자와 발행자를 둘 다 `oidc`로 두면 audience가 서로 달라야 하고 같으면 정적 오류다. 발행자 검증기는 관리자 검증기를 재사용하지 않는다. 관리자를 `disabled`로 두고 발행자만 `oidc`로 켜면 발행자 전용 워커가 되고 관리자 경로는 401로 남는다.
+- 발행자 인증은 관리자와 같은 OIDC 어댑터를 쓴다. 실제 제공자와 issuer·audience·jwks 값은 **UNDECIDED**다. endpoint·발행자 검증기·런타임 설정 키는 로컬 구현했고 좁은 범위 검증을 통과했으며, 전체 검사 기록은 [검증 기록](../../VALIDATION.md)에 둔다.
 - 알 수 없는 mode, 잘못된 플래그, 불완전한 구성은 정적 오류로 거부한다. 원문 settings와 토큰은 노출하지 않는다.
 - `configureCollector`는 키를 조회하지 않고 검증한다. 배포된 워커는 첫 fetch/scheduled에서 env를 검증하고, 같은 구성이면 verifier 캐시를 재사용한다.
 - DB 바인딩은 필수다.
@@ -94,7 +98,7 @@ npm run collector:config -- --file .tmp/collector-target.json --out .tmp/collect
 
 - 입력 필드는 `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev`(boolean 명시), `settings`(object)다.
 - 실제 ID는 운영자가 제공한다. 문법 검증은 소유/존재를 증명하지 않는다.
-- settings의 `ADMIN_AUTH_MODE`는 반드시 `oidc`, `ALLOW_LOCAL_HTTP`는 false다.
+- settings의 `ADMIN_AUTH_MODE`는 반드시 `oidc`, `ALLOW_LOCAL_HTTP`는 false다. 발행자 인증을 켤 때는 `PUBLISHER_AUTH_MODE`를 `oidc`로 두고 발행자 OIDC 값을 함께 넣으며, 두 audience가 달라야 한다. 발행자 키를 넣지 않으면 server 경로는 닫힌 채로 배포된다.
 - 시크릿/토큰은 받지 않고 알려진 키만 허용한다. 입력은 8KiB 이하이고, 출력은 새 경로만 허용하며 기존 파일 덮어쓰기를 거부한다.
 - 결과 설정은 실제 account+DB ID를 고정하고 entry/migration 경로를 절대 경로로 쓴다. 타깃마다 별도 파일이라 환경 상속으로 인한 바인딩 혼동이 없다.
 - `workers_dev`는 명시한 `workersDev`를 따르고, `previewURLs`는 false, crons는 `["* * * * *"]`다.

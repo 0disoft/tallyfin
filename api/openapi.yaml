@@ -8,16 +8,23 @@ info:
     Grant listing and mutation require a current owner grant; grant mutation is implemented locally in this contract and the
     provisioning CLI remains an alternative. Owner-only administrator change history is implemented locally with rolling
     90-day retention and recorded-changes-only coverage. Server batch schemas and core validation are implemented;
-    guarded server persistence is implemented locally. Authenticated server ingestion endpoints are deferred.
+    guarded server persistence and dedicated authenticated server ingestion are implemented locally.
 tags:
   - name: Collection
-    description: Explicit browser events; no visitor identifiers or free text.
+    description: Explicit registered browser and server events; no visitor identifiers or free text.
   - name: Administration
     description: Authenticated project-scoped definitions and aggregates.
 security:
   - adminBearer: []
 components:
   securitySchemes:
+    publisherBearer:
+      type: http
+      scheme: bearer
+      description: Dedicated machine credential verified for issuer, subject, signature, expiry and a
+        single publisher API audience distinct from the administrator audience. Requires explicit
+        project_publishers permission; no authority from Origin, public project IDs or administrator grants.
+        Disabled by default; real issuer and credential issuance are deployment choices.
     adminBearer:
       type: http
       scheme: bearer
@@ -178,7 +185,7 @@ components:
     ServerBatch:
       type: object
       additionalProperties: false
-      description: Core wire contract for future authenticated server ingestion. No server HTTP endpoint is exposed yet.
+      description: Dedicated authenticated server ingestion; does not accept browser workflow attempts.
       required: [schemaVersion, source, events]
       properties:
         schemaVersion: { type: integer, minimum: 1, maximum: 2147483647 }
@@ -1435,7 +1442,9 @@ components:
             coverage:
               type: string
               const: best-effort
-              description: Recorded public collection rejection requests only. Missing diagnostic writes, unknown projects, admin failures and pre-migration history are excluded; not a delivery-completeness or visitor metric.
+              description: Recorded browser and authorized server collection rejection requests, shared across sources.
+                Missing diagnostic writes, unknown projects, initial authentication/publisher-permission denials,
+                admin failures and pre-migration history are excluded; not a delivery-completeness or visitor metric.
         summary:
           $ref: "#/components/schemas/CollectionRejectionSummary"
         days:
@@ -1446,6 +1455,118 @@ components:
           items:
             $ref: "#/components/schemas/CollectionRejectionDay"
 paths:
+  /v1/projects/{projectId}/server-batches:
+    post:
+      tags: [Collection]
+      operationId: collectServerBatch
+      summary: Atomically ingest authenticated server events
+      description: >
+        Requires a dedicated publisher bearer verified before project access, admission or body reads,
+        and a current project_publishers permission before admission and again in the atomic write.
+        The default OIDC adapter requires a single publisher audience distinct from the administrator
+        audience; administrator reader/owner grants never imply publishing permission.
+        Origin is ignored and no CORS permission, cookies or server OPTIONS operation are provided.
+        Only POST, no query parameters, at most 20 server events and 16 KiB UTF-8 JSON.
+        Retries preserve eventId, occurredAt and payload; identical receipts count as duplicates.
+        Conflicts reject the entire batch. Browser and server share project minute and UTC daily budgets;
+        denied authentication/permission consumes neither. Server events create no workflow state.
+        All responses use Cache-Control no-store and Vary Authorization.
+      security:
+        - publisherBearer: []
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerBatch"
+            examples:
+              server:
+                externalValue: ./examples/server-batch.json
+      responses:
+        "200":
+          description: Atomically committed; accepted plus duplicates equals the request event count.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchResult"
+        "400":
+          description: Malformed JSON, envelope, UTF-8 encoding, project ID or query string.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid publisher bearer, including disabled publisher authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            WWW-Authenticate:
+              description: Publisher bearer required.
+              schema: { type: string, const: Bearer }
+        "403":
+          description: No publisher permission, unknown project, revoked permission or paused project.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only POST is supported; Allow is POST. No server preflight is exposed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Allow:
+              description: Server collection method.
+              schema: { type: string, const: POST }
+        "409":
+          description: An event ID conflicts with a saved source-specific payload; no batch events are stored.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Request exceeds 16 KiB UTF-8.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Only application/json with optional UTF-8 charset and identity content encoding is accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Unavailable schema or invalid, unregistered, wrong-source event or browser attempt field.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Shared project request/new-receipt quota reached. Retry-After is seconds to the next UTC minute or UTC midnight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Retry-After:
+              description: Seconds before retry.
+              schema: { type: string, pattern: '^\\d+$' }
+        "503":
+          description: Storage temporarily unavailable. Retry-After is 1 second.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+          headers:
+            Retry-After:
+              description: Seconds before retry.
+              schema: { type: string, pattern: '^\\d+$' }
   /v1/projects/{projectId}/collection/rejections:
     get:
       tags: [Administration]

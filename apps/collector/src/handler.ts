@@ -1,8 +1,10 @@
-import { CollectionError, parseBatch, prepareBatch, PROJECT_ID, REJECTION_REASONS } from '@tallyfin/core';
+import { CollectionError, parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, PROJECT_ID, REJECTION_REASONS } from '@tallyfin/core';
 import type { CollectionStore, ErrorCode, RejectionReason } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import { administrator } from './admin.ts';
 import type { AdministratorAccess } from './admin.ts';
+import { authenticatePublisher } from './publisher.ts';
+import type { PublisherAccess } from './publisher.ts';
 
 const messages: Record<ErrorCode, string> = {
   invalid_request: 'Invalid request.', invalid_event: 'Invalid or unregistered event.', unknown_schema: 'Schema is unavailable.',
@@ -14,13 +16,14 @@ const messages: Record<ErrorCode, string> = {
   project_limit_reached: 'Project creation limit reached.',
   grant_conflict: 'Project grant changed. Reload before saving.',
   last_owner: 'The last project owner cannot be removed or demoted.',
-  quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Administrator authentication is required.',
+  quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Authentication is required.',
   forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
 };
 export interface CollectorOptions {
   now?: () => number;
   log?: (entry: { requestId: string; code: ErrorCode }) => void;
   admin?: AdministratorAccess;
+  publisher?: PublisherAccess;
   waitUntil?: (task: Promise<void>) => void;
 }
 export function allowedOrigin(origin: string | null, allowed: string[]): origin is string {
@@ -39,9 +42,10 @@ export function createCollector(store: CollectionStore, options: CollectorOption
     let retryAfter: number | undefined;
     let rejectionProjectId: string | null = null;
     let admitted = false;
+    let activeStore = store;
     try {
       const path = new URL(request.url).pathname;
-      const route = /^\/v1\/projects\/([^/]+)\/batches$/.exec(path);
+      const route = /^\/v1\/projects\/([^/]+)\/(batches|server-batches)$/.exec(path);
       if (!route) {
         if (path === '/v1/projects' || path.startsWith('/v1/projects/')) {
           const result = await administrator(request, options.admin, receivedAt);
@@ -49,23 +53,29 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         }
         throw new CollectionError('not_found', 404);
       }
+      const isServer = route[2] === 'server-batches';
+      if (isServer) headers.set('Vary', 'Authorization');
+      // Authenticate before reading any project, granting CORS, admission or consuming the body.
+      const principal = isServer ? await authenticatePublisher(request, options.publisher) : null;
+      if (isServer) activeStore = options.publisher!.store;
       const projectId = route[1]!;
       if (!PROJECT_ID.test(projectId)) throw new CollectionError('invalid_request', 400);
-      const project = await store.loadProject(projectId);
-      if (!project) throw new CollectionError('not_found', 404);
+      if (principal) await options.publisher!.store.publisherAccess(projectId, principal);
+      const project = await activeStore.loadProject(projectId);
+      if (!project) throw new CollectionError(isServer ? 'forbidden' : 'not_found', isServer ? 403 : 404);
       rejectionProjectId = projectId;
       const origin = request.headers.get('Origin');
-      const permitted = allowedOrigin(origin, project.allowedOrigins);
-      if (permitted) headers.set('Access-Control-Allow-Origin', origin);
+      const permitted = isServer || allowedOrigin(origin, project.allowedOrigins);
+      if (!isServer && permitted && origin) headers.set('Access-Control-Allow-Origin', origin);
       // Denials, malformed requests and preflights consume admission, including repeated IDs.
-      if (!await store.admit(projectId, receivedAt, project.limits.requestsPerMinute)) {
+      if (!await activeStore.admit(projectId, receivedAt, project.limits.requestsPerMinute)) {
         retryAfter = Math.max(1, Math.ceil((60_000 - receivedAt % 60_000) / 1000));
         throw new CollectionError('quota_exceeded', 429);
       }
       admitted = true;
       if (!permitted) throw new CollectionError('origin_denied', 403);
       if (project.status !== 'active') throw new CollectionError('project_unavailable', 403);
-      if (request.method === 'OPTIONS') {
+      if (!isServer && request.method === 'OPTIONS') {
         const method = request.headers.get('Access-Control-Request-Method');
         const requestedHeaders = request.headers.get('Access-Control-Request-Headers') ?? '';
         if (requestedHeaders.length > 128) throw new CollectionError('invalid_request', 400);
@@ -74,14 +84,19 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         headers.set('Access-Control-Allow-Methods', 'POST'); headers.set('Access-Control-Allow-Headers', 'Content-Type');
         return new Response(null, { status: 204, headers });
       }
-      if (request.method !== 'POST') { headers.set('Allow', 'POST, OPTIONS'); throw new CollectionError('invalid_request', 405); }
-      const batch = parseBatch(await readBody(request));
-      const registry = await store.loadRegistry(projectId, batch.schemaVersion);
+      if (request.method !== 'POST') { headers.set('Allow', isServer ? 'POST' : 'POST, OPTIONS'); throw new CollectionError('invalid_request', 405); }
+      if (isServer && new URL(request.url).search) throw new CollectionError('invalid_request', 400);
+      if (isServer && (request.headers.get('Content-Type') ?? '').split(';')[0]!.trim().toLowerCase() !== 'application/json')
+        throw new CollectionError('invalid_request', 415);
+      const body = await readBody(request);
+      const batch = isServer ? parseServerBatch(body) : parseBatch(body);
+      const registry = await activeStore.loadRegistry(projectId, batch.schemaVersion);
       if (!registry) throw new CollectionError('unknown_schema', 422);
       // Recheck the configuration loaded for this version before hashing or writing.
-      if (!allowedOrigin(origin, registry.allowedOrigins)) { headers.delete('Access-Control-Allow-Origin'); throw new CollectionError('origin_denied', 403); }
-      const prepared = await prepareBatch(batch, registry, receivedAt);
-      const result = await store.commit(prepared, registry);
+      if (!isServer && !allowedOrigin(origin, registry.allowedOrigins)) { headers.delete('Access-Control-Allow-Origin'); throw new CollectionError('origin_denied', 403); }
+      const result = batch.source === 'server'
+        ? await options.publisher!.store.commitServer(await prepareServerBatch(batch, registry, receivedAt), registry, principal!)
+        : await activeStore.commit(await prepareBatch(batch, registry, receivedAt), registry);
       if (result.accepted + result.duplicates !== batch.events.length) throw new CollectionError('storage_unavailable', 503);
       return Response.json(result, { status: 200, headers });
     } catch (error) {
@@ -104,7 +119,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         if (reason !== 'minute_limit' && REJECTION_REASONS.includes(reason)) {
           const id = rejectionProjectId;
           const task = (async () => {
-            try { await store.recordRejection(id, receivedAt, reason); } catch { /* bounded best-effort, no retry or raw error logging */ }
+            try { await activeStore.recordRejection(id, receivedAt, reason); } catch { /* bounded best-effort, no retry or raw error logging */ }
           })();
           if (options.waitUntil) {
             try { options.waitUntil(task); } catch { await task; }
@@ -115,4 +130,4 @@ export function createCollector(store: CollectionStore, options: CollectorOption
     }
   };
 }
-const routeForCollection = (url: string) => /^\/v1\/projects\/[^/]+\/batches$/.test(new URL(url).pathname);
+const routeForCollection = (url: string) => /^\/v1\/projects\/[^/]+\/(batches|server-batches)$/.test(new URL(url).pathname);

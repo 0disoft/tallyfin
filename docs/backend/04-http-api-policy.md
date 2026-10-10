@@ -7,6 +7,11 @@ Origin을 정확히 허용 목록과 비교하고 CORS credentials를 허용하�
 OPTIONS는 POST와 Content-Type만 허용한다. 수집에 관리자 자격증명을 요구하거나
 bearer로 공개 수집 권한을 높이지 않는다.
 
+서버 수집은 별도 `POST /v1/projects/{projectId}/server-batches`에서 발행자 bearer와
+프로젝트 발행 권한을 admission 전에 확인한다. JSON 전용·20개/16KiB·POST 전용이며
+쿼리·CORS·preflight를 제공하지 않는다. 기본은 인증을 끈 상태다.
+[서버 이벤트 계약](./server-events.md)을 따른다.
+
 중복은 body의 eventId로 판정한다. 같은 ID/내용은 200 duplicates, 내용 충돌은
 409이며 배치 전체가 거부된다. unknown field/event/property/version과 잘못된
 시간/값을 조용히 건너뛰지 않는다. 일시 실패는 503이다.

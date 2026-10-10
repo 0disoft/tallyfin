@@ -1,9 +1,9 @@
-# 서버 발행 이벤트 계약 (코어·저장 슬라이스)
+# 서버 발행 이벤트 계약 (코어·저장·endpoint 슬라이스)
 
-상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획과 저장·발행 권한 슬라이스까지
-로컬에서 구현했다. 저장 슬라이스는 `project_publishers`, source별 영수증·집계 저장,
-발행자 권한 재검사를 포함한다. HTTP 서버 발행 API·발행자 검증기·CLI 권한 관리·서버
-SDK·서버 출처 조회 화면은 아직 없다. 이 문서는 확정한 것과 아직 계획인 것을 나눠 적는다.
+상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획, 저장·발행 권한, 전용 발행
+endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현했고 좁은 범위 검증을
+통과했다. 발행자 OIDC 제공자 값과 발행자 권한 관리 CLI·서버 SDK·서버 출처 조회 화면은
+아직 없다. 이 문서는 확정한 것과 아직 계획인 것을 나눠 적는다.
 
 형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
 동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다. 브라우저 수집 경로는
@@ -112,9 +112,10 @@ workflow가 섞인 배치를 `invalid_event`(422)로 거부한다. 권한 검사
 `project_publishers`에는 발행자 주체(issuer·subject)와 생성 시각만 둔다. 이벤트 입력·
 원문·발행자 토큰은 저장하지 않는다.
 
-호스트(수집 HTTP 경계)는 서명·issuer·audience·exp를 검증한 principal만 넘겨야 한다.
-검증기와 전용 endpoint는 아직 없으므로 이 계약만으로 서버 발행이 열린다고 보지 않는다.
-발행자 토큰은 저장하지 않고 요청 처리 동안에만 쓴다.
+호스트(수집 HTTP 경계)는 서명·issuer·audience·exp를 검증한 principal만 넘긴다. 전용
+endpoint와 발행자 검증기, `PUBLISHER_*` 런타임 배선을 구현했지만 기본값은 `disabled`다.
+발행자 인증을 켜지 않은 배포에서는 이 계약만으로 서버 발행이 열리지 않는다. 발행자
+토큰은 저장하지 않고 요청 처리 동안에만 쓴다.
 
 ## 할당량
 
@@ -122,6 +123,50 @@ workflow가 섞인 배치를 `invalid_event`(422)로 거부한다. 권한 검사
 두 출처가 한 프로젝트의 같은 분당·일일 예산을 나눠 쓰며, 출처별로 따로 계산하지 않는다.
 같은 ID 재전송도 분당 요청 한도는 소비한다. 같은 내용의 중복은 UTC 일일 신규 영수증
 수와 이벤트 집계를 늘리지 않는다.
+
+## 서버 발행 endpoint
+
+`POST /v1/projects/{projectId}/server-batches` 하나만 연다. 브라우저 수집 경로와 다른
+요청 경계를 쓴다.
+
+- 인증은 `Authorization: Bearer` 헤더만 쓴다. 헤더는 8192자 이하이고 형식이 맞아야
+  하며, 서명·issuer·audience·exp를 검증한 발행자 주체(issuer·subject)만 통과한다.
+  호스트가 `PublisherAccess{store, verifyBearer}`로 검증기를 주입한다.
+- 호스트가 발행자 검증기를 주지 않으면 이 경로는 `unauthorized`(401)다. 관리자 검증기를
+  대신 쓰지 않고 fallback도 두지 않는다. 검증기가 예외를 던지거나 null을 돌려줘도 401이다.
+- 통과한 주체는 형식 검사를 다시 거친 뒤 issuer·subject만 복사해 저장 포트로 넘긴다.
+  토큰과 클레임은 저장하거나 응답에 넣지 않는다.
+- 권한 검사가 프로젝트 읽기와 분당 admission보다 먼저다. 인증이나 발행 권한이 처음부터
+  거부된 요청은 프로젝트 분당 quota를 쓰지 않는다. 인증을 통과한 뒤의 잘못된 요청·중복
+  요청은 브라우저 수집과 같이 분당 admission을 쓴다.
+- 이 경로는 CORS를 지원하지 않는다. `Origin`은 인증에 쓰지 않고 무시하며 응답에
+  `Access-Control-Allow-Origin`을 넣지 않는다. `OPTIONS` preflight를 처리하지 않는다.
+  `POST`가 아니면 `invalid_request`(405)와 `Allow: POST`다.
+- 본문은 `application/json`만 받는다. 다른 미디어 타입은 `invalid_request`(415)다.
+  조회 파라미터가 있으면 `invalid_request`(400)로 거부한다. 16KiB·20개 한도와 필드
+  검사는 코어 `parseServerBatch`·`prepareServerBatch`를 따른다.
+- 등록되지 않았거나 다른 출처의 이름은 거부하고, 일시 중지 프로젝트는
+  `project_unavailable`(403)다. 모르는 프로젝트는 404 대신 `forbidden`(403)으로 답해
+  프로젝트 존재를 숨긴다.
+- 저장은 D1 `commitServer`가 발행 권한을 다시 확인한다. UTC 일일 신규 영수증 한도와
+  분당 admission은 browser와 공유하며, 한도 초과 429에는 `Retry-After`를 보낸다.
+
+### 팩토리 배선
+
+- `createWorker(adminVerifier?, publisherVerifier?)` — 관리자와 발행자 검증기를 따로
+  받는다. 발행자를 주지 않으면 server 경로만 닫힌다.
+- `createOidcWorker(adminOptions, publisherOptions?)` — 둘 다 주면 audience가 서로 달라야
+  하고 같으면 생성 시점에 거부한다.
+- `createPublisherOidcWorker(publisherOptions)` — 발행자 전용. 관리자 경로를 열지 않는다.
+- 기본 export는 검증기를 붙이지 않으므로 관리자·발행자 경로가 모두 401로 닫힌다.
+- 발행자용 OIDC 검증기는 `exclusiveAudience`로 만든다. 서명 검증 뒤에 `aud`가 audience
+  문자열 하나이거나 같은 값을 가진 1원소 배열일 때만 통과시키고, 다른 audience가 섞인
+  토큰은 거부한다. 관리자 검증기는 기존 `includes` 정책을 유지한다.
+- 인증은 기존 `packages/auth-oidc`의 jose 기반 검증을 재사용한다.
+
+발행자 검증기는 호스트가 주입한다. 배포 설정에서 발행자 인증을 켜지 않으면(기본값
+`disabled`, 발행자 설정이 없는 기존 배포 포함) server 경로는 401로 닫혀 있다. 발행자
+OIDC 제공자 값과 원격 등록·배포는 아직 넣지 않았다.
 
 ## 마이그레이션과 롤백
 
@@ -142,20 +187,18 @@ workflow가 섞인 배치를 `invalid_event`(422)로 거부한다. 권한 검사
 
 - 브라우저 시작과 서버 완료를 연결하는 전환율. 지금은 server 이벤트 건수만 다룰 수
   있고 browser/server 시도 연결은 별도 설계다.
-- 발행자 자격증명 종류와 audience·발급 절차. 공개 프로젝트 ID와 허용 오리진을 발행자
-  인증 수단으로 재사용하지 않는다는 것만 정했다.
+- 발행자 OIDC 운영 설정과 실제 audience 값·발급 절차. 공개 프로젝트 ID와 허용 오리진을
+  발행자 인증 수단으로 재사용하지 않는다는 것만 정했다.
 - 출처별로 분당·일일 한도를 따로 둘지. 지금은 프로젝트 한 값을 공유한다.
 - server 출처 조회의 API·화면 형태. 현재 조회 계약은 `source`가 browser 고정이다.
 
 ## 다음 슬라이스
 
-1. 발행자 검증기와 전용 서버 발행 endpoint. 서명·issuer·audience·exp를 검증한
-   principal을 넘기는 HTTP 경계를 세우고 라우트 경로를 확정한다.
-2. `project_publishers` 권한 관리. CLI 또는 owner API로 부여·회수하며 관리자 grant와
-   섞지 않는다.
-3. dependency-free server SDK.
-4. 서버 출처 일별 조회 API와 화면.
-5. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
+1. 발행자 OIDC 운영 설정값을 채워 server 경로를 켜고, `project_publishers` 권한을
+   부여·회수하는 CLI 또는 owner API를 만든다. 관리자 grant와 섞지 않는다.
+2. dependency-free server SDK.
+3. 서버 출처 일별 조회 API와 화면.
+4. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
    수집·조회의 빈 정의 처리를 함께 정한다.
 
 관련: [이벤트·집계 계약](./event-contract.md), [수집기 구현](./collector.md),

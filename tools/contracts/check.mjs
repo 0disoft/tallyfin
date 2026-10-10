@@ -135,6 +135,18 @@ check('API auth declarations remain explicit', () => {
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['403']);
   assert.ok(spec.paths['/v1/projects/{projectId}'].patch.responses['409']);
 });
+check('server HTTP ingestion has a dedicated publisher credential, JSON body and no public preflight', () => {
+  const endpoint = spec.paths['/v1/projects/{projectId}/server-batches'];
+  assert.deepEqual(Object.keys(endpoint), ['post']);
+  assert.deepEqual(endpoint.post.security, [{ publisherBearer: [] }]);
+  assert.deepEqual(Object.keys(endpoint.post.requestBody.content), ['application/json']);
+  assert.equal(endpoint.post.requestBody.content['application/json'].schema.$ref, '#/components/schemas/ServerBatch');
+  assert.equal(spec.components.securitySchemes.publisherBearer.scheme, 'bearer');
+  assert.deepEqual(endpoint.post.parameters, [{ $ref: '#/components/parameters/ProjectId' }]);
+  for (const status of ['200','400','401','403','405','409','413','415','422','429','503'])
+    assert.ok(endpoint.post.responses[status], status);
+  assert.equal(endpoint.post.responses['404'], undefined);
+});
 check('project creation requires explicit authority, closed input and immutable retry metadata', () => {
   const input = example('project-creation');
   for (const value of [{ ...input, owner: 'asserted' }, { ...input, status: 'active' }, { ...input, name: ' ' },

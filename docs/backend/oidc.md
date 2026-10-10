@@ -1,7 +1,9 @@
-# 관리자 JWT 검증 어댑터
+# 관리자·발행자 JWT 검증 어댑터
 
 상태: `packages/auth-oidc`의 서명·클레임 검증과 `createOidcWorker` 연결을 로컬에서
-구현·검증했다. 관리자 프로토타입의 PKCE 로그인·회전 갱신도 로컬에서 구현했다.
+구현·검증했다. 관리자 프로토타입의 PKCE 로그인·회전 갱신도 로컬에서 구현했다. 발행자
+(머신) 검증기와 `exclusiveAudience` 정책, `runtime.ts`·`config.ts`의 `PUBLISHER_*`
+설정 배선은 로컬에서 구현했고 좁은 범위 검증을 통과했다. 전체 루트 검사는 진행 중이다.
 실제 인증 제공자 연결과 운영 배포는 하지 않았다. 서버 어댑터는 JWT access token을 검증한다.
 
 ## 호스트 연결
@@ -28,10 +30,33 @@ export function configureAdministrator(options: OidcOptions) {
 | algorithms | 기본 `['RS256']`. 호스트가 `RS256`·`ES256` 중 명시 선택한다. |
 | tokenType | 기본 `at+jwt`(RFC 9068). 제공자가 `JWT`를 쓰면 명시 선택하고 API 전용 audience를 요구한다. |
 | clockToleranceSeconds | 기본 5초, 0~60초. 시간 클레임 검사에 적용한다. |
+| exclusiveAudience | 기본 false. true면 `aud`에 지정 audience 하나만 있어야 하는 발행자(머신) 정책이 된다. |
 | fetchImpl | 선택. 호스트가 신뢰하는 transport 또는 격리 테스트용 fetch 구현. |
 
 설정 오류는 생성 시 예외가 나고 네트워크 요청을 보내지 않는다. 프로토타입은 OIDC
 로그인과 접힌 bearer 직접 입력을 제공한다. 실제 제공자와 API audience는 미정이다.
+
+## 발행자(머신) 검증
+
+서버 발행자는 관리자와 별도 검증기 포트를 쓴다. 관리자 검증기를 대신 쓰지 않고, 토큰의
+role이나 프로젝트 grant도 발행 권한으로 쓰지 않는다.
+
+- `createWorker(adminVerifier?, publisherVerifier?)` — 두 번째 포트로 발행자 검증기를
+  받는다. 발행자를 주지 않으면 `POST /v1/projects/{projectId}/server-batches`만 401로 닫힌다.
+- `createOidcWorker(adminOptions, publisherOptions?)` — 둘 다 주면 audience가 서로 달라야
+  하고 같으면 생성 시점에 거부한다.
+- `createPublisherOidcWorker(publisherOptions)` — 발행자 전용. 관리자 경로는 열지 않는다.
+- 발행자 검증기는 `exclusiveAudience: true`로 만든다. 서명 검증 뒤 `aud`가 설정한 audience
+  문자열 하나이거나 같은 값을 가진 1원소 배열일 때만 통과시키고, 다른 audience가 섞인
+  토큰은 거부한다. 관리자 검증기는 기존 포함(include) 정책을 유지한다.
+- 검증 실패·예외·null, 형식이 틀린 주체는 모두 401이다. 통과하면 `{issuer, subject}`만
+  넘기고 토큰·클레임은 저장하거나 로그에 남기지 않는다.
+- 발행자 검증기 뒤에 수집기가 D1 `project_publishers` 권한을 다시 본다. owner/reader
+  관리자 grant로는 발행 권한을 얻지 못한다.
+
+`runtime.ts`·`config.ts`가 `PUBLISHER_AUTH_MODE`(기본 `disabled`)와 `PUBLISHER_OIDC_*`
+키를 읽어 이 검증기를 붙인다. 기본 구성에서는 server 경로가 닫혀 있다. 실제 제공자 값과
+운영 audience 등록·배포는 하지 않았다. 설정 키 규칙은 [실행·배포 준비](./runtime.md)에 둔다.
 
 ## 토큰·권한 정책
 

@@ -1,5 +1,33 @@
 # 검증
 
+## 인증된 서버 이벤트 수집 API — 2026-10-11
+
+`POST /v1/projects/{projectId}/server-batches`를 별도 발행자 검증기와 연결했다.
+관리자 grant와 독립인 발행 권한을 admission 전에 확인하고, 기존 commitServer가 쓰기
+직전에 다시 검사한다. 브라우저와 같은 분당·UTC 일일 한도를 쓰며 JSON 전용·16KiB·
+20개 한도, POST 전용, 쿼리 거부, CORS 없음·Origin 무시, 동일 ID 재시도와 전체 배치
+충돌 거부를 적용한다. 기본은 401로 닫힌다. `PUBLISHER_AUTH_MODE`와 별도
+`PUBLISHER_OIDC_*` 설정을 runtime에 연결했고, 서버 토큰은 단일 audience만 받는다.
+관리자·발행자 audience를 같게 설정하면 구성 단계에서 거부한다. 발행자 변수가 없는
+이전 구성도 disabled로 동작한다.
+
+루트 `npm run check`의 타입 검사·전체 테스트 218/218·브라우저 SDK 크기 검사 통과.
+신규 HTTP 테스트 6/6에서는 실제 Miniflare Worker와 D1, 메모리에서 생성한 임시 RSA
+서명과 격리된 공개 JWKS transport로 인증과 저장까지 확인했다. 관리자 토큰·다중
+audience·잘못된 issuer·만료·서명 변조 거부, owner 권한만 있을 때 발행 거부,
+미등록 프로젝트 비공개 403, 발행 권한 회수 전후·저장 전 회수, 중복·충돌·공유
+할당량, 잘못된 메서드·미디어 타입·UTF-8·크기·스키마·출처·attempt 입력 거부를
+확인했다. 인증·발행 권한 초기 거부는 admission을 쓰지 않으며 그 뒤 잘못된 요청은
+한도를 쓴다. OpenAPI lint 경고 없이 통과·계약 검사 42/42 통과.
+SDK gzip 2667 bytes·Sembom 예제 포함 2949 bytes로 3072-byte 예산을 유지한다.
+
+OpenAPI 요청 경로·발행자 security scheme, 제품 명세·로드맵·수집/서버 이벤트·OIDC·
+실행 문서를 변경했다. DB 구조·마이그레이션·브라우저 SDK·의존성·CI 러너·위생
+정책은 변경하지 않았다. UI 변경이 없어 UI 빌드/브라우저 화면 검증은 생략했고 일반
+소스 lint 스크립트도 없다. 실제 제공자 자격증명 발급·원격 DB·부하·배포·Sembom
+활성화는 실행하지 않았다. 발행자 권한 관리 도구·서버 SDK·서버 출처 조회와
+server-only 레지스트리 허용은 후속이다.
+
 ## 소유자 전용 변경 이력 조회 API — 2026-10-11
 
 `GET /v1/projects/{projectId}/changes`·코어 AdminChangePage·AdminStore.changes와 D1
