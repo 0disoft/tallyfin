@@ -7,6 +7,7 @@ import LiveSchemas from './LiveSchemas';
 import LiveProjectCreate from './LiveProjectCreate';
 import LiveSdkSetup from './LiveSdkSetup';
 import CollectionDiagnostics from './CollectionDiagnostics';
+import DateRangePicker from './DateRangePicker';
 import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
@@ -18,7 +19,7 @@ import EventPropertyBreakdown from './EventPropertyBreakdown';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
 import type { EventGrouping, PropertyAnalysis } from './api/event-analysis';
 import { appendPage, shouldApplyPage } from './api/pagination';
-import { periodRange, rangeLabel, todayInZone } from './api/dates';
+import { comparisonRangeError, periodRange, rangeError, rangeLabel, todayInZone, type DateRange } from './api/dates';
 import type { EventDefinition, EventSeriesResponse, Project, ProjectSettings, Registry } from './api/types';
 
 type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
@@ -73,7 +74,7 @@ function workflowRecords(load: WorkflowLoad): DailyRecord[] {
   }));
 }
 
-export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate }: { view: View; period: Period; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void }) {
+export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void }) {
   const currentOrigin = useMemo(() => window.location.origin, []);
   const [session, setSession] = useState<Session | null>(null);
   const [token, setToken] = useState('');
@@ -106,6 +107,8 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setWorkflowDetails(previous => ({ ...Object.fromEntries(Object.entries(previous).filter(([, value]) => value.context === state.context)), [id]: state }));
   }, []);
   const [series, setSeries] = useState<Load<EventSeriesResponse> & { key?: string; analysis?: PropertyAnalysis | null }>({ status: 'idle' });
+  const [customRange, setCustomRange] = useState<{ scope: string; range: DateRange } | null>(null);
+  useEffect(() => { if (!customPeriod) setCustomRange(null); }, [customPeriod]);
 
   const client = useMemo(() => (session ? new ApiClient({ basePath: session.basePath,
     ...(session.login ? { getBearer: () => session.login!.getAccessToken(), onDestroy: () => session.login!.destroy() } : { token: session.token ?? '' }),
@@ -122,7 +125,11 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
   const activeTimeZone = activeProject?.timeZone ?? null;
-  const currentRange = activeTimeZone ? periodRange(todayInZone(activeTimeZone), period) : null;
+  const projectToday = activeTimeZone ? todayInZone(activeTimeZone) : null;
+  const dateScope = JSON.stringify([activeProjectId, activeTimeZone, period]);
+  useEffect(() => { setCustomRange(previous => previous?.scope === dateScope ? previous : null); }, [dateScope]);
+  const currentRange = projectToday ? customPeriod && customRange?.scope === dateScope ? customRange.range : periodRange(projectToday, period) : null;
+  const dateError = currentRange && projectToday ? rangeError(currentRange, projectToday) : null;
   const mainKey = JSON.stringify([activeProjectId, activeTimeZone, versionText, currentRange?.from, currentRange?.to, refreshTick, view]);
   const currentMain = main.key === mainKey ? main : null;
   workflowContext.current = mainKey;
@@ -155,6 +162,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     sessionRef.current += 1;
     setToken(''); setProjectId(null); setSelectedEvent(null); setGrouping(null); setProjects({ status: 'idle' });
     setMain({ status: 'idle' }); setSeries({ status: 'idle' });
+    setCustomRange(null);
     setSession({ login, basePath: API_BASE_PATH });
     setShowCreate(false); setNewProjectId(null);
   }, []);
@@ -168,6 +176,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setNextCursor(null);
     setMain({ status: 'idle' });
     setSeries({ status: 'idle' });
+    setCustomRange(null);
     setCompare(false); setComparison({ status: 'idle' });
     setProjectId(null);
     setSelectedEvent(null);
@@ -183,6 +192,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     setMore(false);
     client?.destroy();
     setSession(null);
+    setCustomRange(null);
     setCompare(false); setComparison({ status: 'idle' });
     setToken('');
     setProjects({ status: 'idle' });
@@ -231,10 +241,10 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   }, [activeProject, onActiveProjectChange]);
 
   useEffect(() => {
-    if (view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion) { setMain({ status: 'idle' }); return; }
+    if (view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion || !currentRange || dateError) { setMain({ status: 'idle' }); return; }
     const controller = new AbortController();
     setMain({ status: 'loading', key: mainKey });
-    const range = periodRange(todayInZone(activeTimeZone), period);
+    const range = currentRange;
     (async () => {
       try {
         const registry = await client.getSchema(activeProjectId, version, { signal: controller.signal });
@@ -247,19 +257,20 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       }
     })();
     return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey]);
+  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey, dateError]);
 
   const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
+  const comparisonError = mainData && projectToday ? comparisonRangeError(mainData.range, projectToday) : null;
   const comparisonKey = JSON.stringify([mainKey, comparisonRetry]);
   useEffect(() => {
-    if (!compare || view === 'settings' || !client || !mainData) { setComparison({ status: 'idle' }); return; }
+    if (!compare || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
     const controller = new AbortController();
     setComparison({ status: 'loading', key: comparisonKey });
     loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal)
       .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
       .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
     return () => controller.abort();
-  }, [client, compare, mainData, comparisonKey, view]);
+  }, [client, compare, mainData, comparisonKey, view, comparisonError]);
 
   useEffect(() => {
     if (view !== 'events' || !client || !analysisEvent || !analysisRegistry || !currentRange || !seriesKey) { setSeries({ status: 'idle' }); return; }
@@ -327,7 +338,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     </section></details></>;
   }
 
-  const data = mainData ?? null;
+  const data = dateError ? null : mainData ?? null;
   const currentComparison = comparison.key === comparisonKey ? comparison : null;
   const range = data?.range ?? null;
   const registry = data?.registry ?? null;
@@ -355,6 +366,7 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
   const successLabel = successDefinition?.label ?? '성공 시도';
   const currentWorkflowDetails = view === 'goals' ? Object.values(workflowDetails).filter(detail => detail.context === mainKey && detail.groupBy) : [];
   const exportUnavailable = !data || !validVersion ? '현재 기간 조회를 마쳐야 CSV를 내려받을 수 있어요.'
+    : compare && comparisonError ? '직전 기간이 보존 범위를 벗어나요. 비교를 끄면 현재 기간 CSV를 내려받을 수 있어요.'
     : compare && (currentComparison?.status !== 'ready' || !currentComparison.data) ? '직전 기간 비교를 마치거나 비교를 꺼 주세요.'
     : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.'
     : currentWorkflowDetails.some(detail => detail.status !== 'ready') ? '속성별 완료율 조회를 마치거나 해당 분류를 해제해 주세요.' : null;
@@ -379,8 +391,12 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
       {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
     </div>
+    {view !== 'settings' && customPeriod && currentRange && projectToday && <DateRangePicker
+      key={JSON.stringify([dateScope, currentRange.from, currentRange.to])} range={currentRange} today={projectToday} timeZone={activeTimeZone!}
+      onApply={range => setCustomRange({ scope: dateScope, range })} />}
+    {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
-    {view !== 'settings' && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
+    {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
     {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status])])} input={exportInput} unavailable={exportUnavailable} />}
     {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
@@ -400,7 +416,8 @@ export function LiveDashboard({ view, period, onActiveProjectChange, onNavigate 
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
     {view !== 'settings' && validVersion && data && registry && <>
-      {compare && <>
+      {compare && comparisonError && <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 CSV도 내려받을 수 있어요.</p>}
+      {compare && !comparisonError && <>
         {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">직전 기간을 조회하는 중이에요.</p>}
         {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
         {currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}

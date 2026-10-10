@@ -998,6 +998,14 @@ button {
 .api-toolbar { align-items:flex-end; margin-bottom:10px; }
 .comparison-toggle { display:flex; align-items:center; gap:8px; min-height:44px; font-size:16px; }
 .comparison-toggle input { width:18px; height:18px; accent-color:#155eef; }
+.custom-date-range { display:grid; gap:12px; margin:16px 0; padding:16px; border:1px solid #e2e8f0; border-radius:6px; background:#fff; }
+.custom-date-range h2 { margin:0; font-size:1.1rem; }
+.custom-date-range form { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; }
+.custom-date-range .api-field { flex:1 1 180px; min-width:0; font-size:1rem; }
+.custom-date-range input[type="date"] { width:100%; min-width:0; min-height:44px; font-size:1rem; }
+.custom-date-range button { min-height:44px; }
+.custom-date-range p { margin:0; }
+@media(max-width:480px) { .custom-date-range form { display:grid; grid-template-columns:minmax(0,1fr); } }
 .period-comparison { margin-bottom:28px; }
 .csv-export { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:16px 0; }
 .csv-export .context-note, .csv-export .form-error { flex:1 1 240px; margin:0; }
