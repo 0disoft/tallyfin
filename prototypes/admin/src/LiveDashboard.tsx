@@ -10,11 +10,11 @@ import SourceEventTable, { sourceLabel, type EventRow } from './SourceEventTable
 import SourceMetrics from './SourceMetrics';
 import CollectionDiagnostics from './CollectionDiagnostics';
 import DateRangePicker from './DateRangePicker';
-import { formatCount, formatRate, type DailyRecord, type Period, type View } from './data';
+import { formatCount, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
-import WorkflowPropertyBreakdown from './WorkflowPropertyBreakdown';
+import LiveGoals from './LiveGoals';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
 import { loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
@@ -267,19 +267,20 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey, dateError]);
 
   const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
+  const comparisonAvailable = view !== 'goals' || !!mainData?.workflows.length;
   const comparisonError = mainData && projectToday ? comparisonRangeError(mainData.range, projectToday) : null;
   const propertyComparison = useEventPropertyComparison(client, analysisRegistry, seriesData,
     compare && view === 'events' && !!groupBy && !comparisonError && !!seriesData, seriesKey);
   const comparisonKey = JSON.stringify([mainKey, comparisonRetry]);
   useEffect(() => {
-    if (!compare || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
+    if (!compare || !comparisonAvailable || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
     const controller = new AbortController();
     setComparison({ status: 'loading', key: comparisonKey });
     loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal, source)
       .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
       .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
     return () => controller.abort();
-  }, [client, compare, mainData, comparisonKey, view, comparisonError]);
+  }, [client, compare, mainData, comparisonKey, view, comparisonError, comparisonAvailable]);
 
   useEffect(() => {
     if (view !== 'events' || !client || !analysisEvent || !analysisRegistry || !currentRange || !seriesKey) { setSeries({ status: 'idle' }); return; }
@@ -396,7 +397,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           setSelectedSource(event.target.value === 'server' ? 'server' : 'browser'); setSelectedEvent(null); setGrouping(null);
         }}><option value="browser">브라우저</option><option value="server">서버</option></select></label>}
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
-      {view !== 'settings' && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />직전 기간과 비교</label>}
+      {view !== 'settings' && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름 기간 비교' : '직전 기간과 비교'}</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
@@ -406,9 +407,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       onApply={range => setCustomRange({ scope: dateScope, range })} />}
     {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
-    {view !== 'settings' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 목표는 브라우저 작업 흐름을 기준으로 계산해요.'}</p>}
+    {view !== 'settings' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 작업 흐름은 브라우저 기준이며, 퍼널은 등록된 단계의 출처를 함께 조회해요.'}</p>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
-    {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} />}
+    {view !== 'settings' && (view !== 'goals' || !!data?.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
     {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
@@ -428,8 +429,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
     {view !== 'settings' && validVersion && data && registry && <>
-      {compare && comparisonError && <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 CSV도 내려받을 수 있어요.</p>}
-      {compare && !comparisonError && <>
+      {compare && comparisonAvailable && comparisonError && <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 CSV도 내려받을 수 있어요.</p>}
+      {compare && comparisonAvailable && !comparisonError && <>
         {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">직전 기간을 조회하는 중이에요.</p>}
         {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
         {currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
@@ -469,20 +470,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           </>}
         </section>}
       </>}
-      {view === 'goals' && (data.workflows.length === 0
-        ? <section className="state-panel" role="status"><h2>등록된 작업 흐름이 없어요</h2><p>이 스키마에는 완료율을 계산할 작업 흐름 정의가 없어요.</p></section>
-        : data.workflows.map(load => <section className="goal-section" key={load.definition.id}>
-          <div className="goal-header"><div><h2>{load.definition.label}</h2><p className="context-note">시작일 기준 코호트({load.response.cohortBasis}) · 정의 v{registry.schemaVersion}</p></div><div className="goal-ratio"><strong>{formatRate(load.response.summary.completionRate)}</strong><span>{formatCount(load.response.summary.succeededAttempts)} / {formatCount(load.response.summary.startedAttempts)}</span></div></div>
-          {load.response.summary.completionRate !== null && <progress className="goal-track" max={100} value={load.response.summary.completionRate} aria-label={`${load.definition.label} 완료율`} />}
-          <dl className="definition-list">
-            <div><dt>시작</dt><dd>{load.definition.startEvent}<span>{formatCount(load.response.summary.startedAttempts)}건</span></dd></div>
-            <div><dt>성공</dt><dd>{load.definition.successEvent}<span>{formatCount(load.response.summary.succeededAttempts)}건</span></dd></div>
-            <div><dt>실패</dt><dd>{load.definition.failureEvent ?? '등록 안 됨'}<span>{load.response.summary.failedAttempts === null ? '—' : `${formatCount(load.response.summary.failedAttempts)}건`}</span></dd></div>
-            <div><dt>대기</dt><dd>pending<span>{formatCount(load.response.summary.pendingAttempts)}건</span></dd></div>
-          </dl>
-          <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
-          <WorkflowPropertyBreakdown key={`${mainKey}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={data.range} previous={compare && !comparisonError ? previousRange(data.range) : null} context={mainKey} onState={workflowStateChanged} />
-        </section>))}
+      {view === 'goals' && <LiveGoals client={client} registry={registry} workflows={data.workflows} range={data.range}
+        previous={compare && !comparisonError ? previousRange(data.range) : null} context={mainKey} onState={workflowStateChanged} />}
 
     </>}
   </>;

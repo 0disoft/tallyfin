@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { analyticsCsv, type ExportInput } from './api/csv-export';
 
-export default function CsvDownload({ input, unavailable }: { input: ExportInput | null; unavailable: string | null }) {
+export default function CsvDownload({ input, unavailable, buttonLabel = 'CSV 내려받기' }: { input: ExportInput | null; unavailable: string | null; buttonLabel?: string }) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState(false);
   function download() {
@@ -22,7 +22,7 @@ export default function CsvDownload({ input, unavailable }: { input: ExportInput
     }
   }
   return <div className="csv-export">
-    <button className="secondary-button" type="button" disabled={!input || !!unavailable} onClick={download} aria-describedby="csv-export-status">CSV 내려받기</button>
+    <button className="secondary-button" type="button" disabled={!input || !!unavailable} onClick={download} aria-describedby="csv-export-status">{buttonLabel}</button>
     <p id="csv-export-status" className={error && !unavailable ? 'form-error' : 'context-note'} role={error && !unavailable ? 'alert' : 'status'}>
       {unavailable ?? message ?? '현재 조회 조건·합계·일별 수치를 내려받아요. 분류를 선택했다면 모든 속성 값을 포함해요.'}
     </p>

@@ -120,3 +120,16 @@ test('CSV includes all summary/daily stages, typed sources, unknown blanks, prov
   assert.equal(funnelCsvFilename(data), 'tallyfin-modufile-v1-conversion-2026-10-08-2026-10-09-funnel.csv');
   data.summary.startedRuns++; assert.throws(() => funnelCsv(data));
 });
+
+test('clearing a selection cancels pending delivery without disposing the report for a later selection', async () => {
+  const pending = deferred(); let signal, calls = 0;
+  const client = new ApiClient({ token: 'not-a-credential', fetchImpl: (_url, init) => {
+    ++calls; signal = init.signal; return calls === 1 ? pending.promise : Promise.resolve(ok(fixture()));
+  } });
+  const states = [], report = new FunnelReport(client, state => states.push(state));
+  const request = report.load(registry(), range, 'conversion', 'old'); report.cancel();
+  assert.equal(signal.aborted, true); const count = states.length;
+  pending.resolve(ok(fixture())); await request; assert.equal(states.length, count); assert.equal(report.state.phase, 'idle');
+  await report.load(registry(), range, 'conversion', 'new'); assert.equal(report.state.phase, 'ready');
+  assert.equal(report.state.context, 'new'); report.dispose(); client.destroy();
+});

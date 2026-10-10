@@ -1,5 +1,41 @@
 # 검증
 
+## 관리자 퍼널 분석 화면·CSV 연결 — 2026-10-11
+
+API 연결 목표 화면에 `LiveGoals`·`LiveFunnels`를 연결했다. 퍼널 선택 전에는 요청하지
+않고, 선택한 등록 정의의 모든 출처·차원 조합을 함께 표시한다. 단계별 이벤트/출처·도달
+수·첫 단계 대비 도달률·직전 대비 전환율·다음 미도달 수와 일별 요약·날짜별 단계 표를
+연결했다. 잠정값 안내를 결과 근처에 두고 미도달을 실패로 분류하지 않는다. 퍼널 CSV는
+기존 작업 흐름 CSV와 별도이며 작업 흐름 없는 목표에는 기존 CSV/기간 비교를 숨긴다.
+
+조회 effect는 선택 해제 때 cancel하고 context·client 소유 가드로 이전 표/CSV를 숨긴다.
+같은 퍼널 재선택도 스냅샷을 즉시 비운다. cancel/dispose·늦은 응답을 테스트했고 목표
+렌더링을 추출해 `LiveDashboard.tsx`는 40,575 B에서 39,027 B로 줄였다.
+
+실행·통과: `prototypes/admin`의 `npm run typecheck`, `npm test` 148/148(퍼널 신규 8개),
+`npm run build`, `npm run test:sites` 4/4. 마지막 표 선택 스타일·잠정값 안내·기존 비교
+범위 표시 보완 후 typecheck·build·Sites 패키징 검사를 다시 통과했다. 관리자 메인 번들
+510.27 kB(gzip 141.23 kB)의 500 kB 경고는 남았으며 후속 성능 정리 대상이다.
+
+로컬 Vite 127.0.0.1:5186과 Codex 인앱 Chromium에서 실제 App→LiveDashboard→LiveGoals→
+LiveFunnels에 합성 transport만 주입했다. 실제 자격 증명 없이 API 연결·목표 이동·등록
+퍼널 선택, 91회 시작/42회 완료·단계별 browser/server 표시, 일별 날짜 선택 내역, 403과
+응답 합계 오류 후 표 제거/CSV 잠금, 정상 재시도, 0건의 null 비율 표시, 지연 중 CSV
+잠금·선택 해제, 프로젝트/기간 전환 선택 초기화, 연결 해제 후 표 제거를 확인했다.
+실제 CSV를 내려받아 요약 4행·일별 28행과 source·미지 비율 빈 셀을 확인했다.
+
+기존 90% 확대를 유지한 CSS innerWidth 320px(뷰포트 288px)에서 문서 scrollWidth 320px,
+표 영역 288px/내용 797px, 표 셀 18px였다. 키보드 ArrowRight 내부 스크롤을 확인했다.
+뷰포트는 복원하고 검증 탭·서버는 종료했다. HMR 중 hook 의존성 배열 크기 변경 경고가
+1건 발생했으며 최종 코드를 새 탭에서 로드한 뒤 콘솔 오류는 없었다. 증거는 ignore된
+`prototypes/admin/.tmp/funnel-report-ui/desktop.jpg`·`mobile.jpg`·`download.csv`에 있다.
+
+명세·로드맵·ADR·프론트엔드 설계·프로토타입 안내를 갱신했다. API·DBML·마이그레이션·
+SDK·의존성·CI 러너·위생 정책 변경은 없다. 루트 `npm run typecheck`도 통과했으며,
+백엔드는 변경하지 않아 백엔드 테스트는 반복하지 않았다. 운영 OIDC·원격 D1은 환경
+연결 전이라 실행하지 않았다. 푸시·배포·Sembom
+활성화는 없다. 다음은 기존 JSON 초안/검증/발행을 사용하는 퍼널 단계 편집 폼이다.
+
 ## 관리자 퍼널 조회·CSV 계층 — 2026-10-11
 
 관리자 `ApiClient.getFunnelDaily`에 같은 출처·메모리 bearer·취소·no-store 전송을 연결했다.

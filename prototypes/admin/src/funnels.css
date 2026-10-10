@@ -1,0 +1,238 @@
+/* ==========================================================================
+   Funnel analysis (LiveFunnels)
+   ========================================================================== */
+.funnel-section {
+  margin-top: 24px;
+  min-width: 0;
+}
+
+.funnel-section .section-header {
+  margin-top: 0;
+}
+
+.funnel-section .property-grouping { display: grid; gap: 8px; margin-top: 16px; }
+.funnel-section .property-grouping select {
+  width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px;
+  border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; appearance: auto;
+  font-size: 18px;
+}
+
+.funnel-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+
+.funnel-summary h3 {
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.funnel-summary .context-note {
+  margin-top: 6px;
+}
+
+.funnel-ratio {
+  color: #155eef;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.funnel-ratio strong {
+  display: block;
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.funnel-ratio span {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.funnel-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 24px;
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.funnel-facts dt {
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.funnel-facts dd {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.funnel-fraction {
+  margin-left: 6px;
+  color: #64748b;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.funnel-table {
+  font-size: 18px;
+}
+
+.funnel-table th,
+.funnel-table td {
+  font-size: 18px;
+}
+
+.funnel-table .number-cell {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel-table .funnel-event-cell {
+  white-space: normal;
+}
+
+.funnel-table .funnel-day {
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.funnel-step {
+  font-weight: 600;
+  color: #0f172a;
+  white-space: nowrap;
+}
+
+.funnel-event-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.funnel-event-label {
+  color: #0f172a;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.funnel-event-name {
+  color: #64748b;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.funnel-source {
+  color: #475569;
+  white-space: nowrap;
+}
+
+.funnel-rate {
+  min-width: 96px;
+}
+
+.funnel-track {
+  display: block;
+  width: 100%;
+  height: 8px;
+  margin-top: 6px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  border-radius: 6px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.funnel-track::-webkit-progress-bar {
+  background: #e2e8f0;
+  border-radius: 6px;
+}
+
+.funnel-track::-webkit-progress-value {
+  background: #155eef;
+  border-radius: 6px;
+}
+
+.funnel-track::-moz-progress-bar {
+  background: #155eef;
+  border-radius: 6px;
+}
+
+.funnel-daily {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.funnel-daily > summary {
+  cursor: pointer;
+  padding: 6px 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.funnel-daily .table-scroll {
+  margin-top: 12px;
+}
+
+.funnel-day-heading {
+  margin-top: 20px;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.funnel-provisional {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 20px;
+  color: #7c2d12;
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.funnel-csv {
+  margin-top: 24px;
+}
+
+@media (max-width: 800px) {
+  .funnel-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .funnel-ratio {
+    text-align: left;
+  }
+}
+
+@media (max-width: 450px) {
+  .funnel-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

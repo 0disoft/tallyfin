@@ -25,6 +25,7 @@ export class FunnelReport {
       this.#set({ phase: 'error', context, funnelId, error: error instanceof ApiError ? error : new ApiError('contract', '퍼널 응답이 등록된 정의와 맞지 않아요.') });
     }
   }
-  dispose(): void { this.#disposed = true; ++this.#generation; this.#controller?.abort(); this.state = { phase: 'idle', context: '', funnelId: '' }; }
+  cancel(): void { ++this.#generation; this.#controller?.abort(); this.#controller = undefined; this.state = { phase: 'idle', context: '', funnelId: '' }; }
+  dispose(): void { this.#disposed = true; this.cancel(); }
   #set(state: FunnelReportState): void { this.state = state; this.onChange(state); }
 }

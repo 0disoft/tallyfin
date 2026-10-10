@@ -1,0 +1,225 @@
+import { useEffect, useId, useRef, useState } from 'react';
+import { WarningCircle } from '@phosphor-icons/react';
+import { ApiClient } from './api/client';
+import type { DateRange } from './api/dates';
+import { FunnelReport } from './api/funnel-report';
+import type { FunnelReportState } from './api/funnel-report';
+import type { FunnelResponse } from './api/funnel-contract';
+import { funnelCsv, funnelCsvFilename } from './api/funnel-csv';
+import type { FunnelDefinition, Registry } from './api/types';
+import { formatCount, formatRate } from './data';
+import { sourceLabel } from './SourceEventTable';
+import './funnels.css';
+
+type StepCounts = FunnelResponse['summary']['steps'][number];
+
+function clampPercent(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+export default function LiveFunnels({ client, registry, range, context }: {
+  client: ApiClient; registry: Registry; range: DateRange; context: string;
+}) {
+  const id = useId();
+  const funnels = registry.funnels ?? [];
+  const funnelIds = funnels.map(funnel => funnel.id);
+  const [selection, setSelection] = useState<{ context: string; id: string }>({ context, id: '' });
+  const [snapshot, setSnapshot] = useState<{ client: ApiClient; state: FunnelReportState } | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [csvMessage, setCsvMessage] = useState<string | null>(null);
+  const [csvError, setCsvError] = useState(false);
+  const reportRef = useRef<FunnelReport | null>(null);
+
+  // One report per client. dispose() aborts in-flight reads, so a new client or
+  // unmount never leaves a request running against the previous session.
+  useEffect(() => {
+    const report = new FunnelReport(client, next => {
+      if (reportRef.current === report) setSnapshot({ client, state: next });
+    });
+    reportRef.current = report;
+    return () => {
+      if (reportRef.current === report) reportRef.current = null;
+      report.dispose();
+    };
+  }, [client]);
+
+  // A selection only counts in the context it was made and only for a registered
+  // id; a new context renders blank before any fetch runs.
+  const selectedId = selection.context === context && funnelIds.includes(selection.id) ? selection.id : '';
+
+  // Only a selected funnel is fetched; the report validates the requested
+  // registry/range and discards stale responses. Deselecting cancels the read.
+  useEffect(() => {
+    const report = reportRef.current;
+    if (!report || !selectedId || !funnelIds.includes(selectedId)) return;
+    report.load(registry, range, selectedId, context).catch(() => {});
+    return () => report.cancel();
+  }, [client, registry, range, selectedId, context, retryTick]);
+
+  // A different funnel (or no funnel) starts with a clean detail and CSV state.
+  useEffect(() => {
+    setSelectedDay(null);
+    setCsvMessage(null);
+    setCsvError(false);
+  }, [selectedId]);
+
+  if (!funnels.length) return null;
+
+  // Render guard: nothing owned by a previous client, context or selection shows.
+  const view = snapshot && snapshot.client === client && snapshot.state.context === context
+    && snapshot.state.funnelId === selectedId ? snapshot.state : null;
+  const data = view?.phase === 'ready' ? view.data ?? null : null;
+  const loading = Boolean(selectedId) && (!view || view.phase === 'loading' || view.phase === 'idle');
+  const csvReady = Boolean(data && data.funnelId === selectedId && data.meta.projectId === registry.project.id
+    && data.meta.schemaVersion === registry.schemaVersion);
+  const activeDay = data && selectedDay ? data.days.find(day => day.date === selectedDay) ?? null : null;
+
+  const declaredLabel = (step: { eventName: string; source: 'browser' | 'server' }) =>
+    registry.events.find(event => event.name === step.eventName && event.source === step.source)?.label ?? step.eventName;
+
+  const choose = (value: string) => {
+    setSnapshot(null);
+    setSelection({ context, id: value });
+  };
+
+  const stepRows = (steps: StepCounts[], definition: FunnelDefinition) => steps.map(step => {
+    const declared = definition.steps[step.stepIndex];
+    return <tr key={step.stepIndex}>
+      <th scope="row"><span className="funnel-step">{step.stepIndex + 1}단계</span></th>
+      <td className="funnel-event-cell">
+        <span className="funnel-event-stack">
+          <span className="funnel-event-label">{declared ? declaredLabel(declared) : '—'}</span>
+          {declared && <span className="funnel-event-name">{declared.eventName}</span>}
+        </span>
+      </td>
+      <td className="funnel-source">{declared ? sourceLabel(declared.source) : '—'}</td>
+      <td className="number-cell">{formatCount(step.reachedRuns)}</td>
+      <td className="number-cell funnel-rate">
+        {formatRate(step.reachRate)}
+        {step.reachRate !== null && <progress className="funnel-track" max={100} value={clampPercent(step.reachRate)} aria-hidden="true" />}
+      </td>
+      <td className="number-cell">{formatRate(step.conversionRate)}</td>
+      <td className="number-cell">{step.notReachedNext === null ? '—' : formatCount(step.notReachedNext)}</td>
+    </tr>;
+  });
+
+  const stepHead = <tr>
+    <th scope="col">단계</th>
+    <th scope="col">이벤트</th>
+    <th scope="col">출처</th>
+    <th scope="col" className="number-cell">도달</th>
+    <th scope="col" className="number-cell">첫 단계 대비 도달률</th>
+    <th scope="col" className="number-cell">직전 단계 대비 전환율</th>
+    <th scope="col" className="number-cell">다음 단계 미도달</th>
+  </tr>;
+
+  const download = () => {
+    if (!csvReady || !data) return;
+    let url: string | undefined;
+    let link: HTMLAnchorElement | undefined;
+    try {
+      url = URL.createObjectURL(new Blob([funnelCsv(data)], { type: 'text/csv;charset=utf-8' }));
+      link = document.createElement('a');
+      link.href = url;
+      link.download = funnelCsvFilename(data);
+      document.body.append(link);
+      link.click();
+      setCsvError(false);
+      setCsvMessage('CSV 다운로드를 요청했어요.');
+    } catch {
+      setCsvError(true);
+      setCsvMessage('CSV를 만들지 못했어요. 조회 상태와 브라우저 다운로드 설정을 확인해 주세요.');
+    } finally {
+      link?.remove();
+      if (url) { const release = url; setTimeout(() => URL.revokeObjectURL(release), 1000); }
+    }
+  };
+
+  return <section className="funnel-section" aria-labelledby={`${id}-heading`}>
+    <div className="section-header"><h2 id={`${id}-heading`}>퍼널 분석</h2></div>
+    <p className="context-note">시작 이벤트가 발생한 실행만 시작일 기준 코호트로 세요. 각 단계 이벤트는 등록된 정의의 출처를 그대로 사용하고 한 출처로 거르지 않아요.</p>
+    <label className="api-field property-grouping" htmlFor={`${id}-select`}>
+      <span>퍼널 선택</span>
+      <select id={`${id}-select`} className="text-input settings-select" value={selectedId} onChange={event => choose(event.target.value)}>
+        <option value="">퍼널을 선택하세요</option>
+        {funnels.map(funnel => <option key={funnel.id} value={funnel.id}>{funnel.label}</option>)}
+      </select>
+    </label>
+    {!selectedId && <p className="context-note" role="status">퍼널을 선택하면 단계별 도달·전환과 일별 내역을 조회해요. 선택하기 전에는 조회하지 않아요.</p>}
+    {loading && <section className="state-panel" role="status" aria-busy="true"><h2>퍼널 집계를 조회하는 중이에요</h2><p>등록된 퍼널 정의와 시작일 코호트를 서버에서 가져와요.</p></section>}
+    {selectedId && view?.phase === 'error' && <section className="state-panel" role="alert">
+      <WarningCircle size={32} />
+      <h2>퍼널 집계를 불러오지 못했어요</h2>
+      <p>{view.error?.message ?? '요청을 마치지 못했어요. 잠시 후 다시 시도해 주세요.'}</p>
+      <div className="state-actions"><button className="secondary-button" type="button" onClick={() => setRetryTick(tick => tick + 1)}>다시 시도</button></div>
+    </section>}
+    {data && <>
+      <div className="funnel-summary">
+        <div>
+          <h3>{data.definition.label}</h3>
+          <p className="context-note">시작일 기준 코호트({data.cohortBasis}) · {data.meta.timeZone} · 스키마 v{data.meta.schemaVersion} · {data.meta.from} ~ {data.meta.to}</p>
+        </div>
+        <div className="funnel-ratio">
+          <strong>{formatRate(data.summary.completionRate)}</strong>
+          <span>완료 {formatCount(data.summary.completedRuns)} / 시작 {formatCount(data.summary.startedRuns)}</span>
+        </div>
+      </div>
+      <dl className="funnel-facts">
+        <div><dt>시작한 실행</dt><dd>{formatCount(data.summary.startedRuns)}건</dd></div>
+        <div><dt>완료한 실행</dt><dd>{formatCount(data.summary.completedRuns)}건</dd></div>
+        <div><dt>완료율</dt><dd>{formatRate(data.summary.completionRate)}<span className="funnel-fraction">{formatCount(data.summary.completedRuns)} / {formatCount(data.summary.startedRuns)}</span></dd></div>
+      </dl>
+      {data.days.some(day => day.provisional) && <p className="notice" role="status">집계 중인 시작일이 포함돼 있어 결과가 달라질 수 있어요.</p>}
+      {data.summary.startedRuns === 0 && <p className="notice" role="status">선택한 기간에 관찰된 시작 실행이 없어요. 도달 수는 0으로, 비율은 알 수 없음(—)으로 표시해요. 등록된 퍼널이 없는 것과는 달라요.</p>}
+      <p className="context-note">다음 단계 미도달 수에는 아직 진행 중이거나 아직 전달되지 않은 실행이 포함돼요. 실패로 확정된 실행이 아니에요.</p>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label={`${data.definition.label} 단계별 도달 표`}>
+        <table className="event-table funnel-table">
+          <caption className="sr-only">{data.definition.label} 단계별 도달 수, 첫 단계 대비 도달률, 직전 단계 대비 전환율, 다음 단계 미도달 수</caption>
+          <thead>{stepHead}</thead>
+          <tbody>{stepRows(data.summary.steps, data.definition)}</tbody>
+        </table>
+      </div>
+      <p className="context-note">첫 단계 도달률은 시작 실행 대비예요. 첫 단계의 직전 단계 전환율과 마지막 단계의 다음 미도달은 비교 대상이 없어 —로 표시해요.</p>
+      <details className="funnel-daily">
+        <summary>일별 시작일 코호트 ({data.days.length}일)</summary>
+        <div className="table-scroll" tabIndex={0} role="region" aria-label={`${data.definition.label} 일별 코호트 표`}>
+          <table className="event-table funnel-table">
+            <caption className="sr-only">시작일별 시작 실행·완료 실행 수, 완료율과 확정 상태</caption>
+            <thead><tr>
+              <th scope="col">시작일</th>
+              <th scope="col" className="number-cell">시작 실행</th>
+              <th scope="col" className="number-cell">완료 실행</th>
+              <th scope="col" className="number-cell">완료율</th>
+              <th scope="col">확정 상태</th>
+            </tr></thead>
+            <tbody>{data.days.map(day => <tr key={day.date}>
+              <th scope="row"><button className="text-button funnel-day" type="button" aria-pressed={selectedDay === day.date} onClick={() => setSelectedDay(previous => previous === day.date ? null : day.date)}>{day.date}</button></th>
+              <td className="number-cell">{formatCount(day.startedRuns)}</td>
+              <td className="number-cell">{formatCount(day.completedRuns)}</td>
+              <td className="number-cell">{formatRate(day.completionRate)}</td>
+              <td>{day.provisional ? <span className="funnel-provisional">집계 중</span> : '확정'}</td>
+            </tr>)}</tbody>
+          </table>
+        </div>
+        <p className="context-note">시작일 코호트가 끝난 뒤 48시간 동안은 집계 중이에요. 날짜를 선택하면 그 날의 단계별 내역을 볼 수 있어요.</p>
+        {activeDay && <>
+          <h4 className="funnel-day-heading">{activeDay.date} 단계별 내역{activeDay.provisional ? ' · 집계 중' : ''}</h4>
+          <div className="table-scroll" tabIndex={0} role="region" aria-label={`${activeDay.date} 단계별 도달 표`}>
+            <table className="event-table funnel-table">
+              <caption className="sr-only">{activeDay.date} 시작일 코호트의 단계별 도달 수와 비율</caption>
+              <thead>{stepHead}</thead>
+              <tbody>{stepRows(activeDay.steps, data.definition)}</tbody>
+            </table>
+          </div>
+        </>}
+      </details>
+    </>}
+    {selectedId && <div className="csv-export funnel-csv">
+      <button className="secondary-button" type="button" disabled={!csvReady} onClick={download} aria-describedby={`${id}-csv-status`}>퍼널 CSV 내려받기</button>
+      <p id={`${id}-csv-status`} className={csvError ? 'form-error' : 'context-note'} role={csvError ? 'alert' : 'status'}>
+        {csvReady ? csvMessage ?? '현재 퍼널의 요약·단계·일별 수치를 CSV로 내려받아요.' : '조회를 마치면 현재 퍼널 결과를 CSV로 내려받을 수 있어요.'}
+      </p>
+    </div>}
+  </section>;
+}
