@@ -57,8 +57,9 @@ function browserPlatform(): BrowserPlatform | undefined {
   };
 }
 interface Batch {
-  body: string; count: number; createdAt: number; tries: number;
-  stopRetry?: (() => void) | undefined; stopRequest?: (() => void) | undefined;
+  // Reserved internal fields: build tooling may shorten them, never wire/public keys.
+  __tfBatchBody: string; __tfBatchCount: number; __tfBatchCreatedAt: number; __tfBatchTries: number;
+  __tfBatchStopRetry?: (() => void) | undefined; __tfBatchStopRequest?: (() => void) | undefined;
 }
 
 /** Internal shared transport. Public entry points validate their own finite task profiles. */
@@ -84,7 +85,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   const encoder = new TextEncoder(); const queue: string[] = [];
   const active = new Set<Batch>(); let stopped = false; let draining = false;
   let cancelTimer: (() => void) | undefined;
-  const pending = () => queue.length + [...active].reduce((count, batch) => count + batch.count, 0);
+  const pending = () => queue.length + [...active].reduce((count, batch) => count + batch.__tfBatchCount, 0);
   const snapshot = (name: string, properties: Properties): Properties | undefined => {
     if (!own(schema.events, name) || !properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
     const definitions = schema.events[name]!;
@@ -110,10 +111,10 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       if (encoder.encode(prefix + candidate + ']}').length > 16384) break;
       events = candidate; count++;
     }
-    return { body: prefix + events + ']}', count, createdAt: platform.now(), tries: 0 };
+    return { __tfBatchBody: prefix + events + ']}', __tfBatchCount: count, __tfBatchCreatedAt: platform.now(), __tfBatchTries: 0 };
   };
   const release = (batch: Batch) => {
-    active.delete(batch); batch.stopRequest = undefined;
+    active.delete(batch); batch.__tfBatchStopRequest = undefined;
     if (!active.size) {
       if (queue.length) schedule(draining || queue.length >= 20 ? 0 : 5000);
       else { draining = false; cancelTimer?.(); cancelTimer = undefined; }
@@ -121,26 +122,26 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   };
   const send = (batch: Batch) => {
     if (stopped || !active.has(batch)) return;
-    const remaining = batch.createdAt + 600000 - platform.now();
+    const remaining = batch.__tfBatchCreatedAt + 600000 - platform.now();
     if (remaining <= 0) { release(batch); return; }
     const controller = new AbortController(); let finished = false;
     const finish = (status: number, header: string | null = null) => {
       if (finished || stopped || !active.has(batch)) return;
-      finished = true; stopTimeout(); batch.stopRequest = undefined;
-      if ([0, 429, 503].includes(status) && batch.tries < 2) {
-        let delay = 1000 * 2 ** batch.tries;
+      finished = true; stopTimeout(); batch.__tfBatchStopRequest = undefined;
+      if ([0, 429, 503].includes(status) && batch.__tfBatchTries < 2) {
+        let delay = 1000 * 2 ** batch.__tfBatchTries;
         if (header !== null && /^\d+$/.test(header)) delay = Math.max(1000, Number(header) * 1000);
-        if (platform.now() + delay < batch.createdAt + 600000) {
-          batch.tries++;
-          batch.stopRetry = platform.timer(() => { batch.stopRetry = undefined; send(batch); }, delay);
+        if (platform.now() + delay < batch.__tfBatchCreatedAt + 600000) {
+          batch.__tfBatchTries++;
+          batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);
           return;
         }
       }
       release(batch);
     };
     const stopTimeout = platform.timer(() => { controller.abort(); finish(0); }, Math.min(10000, remaining));
-    batch.stopRequest = () => { finished = true; stopTimeout(); controller.abort(); };
-    try { platform.send(endpoint, batch.body, controller.signal).then(r => finish(r.status, r.retryAfter), () => finish(0)); }
+    batch.__tfBatchStopRequest = () => { finished = true; stopTimeout(); controller.abort(); };
+    try { platform.send(endpoint, batch.__tfBatchBody, controller.signal).then(r => finish(r.status, r.retryAfter), () => finish(0)); }
     catch { finish(0); }
   };
   function pump() {
@@ -148,8 +149,8 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     launch();
   }
   function launch() {
-    const batch = pack(); if (!batch.count) { queue.shift(); schedule(0); return; }
-    queue.splice(0, batch.count); active.add(batch); send(batch);
+    const batch = pack(); if (!batch.__tfBatchCount) { queue.shift(); schedule(0); return; }
+    queue.splice(0, batch.__tfBatchCount); active.add(batch); send(batch);
   }
   const enqueue = (name: string, properties: Properties, occurredAt: number, attachment?: object) => {
     if (stopped || pending() >= 40) return false;
@@ -166,13 +167,13 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     if (stopped) return;
     draining = true;
     // In-flight requests already use keepalive. Do not bypass a pending Retry-After.
-    if ([...active].some(batch => batch.stopRetry)) return;
+    if ([...active].some(batch => batch.__tfBatchStopRetry)) return;
     while (queue.length && platform.beacon) {
-      const batch = pack(); if (!batch.count) break;
-      let queued = false; try { queued = platform.beacon(endpoint, batch.body); } catch { /* fetch fallback */ }
+      const batch = pack(); if (!batch.__tfBatchCount) break;
+      let queued = false; try { queued = platform.beacon(endpoint, batch.__tfBatchBody); } catch { /* fetch fallback */ }
       if (!queued) break;
       // Beacon true means browser queue acceptance, not a committed server receipt.
-      queue.splice(0, batch.count);
+      queue.splice(0, batch.__tfBatchCount);
     }
     cancelTimer?.(); cancelTimer = undefined;
     // Start unsent keepalive batches during the visibility callback, before timers can freeze.
@@ -185,7 +186,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     destroy() {
       if (!stopped) {
         stopped = true; cancelTimer?.();
-        for (const batch of active) { batch.stopRetry?.(); batch.stopRequest?.(); }
+        for (const batch of active) { batch.__tfBatchStopRetry?.(); batch.__tfBatchStopRequest?.(); }
         detach?.(); queue.length = 0; active.clear();
       }
     },
