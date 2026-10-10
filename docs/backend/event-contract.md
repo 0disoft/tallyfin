@@ -24,7 +24,9 @@
 스키마 버전의 events/workflows는 불변이며 변경은 새 버전으로 발행한다. active만
 수집하고 retired는 조회만 한다. 여러 active 버전으로 구형 클라이언트를 수용할 수 있다.
 최대 이벤트 50종·흐름 10종, 최소 browser 이벤트 하나를 요구한다. server 정의는
-예약할 수 있으나 v0.1 수집·조회는 browser만 지원한다. definitions_json은 32KiB 이하다.
+예약할 수 있으나 현재 HTTP 수집·조회와 DB 저장은 browser만 지원한다. server 배치의
+코어 검증·정규화·해시·순수 집계 계획은 구현했고 별도 [서버 이벤트 계약](./server-events.md)에
+범위와 후속 인증·저장 작업을 정리했다. definitions_json은 32KiB 이하다.
 
 속성은 최대 4개, boolean·고정 enum 1~32종·32가지 이하의 정수 범위만 허용한다.
 optional 누락도 한 값 종류로 세어 가능한 조합의 곱을 이벤트/흐름 각각 256 이하로

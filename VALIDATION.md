@@ -77,6 +77,32 @@ reader 전환 때 권한 요청 수가 늘지 않고 목록·추가 폼이 사�
 
 제품 명세·로드맵·프론트엔드 설계·관리자 문서·검증 기록을 갱신했다.
 API·DB·SDK·의존성·CI 러너·위생 정책 변경, 푸시·배포·Sembom 활성화는 없다.
+
+## 서버 배치 코어 검증·집계 계획 — 2026-10-11
+
+`ServerBatch`·`ServerEvent`·`PreparedServerBatch`와 `parseServerBatch`·
+`prepareServerBatch`를 추가했다. 기존 parser/preparer와 구조·등록 속성·시간 검증을
+공유하고 server 출처 정의만 허용하며 attempt는 거부한다. canonicalEvent에 출처를
+선택적으로 받아 기본 browser 해시 입력 바이트를 유지한다. `planIngest`는 서버 배치의
+영수증·이벤트 delta만 만들고 시도·작업 흐름을 만들지 않는다. HTTP handler와 저장
+어댑터에는 연결하지 않았으며 현재 공개 browser 경로는 여전히 server 배치를 거부한다.
+
+신규 테스트의 첫 실행에서 기존 dimensionKey의 typed 값 직렬화를 잘못 적은 예상값
+한 건이 실패했다. 소스의 기존 직렬화 형식에 맞춰 기대값을 수정하고 루트
+`npm run check`를 실행해 타입 검사·203/203 테스트(서버 배치 신규 4개 포함)·브라우저
+크기 검사를 통과했다. 기존 Worker/Miniflare·D1 원자 저장·관리자 권한·CLI 회귀도 함께
+실행됐다. SDK gzip 2667 bytes, Sembom 연동 포함 2949 bytes로 3072 bytes 예산 이내다.
+
+`tools/contracts`의 `npm run check` 41/41과 `npm run lint`가 통과했다. OpenAPI의
+ServerBatch는 아직 HTTP 경로에 연결하지 않은 계약이라 no-unused-components 경고
+한 건이 있다. 이 경고를 없애려고 browser 경로에 서버 스키마를 허용하거나 검사 규칙을
+완화하지 않았다. ServerBatch·ServerEvent 스키마와 예제를 더하고, 별도 출처·attempt
+금지·닫힌 객체·20개 한도·공개 browser 경로의 기존 요청 스키마를 검사한다.
+
+제품 명세·로드맵·서버 이벤트 계약·백엔드 안내·README와 검증 기록을 갱신했다. API의
+컴포넌트 스키마만 추가했고 HTTP 경로·인증·DB·마이그레이션·SDK·의존성·CI 러너·위생
+정책을 바꾸지 않았다. 새 HTTP 서버 인증/저장 smoke와 서버-only 스키마 등록은 아직
+구현하지 않아 실행하지 않았다. 운영 인증·원격 DB 적용·푸시·배포·Sembom 활성화는 없다.
 실제 OIDC 계정과 원격 D1은 환경이 연결되지 않아 이번 UI 검증에 사용하지 않았다.
 
 ## 관리자 권한 변경 클라이언트 — 2026-10-11

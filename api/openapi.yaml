@@ -7,7 +7,8 @@ info:
     Schema publication requires an owner grant and explicit privacy review. Project creation requires a separately provisioned creator permission.
     Grant listing and mutation require a current owner grant; grant mutation is implemented locally in this contract and the
     provisioning CLI remains an alternative. Owner-only administrator change history is implemented locally with rolling
-    90-day retention and recorded-changes-only coverage. Server ingestion is deferred.
+    90-day retention and recorded-changes-only coverage. Server batch schemas and core validation are implemented;
+    authenticated server ingestion endpoints and persistence are deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
@@ -167,6 +168,26 @@ components:
           maxItems: 20
           items:
             $ref: "#/components/schemas/Event"
+    ServerEvent:
+      description: Registered server event only. Browser attempt identities and workflow state are forbidden.
+      allOf:
+        - $ref: "#/components/schemas/Event"
+        - type: object
+          properties:
+            attempt: false
+    ServerBatch:
+      type: object
+      additionalProperties: false
+      description: Core wire contract for future authenticated server ingestion. No server HTTP endpoint is exposed yet.
+      required: [schemaVersion, source, events]
+      properties:
+        schemaVersion: { type: integer, minimum: 1, maximum: 2147483647 }
+        source: { type: string, const: server }
+        events:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/ServerEvent" }
     BatchResult:
       type: object
       additionalProperties: false

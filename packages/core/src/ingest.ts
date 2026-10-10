@@ -1,5 +1,5 @@
 import { CollectionError } from './types.ts';
-import type { PreparedBatch, PreparedEvent } from './types.ts';
+import type { PreparedBatch, PreparedServerBatch } from './types.ts';
 import { DAY } from './value.ts';
 
 export interface Receipt { event_id: string; schema_version: number; payload_hash: string; received_at: number; expires_at: number }
@@ -19,7 +19,7 @@ export interface IngestPlan {
   accepted: number; duplicates: number;
 }
 
-export function planIngest(batch: PreparedBatch, snapshot: IngestSnapshot, dailyLimit: number): IngestPlan {
+export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot: IngestSnapshot, dailyLimit: number): IngestPlan {
   const receipts = new Map(snapshot.receipts.filter(r => r.expires_at > batch.receivedAt).map(r => [r.event_id, r]));
   const attempts = new Map(snapshot.attempts.filter(a => a.expires_at > batch.receivedAt).map(a => [a.attempt_id, { ...a }]));
   const changed = new Map<string, AttemptState>();

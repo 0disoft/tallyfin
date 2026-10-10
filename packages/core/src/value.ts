@@ -49,8 +49,9 @@ export function dimensionKey(properties: Properties, keys = Object.keys(properti
   if (new TextEncoder().encode(value).byteLength > 512) throw new CollectionError('invalid_event', 422);
   return value;
 }
-export function canonicalEvent(projectId: string, batchVersion: number, event: import('./types.ts').BrowserEvent): string {
-  return JSON.stringify([projectId, batchVersion, 'browser', event.eventId, event.name,
+export function canonicalEvent(projectId: string, batchVersion: number, event: import('./types.ts').BrowserEvent,
+  source: import('./types.ts').EventSource = 'browser'): string {
+  return JSON.stringify([projectId, batchVersion, source, event.eventId, event.name,
     event.occurredAt, dimensionKey(event.properties), event.attempt
       ? [event.attempt.workflowId, event.attempt.attemptId, event.attempt.startedAt] : null]);
 }

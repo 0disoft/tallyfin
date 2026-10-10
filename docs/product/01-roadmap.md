@@ -5,8 +5,17 @@
 ## 현재 진행 순서 — 2026-10-11
 
 - 권한 조회·변경 화면과 관리자 변경 이력 저장·조회·화면 연결은 로컬 구현·검증 완료다.
-- 다음 구현은 서버 발행 인증·수집 계약과 서버 SDK다. 브라우저 공개 ID나 Origin을
-  서버의 인증 수단으로 재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도 설계한다.
+- 서버 발행 코어 슬라이스도 완료했다. `parseServerBatch`·`prepareServerBatch`,
+  source별 payload hash, `planIngest`의 서버 지원, `ServerBatch`·`ServerEvent`
+  계약까지다. HTTP 서버 발행 API·서버 인증·DB 저장 경로·서버 SDK·서버 출처 조회
+  화면은 아직 없다. [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과
+  계획을 나눠 적었다.
+- 다음 구현은 서버 저장·인증 경계다. 별도 머신 principal 인증과 프로젝트 발행 권한
+  검사를 관리자 reader/owner grant로 추론하지 않고, DB에 source별 영수증과
+  `event_daily_counts`를 쓰며 commit 저장 시점에 권한을 다시 검사한다. 그 뒤 전용
+  endpoint·dependency-free server SDK·서버 일별 조회·UI 순서다. 브라우저 공개 ID나
+  Origin을 서버의 인증 수단으로 재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도
+  설계한다.
 - 이후 다단계 퍼널의 연결·보존 기준을 설계하고 조회와 화면을 작은 단위로 구현한다.
 - 실제 인증 제공자·원격 DB·정리 작업·복구·부하 검증을 마친 뒤 서비스 파일럿을 진행한다.
 - Sembom과 다른 종류의 서비스 한 곳에서 범용성을 확인하고 라이선스·독립 설치·공개
@@ -267,4 +276,16 @@ change는 action별로 필요한 값만 담는다. limit은 기본 25·최대 10
 요청하지 않고 401·403이면 기록을 지운다. 응답 형태·프로젝트·보존 범위·정렬·커서 진행을
 검사하고 프로젝트 전환·언마운트 때 취소·늦은 응답 폐기를 적용한다. 320px 표시와 키보드
 표 스크롤을 로컬 브라우저에서 확인했다. API·DB·SDK·의존성·CI 변경·푸시·배포는 없다.
+검증은 [검증 기록](../../VALIDATION.md)에 둔다.
+
+2026-10-11 서버 발행 코어: `parseServerBatch`·`prepareServerBatch`와 `ServerBatch`·
+`ServerEvent` 계약을 로컬 구현했다. server 이벤트는 eventId·name·UTC occurredAt·등록
+properties 네 필드만 갖고 attempt는 금지한다. 배치당 최대 20개·16KiB, occurredAt은
+수신 시각 기준 과거 24시간~미래 5분이며 source가 server인 등록 정의만 쓴다. 영수증 키와
+payload hash 입력에 출처가 들어가고 브라우저 canonical 해시 바이트는 그대로 유지한다.
+`planIngest`는 server 배치에서 영수증·이벤트 일별 집계 delta만 만든다. HTTP 서버 발행
+API·서버 인증·DB 저장 경로·서버 SDK·서버 출처 조회 화면은 아직 없다. 다음은 별도 머신
+principal 인증과 프로젝트 발행 권한 검사, source별 영수증·`event_daily_counts` 저장과
+commit 시점 권한 재검사다. 일일 신규 영수증 한도를 출처가 나눠 쓰는지는 저장·인증
+슬라이스에서 정한다. 원격 DB 적용·푸시·배포는 없다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.

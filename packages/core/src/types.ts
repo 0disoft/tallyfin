@@ -28,6 +28,12 @@ export interface BrowserEvent {
 export interface BrowserBatch {
   schemaVersion: number; source: 'browser'; events: BrowserEvent[];
 }
+export type EventSource = 'browser' | 'server';
+/** Server events carry no browser attempt identity or workflow state. */
+export interface ServerEvent extends Omit<BrowserEvent, 'attempt'> { attempt?: never }
+export interface ServerBatch {
+  schemaVersion: number; source: 'server'; events: ServerEvent[];
+}
 export interface PreparedEvent {
   event: BrowserEvent; occurredAt: number; eventDate: string; dimensionKey: string;
   payloadHash: string;
@@ -39,6 +45,13 @@ export interface PreparedEvent {
 export interface PreparedBatch {
   projectId: string; schemaVersion: number; source: 'browser'; receivedAt: number;
   events: PreparedEvent[];
+}
+export interface PreparedServerEvent extends Omit<PreparedEvent, 'event' | 'workflow'> {
+  event: ServerEvent; workflow?: never;
+}
+export interface PreparedServerBatch {
+  projectId: string; schemaVersion: number; source: 'server'; receivedAt: number;
+  events: PreparedServerEvent[];
 }
 export type ErrorCode = 'invalid_request' | 'invalid_event' | 'unknown_schema' |
   'origin_denied' | 'project_unavailable' | 'event_conflict' | 'attempt_conflict' |

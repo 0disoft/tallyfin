@@ -18,13 +18,29 @@ const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
 
-for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batch':'BrowserBatch',
+for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batch':'BrowserBatch', 'server-batch':'ServerBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
   'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
+check('server batch is closed, source-specific and forbids browser attempt identities', () => {
+  const server = example('server-batch');
+  assert.equal(validate('BrowserBatch', server), false);
+  assert.equal(validate('ServerBatch', example('browser-batch')), false);
+  for (const mutate of [v => v.source = 'browser', v => v.source = 'other', v => v.token = 'extra',
+    v => v.events = [], v => v.events = Array(21).fill(v.events[0]),
+    v => v.events[0].attempt = example('browser-batch').events[0].attempt,
+    v => v.events[0].attempt = null, v => v.events[0].userId = 'private',
+    v => v.events[0].properties = { outcome: { name: 'nested' } },
+    v => v.events[0].properties.outcome = 'free text', v => v.events[0].eventId = 'persistent-id',
+    v => v.events[0].occurredAt = '2026-10-08T15:00:10+09:00']) {
+    const value = structuredClone(server); mutate(value); assert.equal(validate('ServerBatch', value), false);
+  }
+  assert.equal(spec.paths['/v1/projects/{projectId}/batches'].post.requestBody.content['application/json'].schema.$ref,
+    '#/components/schemas/BrowserBatch');
+});
 const batch = example('browser-batch');
 for (const [name, mutate] of [
   ['unknown envelope key', b => { b.userId = 'private'; }],
