@@ -214,7 +214,7 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
             issued = true; sent++;
             const response = await host.fetch(endpoint, { method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body,
-              signal: requestSignal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+              signal: requestSignal, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
             httpStatus = response.status; header = response.headers.get('Retry-After');
             if (response.status === 200) return await receipt(response, count, requestSignal);
             await response.body?.cancel();

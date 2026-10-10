@@ -1,5 +1,30 @@
 # 검증
 
+## 서버 SDK Node·Worker·D1 통합 — 2026-10-11
+
+`apps/collector/test/server-sdk.test.ts`에서 서버 작업 예제와 등록 정의 투영을 확인했다.
+Node 기본 fetch의 루프백 HTTP 전송과 Worker 기본 fetch의 outbound service 전송이
+전용 audience로 서명한 메모리 임시 토큰·발행 권한 검사를 거쳐 실제 로컬 D1에 저장된다.
+테스트 전용 키/JWT는 메모리에서 생성하고 실제 제공자·자격증명은 사용하지 않는다.
+응답 유실 뒤 본문·ID를 유지한 재전송은 신규 집계/할당량을 늘리지 않고, 저장된 이벤트의
+수동 복원도 duplicate다. 같은 ID·다른 내용은 409이며 권한 회수 뒤 두 런타임 모두
+403이고 신규 영수증을 만들지 않는다. 서버 발행은 브라우저 작업 흐름 상태를 만들지 않는다.
+
+기존 `redirect: 'error'`는 현재 Worker 런타임에서 요청 전에 실패하는 것으로 재현됐다.
+SDK를 `redirect: 'manual'`로 수정해 리다이렉트를 따라가지 않으며, Node와 Worker 모두
+302에서 한 번만 시도하고 다른 주소로 토큰을 보내지 않는지 확인했다. 응답 유실 테스트의
+Miniflare 영수증 스트림은 소진 후 버려 로컬 연결 오류 로그 없이 실패를 재현한다.
+
+관련 테스트 15/15, 루트 `npm run check`의 타입 검사·전체 테스트 238/238·브라우저 크기
+검사, OpenAPI lint와 계약/문서 링크 검사 43/43 통과. `npm run build:server`의 ESM/타입
+선언 빌드 통과: 7179 bytes/gzip 3154 bytes, 런타임 의존성 0개다. 브라우저 SDK는 gzip
+2667 bytes, Sembom 포함 2949 bytes로 3KiB 예산을 유지했다.
+
+예제 Registry를 추가했고 API/DB 계약·마이그레이션·의존성·CI 러너·위생 정책은 변경하지
+않았다. 아키텍처·개발 안내·SDK/패키지 경계·로드맵을 갱신했다. UI 변경이 없어 화면 검사는
+반복하지 않았고 일반 소스 lint 스크립트는 없다. 실제 제공자·원격 DB·서비스 활성화·푸시·
+배포는 실행하지 않았다. 서버 출처 조회 화면과 서버 전용 등록은 다음 구현이다.
+
 ## 의존성 없는 서버 SDK — 2026-10-11
 
 `packages/server`에 별도 ESM SDK `createTallyfinServer`를 구현했다. 검토한 서버 이벤트

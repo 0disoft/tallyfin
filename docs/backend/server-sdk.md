@@ -1,7 +1,7 @@
 # 서버 SDK (packages/server)
 
 상태: `@tallyfin/server`의 소스와 단위 테스트·빌드를 로컬에서 확인했고 런타임 의존성은
-없다. 다음 슬라이스는 로컬 Miniflare Worker·D1 통합이고, 원격 배포·실제 제공자 연결은
+없다. 로컬 Node·Miniflare Worker·D1 통합도 확인했고, 원격 배포·실제 제공자 연결은
 범위 밖이다. 실측값과 전체 루트 검사 기록은 [검증 기록](../../VALIDATION.md)에 둔다.
 
 런타임 의존성 없이 `fetch`·Web Crypto·`AbortController`만 쓰는 ESM 클라이언트다. DOM에
@@ -124,8 +124,15 @@ const client = createTallyfinServer({
 ## 보안
 
 요청은 `Authorization: Bearer` 헤더와 `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`,
-`redirect: 'error'`, `cache: 'no-store'`를 쓴다. 쿠키·referrer·리다이렉트·캐시를 쓰지 않고,
+`redirect: 'manual'`, `cache: 'no-store'`를 쓴다. 쿠키·referrer·리다이렉트·캐시를 쓰지 않고,
 토큰·원문 입력·원문 오류를 결과나 로그에 넣지 않는다.
+
+리다이렉트 응답은 따라가지 않고 `unavailable`/`invalid_response`로 돌려준다. 이 응답은
+자동 재시도하지 않는다. Node와 Worker의 기본 fetch에서 다른 주소로 토큰을 전달하지
+않는지 통합 테스트로 확인한다.
+
+[작업 서비스 예제](../../examples/server/README.md)는 검토한 등록 스키마의 서버 정의만
+투영한다. 투영 도구는 빌드 시점에만 코어를 읽으며 SDK 번들에는 넣지 않는다.
 
 관련: [서버 발행 이벤트](./server-events.md), [이벤트·집계 계약](./event-contract.md),
 [검증](../../VALIDATION.md).

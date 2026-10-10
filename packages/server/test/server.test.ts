@@ -48,7 +48,7 @@ test('configuration is inert, schema is snapshotted, events are immutable and se
   assert.deepEqual(Object.keys(body).sort(), ['events', 'schemaVersion', 'source']);
   assert.deepEqual(Object.keys(body.events[0]).sort(), ['eventId', 'name', 'occurredAt', 'properties']);
   const init = h.calls[0]!.init;
-  assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'error'); assert.equal(init.credentials, 'omit');
+  assert.equal(init.method, 'POST'); assert.equal(init.redirect, 'manual'); assert.equal(init.credentials, 'omit');
   assert.equal(init.referrerPolicy, 'no-referrer'); assert.equal(init.cache, 'no-store');
   assert.deepEqual(Object.keys(init.headers!), ['Content-Type', 'Authorization']);
 });

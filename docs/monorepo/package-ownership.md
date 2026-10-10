@@ -1,10 +1,11 @@
 # 패키지 소유권
 
-상태: 부분 구현. core·storage-d1·collector·browser 로컬 구현·검증 완료(Sembom 예제 포함), admin 계획. npm 스코프는 미결정.
+상태: 부분 구현. core·storage-d1·collector·browser·server 로컬 구현·검증 완료(Sembom 예제 포함), admin 계획. 현재 `@tallyfin` 로컬 스코프로만 쓰고 공개 npm 스코프·릴리스 방식은 미결정.
 
 ## 책임
 - core: 프로젝트별 이벤트/속성 등록 정의, 검증, 정규화, 목표·집계 기준. 특정 서비스 이벤트명을 전역 요구사항으로 두지 않는다. 로컬 구현·검증 완료.
 - browser: 최소 SDK. 동기 수집 I/O 없음, 렌더링/계산 대기 없음. 로컬 구현·검증 완료.
+- server: 서버 발행 SDK. `send`는 await하는 배치 전송이고 수명 주기·재시도 저장·`getToken` 콜백은 호출자가 쥔다. 외부 런타임 의존성이 없고 브라우저/core/storage 런타임을 번들하지 않는다. 로컬 구현·검증 완료, 로컬 Node·Worker·D1 통합 검증 완료.
 - storage-d1: D1 집계 저장 어댑터. 원자적 커밋·CAS 가드·할당량·만료 정리를 포함하며 로컬 구현·검증 완료.
 - auth-oidc: 서버용 JWT 서명·클레임·공개키 검증 어댑터. 호스트 설정을 받으며 Cloudflare·D1에 의존하지 않는다. core/SDK에 포함하지 않는다.
 - collector: Worker 수신 경계. 프로젝트·스키마·발행 출처에 맞춰 검증하고 집계한다. 최소 browser 수집 로컬 구현·검증 완료.

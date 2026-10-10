@@ -12,7 +12,7 @@
   `ServerCollectionStore`, 전용 `POST .../server-batches`와 `PublisherAccess` 발행자
   인증 배선까지다. 발행자 회수 경쟁은 쓰기 batch의 권한 재검사로 롤백한다. 발행자
   권한 부여·회수 CLI(`publisher-grant`·`publisher-revoke`)와 dependency-free 서버 SDK
-  (`packages/server`)도 로컬 구현 완료다. 발행자 OIDC 운영 설정값과 서버 출처 조회 화면은
+  (`packages/server`)도 로컬 구현 완료이며 Node·Worker·D1 통합을 검증했다. 발행자 OIDC 운영 설정값과 서버 출처 조회 화면은
   아직 없다. [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
 - 다음 구현은 서버 출처 일별 조회·UI와 server 정의만 있는 스키마 허용이다. 발행자 OIDC
   운영 설정값은 사용자가 운영 인증을 정한 뒤 채운다. 브라우저 공개 ID나 Origin을 서버의
@@ -25,6 +25,13 @@
 아래 날짜별 기록의 “다음 단계”는 해당 작업 시점의 기록이며, 현재 순서는 위 목록을 따른다.
 
 작은 순차 슬라이스로 진행합니다.
+
+2026-10-11 서버 SDK 통합: 작업 서비스 예제와 빌드 시점 서버 스키마 투영을 추가하고,
+Node 기본 fetch·Worker 기본 fetch·발행자 인증·실제 로컬 D1 저장을 함께 검증했다.
+Worker에서 실패하던 리다이렉트 옵션을 수정하고 두 런타임의 리다이렉트 차단을 확인했다.
+응답 유실 재전송·수동 복원은 중복 집계되지 않고 내용 충돌·발행 권한 회수는 거부된다.
+다음은 서버 출처 조회·UI와 서버 전용 등록이다. 실제 제공자·원격 배포는 아직 없다.
+검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 
 2026-10-10 수집 거부 원인 저장·조회: 기존 admission에 고정 원인별 카운터를 보관하는
 0004 마이그레이션과 UTC 최근 7일 reader/owner GET API를 로컬 구현·검증했다. 분당/일일

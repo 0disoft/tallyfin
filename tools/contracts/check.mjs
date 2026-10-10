@@ -18,7 +18,7 @@ const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
 
-for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batch':'BrowserBatch', 'server-batch':'ServerBatch',
+for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry':'Registry', 'browser-batch':'BrowserBatch', 'server-batch':'ServerBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
