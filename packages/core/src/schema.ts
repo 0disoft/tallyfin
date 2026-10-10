@@ -2,6 +2,7 @@ import type { EventDefinition, PropertyDefinition, Registry } from './types.ts';
 import { closed, ENUM_VALUE, has, integer, matches, NAME, record, text } from './value.ts';
 
 export const MAX_SCHEMA_BYTES = 32 * 1024;
+// browser_event_required remains a legacy wire code; current schemas may be server-only.
 export type SchemaIssueCode = 'invalid_definition' | 'definition_limit' | 'duplicate' | 'cardinality_limit' |
   'browser_event_required' | 'invalid_reference' | 'dimension_mismatch';
 export interface SchemaIssue { path: string; code: SchemaIssueCode }
@@ -55,7 +56,6 @@ export function validateSchemaDefinitions(value: unknown): void {
     if (combinations > 256) fail(`${path}/properties`, 'cardinality_limit');
   }
   const definitions = value as unknown as SchemaDefinitions;
-  if (!definitions.events.some(e => e.source === 'browser')) fail('/events', 'browser_event_required');
   const bound = new Set<string>(); const workflows = new Set<string>();
   for (const [index, workflow] of definitions.workflows.entries()) {
     const path = `/workflows/${index}`;

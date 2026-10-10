@@ -297,7 +297,7 @@ components:
       description: SHA-256 of canonical JSON of project, allowedOrigins and limits. Excludes ingest revision and collected data.
     AllowedOrigins:
       type: array
-      minItems: 1
+      minItems: 0
       maxItems: 16
       uniqueItems: true
       items:
@@ -305,7 +305,7 @@ components:
         format: uri
         minLength: 1
         maxLength: 256
-      description: Exact origins; no path, wildcard, userinfo or null. HTTPS in production; loopback HTTP only by explicit local configuration.
+      description: Exact browser origins; no path, wildcard, userinfo or null. HTTPS in production; loopback HTTP only by explicit local configuration. An empty list disables all browser collection; authenticated server publishers do not use this list.
     CollectionLimits:
       type: object
       additionalProperties: false
@@ -860,6 +860,7 @@ components:
           uniqueItems: true
     SchemaPublication:
       type: object
+      description: At least one registered event from either source is required. Server-only definitions use an empty workflow list; workflows remain browser-only.
       additionalProperties: false
       required: [expectedLatestVersion, privacyReviewed, events, workflows]
       properties:

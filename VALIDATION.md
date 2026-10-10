@@ -1,5 +1,28 @@
 # 검증
 
+## 서버 전용 스키마·빈 브라우저 허용 출처 — 2026-10-11
+
+공용 스키마 검증에서 최소 browser 이벤트 조건을 제거했다. 전체 이벤트 1~50개·
+browser 전용 workflow 참조·속성 한도·개인정보 검토는 유지한다. 프로젝트의
+allowedOrigins는 0~16개이며 빈 배열은 browser 수집을 origin_denied로 거부한다.
+발행자는 기존 전용 인증·프로젝트 권한으로만 server-batches를 사용한다.
+browser_event_required는 구버전 호환 코드로 남지만 현재 검증기는 내보내지 않는다.
+job-registry 예제에서 임시 browser 이벤트와 허용 출처를 없애 서버 전용 예제로 바꿨다.
+
+관련 schema·settings·server query·server SDK 테스트 23/23을 통과한 뒤, 루트
+`npm run check`의 타입 검사·247/247 테스트·SDK 크기 검사도 통과했다. SDK gzip
+2667 bytes·SDK+Sembom 2949 bytes는 이전과 같다. owner의 실제 HTTP 설정 변경·
+초안 검사·v2 발행·server 수집·같은 ID 재전송·server 조회·빈 browser summary·
+없는 workflow 404·browser Origin 거부를 로컬 D1에서 확인했다. native Worker의
+server-only 스키마 조회와 기존 Node·Worker SDK 발행/충돌/권한 회수 통합도 통과했다.
+
+OpenAPI lint·계약 검사 46/46·git diff --check 통과. 처음 추가한 YAML description이
+기존 키와 중복되어 검사가 실패했고 기존 설명에 합친 뒤 lint·계약 검사를 재실행했다.
+OpenAPI·등록 예제·DBML의 출처 설명·제품 스펙·로드맵·서버/관리자 계약·예제 안내를
+갱신했다. DBML은 주석만 바꿨고 SQL·마이그레이션·SDK 런타임·의존성·CI·위생 정책은
+변경하지 않았다. 관리자 서버 연결 안내·빈 출처 편집·진단은 다음 슬라이스다.
+운영 인증·원격 D1·Sembom·푸시·배포는 연결 환경이 없어 실행하지 않았다.
+
 ## 관리자 발행 출처 선택 화면 — 2026-10-11
 
 `LiveDashboard`의 개요·이벤트 분석에서 browser/server 출처를 고르도록 연결했다.

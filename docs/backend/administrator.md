@@ -141,7 +141,8 @@ JSON 오류·닫힌 envelope 위반·배열이 아닌 events/workflows는 400, �
 반환한다. 정상 초안의 issues는 빈 배열이고, 오류가 있으면 첫 오류 하나의 JSON pointer
 `path`와 안정된 `code`를 반환한다. 입력값·DB 오류를 응답이나 로그에 넣지 않는다.
 코드는 invalid_definition, definition_limit, duplicate, cardinality_limit,
-browser_event_required, invalid_reference, dimension_mismatch다.
+invalid_reference, dimension_mismatch다. browser_event_required는 구버전 응답 호환을 위해
+계약에 남겨 두지만 현재 검증기는 내보내지 않는다. server 정의만 있는 초안도 검증한다.
 
 검증은 실제 등록과 같은 코어 함수로 이벤트 1~50개·흐름 최대 10개·속성 최대 4개·
 종류 수/가능 조합 한도·흐름 참조·필수 차원 일치를 확인한다. 이벤트 출처는 browser/server

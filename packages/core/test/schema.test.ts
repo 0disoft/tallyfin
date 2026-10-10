@@ -22,7 +22,7 @@ test('draft diagnostics locate the first issue without echoing private values', 
     [d => { d.workflows[0].successEvent = 'missing'; }, '/workflows/0/successEvent', 'invalid_reference'],
     [d => { d.workflows[0].successEvent = d.workflows[0].startEvent; }, '/workflows/0/successEvent', 'invalid_reference'],
     [d => { d.events.find((e: any) => e.name === d.workflows[0].successEvent).properties.tool.required = false; }, '/workflows/0/dimensions/0', 'dimension_mismatch'],
-    [d => { d.events.forEach((e: any) => { e.source = 'server'; }); }, '/events', 'browser_event_required'],
+    [d => { d.events.forEach((e: any) => { e.source = 'server'; }); }, '/workflows/0/startEvent', 'invalid_reference'],
     [d => { d.events = []; }, '/events', 'definition_limit'],
     [d => { d.workflows = Array(11).fill(d.workflows[0]); }, '/workflows', 'definition_limit'],
   ];
@@ -31,6 +31,16 @@ test('draft diagnostics locate the first issue without echoing private values', 
     assert.deepEqual(validateSchemaDraft(input), { valid: false, issues: [{ path, code }], privacyReviewRequired: true });
     assert.throws(() => validateRegistry({ ...registry(), ...input }));
   }
+});
+
+test('server-only definitions need no browser events or origins but cannot bind browser workflows', () => {
+  const original = registry();
+  const input = { ...original, allowedOrigins: [], events: original.events.map((event: any) => ({ ...event, source: 'server' })), workflows: [] };
+  assert.deepEqual(validateSchemaDraft({ events: input.events, workflows: [] }), { valid: true, issues: [], privacyReviewRequired: true });
+  assert.deepEqual(validateRegistry(input), input);
+  assert.equal(validateSchemaDraft({ events: [], workflows: [] }).valid, false);
+  assert.deepEqual(validateSchemaDraft({ events: input.events, workflows: original.workflows }).issues,
+    [{ path: '/workflows/0/startEvent', code: 'invalid_reference' }]);
 });
 test('optional missing buckets count toward cardinality and dimensions compare normalized enum domains', () => {
   const input = draft();

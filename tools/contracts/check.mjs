@@ -260,9 +260,10 @@ check('settings updates reject unsafe shapes and require a hash plus a mutable f
   for (const value of [null, [], {}, { expectedSettingsHash: valid.expectedSettingsHash }, { name: 'missing hash' },
     { ...valid, expectedSettingsHash: 'bad' }, { ...valid, timeZone: 'UTC' }, { ...valid, status: 'retired' },
     { ...valid, name: null }, { ...valid, limits: {} }, { ...valid, limits: { requestsPerMinute: 601 } },
-    { ...valid, limits: { newReceiptsPerUtcDay: 0 } }, { ...valid, allowedOrigins: [] }])
+    { ...valid, limits: { newReceiptsPerUtcDay: 0 } }, { ...valid, allowedOrigins: [''] }])
     assert.equal(validate('ProjectSettingsUpdate', value), false);
   assert.ok(validate('ProjectSettingsUpdate', { expectedSettingsHash: valid.expectedSettingsHash, limits: { requestsPerMinute: 1 } }));
+  assert.ok(validate('ProjectSettingsUpdate', { expectedSettingsHash: valid.expectedSettingsHash, allowedOrigins: [] }));
 });
 check('schema publication requires reviewed definitions and listing/publication metadata are bounded', () => {
   const input = { expectedLatestVersion: 1, privacyReviewed: true, events: registry.events, workflows: registry.workflows };

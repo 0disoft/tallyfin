@@ -13,7 +13,7 @@ Table projects {
   name text [not null]
   status text [not null, note: 'active | paused']
   time_zone text [not null, note: 'Validated IANA zone, immutable after creation']
-  allowed_origins_json text [not null, note: 'Exact scheme/host/port, no paths or wildcard; <=16']
+  allowed_origins_json text [not null, note: 'Exact scheme/host/port, no paths or wildcard; 0..16; empty disables browser collection']
   requests_per_minute integer [not null, note: '1..600; deployment admission control']
   new_receipts_per_utc_day integer [not null, note: '1..1000000; default 100000']
   latest_received_at bigint [note: 'Latest committed new receipt, not complete-delivery evidence']

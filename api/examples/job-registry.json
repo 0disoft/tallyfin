@@ -2,15 +2,9 @@
   "project": { "id": "jobs", "name": "Job service", "status": "active", "timeZone": "UTC" },
   "schemaVersion": 1,
   "schemaStatus": "active",
-  "allowedOrigins": ["https://jobs.example.invalid"],
+  "allowedOrigins": [],
   "limits": { "requestsPerMinute": 120, "newReceiptsPerUtcDay": 100000 },
   "events": [
-    {
-      "name": "job_requested",
-      "label": "Job requested",
-      "source": "browser",
-      "properties": {}
-    },
     {
       "name": "job_finished",
       "label": "Job finished",

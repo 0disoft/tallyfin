@@ -59,8 +59,10 @@ endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현�
 보내거나 server 정의로 browser 이벤트를 보내면 거부한다. v0.1 작업 흐름 정의는 browser
 출처만 지원하므로 server 이벤트는 흐름 단계가 되지 않는다.
 
-스키마 검증은 아직 최소 browser 이벤트 하나를 요구한다. 그래서 server 정의가 섞인
-레지스트리로 검증하고, server 정의만 있는 등록 허용은 여전히 후속이다.
+스키마는 최소 이벤트 하나만 요구하고 server 정의만 있어도 등록할 수 있다.
+server 전용 스키마는 workflows를 빈 배열로 둔다. allowedOrigins도 빈 배열로 둘 수 있으며
+이때 browser 수집은 origin_denied로 거부하고 server 발행은 전용 인증·발행 권한을 계속 검사한다.
+해당 스키마의 browser summary는 events=[]·totalEvents=0이고 browser workflow 조회는 404다.
 
 ## 중복·해시
 
@@ -230,8 +232,7 @@ server 정의도 daily 속성 분류를 지원한다. 그 출처에 정의가 �
 
 ## 다음 슬라이스
 
-1. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
-   수집·조회의 빈 정의 처리를 함께 정한다.
+1. server 전용 프로젝트의 관리자 SDK 연결 안내·수집 진단 연결. 등록·수집·조회는 지원한다.
 
 발행자 OIDC 운영 설정값과 원격 등록·배포는 별도의 운영 후속이다. 사용자가 운영 인증
 방식을 정한 뒤에 채워 server 경로를 켠다.

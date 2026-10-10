@@ -72,6 +72,45 @@ test('source summaries keep old browser defaults and report only committed serve
   assert.equal(server.meta.timeZone, 'Asia/Seoul'); assert.equal(server.meta.coverage, 'observed-only');
 });
 
+test('owner can publish a server-only schema with no browser origins, collect it and read empty browser summaries', async () => {
+  await f.db.prepare("UPDATE project_grants SET role='owner'").run();
+  const handler = createCollector(f.store, { now: () => now,
+    admin: { store: new D1Queries(f.db), verifyBearer: async () => reader },
+    publisher: { store: f.store, verifyBearer: async () => publisher } });
+  const write = (path: string, method: string, body: unknown) => handler(new Request('https://collector.example.invalid' + route(path), {
+    method, headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }));
+  const settings = await read('/v1/projects/sembom');
+  const response = await handler(new Request('https://collector.example.invalid/v1/projects/sembom', {
+    method: 'PATCH', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedSettingsHash: settings.settingsHash, allowedOrigins: [] }),
+  }));
+  assert.equal(response.status, 200); assert.deepEqual((await response.json() as any).allowedOrigins, []);
+  const definitions = { events: registry.events.filter(event => event.source === 'server'), workflows: [] };
+  const valid = await write('schemas/validate', 'POST', definitions);
+  assert.equal(valid.status, 200); assert.equal((await valid.json() as any).valid, true);
+  const published = await write('schemas/2', 'PUT', { expectedLatestVersion: 1, privacyReviewed: true, ...definitions });
+  assert.equal(published.status, 200);
+  assert.deepEqual((await read(route('schemas/2'))).allowedOrigins, []);
+  const body = { schemaVersion: 2, source: 'server', events: [{ eventId: crypto.randomUUID(), name: 'job_finished',
+    occurredAt: new Date(now).toISOString(), properties: { outcome: 'success', retried: false } }] };
+  const accepted = await write('server-batches', 'POST', body);
+  assert.equal(accepted.status, 200); assert.deepEqual(await accepted.json(), { accepted: 1, duplicates: 0 });
+  assert.deepEqual(await (await write('server-batches', 'POST', body)).json(), { accepted: 0, duplicates: 1 });
+  const window = range.replace('schemaVersion=1', 'schemaVersion=2');
+  assert.equal((await read(route('summary' + window + '&source=server'))).totalEvents, 1);
+  const browser = await read(route('summary' + window));
+  assert.deepEqual(browser.events, []); assert.equal(browser.totalEvents, 0);
+  await read(route('workflows/calculation/daily' + window), 404);
+  const denied = await handler(new Request('https://collector.example.invalid' + route('batches'), {
+    method: 'POST', headers: { Origin: browserRegistry.allowedOrigins[0]!, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, source: 'browser' }),
+  }));
+  assert.equal(denied.status, 403); assert.equal((await denied.json() as any).error.code, 'origin_denied');
+  assert.equal(denied.headers.get('Access-Control-Allow-Origin'), null);
+  assert.equal(await f.db.prepare('SELECT count(*) AS n FROM workflow_attempts').first<number>('n'), 0);
+});
+
 test('server daily counts use project-local dates and registered typed property buckets, including absent, false and zero', async () => {
   await collect();
   const url = route('events/job_finished/daily' + range + '&source=server');
@@ -147,7 +186,8 @@ test('native Worker reads source-filtered counts from real D1 and rechecks the a
     for (const statement of migrationStatements()) await db.prepare(statement).run();
     await seed(db);
     await db.prepare("INSERT INTO project_schemas VALUES ('sembom',2,'active',?,?,NULL)")
-      .bind(JSON.stringify({ events: registry.events, workflows: registry.workflows }), now).run();
+      .bind(JSON.stringify({ events: registry.events.filter(event => event.source === 'server'), workflows: [] }), now).run();
+    await db.prepare("UPDATE projects SET allowed_origins_json='[]'").run();
     await db.prepare("INSERT INTO project_grants VALUES ('sembom',?,?,'reader',?)").bind(reader.issuer, reader.subject, now).run();
     await db.prepare("INSERT INTO event_daily_counts VALUES ('sembom',2,'server','2026-10-09','job_finished',?,4,?)")
       .bind('[["outcome","string","success"],["retried","boolean",false],["shards","number",0]]', now).run();

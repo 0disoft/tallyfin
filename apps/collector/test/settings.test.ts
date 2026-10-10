@@ -84,7 +84,7 @@ test('write authentication fails closed without verifier or with invalid identit
 test('closed bounded update rejects invalid values, unknown keys and ambiguous origins without changes', async () => {
   const original = await settings();
   const invalid = [{}, { name: '' }, { name: 'x'.repeat(81) }, { name: null }, { status: 'retired' }, { timeZone: 'UTC' },
-    { id: 'other' }, { events: [] }, { allowedOrigins: [] }, { allowedOrigins: Array(17).fill('https://example.invalid') },
+    { id: 'other' }, { events: [] }, { allowedOrigins: [''] }, { allowedOrigins: Array(17).fill('https://example.invalid') },
     { allowedOrigins: ['https://example.invalid', 'https://example.invalid'] }, { allowedOrigins: ['https://*.invalid'] },
     { allowedOrigins: ['https://example.invalid/'] }, { allowedOrigins: ['https://user@example.invalid'] },
     { allowedOrigins: ['http://localhost:5173'] }, { allowedOrigins: ['http://remote.example.invalid'] },

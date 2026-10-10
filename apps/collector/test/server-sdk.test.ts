@@ -17,7 +17,7 @@ import { example, migrationStatements } from '../../../packages/storage-d1/test/
 test('server projection includes only reviewed server rules; browser-only or invalid definitions cannot be projected', () => {
   assert.deepEqual(projectServerSchema(example('job-registry')), jobSchema);
   assert.throws(() => projectServerSchema(example('registry')), /server event/);
-  const invalid = example('job-registry'); invalid.events[1].properties.outcome.values.push('free text');
+  const invalid = example('job-registry'); invalid.events[0].properties.outcome.values.push('free text');
   assert.throws(() => projectServerSchema(invalid));
 });
 

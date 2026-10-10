@@ -18,7 +18,7 @@ export function validateMutableSettings(value: unknown, options: { allowLocalHtt
   if (!closed(value, ['name', 'status', 'allowedOrigins', 'limits']) || !text(value.name, 1, 80) ||
     !['active', 'paused'].includes(String(value.status)) || !closed(value.limits, ['requestsPerMinute', 'newReceiptsPerUtcDay']) ||
     !integer(value.limits.requestsPerMinute, 1, 600) || !integer(value.limits.newReceiptsPerUtcDay, 1, 1_000_000) ||
-    !Array.isArray(value.allowedOrigins) || value.allowedOrigins.length < 1 || value.allowedOrigins.length > 16 ||
+    !Array.isArray(value.allowedOrigins) || value.allowedOrigins.length > 16 ||
     new Set(value.allowedOrigins).size !== value.allowedOrigins.length) throw Error('invalid project settings');
   for (const origin of value.allowedOrigins) {
     if (!text(origin, 1, 256)) throw Error('invalid project settings');
@@ -34,7 +34,7 @@ export function parseSettingsUpdate(value: unknown): ProjectSettingsUpdate {
   if (!closed(value, ['expectedSettingsHash'], keys) || !matches(value.expectedSettingsHash, /^[0-9a-f]{64}$/) ||
     !keys.some(key => has(value, key)) || (has(value, 'name') && !text(value.name, 1, 80)) ||
     (has(value, 'status') && value.status !== 'active' && value.status !== 'paused') ||
-    (has(value, 'allowedOrigins') && (!Array.isArray(value.allowedOrigins) || value.allowedOrigins.length < 1 ||
+    (has(value, 'allowedOrigins') && (!Array.isArray(value.allowedOrigins) ||
       value.allowedOrigins.length > 16 || value.allowedOrigins.some(origin => !text(origin, 1, 256)))) ||
     (has(value, 'limits') && (!closed(value.limits, [], ['requestsPerMinute', 'newReceiptsPerUtcDay']) ||
       Object.keys(value.limits).length === 0 ||

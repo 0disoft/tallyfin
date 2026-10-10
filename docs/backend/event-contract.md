@@ -23,10 +23,11 @@
 
 스키마 버전의 events/workflows는 불변이며 변경은 새 버전으로 발행한다. active만
 수집하고 retired는 조회만 한다. 여러 active 버전으로 구형 클라이언트를 수용할 수 있다.
-최대 이벤트 50종·흐름 10종, 최소 browser 이벤트 하나를 요구한다. server 정의는
-예약할 수 있다. server HTTP 수집(`POST .../server-batches`)·발행자 인증·권한 관리 CLI·
-서버 발행 SDK·출처별 조회 API(`source`)는 로컬에서 구현·검증 완료했고, server 정의만 있는
-레지스트리는 아직 허용하지 않는다. server 배치의 코어 검증과 별도 프로젝트 발행 권한을
+이벤트는 출처와 관계없이 1~50종·흐름은 최대 10종이며 server 정의만 있는 스키마도
+허용한다. server 전용 스키마는 workflows를 빈 배열로 둔다. 허용 browser 출처는
+0~16개이고 빈 목록이면 모든 browser 수집을 거부한다. server 인증에는 이 목록을 쓰지 않는다.
+server HTTP 수집(`POST .../server-batches`)·발행자 인증·권한 관리 CLI·
+서버 발행 SDK·출처별 조회 API(`source`)는 로컬에서 구현·검증 완료했다. server 배치의 코어 검증과 별도 프로젝트 발행 권한을
 검사하는 저장 어댑터를 구현했다. 0006은 browser 영수증·이벤트 집계를 보존하며 source
 제약을 넓히고 `project_publishers`를 빈 테이블로 추가한다. 발행 권한은 저장 직전 같은
 batch에서 다시 검사한다. 실제 제공자 연결·원격 배포는 아직 없다. definitions_json은 32KiB 이하다.
