@@ -1,0 +1,11 @@
+{
+  "eventId": "fd57ec8c-27e4-4b58-a3e0-28c02c099003",
+  "name": "job_finished",
+  "occurredAt": "2026-10-11T15:00:02.000Z",
+  "properties": { "kind": "pdf" },
+  "funnel": {
+    "funnelId": "conversion",
+    "runId": "b212284f-57a6-41e4-a41f-10c6d2db76c7",
+    "startedAt": "2026-10-11T14:59:59.000Z"
+  }
+}

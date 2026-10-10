@@ -11,3 +11,4 @@ export * from './settings.ts';
 export * from './project-creation.ts';
 export * from './rejections.ts';
 export * from './admin-changes.ts';
+export * from './funnel.ts';

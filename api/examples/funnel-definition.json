@@ -1,0 +1,11 @@
+{
+  "id": "conversion",
+  "label": "File conversion",
+  "steps": [
+    { "eventName": "file_selected", "source": "browser" },
+    { "eventName": "upload_finished", "source": "browser" },
+    { "eventName": "job_started", "source": "server" },
+    { "eventName": "job_finished", "source": "server" }
+  ],
+  "dimensions": ["kind"]
+}

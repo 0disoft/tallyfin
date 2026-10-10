@@ -1,5 +1,31 @@
 # 검증
 
+## 순서 작업 퍼널 계약·코어 — 2026-10-11
+
+OpenAPI의 독립 FunnelDefinition·FunnelLink·FunnelEvent·FunnelCounts와
+packages/core/src/funnel.ts를 추가했다. 2~10개 단계·고정 발행 출처·동일 필수 분류
+도메인·작업별 UUID·24시간 진행 창·시작 시각 + 72시간 연결 상태를 정의한다.
+prepareFunnelObservation은 기존 이벤트 검증을 재사용하고 연결 내용을 포함한 별도
+정규 해시를 만든다. planFunnelProgress는 원본 snapshot을 바꾸지 않고 연속 관찰한
+단계의 delta만 돌려준다. 영수증 중복 제거와 인증·원자 저장은 저장/수집 연결에서 맡는다.
+
+새 테스트 8/8은 4단계 browser/server의 전체 24개 수신 순열, 시작·중간 단계 누락,
+자정 전후 시작일 집계, 동일 시각 단계, 재전송·상반된 단계 시각, 프로젝트/버전/분류
+충돌, 정확한 24시간/만료 경계, 유한 등록 속성·출처·정의 검증과 null 분모를 확인한다.
+현재 Registry·BrowserBatch·ServerBatch가 신규 funnel 필드를 계속 거부함도 확인했다.
+
+루트 npm run check의 타입 검사·255/255 테스트·브라우저 gzip 예산 검사를 통과했다.
+SDK는 2667 bytes·SDK+Sembom은 2949 bytes로 그대로다. 최초 타입 검사의 unknown
+좁히기와 attempt 타입 문제를 수정한 뒤 전체 check를 재실행했다. 계약 npm run lint는
+유효하지만 아직 endpoint에 연결하지 않은 신규 타입의 no-unused-components 경고
+3개가 있다. npm run check의 계약 검사 50/50과 git diff --check도 통과했다.
+
+ADR 0006·제품 명세·로드맵·서버 이벤트 문서를 갱신했다. API에는 독립 타입만 추가했고
+실제 HTTP 요청/응답·DBML·SQL·SDK·의존성·CI·위생 정책 변경은 없다. 저장·수집·SDK·
+조회·화면 연결은 후속이라 신규 퍼널의 D1 통합·브라우저 화면 검증은 실행하지 않았다.
+기존 전체 테스트의 D1/Worker 통합은 통과했지만 신규 퍼널 저장 증거로 사용하지 않는다.
+운영 인증·원격 DB·서비스 파일럿·푸시·배포는 실행하지 않았다.
+
 ## 관리자 서버 SDK 안내·출처별 진단 — 2026-10-11
 
 프로젝트 생성·설정 입력과 응답 파서가 빈 allowedOrigins를 처리한다. SDK 안내는

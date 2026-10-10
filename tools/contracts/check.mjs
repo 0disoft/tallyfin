@@ -5,6 +5,7 @@ import YAML from 'yaml';
 import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { Parser } from '@dbml/core';
+import { funnelCounts } from '../../packages/core/src/funnel.ts';
 
 const root = new URL('../../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
@@ -23,7 +24,8 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
-  'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage' })) {
+  'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage',
+  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 check('server batch is closed, source-specific and forbids browser attempt identities', () => {
@@ -43,6 +45,26 @@ check('server batch is closed, source-specific and forbids browser attempt ident
     '#/components/schemas/BrowserBatch');
 });
 const batch = example('browser-batch');
+check('funnel contracts remain core-only with bounded steps, random task links and no extra identity', () => {
+  const definition = example('funnel-definition'), event = example('funnel-event');
+  for (const mutate of [v => v.steps = [], v => v.steps = Array(11).fill(v.steps[0]),
+    v => v.steps[0].source = 'mixed', v => v.steps[0].userId = 'private', v => v.dimensions = ['kind', 'kind']]) {
+    const value = structuredClone(definition); mutate(value); assert.equal(validate('FunnelDefinition', value), false);
+  }
+  for (const mutate of [v => v.funnel.runId = 'visitor-id', v => v.funnel.token = 'extra',
+    v => v.source = 'server', v => v.attempt = {}, v => v.funnel.startedAt = '2026-10-11T23:59:59+09:00']) {
+    const value = structuredClone(event); mutate(value); assert.equal(validate('FunnelEvent', value), false);
+  }
+  const envelope = { schemaVersion: 1, source: 'browser', events: [event] };
+  assert.equal(validate('BrowserBatch', envelope), false);
+  envelope.source = 'server'; assert.equal(validate('ServerBatch', envelope), false);
+  assert.equal(validate('Registry', { ...example('registry'), funnels: [definition] }), false);
+});
+check('core funnel counts conform to the declared response shape including null denominators', () => {
+  for (const reached of [[10, 8, 4, 3], [0, 0], [1, 0]])
+    assert.ok(validate('FunnelCounts', funnelCounts(reached)), JSON.stringify(ajv.errors));
+  assert.equal(validate('FunnelCounts', { ...funnelCounts([1, 1]), completionRate: 101 }), false);
+});
 check('event reads select one source, preserve browser defaults and never enable server workflow cohorts', () => {
   assert.deepEqual(spec.components.parameters.EventSource.schema, { type: 'string', enum: ['browser', 'server'], default: 'browser' });
   for (const path of ['/v1/projects/{projectId}/summary', '/v1/projects/{projectId}/events/{eventName}/daily'])
@@ -285,10 +307,10 @@ check('schema publication requires reviewed definitions and listing/publication 
 check('all changed document relative links resolve', () => {
   const documents=['README.md','DEVELOPMENT.md','VALIDATION.md','ARCHITECTURE.md','docs/README.md','docs/product/02-spec.md','docs/product/01-roadmap.md','docs/adr/0002-contract-source-of-truth.md','docs/adr/0003-minimal-privacy-preserving-events.md','docs/adr/0005-event-and-aggregation-contract.md','docs/backend/event-contract.md','docs/backend/collector.md','docs/backend/README.md','docs/backend/03-persistence-model.md','docs/backend/04-http-api-policy.md','docs/integrations/backend-api.md','docs/integrations/sembom.md','docs/monorepo/package-ownership.md','docs/monorepo/workspace-boundaries.md','db/migrations/README.md'];
   documents.push('docs/backend/server-sdk.md', 'docs/backend/server-events.md', 'docs/backend/runtime.md',
-    'docs/backend/oidc.md', 'docs/backend/provisioning.md');
+    'docs/backend/oidc.md', 'docs/backend/provisioning.md', 'docs/adr/0006-ordered-task-funnels.md');
   for (const document of documents) for (const match of read(document).matchAll(/\]\(([^)]+)\)/g)) {
     const target=match[1]; if(/^(https?:|#)/.test(target))continue;
     assert.ok(fs.existsSync(fileURLToPath(new URL(target.split('#')[0],new URL(document,root)))),`${document}: ${target}`);
   }
 });
-console.log(`${checks} contract checks passed. No runtime, transaction, migration or auth behavior was executed.`);
+console.log(`${checks} contract checks passed. No collector, transaction, migration or auth behavior was executed.`);
