@@ -1,5 +1,22 @@
 # 검증
 
+## 서버 SDK 퍼널 연결 전송 — 2026-10-11
+
+서버 SDK에 선택 funnel 링크·createFunnelRun과 서버 참여 퍼널의 스키마 투영을 연결했다.
+브라우저 단계는 null로 위치만 남기고 브라우저 이름·규칙·label·purpose는 투영하지 않는다.
+입력을 복사·동결하고 재전송 본문·재시작 복원 metadata를 유지한다.
+
+`node --test apps/collector/test/funnels.test.ts packages/server/test/*.test.ts` 21/21,
+`node --test apps/collector/test/server-sdk.test.ts` 2/2, 합계 23개 테스트와
+`npm run typecheck`를 통과했다. `npm run build:server`도 통과했고 번들 8864 bytes·gzip
+3631 bytes·런타임 의존성 0이다. native Worker producer의 퍼널 SDK 전송은 서명 JWT와
+실제 로컬 D1에서 중복·발행 권한 회수를 확인했고 Node는 응답 유실 뒤 중복을 확인했다.
+이 결과는 서버 SDK 슬라이스만의 검증이며 브라우저 기본 SDK 바이트는 바꾸지 않았다.
+
+`tools/contracts`의 `npm run check` 51/51과 문서 링크·`git diff --check`도 통과했다.
+공개 HTTP·DB 계약·CI·의존성 변경은 없다. 운영 인증·원격 DB·푸시·배포는 실행하지 않았다.
+브라우저 SDK 전송·관리자 SDK 코드 생성·퍼널 조회 API와 화면은 후속이다.
+
 ## 퍼널 연결 수집·저장과 0007 마이그레이션 — 2026-10-11
 
 BrowserBatch·ServerBatch가 이벤트별 선택 funnel 링크를 받고, 한 이벤트에 attempt와 funnel을

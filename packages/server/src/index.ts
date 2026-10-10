@@ -2,10 +2,17 @@ export type Value = string | boolean | number;
 export type Properties = Readonly<Record<string, Value>>;
 export type Rule = readonly ['boolean', boolean] | readonly ['enum', boolean, readonly string[]] |
   readonly ['integer', boolean, number, number];
+/** Null preserves a non-server milestone's position without shipping its event definition. */
+export interface ServerFunnel { steps: readonly (string | null)[]; dimensions: readonly string[] }
+export interface FunnelLink { readonly funnelId: string; readonly runId: string; readonly startedAt: string }
 /** Build-time projection of reviewed server definitions only; never workflows or browser definitions. */
-export interface ServerSchema { version: number; events: Readonly<Record<string, Readonly<Record<string, Rule>>>> }
+export interface ServerSchema {
+  version: number; events: Readonly<Record<string, Readonly<Record<string, Rule>>>>;
+  funnels?: Readonly<Record<string, ServerFunnel>>;
+}
 export interface ServerEvent {
   readonly eventId: string; readonly name: string; readonly occurredAt: string; readonly properties: Properties;
+  readonly funnel?: FunnelLink;
 }
 export interface ServerOptions {
   endpoint: string; schema: ServerSchema;
@@ -23,7 +30,9 @@ export type DeliveryResult =
   { status: 'rejected' | 'unavailable' | 'aborted'; reason: FailureReason; httpStatus: number | null; retryable: boolean; attempts: number };
 export interface ServerClient {
   /** Preserve the returned ID/time/content for delivery retries, including process restarts. */
-  createEvent(name: string, properties?: Properties, metadata?: { eventId?: string; occurredAt?: string }): ServerEvent;
+  createEvent(name: string, properties?: Properties, metadata?: { eventId?: string; occurredAt?: string; funnel?: FunnelLink }): ServerEvent;
+  /** New random identity for a server-started task; never a visitor identifier or credential. */
+  createFunnelRun(funnelId: string): FunnelLink;
   /** One atomic batch of 1..20 events. No implicit queue, listener or fire-and-forget work. */
   send(events: readonly ServerEvent[], options?: { signal?: AbortSignal }): Promise<DeliveryResult>;
 }
@@ -47,7 +56,7 @@ const own = (value: object, key: string) => Object.hasOwn(value, key);
 const aborted = Symbol('aborted'); const timedOut = Symbol('timedOut'); const authFailed = Symbol('authFailed'); const badResponse = Symbol('badResponse');
 
 function schemaValid(value: unknown): value is ServerSchema {
-  if (!record(value) || Object.keys(value).sort().join(',') !== 'events,version' ||
+  if (!record(value) || Object.keys(value).some(key => !['events', 'version', 'funnels'].includes(key)) ||
     !integer(value.version, 1, 2147483647) || !record(value.events)) return false;
   const events = Object.entries(value.events);
   if (!events.length || events.length > 50) return false;
@@ -68,6 +77,24 @@ function schemaValid(value: unknown): value is ServerSchema {
     }
     if (combinations > 256) return false;
   }
+  if (own(value, 'funnels')) {
+    if (!record(value.funnels) || Object.keys(value.funnels).length > 10) return false;
+    for (const [id, funnel] of Object.entries(value.funnels)) {
+      if (!NAME.test(id) || !record(funnel) || Object.keys(funnel).sort().join(',') !== 'dimensions,steps' ||
+        !Array.isArray(funnel.steps) || funnel.steps.length < 2 || funnel.steps.length > 10 ||
+        !Array.isArray(funnel.dimensions) || funnel.dimensions.length > 4 ||
+        funnel.dimensions.some(key => typeof key !== 'string' || !NAME.test(key)) ||
+        new Set(funnel.dimensions).size !== funnel.dimensions.length) return false;
+      const names = funnel.steps.filter(name => name !== null);
+      if (!names.length || new Set(names).size !== names.length) return false;
+      for (const name of names) {
+        if (typeof name !== 'string' || !own(value.events, name)) return false;
+        const rules = value.events[name] as Record<string, Rule>, first = value.events[names[0] as string] as Record<string, Rule>;
+        for (const key of funnel.dimensions)
+          if (!own(rules, key) || !rules[key]?.[1] || JSON.stringify(rules[key]) !== JSON.stringify(first[key])) return false;
+      }
+    }
+  }
   return true;
 }
 function utc(value: unknown): string {
@@ -79,7 +106,8 @@ function utc(value: unknown): string {
   return normalized;
 }
 function eventSnapshot(value: unknown, schema: ServerSchema, now: number): ServerEvent {
-  if (!record(value) || Object.keys(value).sort().join(',') !== 'eventId,name,occurredAt,properties' ||
+  if (!record(value) || Object.keys(value).some(key => !['eventId', 'name', 'occurredAt', 'properties', 'funnel'].includes(key)) ||
+    !['eventId', 'name', 'occurredAt', 'properties'].every(key => own(value, key)) ||
     typeof value.eventId !== 'string' || !UUID.test(value.eventId) || typeof value.name !== 'string' ||
     !own(schema.events, value.name) || !record(value.properties)) throw new ServerInputError();
   const rules = schema.events[value.name]!; const properties: [string, Value][] = [];
@@ -94,7 +122,17 @@ function eventSnapshot(value: unknown, schema: ServerSchema, now: number): Serve
   const occurredAt = utc(value.occurredAt); const ms = Date.parse(occurredAt);
   if (!integer(now, 0, 8640000000000000) || ms < now - 86400000 || ms > now + 300000) throw new ServerInputError();
   properties.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
-  return Object.freeze({ eventId: value.eventId, name: value.name, occurredAt, properties: Object.freeze(Object.fromEntries(properties)) });
+  const funnel = own(value, 'funnel') ? linkSnapshot(value.funnel, value.name, schema, ms) : undefined;
+  return Object.freeze({ eventId: value.eventId, name: value.name, occurredAt, properties: Object.freeze(Object.fromEntries(properties)),
+    ...(funnel ? { funnel } : {}) });
+}
+function linkSnapshot(value: unknown, name: string, schema: ServerSchema, occurredAt: number): FunnelLink {
+  if (!record(value) || Object.keys(value).sort().join(',') !== 'funnelId,runId,startedAt' ||
+    typeof value.funnelId !== 'string' || !schema.funnels || !own(schema.funnels, value.funnelId) ||
+    typeof value.runId !== 'string' || !UUID.test(value.runId)) throw new ServerInputError();
+  const index = schema.funnels[value.funnelId]!.steps.indexOf(name), startedAt = utc(value.startedAt), start = Date.parse(startedAt);
+  if (index < 0 || start > occurredAt || occurredAt - start > 86400000 || index === 0 && start !== occurredAt) throw new ServerInputError();
+  return Object.freeze({ funnelId: value.funnelId, runId: value.runId, startedAt });
 }
 function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -177,10 +215,20 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
   return {
     createEvent(name, properties = {}, metadata = {}) {
       try {
-        if (!record(metadata) || Object.keys(metadata).some(key => !['eventId', 'occurredAt'].includes(key))) throw new ServerInputError();
+        if (!record(metadata) || Object.keys(metadata).some(key => !['eventId', 'occurredAt', 'funnel'].includes(key))) throw new ServerInputError();
         const now = host.now();
+        const first = metadata.funnel && schema.funnels?.[metadata.funnel.funnelId]?.steps[0] === name;
         return eventSnapshot({ eventId: metadata.eventId === undefined ? host.uuid() : metadata.eventId, name,
-          occurredAt: metadata.occurredAt === undefined ? new Date(now).toISOString() : metadata.occurredAt, properties }, schema, now);
+          occurredAt: metadata.occurredAt === undefined ? (first ? metadata.funnel!.startedAt : new Date(now).toISOString()) : metadata.occurredAt, properties,
+          ...(metadata.funnel !== undefined ? { funnel: metadata.funnel } : {}) }, schema, now);
+      } catch { throw new ServerInputError(); }
+    },
+    createFunnelRun(funnelId) {
+      try {
+        if (!schema.funnels || !own(schema.funnels, funnelId) || schema.funnels[funnelId]!.steps[0] === null) throw new ServerInputError();
+        const now = host.now(), name = schema.funnels[funnelId]!.steps[0]!;
+        if (!integer(now, 0, 8640000000000000)) throw new ServerInputError();
+        return linkSnapshot({ funnelId, runId: host.uuid(), startedAt: new Date(now).toISOString() }, name, schema, now);
       } catch { throw new ServerInputError(); }
     },
     async send(events, sendOptions = {}) {

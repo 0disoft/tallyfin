@@ -16,7 +16,7 @@
 | 옵션 | 필수 | 규칙 |
 | --- | --- | --- |
 | endpoint | 예 | `/v1/projects/{projectId}/server-batches` 경로만. https, 또는 `allowLocalHttp`가 true이고 호스트가 루프백일 때 http. userinfo·쿼리·해시는 거부한다. |
-| schema | 예 | `{ version(1~2147483647), events }`. 서버 출처로 검토한 정의만 넣고 브라우저 정의·작업 흐름은 넣지 않는다. 직렬화 32KiB 이하다. |
+| schema | 예 | `{ version(1~2147483647), events, funnels? }`. 서버 출처로 검토한 정의만 넣고 브라우저 이벤트 정의·작업 흐름은 넣지 않는다. 직렬화 32KiB 이하다. |
 | getToken(signal) | 예 | 전용 발행자 자격증명을 돌려주는 함수. 문자열 또는 Promise이고 시도마다 새로 호출한다. |
 | allowLocalHttp | 아니요 | 기본 false. |
 | maxAttempts | 아니요 | 1~3, 기본 3. |
@@ -28,6 +28,12 @@
 `['enum', required, values]`(허용 값 32종 이하, 중복 불가), `['integer', required, low, high]`
 (±1000000)다. 속성별 선택지 32개, 이벤트별 조합 256개 이하다. 속성 값은 불리언·문자열·
 정수만 받는다.
+
+`schema.funnels`는 선택이며 `{ [id]: { steps: (string | null)[], dimensions: string[] } }`
+형태다. steps는 2~10개이고 문자열은 등록된 서버 이벤트 이름, null은 브라우저 단계의
+위치만 나타낸다. 서버 투영 도구는 서버가 참여하는 퍼널만 추가하며 브라우저 이벤트의
+이름·속성 규칙·label·purpose는 SDK에 넣지 않는다. 해당 퍼널이 없으면 funnels를 생략해
+기존 정의 형태를 유지한다.
 
 `host`는 선택이고 `now`·`monotonicNow`·`uuid`·`fetch`·`wait`를 모두 함수로 줘야 한다.
 기본은 `Date.now`·`performance.now`·`crypto.randomUUID`·`globalThis.fetch`다.
@@ -65,12 +71,39 @@ const client = createTallyfinServer({
 `createEvent(name, properties?, metadata?)`가 얼린 `ServerEvent`를 만든다.
 
 - `eventId`는 UUID v4 형식이고 `occurredAt`은 ms를 채운 UTC ISO 문자열이다. `metadata`의
-  `eventId`·`occurredAt`으로 저장해 둔 값을 넘길 수 있고 다른 키는 거부한다.
+  `eventId`·`occurredAt`·`funnel`만 받으며 저장해 둔 값을 넘길 수 있다. 다른 키는 거부한다.
 - `occurredAt`은 현재 기준 과거 24시간~미래 5분만 허용한다. `properties`는 등록 규칙만
   받고 필수 속성이 빠지거나 종류·enum·범위가 틀리면 거부한다.
 - 잘못된 입력은 `ServerInputError`(code `invalid_event`)다.
-- 반환 객체는 얼려 있고 속성 키가 정렬되어 캐논컬하다. 프로세스가 다시 시작해도
-  `eventId`·`occurredAt`·본문을 저장해 두면 같은 이벤트로 다시 보낼 수 있다.
+- 반환 객체는 입력을 복사해 속성·선택 funnel 링크까지 얼리고 속성 키를 정렬한다.
+  프로세스가 다시 시작해도 `eventId`·`occurredAt`·속성·`funnel`을 저장해 두면 같은
+  이벤트로 복원해 다시 보낼 수 있다.
+
+## 작업 퍼널 연결
+
+`ServerEvent`는 선택 `funnel: FunnelLink`를 지원한다. 링크는
+`{ funnelId, runId, startedAt }` 세 키만 받는다. 등록된 서버 단계·UUIDv4·실제 UTC 시각을
+검사하며 단계는 시작 뒤 24시간 이내, 첫 단계는 시작과 같은 시각이어야 한다.
+`createEvent`·`createFunnelRun`의 잘못된 입력은 `ServerInputError`다.
+
+`createFunnelRun(id)`는 첫 단계가 server인 퍼널만 시작한다. 새 UUID와 현재 시각으로
+얼린 링크를 반환하며 첫 단계 `createEvent`에서 occurredAt을 생략하면 링크의 startedAt을
+쓴다. 아래 이름과 속성은 호스트가 발행한 정의에 등록되어 있어야 한다.
+
+```ts
+const run = client.createFunnelRun('processing');
+const started = client.createEvent('processing_started', { kind: 'pdf' }, { funnel: run });
+await client.send([started]);
+// 실제 작업 성공을 확인한 뒤 같은 연결 정보로 완료를 보냅니다.
+const completed = client.createEvent('processing_completed', { kind: 'pdf' }, { funnel: run });
+await client.send([completed]);
+```
+
+첫 단계가 browser이면 서버에서 새 run을 만들지 않고 실제 업무 요청에서 검증한
+작업 컨텍스트의 링크를 받는다. 실제 완료를 확인한 서버 코드가
+`createEvent(name, properties, { funnel: link })`로 완료를 발행한다. runId는 인증 수단이나
+방문자 ID가 아니며 기존 발행자 인증·권한 검사를 그대로 사용한다. 브라우저 SDK의 퍼널
+전송·관리자 SDK 코드 생성·퍼널 조회 API와 화면은 후속이다.
 
 ## 전송
 
@@ -78,8 +111,8 @@ const client = createTallyfinServer({
 16KiB 이하의 원자 배치 하나만 보낸다. 암묵적 큐·타이머·fire-and-forget·수명 주기
 리스너를 만들지 않고, 대기 중 요청이 있을 때만 타이머를 만들고 정리한다.
 
-- 본문은 첫 시도 전에 만들어 시도마다 같은 스냅샷을 쓰고, 토큰은 시도마다 `getToken`으로
-  새로 받는다.
+- 이벤트·속성·funnel 링크를 다시 검사하고 복사·동결한 스냅샷으로 첫 시도 전에 본문을
+  만든다. 재시도는 같은 본문을 쓰고 토큰은 시도마다 `getToken`으로 새로 받는다.
 - 검증·자격증명·전송 실패는 예외 대신 결과로 알린다. 다만 호스트가 넘긴 `ServerPlatform`은
   아래 계약을 지켜야 하고, 계약을 어기는 프로그래머 오류는 던져질 수 있다. `delivered`는
   `{accepted, duplicates, attempts}`, 그 밖은 `{reason, httpStatus, retryable, attempts}`다.
@@ -116,9 +149,9 @@ const client = createTallyfinServer({
 - 지속 큐·아웃박스·재시도 스케줄러는 SDK에 없다. 저장과 재시도 시점은 호스트가 관리한다.
 - `getToken`의 실제 발급자 선택과 자격증명 발급은 호스트 책임이다. M2M client secret을
   브라우저나 공개 번들에 넣지 않는다.
-- 서버 정의만 있는 레지스트리 허용과 서버 출처 조회 API·화면은 아직 없다.
-- 실패 후 수동 재시도는 저장해 둔 `metadata`(`eventId`·`occurredAt`)를 그대로 넘겨 같은
-  이벤트로 보낸다.
+- 서버 정의만 있는 레지스트리와 서버 출처 조회 API·화면은 로컬에서 구현·검증했다.
+- 실패 후 수동 재시도는 저장해 둔 `metadata`(`eventId`·`occurredAt`·선택 `funnel`)와
+  속성을 그대로 넘겨 같은 이벤트로 보낸다.
 - 실제 제공자 연결·운영 배포와 원격 D1 적용은 범위 밖이다.
 
 ## 보안
