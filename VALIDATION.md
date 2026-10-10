@@ -1,5 +1,35 @@
 # 검증
 
+## 관리자 발행 출처 선택 화면 — 2026-10-11
+
+`LiveDashboard`의 개요·이벤트 분석에서 browser/server 출처를 고르도록 연결했다.
+출처를 조회·기간 비교·CSV·로딩 키에 포함하고 전환 시 선택 이벤트와 분류를 초기화한다.
+`SourceEventTable`과 `SourceMetrics`를 분리해 기존 표시 규칙을 공유하며 server 개요에는
+브라우저 시작·성공·완료율을 넣지 않는다. 목표는 browser 작업 흐름만 조회한다.
+다른 출처 행은 건수 0 대신 `다른 출처`로 표시하고 빈 server 집계 안내에서 완료율 문구를 뺀다.
+
+관리자 `npm run typecheck`, `npm test` 128/128, `npm run test:sites` 4/4,
+`npm run build`, `git diff --check` 통과. build는 Sites용 client/server/hosting 파일을 만들었다.
+API·DB·SDK를 바꾸지 않아 백엔드 검사는 반복하지 않았고 일반 소스 lint 스크립트는 없다.
+
+Codex 인앱 Chromium과 로컬 Vite(127.0.0.1:5184)에서 실제 화면과 ApiClient에 합성
+fetch transport를 연결했다. 토큰을 비운 채 연결해 자격 증명을 만들거나 전송하지 않았다.
+browser 총 35건·20회 시작·15회 성공·75% 완료율, server 총 12건과 이전 6건·100% 증감,
+server 일별 그래프·retried 속성의 false/null 구분·값별 비교, 목표의 browser 고정을 확인했다.
+server 조회에는 workflow 요청이 없었고 내려받은 CSV 파일명에 `-server`가 들어가며
+선택하지 않은 browser 행은 `not_selected`·빈 건수였다. 503 오류 때 결과와 CSV를 잠그고
+재시도로 복구하며, 지연된 server 응답을 browser 전환 뒤 전달해도 35건·75%가 유지됐다.
+임시 검증 페이지 HMR에서 createRoot 중복 경고가 한 번 기록됐고 연결이 끊겨 새로고침했다.
+새로고침 후 최종 코드의 정상 조회를 확인했으며 이후 새 콘솔 오류는 발생하지 않았다.
+
+기존 브라우저 90% 확대에서 실제 innerWidth 320px(override 288px), 문서 폭 303px,
+표 540px·스크롤 영역 255px·셀 18px를 확인했다. 표 영역에 키보드 포커스를 두고
+ArrowRight로 가로 스크롤했으며 뷰포트는 복원했다. 검증 화면은 ignore된
+`prototypes/admin/.tmp/source-ui-qa/desktop.jpg`·`mobile.jpg`에 보관한다.
+운영 OIDC·원격 D1·Sembom 연결·푸시·배포는 실행하지 않았다. 로컬 검증 서버와 탭은 종료한다.
+제품 스펙·로드맵·프론트엔드 설계·서버 이벤트 문서·프로토타입 안내를 갱신했다.
+API·DB·SDK·의존성·CI 러너·위생 정책은 변경하지 않았다.
+
 ## 관리자 서버 출처 클라이언트·비교·CSV — 2026-10-11
 
 관리자 `ApiClient`의 summary·event daily에 선택 source를 연결했다. 파서는 두 이벤트
