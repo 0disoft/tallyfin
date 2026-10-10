@@ -101,6 +101,10 @@ key와 bearer를 파일·로그에 남기지 않는다. 외부 제공자·운영
 
 ## 브라우저 관리자 로그인
 
+관리자/수집기 타깃과 공개 로그인 설정을 함께 준비하려면
+[운영 설치 설정 준비](./installation.md)의 `npm run install:prepare`를 사용한다.
+issuer·계정·서비스 바인딩·관리자 출처의 일치를 검사하며 실제 제공자 등록은 별도다.
+
 `apps/admin/src/auth`는 공개 클라이언트 OIDC를 사용한다. 클라이언트 비밀값
 없이 Authorization Code + PKCE(S256), state, nonce와 ID token 서명을 검증한다.
 ID token은 로그인 세션을 확인하는 용도이며 `/v1`에는 access token만 보낸다.

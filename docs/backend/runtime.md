@@ -91,6 +91,9 @@ Ctrl+C·SIGTERM·부모 IPC 연결 종료·시작 실패·자식의 예기치 �
 
 ## 배포 준비
 
+관리자와 수집기·로그인 설정을 함께 준비할 때는 [운영 설치 설정](./installation.md)의
+`install:prepare`를 사용한다. 아래 명령은 각 Worker의 개별 설정 준비를 위한 대안이다.
+
 ```
 npm run collector:config -- --file .tmp/collector-target.json --out .tmp/collector-deploy/wrangler.json
 ```
