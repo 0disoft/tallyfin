@@ -1,24 +1,27 @@
-import { useState } from 'react';
-import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useEffect, useState, type ComponentType } from 'react';
+import type { TrendChartProps } from './TrendChart';
 import { ArrowDown, ArrowRight, ArrowUp, ChartBar, Circle, MagnifyingGlass } from '@phosphor-icons/react';
 import { formatCount, formatRate, getSeries, type DailyRecord, type ProjectDefinition, type Summary } from './data';
 
 type Props = { project: ProjectDefinition; records: DailyRecord[]; summary: Summary };
 export function Trend({ records, event }: { records: DailyRecord[]; event?: string }) {
   const series = getSeries(records, event);
+  const [Chart, setChart] = useState<ComponentType<TrendChartProps> | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    import('./TrendChart').then(module => {
+      if (active) setChart(() => module.default);
+    }).catch(() => {
+      if (active) setLoadFailed(true);
+    });
+    return () => { active = false; };
+  }, []);
   return <figure className="trend-figure">
     <figcaption className="sr-only">일별 {event ?? '수집 이벤트'} 건수. 아래 수치 보기에서 표로 확인할 수 있어요.</figcaption>
-    <div className="chart-wrap" role="img" aria-label={`일별 추이, 합계 ${formatCount(series.reduce((sum, day) => sum + day.count, 0))}건`}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={series} margin={{ top: 12, right: 20, bottom: 8, left: 2 }} accessibilityLayer>
-          <CartesianGrid stroke="#E2E8F0" strokeDasharray="3 3" />
-          <XAxis dataKey="label" tick={{ fontSize: 16, fill: '#64748B' }} tickMargin={14} minTickGap={22} axisLine={{ stroke: '#B8C3D4' }} tickLine={false} />
-          <YAxis width={58} tick={{ fontSize: 16, fill: '#64748B' }} tickFormatter={formatCount} tickLine={false} axisLine={{ stroke: '#B8C3D4' }} domain={[0, 'auto']} tickCount={4} />
-          <Tooltip formatter={value => [formatCount(Number(value)), '건수']} labelFormatter={label => `${label}`} contentStyle={{ borderRadius: 6, borderColor: '#E2E8F0', fontSize: 16 }} />
-          <Area type="linear" dataKey="count" stroke="#155EEF" strokeWidth={2} fill="#E6F4FF" fillOpacity={0.85} dot={series.length <= 7 ? { r: 5, fill: '#155EEF', stroke: '#FFFFFF', strokeWidth: 2 } : false} activeDot={{ r: 6 }} isAnimationActive={false} />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
+    {Chart ? <Chart series={series} /> : <div className="chart-wrap chart-placeholder" aria-busy={!loadFailed}>
+      {loadFailed ? <><p role="status">차트를 불러오지 못했어요. 아래 수치 보기에서 확인하거나 화면을 새로고침해 주세요.</p><button type="button" className="secondary-button" onClick={() => window.location.reload()}>화면 새로고침</button></> : <p role="status">차트를 불러오는 중이에요.</p>}
+    </div>}
     <details className="daily-values"><summary>수치 보기</summary><div className="table-scroll" tabIndex={0} aria-label="일별 수치 표"><table className="event-table"><caption className="sr-only">일별 수집 건수</caption><thead><tr><th scope="col">날짜</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{series.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td className="number-cell">{formatCount(day.count)}</td></tr>)}</tbody></table></div></details>
   </figure>;
 }

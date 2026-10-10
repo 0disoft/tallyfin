@@ -1022,3 +1022,51 @@ CommandCode DeepSeek4.1 Flash high의 문서 갱신을 코드와 대조했다. �
 화면source of truth FRONTEND_DESIGN.md·프로토타입README·로드맵·이 기록을 갱신했다.
 API/DB·SDK·의존성·위생 정책·CI/러너 변경은 없다. 운영 인증·원격 DB·운영 부하·배포는
 미검증이며 푸시·배포·Sembom 연동은 없다.
+
+## 2026-10-11 관리자 차트 지연 로드
+
+개요의 일별 추이 차트를 `Dashboard.tsx`의 `Trend`에서 `useEffect`의
+`import('./TrendChart')`로 지연 로드하고 Recharts JSX를 `TrendChart.tsx`로
+옮겼다. 불러오는 동안 자리 표시자는 `role="status"`로 알리고 실패해도 일별 수치 표와
+나머지 화면을 유지하며 `화면 새로고침` 버튼으로 새 문서에서 복구한다. 언마운트 뒤
+늦게 도착한 import 결과는 버린다. API/DB·SDK·의존성·CI·위생 정책 변경은 없다.
+
+`prototypes/admin`에서 npm test 101/101, npm run typecheck, npm run build,
+npm run test:sites 4/4를 통과했고 `git diff --check`도 통과했다. 빌드에서 기존
+500kB 초과 JS 경고가 사라졌다. 루트 `npm run check`와 계약 검사는 이 슬라이스에서
+돌리지 않았다.
+
+번들: 기준선 커밋 `53aa645`의 첫 JS 800.26kB/gzip 228.43kB가 446.61kB/gzip
+125.83kB로 약 44.9% 줄었고 차트 청크는 353.93kB/gzip 102.84kB다. 개요는 기본 화면에
+차트가 있어 개요 총 JS gzip이 228.43kB에서 228.67kB로 거의 같고 요청 수가 1건에서
+2건으로 는다. 모든 화면의 총량·로드 시간이 줄었다는 뜻이 아니다.
+
+브라우저 확인은 로컬 `vite preview`(127.0.0.1:5180, 프로덕션 빌드)와 Codex 인앱
+Chromium에서 캐시를 끄고 같은 탭에서 기준선 3회 뒤 지연 로드 3회를 연속 실행했다.
+CPU·네트워크 제한은 없었다. FCP는 452/376/296ms에서 308/252/296ms로 중앙값이
+376ms에서 296ms, DCL은 351.5/266.3/216.5ms에서 179.4/175.6/168.8ms로 중앙값이
+266.3ms에서 175.6ms가 됐다. 개요 main fetch 종료는 기준선 302/213.4/139.1ms, 지연
+로드 77.3/93.3/88.4ms였고 차트 청크 fetch 종료는 378/541.2/433ms였다. `load` 이벤트는
+비동기 차트 완료 시각이 아니다. Resource Timing의 encodedBody는 기준선 226491 bytes,
+지연 로드 entry 124796 bytes와 차트 101925 bytes를 합쳐 226721 bytes다. 로컬 preview
+서버의 압축값은 Vite 빌드의 gzip과 달라 두 값을 서로 바꿔 쓰지 않는다. 표본 3회·
+순차 측정이라 warmup이 섞이고 개선을 보장하지 않으며 운영 CWV·INP·LCP·full trace는 측정하지 않았다.
+warmup이 섞이고 개선을 보장하지 않으며 운영 CWV·INP·LCP·full trace는 측정하지 않았다.
+원시 수치는 로컬 무시 파일 `.tmp/prototype-qa/chart-load-metrics.json`이다.
+
+차트 청크를 차단한 화면에서도 일별 수치 표와 요약 지표가 유지됐고, 브라우저가 실패한
+import를 문서 단위로 기억해 다시 불러오는 시도로는 복구되지 않는다는 것을 직접 확인한
+뒤 네트워크 차단을 풀고 `화면 새로고침` 버튼으로 차트가 복구되는 것을 확인했다.
+실패 자리 표시자의 데스크톱 높이는 280px였다. 차트가 없는 `/auth/callback` 실제
+화면에서는 entry 124796 bytes와 OidcLogin 10773 bytes만 요청됐고 차트 청크는 받지
+않았다(인증 값은 입력하지 않았다).
+
+7일에서 14일로 기간을 바꿔 차트 합계가 43440, 이벤트 상세 `conversion_started` 합계가
+8825로 갱신되는 것을 확인했다. 실제 CSS 320px(innerWidth 320, viewport 288은 기존 90%
+확대가 반영된 값이며 확대율 자체는 바꾸지 않았다)에서 정상·차트 다운로드 차단 실패
+화면 모두 페이지 303px, 차트 자리 높이 285px에 가로 넘침이 없었고 실패 화면의
+`role=status`와 새로고침 복구도 다시 확인했다. 최종 전체 화면은
+`.tmp/prototype-qa/chart-lazy-load.png`다. 브라우저 캐시·차단 URL·viewport 설정을
+되돌리고 검증 탭을 닫았으며 로컬 검증 서버 종료 후 5180 리스너가 없는 것을 확인했다.
+
+운영 인증·실 DB·실 서버 부하·Sembom 연동·원격 푸시와 배포는 실행하지 않았다.
