@@ -106,10 +106,59 @@ npm run collector:config -- --file .tmp/collector-target.json --out .tmp/collect
 - 준비된 파일은 `npm run collector:dry-run -- --config .tmp/collector-deploy/wrangler.json`으로 검사한다. 운영자가 실제 config를 넣어야 하고 이번 세션에서는 실행하지 않았다.
 - 실제 배포·원격 마이그레이션·프로젝트 등록·권한 부여·인증 제공자 연결·도메인 연결·운영 검증은 승인한 후속 작업에서 진행한다. 등록 CLI는 로컬만 지원한다.
 
+## 관리자 Worker 배포 준비
+
+관리자 자산과 API를 같은 출처에서 제공하는 기준은 `apps/admin/wrangler.jsonc`다.
+`/v1`·`/v1/*`는 고정 `COLLECTOR` 서비스 바인딩으로 별도 수집기 Worker에 전달한다.
+인증·grant·본문 한도·수집 Origin 검사는 기존 수집기 정책을 따르고, 정적 API 경로가
+있어도 API가 우선한다. API 응답을 HTML로 바꾸지 않으며 본문·헤더·쿼리를 유지한다.
+호출은 한 번만 하고 리다이렉트·자동 재시도·API 캐시를 사용하지 않는다.
+
+다음 명령은 로컬 파일 생성과 업로드 없는 검사다.
+
+```powershell
+npm run build:admin
+npm run admin:config -- --file .tmp/admin-target.json --out .tmp/admin-deploy/wrangler.json
+npm run admin:dry-run -- --config .tmp/admin-deploy/wrangler.json
+npm run admin:types
+```
+
+입력은 `workerName`, `accountId`, `collectorWorkerName`, `workersDev`(boolean 명시),
+선택 `domain`이다. 앞 세 값은 실제 운영자가 제공하고 Worker 이름 둘은 달라야 한다.
+`workersDev=false`면 `domain`이 필수다. domain은 URL·경로·와일드카드 없는 소문자
+호스트 이름으로 받아 custom domain route를 만든다. 환경별 실제 수집기 배포 이름을
+`collectorWorkerName`에 넣으며 별도 environment 상속은 사용하지 않는다.
+8KiB 이하의 닫힌 JSON만 받고 시크릿·토큰·OIDC 값을 받지 않으며 기존 출력은 덮어쓰지 않는다.
+ID·도메인 문법 검사는 소유권·실제 리소스 존재를 증명하지 않는다.
+
+기본 admin config는 타입·패키지 확인용이므로 실제 배포에 그대로 사용하지 않는다.
+생성 파일에는 계정·수집기 이름과 자산/entry 절대 경로가 들어간다. 실제 Wrangler
+배포 때 custom domain 연결이 일어날 수 있으므로 파일을 먼저 검토한다. 수집기와
+관리자는 같은 Cloudflare 계정에 배포하고 수집기를 먼저 준비한다. 관리자 Worker에는
+DB·관리자 JWT 키·발행자 자격 증명을 넣지 않는다.
+
+바인딩 누락·호출 예외는 `admin_api_unavailable` 503 JSON과 `Retry-After: 5`다.
+HEAD 오류 응답은 본문이 없다. 관리자 화면은 저장소 오류와 구별해 연결 실패를 안내한다.
+로그에는 고정 코드만 쓰고 예외·토큰·요청 URL은 쓰지 않는다. callback code/state를
+보호하려고 invocation 로그·자동 trace를 끄고 query redaction을 유지한다.
+API/DB 계약은 유지하며 이 오류는 관리자 전송 경계에서만 발생한다.
+
+`/auth/callback`·`/demo`는 관리자 앱 경로다. OIDC client 설정은 빌드 때
+`apps/admin/.env`의 `VITE_OIDC_`에서 별도로 읽고 토큰을 번들에 넣지 않는다.
+callback은 최종 관리자 HTTPS 출처의 `/auth/callback`이어야 한다.
+실제 제공자·로그인·원격 서비스 바인딩·DNS·D1·배포는 아직 검증하지 않았다.
+Sites 패키징은 유지하지만 기본 hosting에는 collector 바인딩이 없으므로 운영 연결은
+위 Wrangler 구성을 사용한다. 되돌릴 때는 관리자 Worker 코드와 바인딩 설정을 함께
+복원한다. 수집기 코드·DB·기록은 변경하지 않는다.
+
 ## 타입과 검증
 
 - `npm run collector:types`의 생성물은 `.tmp`에 둔다. 기준 문서는 `wrangler.jsonc`와 운영자가 준비한 대상별 설정이다.
 - `npm run typecheck`는 바인딩을 생성한 뒤 공통 코드와 플랫폼 연결 코드를 각각 검사한다.
+- `npm run admin:types`는 관리자 바인딩을 생성하고 `tsconfig.worker.json`의 checkJs로
+  Worker를 검사한다. 루트 typecheck에 포함한다.
+- `node --test --test-timeout=30000 apps/admin/test/edge.test.ts tools/runtime/test/admin-target.test.ts`는
+  임시 키·정적 fixture와 실제 로컬 수집기·D1으로 검증한다. 원격 리소스는 쓰지 않는다.
 
 ## 로깅·관측
 

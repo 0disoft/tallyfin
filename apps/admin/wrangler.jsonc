@@ -1,0 +1,24 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "tallyfin-admin",
+  "main": "worker/index.js",
+  "compatibility_date": "2026-08-06",
+  "workers_dev": false,
+  "preview_urls": false,
+  "send_metrics": false,
+  // Local type/packaging baseline only. Prepare actual targets with admin:config.
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "none",
+    "run_worker_first": ["/v1", "/v1/*"]
+  },
+  "services": [{ "binding": "COLLECTOR", "service": "tallyfin-collector" }],
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "invocation_logs": false, "head_sampling_rate": 1 },
+    // Auth callback URLs and tokens must not appear in automatic request traces.
+    "traces": { "enabled": false }
+  }
+}

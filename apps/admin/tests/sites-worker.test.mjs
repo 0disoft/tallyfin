@@ -61,6 +61,84 @@ test("does not turn missing API or write requests into the app shell", async () 
   }
 });
 
+test("reserves every /v1 API request regardless of Accept, method or colliding assets", async () => {
+  for (const method of ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"]) {
+    for (const path of ["/v1", "/v1/", "/v1/projects/missing"]) {
+      const response = await worker.fetch(new Request("https://example.test" + path, {
+        method, headers: { accept: "text/html" },
+      }), { ASSETS: { fetch: () => assert.fail("API must not reach static assets") } });
+      assert.equal(response.status, 503);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      assert.equal(response.headers.get("retry-after"), "5");
+      if (method === "HEAD") assert.equal(await response.text(), "");
+      else assert.equal((await response.json()).error.code, "admin_api_unavailable");
+    }
+  }
+});
+
+test("streams the original URL, credentials, origin and write body once to the collector", async () => {
+  let calls = 0;
+  const input = "https://example.test/v1/projects/demo/settings?schemaVersion=1";
+  const response = await worker.fetch(new Request(input, {
+    method: "PUT", headers: { Authorization: "Bearer unit-test-only", Origin: "https://service.test", "Content-Type": "application/json" },
+    body: '{"name":"updated"}',
+  }), {
+    ASSETS: { fetch: () => assert.fail("API must not reach static assets") },
+    COLLECTOR: { fetch: async request => {
+      calls++;
+      assert.equal(request.url, input);
+      assert.equal(request.method, "PUT");
+      assert.equal(request.redirect, "manual");
+      assert.equal(request.headers.get("authorization"), "Bearer unit-test-only");
+      assert.equal(request.headers.get("origin"), "https://service.test");
+      assert.equal(await request.text(), '{"name":"updated"}');
+      return Response.json({ error: { code: "settings_conflict" } }, { status: 409, headers: { "Retry-After": "12", "X-Request-ID": "unit-request", Vary: "Origin" } });
+    } },
+  });
+  assert.equal(calls, 1);
+  assert.equal(response.status, 409);
+  assert.equal(response.headers.get("x-request-id"), "unit-request");
+  assert.equal(response.headers.get("retry-after"), "12");
+  assert.equal(response.headers.get("vary"), "Origin");
+  assert.equal((await response.json()).error.code, "settings_conflict");
+});
+
+test("preserves collector errors and redirects without replacing them with HTML or retrying", async () => {
+  for (const status of [401, 403, 404, 429, 503, 307]) {
+    let calls = 0;
+    const response = await worker.fetch(new Request("https://example.test/v1/projects", { headers: { accept: "text/html" } }), {
+      ASSETS: { fetch: () => assert.fail("API must not reach static assets") },
+      COLLECTOR: { fetch: async () => { calls++; return new Response("upstream", { status, headers: { Location: "https://other.test/", "Retry-After": "10" } }); } },
+    });
+    assert.equal(calls, 1);
+    assert.equal(response.status, status);
+    assert.equal(await response.text(), "upstream");
+  }
+});
+
+test("upstream exceptions produce a fixed unavailable error without leaking exception text", async () => {
+  let calls = 0;
+  const response = await worker.fetch(new Request("https://example.test/v1/projects", { method: "POST", body: "write" }), {
+    ASSETS: { fetch: () => assert.fail("API must not reach static assets") },
+    COLLECTOR: { fetch: async () => { calls++; throw Error("private upstream diagnostic"); } },
+  });
+  assert.equal(calls, 1);
+  assert.equal(response.status, 503);
+  assert.equal(await response.text(), '{"error":{"code":"admin_api_unavailable"}}');
+});
+
+test("callback, demo and /v10 stay app routes; missing JS never becomes the app shell", async () => {
+  for (const path of ["/auth/callback?error=access_denied", "/demo", "/v10", "/assets/missing.js"]) {
+    const calls = [];
+    const response = await worker.fetch(new Request("https://example.test" + path, { headers: { accept: "text/html" } }), {
+      COLLECTOR: { fetch: () => assert.fail("non-API route must not reach collector") },
+      ASSETS: { fetch: async request => { const pathname = new URL(request.url).pathname; calls.push(pathname); return new Response("asset", { status: pathname === "/index.html" ? 200 : 404 }); } },
+    });
+    assert.equal(response.status, path.startsWith("/assets/") ? 404 : 200);
+    if (!path.startsWith("/assets/")) assert.equal(calls.at(-1), "/index.html");
+  }
+});
+
 test("emits the files required by Sites packaging", async () => {
   await access(new URL("../dist/client/index.html", import.meta.url));
   await access(new URL("../dist/server/index.js", import.meta.url));

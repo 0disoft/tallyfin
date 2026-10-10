@@ -1,5 +1,41 @@
 # 검증
 
+## 관리자 Worker 같은 출처 API 경로 — 2026-10-11
+
+관리자 Worker는 `/v1`·`/v1/*`를 정적 자산보다 우선해 고정 `COLLECTOR` 서비스
+바인딩으로 전송한다. 경로·쿼리·Origin·Authorization·쓰기 본문과 응답을 유지하고,
+스트리밍으로 한 번만 호출하며 리다이렉트·자동 재시도·API 캐시는 사용하지 않는다.
+바인딩 누락·호출 예외는 고정 503 JSON이고 HTML fallback을 거치지 않는다.
+HEAD 오류 본문은 없고 `Retry-After: 5`를 보낸다. 화면에서도 저장소 오류와 구분한다.
+실제 계정·Worker·공개 진입점을 받는 로컬 전용 `admin:config`, 기본 Wrangler config,
+타입 생성/checkJs와 dry-run 명령을 추가했다.
+
+실행·통과: `npm run check:admin`(타입 검사, 테스트 156/156, 빌드, 번들 2/2,
+Sites/게이트웨이 검사 9/9), 루트 `npm run typecheck`(수집기·관리자 타입 생성 포함),
+`node --test --test-timeout=30000 tools/runtime/test/admin-target.test.ts apps/admin/test/edge.test.ts`
+4/4, 계약 `npm run check` 53/53, `npm run admin:dry-run`(업로드 없음).
+단위 검사는 메서드·Accept와 무관한 API 예약, 본문·쿼리·헤더 유지, upstream
+401/403/404/409/429/503/307 유지, 예외 고정 메시지, callback/demo/v10 분리와 누락 JS
+404를 확인했다. 설정 검사는 자기 바인딩·불완전 진입점·추가/비밀 키·잘못된 도메인·
+출력 덮어쓰기·8KiB 초과·원격 플래그를 거부했다.
+
+실제 로컬 Miniflare Worker 두 개와 임시 D1에 모든 마이그레이션·프로젝트·grant를
+적용했다. 메모리에서 만든 단기 테스트 JWT/JWKS로 무인증 401·owner 200·grant 회수 후
+403을 확인했고, 충돌하는 API 정적 파일이 있어도 API가 우선했다. 없는 API는 HTML
+Accept에도 404 JSON이며 callback/demo/v10은 HTML이고 없는 JS는 404였다.
+검증 런타임과 임시 디렉터리는 finally에서 정리한다. 원격 리소스·운영 자격 증명을 쓰지 않았다.
+
+초기 신규 날짜 `2026-10-11`은 현재 Miniflare가 미래 호환성 날짜 오류로 거부했다.
+기존 검증 베이스라인 `2026-08-06`으로 config·타깃·검사를 맞춘 뒤 위 검사를 통과했다.
+호환성 날짜 승격은 도구 갱신과 함께 별도 검증한다. traces/자동 invocation 로그를 끄고
+query redaction을 유지하는 것은 기존 개인정보 정책을 따른다.
+
+ADR 0007·런타임 안내·로드맵·앱 안내와 이 검증 기록을 갱신했다. API·DB·마이그레이션·
+SDK·의존성·CI 러너·위생 정책 변경은 없고 루트 실행/타입 명령만 추가했다.
+백엔드 전체 검사는 변경 범위 밖이라 반복하지 않았다. 실제 OIDC 제공자·원격 서비스
+바인딩·DNS·D1·배포·Sembom 활성화는 값이 미정이라 미실행이다. 푸시는 하지 않았다.
+다음은 운영 로그인 구성과 설치 절차 정리다.
+
 ## 운영 API 기본 진입·데모 분리 — 2026-10-11
 
 `apps/admin`의 기본 주소와 `/auth/callback`은 API 관리자 모드로 시작한다.

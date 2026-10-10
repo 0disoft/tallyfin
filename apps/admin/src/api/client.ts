@@ -50,6 +50,7 @@ export type ApiErrorKind =
   | 'not_found'
   | 'invalid_request'
   | 'storage_unavailable'
+  | 'admin_api_unavailable'
   | 'settings_conflict'
   | 'schema_conflict'
   | 'project_conflict'
@@ -81,6 +82,7 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   not_found: '프로젝트나 스키마를 찾지 못했어요. (HTTP 404)',
   invalid_request: '요청 범위가 계약과 맞지 않아요. (HTTP 400)',
   storage_unavailable: '저장소를 사용할 수 없어요. (HTTP 503)',
+  admin_api_unavailable: '관리 API에 연결하지 못했어요. 잠시 후 다시 시도해 주세요. (HTTP 503)',
   settings_conflict: '다른 변경 사항이 있어요. 최신 설정을 확인해 주세요. (HTTP 409)',
   schema_conflict: '발행된 스키마가 바뀌었어요. 최신 버전을 확인해 주세요. (HTTP 409)',
   project_conflict: '이미 사용 중이거나 다른 내용으로 생성된 프로젝트 ID예요. (HTTP 409)',
@@ -496,7 +498,8 @@ export class ApiClient {
     } catch {
       // Body is not JSON; keep the fixed status-based message.
     }
-    const kind = response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'last_owner'].includes(code)
+    const kind = response.status === 503 && code === 'admin_api_unavailable' ? 'admin_api_unavailable'
+      : response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'last_owner'].includes(code)
       ? code as ApiErrorKind : STATUS_KIND[response.status] ?? 'http';
     const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
     return new ApiError(kind, message, { status: response.status, code, requestId });

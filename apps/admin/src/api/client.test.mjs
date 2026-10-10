@@ -364,6 +364,16 @@ test('only same-origin /v1 endpoints are accepted', () => {
   assert.throws(() => new ApiClient({ token: TOKEN, basePath: 'https://evil.example.com' }), error => error instanceof ApiError && error.kind === 'invalid_request');
 });
 
+test('gateway unavailable errors identify the API connection separately from storage failure', async () => {
+  const { fetchImpl } = capture(() => jsonResponse(503, { error: { code: 'admin_api_unavailable', message: `private ${TOKEN}` } }));
+  const client = new ApiClient({ token: TOKEN, fetchImpl });
+  await assert.rejects(client.listProjects(), error => {
+    assert.equal(error.kind, 'admin_api_unavailable');
+    assert.equal(error.status, 503); assert.match(error.message, /관리 API에 연결하지 못했어요/);
+    assert.ok(!error.message.includes(TOKEN)); return true;
+  });
+});
+
 test('http, network and contract failures stay distinct and never become zeros', async () => {
   const cases = [[401, 'unauthorized'], [403, 'forbidden'], [404, 'not_found'], [503, 'storage_unavailable'], [400, 'invalid_request'], [500, 'http']];
   for (const [status, kind] of cases) {

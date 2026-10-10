@@ -11,6 +11,12 @@ ModuFile·Sembom·Orchid Pass는 가상의 데이터이며 실제 서비스를 �
 일반 주소의 쿼리로 데모를 켜지 않는다. API 모드는 OIDC 로그인과 관리자 bearer 직접 연결을 제공한다.
 실제 인증 제공자 설정과 운영 배포는 아직 연결하지 않았다.
 
+배포용 Worker는 `/v1`·`/v1/*`를 고정 `COLLECTOR` 서비스 바인딩으로 수집기에 전달한다.
+연결 누락·장애는 503 JSON으로 응답하고 앱 HTML로 바꾸지 않는다. 실제 타깃 파일은
+루트 `npm run admin:config`로 준비한다. 빌드·같은 출처 운영 구성·롤백은
+[관리자 Worker 배포 준비](../../docs/backend/runtime.md#관리자-worker-배포-준비)를 따른다.
+기본 Sites 패키징에는 collector 바인딩이 없어 API 운영 연결을 제공하지 않는다.
+
 ## 실행
 
 수집기와 함께 실행하려면 저장소 루트에서 Node 24 이상을 사용한다.
