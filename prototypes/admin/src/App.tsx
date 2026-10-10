@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarBlank, CaretDown, ChartBar, FileText, FolderSimple, Gear, House, Leaf, List, Target, WarningCircle, X } from '@phosphor-icons/react';
-import '@fontsource/inter/400.css';
-import '@fontsource/inter/500.css';
-import '@fontsource/inter/600.css';
-import '@fontsource/inter/700.css';
-import '@fontsource/inter/800.css';
-import '@fontsource/noto-sans-kr/400.css';
-import '@fontsource/noto-sans-kr/500.css';
-import '@fontsource/noto-sans-kr/700.css';
-import '@fontsource/noto-sans-kr/900.css';
+import '@fontsource-variable/inter/wght.css';
+import '@fontsource-variable/noto-sans-kr/wght.css';
 import { dateAt, getRecords, periodLabel, projects, summarize, type DisplayState, type Period, type ProjectId, type View } from './data';
 import { EventAnalysis, Goals, Overview } from './Dashboard';
 import Settings from './Settings';

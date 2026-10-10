@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { collectorProxy } from "./scripts/local-proxy.mjs";
+import { fontAssets } from "./scripts/font-assets.mjs";
 
 export default defineConfig({
   build: {
@@ -18,5 +19,5 @@ export default defineConfig({
       clientFiles: ["./src/main.jsx"],
     },
   },
-  plugins: [react()],
+  plugins: [fontAssets(), react()],
 });

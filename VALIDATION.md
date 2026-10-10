@@ -1070,3 +1070,49 @@ import를 문서 단위로 기억해 다시 불러오는 시도로는 복구되�
 되돌리고 검증 탭을 닫았으며 로컬 검증 서버 종료 후 5180 리스너가 없는 것을 확인했다.
 
 운영 인증·실 DB·실 서버 부하·Sembom 연동·원격 푸시와 배포는 실행하지 않았다.
+
+## 2026-10-11 관리자 폰트 로딩 정리
+
+관리자 프로토타입의 폰트를 굵기별 정적 CSS 9개에서 가변 폰트 CSS 2개
+(`@fontsource-variable/inter/wght.css`, `@fontsource-variable/noto-sans-kr/wght.css`)로
+바꿨다. `App.tsx`의 import 9줄을 2줄로 줄이고 정적 의존성 `@fontsource/inter`·
+`@fontsource/noto-sans-kr`를 빼고 `@fontsource-variable/inter`·
+`@fontsource-variable/noto-sans-kr` `^5`(설치 5.3.0)를 넣었다. `vite.config.mjs`에
+`scripts/font-assets.mjs` 플러그인을 연결해 실제 패키지 `@font-face`의 family와 굵기만
+alias한다. Inter는 `400 800`(CSS 900은 800), Noto Sans KR은 `400 500`·`700`·`900`
+(600과 800은 700과 900)이고 원본 `unicode-range`와 서브셋은 그대로 둔다. 플러그인이
+두 OFL 원문을 `dist/client/fonts/inter-OFL.txt`·`noto-sans-kr-OFL.txt`로 동봉한다.
+
+`tests/font-assets.test.mjs`를 테스트 러너에 넣어 실제 패키지의 모든 unicode 범위와
+원본 src 유지, 서브셋별 중복 파일 다운로드가 늘지 않음, 기존 굵기 호환, 원본 변경 감지,
+라이선스 동봉을 검사한다. `prototypes/admin`에서 npm test 105/105, npm run typecheck,
+npm run build, npm run test:sites 4/4를 통과했다. 빌드 CSS는 380.42kB/gzip
+119.38kB에서 264.85kB/gzip 35.91kB로 줄었고 초기 JS 446.61kB/gzip 125.83kB는 그대로다.
+lint는 등록 명령이 없어 생략했고 백엔드는 바꾸지 않아 반복하지 않았다.
+
+브라우저 확인은 로컬 `vite preview`(127.0.0.1:5180, 프로덕션 빌드)와 Codex 인앱
+Chromium에서 캐시를 끄고 같은 탭으로 기준선과 가변 폰트를 한 번씩 비교했다.
+`document.fonts.ready`를 기다린 뒤 Resource Timing을 봤다. 실제 preview가 내려준
+encoded CSS는 113783에서 33732 bytes다. 첫 화면 폰트는 28건/324224 bytes에서
+9건/178064 bytes로, CSS와 폰트 본문 합계는 438007에서 211796 bytes로 줄었다. 헤더는
+뺐고 preview 서버의 압축값과 Vite 빌드 gzip은 서로 바꿔 쓰지 않는다. 개요 제목·지표·표의
+전후 geometry 일치를 확인했고 글리프 전수 검증은 하지 않았다.
+
+`document.fonts.load`로 Inter 600의 그리스·키릴·라틴 서브셋 face 4개, Noto Sans KR
+700의 한글·한자 서브셋 face 6개가 실제로 로드되는 것을 확인했다. 지원 서브셋이
+내려받는지 본 것이고 글리프 전수 검증은 하지 않았다. 로컬 dev(5181)의 폰트 CSS
+요청에서 alias한 Inter와 굵기 범위 `400 800` 반영을 봤고 `dist/client/fonts`에 OFL
+원문 2개가 실제로 동봉된 것을 확인했다. 이벤트 분석 `conversion_started` 상세 차트는
+4800건으로 유지됐다.
+
+실제 CSS 320px(innerWidth 320, viewport 288은 기존 90% 확대가 반영된 값이며 확대율은
+바꾸지 않았다)에서 정상 화면과 WOFF2 전체 차단 실패 화면 모두 페이지 303px에 가로
+넘침이 없었고, 차단 화면은 379개 face 오류에도 지표 24680/4800/4128/86.0%와
+표·차트·메뉴가 읽혔다. 차단을 풀고 캐시와 viewport 설정을 되돌린 뒤 검증 탭을 닫았고
+검증 서버도 종료하고 5180·5181 리스너가 없는 것을 확인했다. 원시 수치는 `.tmp/prototype-qa/font-load-metrics.json`이고 화면은
+`font-before.png`·`font-after.png`다. 다른 화면 전체 확인과 운영 CWV·구형 브라우저
+테스트는 실행하지 않았다.
+
+API/DB·SDK·의존성 위생 정책·CI 러너·운영 인증은 바꾸지 않았고 프론트엔드 의존성과
+Vite 플러그인·테스트 명령만 바뀌었다. 푸시·배포·Sembom 연동은 없다. Fontsource 가변 폰트
+근거는 [Fontsource 가변 폰트 안내](https://fontsource.org/docs/getting-started/variable)다.

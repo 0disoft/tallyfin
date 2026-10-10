@@ -464,3 +464,25 @@ dynamic import를 문서 단위로 기억해서 같은 문서에서 다시 불�
 않았고, 새 문서를 여는 `화면 새로고침` 버튼으로만 복구를 확인했다. 컴포넌트가 사라진
 뒤 늦게 도착한 import 결과는 버린다. API·DB·SDK·의존성·CI·위생 정책은 바꾸지 않는다.
 검증 조건과 수치는 [검증 기록](../../VALIDATION.md)에 둔다.
+
+## 관리자 폰트 로딩 — 2026-10-11
+
+관리자 프로토타입은 굵기별 정적 폰트 CSS 9개 대신 가변 폰트 CSS 2개를 쓴다. `App.tsx`가
+`@fontsource-variable/inter/wght.css`와 `@fontsource-variable/noto-sans-kr/wght.css`를
+정적으로 import하고 Vite가 첫 렌더링 전에 `@font-face`를 CSS에 넣는다. 굵기마다 파일을
+따로 받지 않고 가변 woff2 한 파일을 unicode-range 서브셋마다 공유한다.
+
+`scripts/font-assets.mjs` 플러그인의 transform이 실제 패키지의 `@font-face`를 그대로
+쓰면서 family 이름과 굵기만 alias한다. Inter는 `400 800` 한 범위로 두고 CSS 900은
+기존처럼 800을 고른다. Noto Sans KR은 `400 500`·`700`·`900`으로 alias하며 600과
+800은 기존처럼 700과 900을 고른다. 원본 `unicode-range`와 서브셋을 그대로 두고 자모를
+줄이거나 한자·외국어 글리프를 빼지 않는다. 화면 코드는 family 이름과 굵기를 그대로
+쓰고 플러그인이 실제 패키지 정의에 맞춘다.
+
+`font-display: swap`과 시스템 폰트 fallback을 유지해 폰트가 늦거나 실패해도 글자는
+읽힌다. 플러그인은 두 폰트의 OFL 라이선스 원문을 `dist/client/fonts/inter-OFL.txt`와
+`noto-sans-kr-OFL.txt`로 동봉하고, `tests/font-assets.test.mjs`가 실제 패키지의 모든
+unicode 범위 유지, 서브셋별 파일 중복 다운로드 없음, 기존 굵기 호환, 원본 변경 감지,
+라이선스 동봉을 검사한다. 변수 폰트 배포 형식은
+[Fontsource 가변 폰트 안내](https://fontsource.org/docs/getting-started/variable)를 따른다.
+API·DB·SDK 계약은 바꾸지 않고 이 프로토타입에서만 쓰는 의존성 정리다.

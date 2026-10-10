@@ -9,11 +9,11 @@
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/model.test.mjs src/api/*.test.mjs src/auth/client.test.mjs tests/local-proxy.test.mjs"
+    "test": "node --test src/model.test.mjs src/api/*.test.mjs src/auth/client.test.mjs tests/local-proxy.test.mjs tests/font-assets.test.mjs"
   },
   "dependencies": {
-    "@fontsource/inter": "^5",
-    "@fontsource/noto-sans-kr": "^5",
+    "@fontsource-variable/inter": "^5",
+    "@fontsource-variable/noto-sans-kr": "^5",
     "@phosphor-icons/react": "^2",
     "oauth4webapi": "^3",
     "react": "^19",
