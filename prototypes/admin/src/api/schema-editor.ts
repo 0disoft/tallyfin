@@ -1,6 +1,6 @@
 import { ApiClient, ApiError } from './client.ts';
 import type { ProjectSettings } from './types.ts';
-import { canonicalDefinitions, readDraft } from './schema-contract.ts';
+import { canonicalDefinitions, readDraft, schemaDefinitions as definitions } from './schema-contract.ts';
 import type { SchemaDraft, SchemaPage, SchemaValidation } from './schema-contract.ts';
 
 type Snapshot = { settings: ProjectSettings; page: SchemaPage; definitions: SchemaDraft };
@@ -12,7 +12,6 @@ export type SchemaState = {
   pending: Pending | null; message: string | null; formError: string | null; more: boolean;
 };
 const pretty = (d: SchemaDraft) => JSON.stringify(d, null, 2);
-const definitions = (r: SchemaDraft): SchemaDraft => ({ events: r.events, workflows: r.workflows });
 const nextVersion = (v: number | null) => (v ?? 0) >= 2147483647 ? '' : String((v ?? 0) + 1);
 const message = (e: unknown) => e instanceof ApiError ? e.message : '요청을 완료하지 못했어요. 다시 확인해 주세요.';
 

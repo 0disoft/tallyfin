@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
-import { parseBatch, prepareBatch, MAX_PUBLICATION_BYTES } from '@tallyfin/core';
+import { canonicalJson, parseBatch, prepareBatch, MAX_PUBLICATION_BYTES, schemaDefinitions, sha256 } from '@tallyfin/core';
 import { D1Queries } from '@tallyfin/storage-d1';
 import type { SqlDatabase, SqlStatement } from '@tallyfin/storage-d1';
-import { batch, setup, seed, registry, now } from '../../../packages/storage-d1/test/helpers.ts';
+import { batch, example, setup, seed, registry, now } from '../../../packages/storage-d1/test/helpers.ts';
 import { createCollector } from '../src/handler.ts';
 
 let fixture: Awaited<ReturnType<typeof setup>>;
@@ -27,6 +27,34 @@ function request(value: unknown = input(), path = '/v1/projects/sembom/schemas/2
     ...(method === 'GET' ? {} : { body: JSON.stringify(value) }) });
 }
 const revision = async () => (await fixture.db.prepare('SELECT ingest_revision FROM projects WHERE id=?').bind('sembom').first<{ ingest_revision: number }>())!.ingest_revision;
+
+test('owner validates, publishes and reads source-bound funnels; retries retain definitions and legacy versions', async () => {
+  const definitions = schemaDefinitions(example('funnel-registry'));
+  const original = await fixture.db.prepare("SELECT definitions_json FROM project_schemas WHERE version=1").first('definitions_json');
+  const value = { ...definitions, expectedLatestVersion: 1, privacyReviewed: true };
+  const api = handler();
+  const validation = await api(request(definitions, '/v1/projects/sembom/schemas/validate', 'POST'));
+  assert.equal(validation.status, 200); assert.equal((await validation.json() as any).valid, true);
+  const published = await api(request(value)); assert.equal(published.status, 200);
+  const meta = await published.json() as any;
+  assert.equal(meta.definitionHash, await sha256(canonicalJson(definitions)));
+  const savedRevision = await revision();
+  assert.deepEqual(await (await api(request(value))).json(), meta); assert.equal(await revision(), savedRevision);
+  const read = await api(request(null, '/v1/projects/sembom/schemas/2', 'GET')); assert.equal(read.status, 200);
+  assert.deepEqual((await read.json() as any).funnels, definitions.funnels);
+  assert.deepEqual((await fixture.store.loadRegistry('sembom', 2))!.funnels, definitions.funnels);
+  assert.equal(await fixture.db.prepare("SELECT definitions_json FROM project_schemas WHERE version=1").first('definitions_json'), original);
+  const changed = structuredClone(value); changed.funnels![0]!.label = 'Changed funnel';
+  assert.equal((await api(request(changed))).status, 409);
+  const invalid = structuredClone(definitions); invalid.funnels![0]!.steps[2]!.source = 'browser';
+  assert.deepEqual(await (await api(request(invalid, '/v1/projects/sembom/schemas/validate', 'POST'))).json(),
+    { valid: false, issues: [{ path: '/funnels/0/steps/2', code: 'invalid_reference' }], privacyReviewRequired: true });
+  assert.equal((await api(request({ ...invalid, expectedLatestVersion: 2, privacyReviewed: true }, '/v1/projects/sembom/schemas/3'))).status, 400);
+  assert.equal((await api(request({ ...definitions, funnels: null }, '/v1/projects/sembom/schemas/validate', 'POST'))).status, 400);
+  await fixture.db.prepare("UPDATE project_grants SET role='reader'").run();
+  assert.equal((await api(request(null, '/v1/projects/sembom/schemas/2', 'GET'))).status, 200);
+  assert.equal((await api(request(value))).status, 403);
+});
 test('publication preserves settings and old definitions/counts, increments revision once, and becomes collectable', async () => {
   await fixture.store.commit(await prepareBatch(parseBatch(JSON.stringify(batch())), registry, now), registry);
   const previous = await fixture.db.prepare('SELECT * FROM projects').first<any>();

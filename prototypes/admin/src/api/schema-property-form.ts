@@ -23,8 +23,10 @@ export function readPropertyForm(draft: EventFormDraft, eventIndex: number): Pro
 }
 export function propertyIsDimension(draft: EventFormDraft, eventIndex: number, name: string): boolean {
   const event = draft.events[eventIndex];
-  return !!event && draft.workflows.some(workflow => record(workflow) && Array.isArray(workflow.dimensions) && workflow.dimensions.includes(name) &&
-    ['startEvent', 'successEvent', 'failureEvent'].some(key => workflow[key] === event.name));
+  return !!event && (draft.workflows.some(workflow => record(workflow) && Array.isArray(workflow.dimensions) && workflow.dimensions.includes(name) &&
+    ['startEvent', 'successEvent', 'failureEvent'].some(key => workflow[key] === event.name)) ||
+    (draft.funnels ?? []).some(funnel => record(funnel) && Array.isArray(funnel.dimensions) && funnel.dimensions.includes(name) &&
+      Array.isArray(funnel.steps) && funnel.steps.some(step => record(step) && step.eventName === event.name)));
 }
 export type PropertyChange = { kind: 'add' } | { kind: 'remove'; name: string } | { kind: 'rename'; name: string; value: string } |
   { kind: 'type'; name: string; value: FormProperty['type'] } | { kind: 'required'; name: string; value: boolean } |
@@ -43,7 +45,7 @@ export function changePropertyForm(text: string, eventIndex: number, change: Pro
     const row = rows.find(row => row.name === change.name);
     if (!row) throw Error('편집할 속성을 확인해 주세요.');
     if (propertyIsDimension(draft, eventIndex, change.name) && change.kind !== 'purpose')
-      throw Error('작업 흐름의 비교 기준 속성이에요. JSON에서 연결된 정의와 함께 수정해 주세요.');
+      throw Error('작업 흐름·퍼널의 비교 기준 속성이에요. JSON에서 연결된 정의와 함께 수정해 주세요.');
     if (change.kind === 'remove') rows.splice(rows.indexOf(row), 1);
     else if (change.kind === 'rename') {
       if (change.value !== change.name && Object.hasOwn(event.properties, change.value)) throw Error('이미 사용 중인 속성 이름이에요. 다른 속성을 덮어쓰지 않았어요.');

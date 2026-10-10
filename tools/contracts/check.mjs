@@ -25,7 +25,7 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
   'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage',
-  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent' })) {
+  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 check('server batch is closed, source-specific and forbids browser attempt identities', () => {
@@ -45,7 +45,7 @@ check('server batch is closed, source-specific and forbids browser attempt ident
     '#/components/schemas/BrowserBatch');
 });
 const batch = example('browser-batch');
-check('funnel contracts remain core-only with bounded steps, random task links and no extra identity', () => {
+check('funnel registrations accept optional definitions while linked collection stays closed', () => {
   const definition = example('funnel-definition'), event = example('funnel-event');
   for (const mutate of [v => v.steps = [], v => v.steps = Array(11).fill(v.steps[0]),
     v => v.steps[0].source = 'mixed', v => v.steps[0].userId = 'private', v => v.dimensions = ['kind', 'kind']]) {
@@ -58,7 +58,12 @@ check('funnel contracts remain core-only with bounded steps, random task links a
   const envelope = { schemaVersion: 1, source: 'browser', events: [event] };
   assert.equal(validate('BrowserBatch', envelope), false);
   envelope.source = 'server'; assert.equal(validate('ServerBatch', envelope), false);
-  assert.equal(validate('Registry', { ...example('registry'), funnels: [definition] }), false);
+  assert.equal(validate('Registry', example('funnel-registry')), true);
+  const registry = example('funnel-registry');
+  assert.ok(validate('SchemaPublication', { events: registry.events, workflows: [], funnels: registry.funnels,
+    expectedLatestVersion: 1, privacyReviewed: true }));
+  assert.ok(validate('SchemaDraft', { events: registry.events, workflows: [], funnels: [null] }));
+  assert.equal(validate('SchemaDraft', { events: registry.events, workflows: [], funnels: null }), false);
 });
 check('core funnel counts conform to the declared response shape including null denominators', () => {
   for (const reached of [[10, 8, 4, 3], [0, 0], [1, 0]])

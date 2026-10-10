@@ -1,5 +1,43 @@
 # 검증
 
+## 퍼널 정의의 버전별 등록·검증·발행·읽기 — 2026-10-11
+
+Registry·SchemaDraft·SchemaPublication에 선택 funnels를 연결했다. 공용 검증기는
+기존 events/workflows 규칙 뒤에 2~10개 출처 고정 단계·최대 10개 퍼널·동일 필수
+분류 도메인을 검사한다. 정의 전체의 32KiB 예산을 공유한다. 퍼널 검증을 schema로
+옮겨 코어 수집 계산과 스키마 검증이 순환 import를 만들지 않게 했다.
+
+D1의 기존 definitions_json·owner 발행·reader/owner 정의 읽기·오프라인 등록 CLI는
+선택 funnels를 저장/보존한다. schemaDefinitions가 생략 필드를 추가하지 않아 기존
+정의 해시·재요청 비교를 유지한다. 명시한 퍼널은 버전 불변성과 재요청 해시에 포함한다.
+정의 JSON 구조만 확장했고 DBML 주석을 맞췄으며 SQL·테이블·마이그레이션은 바꾸지 않았다.
+
+관리자 클라이언트는 출처·단계·분류 참조를 검사해 퍼널을 읽고, JSON 초안·발행 해시·
+응답 유실 재확인에도 보존한다. 이벤트/속성/흐름 폼은 기존 퍼널을 버리지 않고 연결
+이름·출처·필수 분류 도메인을 잠근다. 퍼널 오류는 JSON 편집에 남긴다. SDK 안내와
+JSON 도움말은 정의 등록과 아직 미지원인 연결 수집을 구분한다.
+
+관련 29/29 테스트에서 실제 로컬 D1 owner의 검증·발행·읽기·동일 재요청·충돌·잘못된
+출처와 reader 제한, CLI preview/적용/재요청/다음 버전·구버전 보존을 확인했다.
+이후 루트 npm run check의 타입 검사·258/258 테스트·SDK gzip 예산 검사를 통과했다.
+SDK 2667 bytes·SDK+Sembom 2949 bytes를 유지한다. 관리자 관련 23/23 및 전체 테스트,
+typecheck·build·test:sites 4/4 통과. 마지막 JSON 도움말 문구 수정 뒤 typecheck·build를
+다시 통과했고 로직이 같은 전체 테스트는 앞의 결과를 재사용했다.
+계약 lint는 유효하며 아직 경로에 연결하지 않은 FunnelEvent/FunnelCounts의 미사용
+경고 2개가 남는다. 계약 check 51/51·git diff --check도 통과했다.
+
+인앱 Chromium·로컬 Vite(127.0.0.1:5185)에서 실제 LiveSdkSetup에 토큰 없는 합성
+transport와 공개 예제 정의를 주입했다. 퍼널 미지원 안내·browser/server 선택·서버 코드의
+source별 이벤트 투영을 확인하고 ignore된 prototypes/admin/.tmp/funnel-registration-ui/
+desktop.png에 화면을 저장했다. 임시 harness가 처음 default export를 named import로
+읽어 오류가 났고 수정·새로고침 뒤 화면을 확인했으며 이후 새 콘솔 오류는 없었다.
+검증 서버·탭을 종료하고 임시 html/tsx를 삭제했다.
+
+OpenAPI·DBML 주석·ADR·제품 명세/로드맵·관리자/서버/프론트엔드 문서를 갱신했다.
+계약 검사 도구는 새 예제를 검증하도록 확장했고 CI 러너·의존성·위생 정책 변경은 없다.
+퍼널 연결 상태·단계 집계 저장/수집·SDK·집계 조회/화면은 후속이다. 신규 연결 이벤트의
+D1 수집 통합·운영 인증·원격 DB·서비스 파일럿·푸시·배포는 실행하지 않았다.
+
 ## 순서 작업 퍼널 계약·코어 — 2026-10-11
 
 OpenAPI의 독립 FunnelDefinition·FunnelLink·FunnelEvent·FunnelCounts와

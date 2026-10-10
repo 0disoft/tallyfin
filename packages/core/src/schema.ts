@@ -1,4 +1,4 @@
-import type { EventDefinition, PropertyDefinition, Registry } from './types.ts';
+import type { EventDefinition, FunnelDefinition, PropertyDefinition, Registry } from './types.ts';
 import { closed, ENUM_VALUE, has, integer, matches, NAME, record, text } from './value.ts';
 
 export const MAX_SCHEMA_BYTES = 32 * 1024;
@@ -7,7 +7,7 @@ export type SchemaIssueCode = 'invalid_definition' | 'definition_limit' | 'dupli
   'browser_event_required' | 'invalid_reference' | 'dimension_mismatch';
 export interface SchemaIssue { path: string; code: SchemaIssueCode }
 export interface SchemaValidation { valid: boolean; issues: SchemaIssue[]; privacyReviewRequired: true }
-export type SchemaDefinitions = Pick<Registry, 'events' | 'workflows'>;
+export type SchemaDefinitions = Pick<Registry, 'events' | 'workflows' | 'funnels'>;
 export class SchemaDefinitionError extends Error {
   readonly issue: SchemaIssue;
   constructor(path: string, code: SchemaIssueCode) {
@@ -34,7 +34,7 @@ function signature(definition: PropertyDefinition): string {
 }
 /** Shared by registration and draft validation: passing a draft never relaxes registry rules. */
 export function validateSchemaDefinitions(value: unknown): void {
-  if (!closed(value, ['events', 'workflows'])) fail('');
+  if (!closed(value, ['events', 'workflows'], ['funnels'])) fail('');
   if (!Array.isArray(value.events)) fail('/events');
   if (!Array.isArray(value.workflows)) fail('/workflows');
   if (value.events.length < 1 || value.events.length > 50) fail('/events', 'definition_limit');
@@ -87,6 +87,7 @@ export function validateSchemaDefinitions(value: unknown): void {
       }
     }
   }
+  if (has(value, 'funnels')) validateFunnels(value.funnels, definitions.events);
 }
 /** Reports only the first issue; syntax validation cannot approve private enum contents. */
 export function validateSchemaDraft(value: unknown): SchemaValidation {
@@ -95,4 +96,48 @@ export function validateSchemaDraft(value: unknown): SchemaValidation {
     if (!(error instanceof SchemaDefinitionError)) throw error;
     return { valid: false, issues: [error.issue], privacyReviewRequired: true };
   }
+}
+
+/** Events and the combined definition budget have already been validated above. */
+function validateFunnels(value: unknown, events: EventDefinition[]): asserts value is FunnelDefinition[] {
+  if (!Array.isArray(value) || value.length > 10) fail('/funnels', 'definition_limit');
+  const ids = new Set<string>();
+  for (const [index, definition] of value.entries()) {
+    const path = `/funnels/${index}`;
+    if (!closed(definition, ['id', 'label', 'steps', 'dimensions']) || !matches(definition.id, NAME) || !text(definition.label, 1, 80) ||
+      !Array.isArray(definition.steps) || definition.steps.length < 2 || definition.steps.length > 10 ||
+      !Array.isArray(definition.dimensions) || definition.dimensions.length > 4 || !definition.dimensions.every(key => matches(key, NAME)) ||
+      new Set(definition.dimensions).size !== definition.dimensions.length) fail(path);
+    if (ids.has(definition.id)) fail(`${path}/id`, 'duplicate');
+    ids.add(definition.id);
+    const names = new Set<string>(); const stages: EventDefinition[] = [];
+    for (const [stepIndex, step] of definition.steps.entries()) {
+      const stepPath = `${path}/steps/${stepIndex}`;
+      if (!closed(step, ['eventName', 'source']) || !matches(step.eventName, NAME) || (step.source !== 'browser' && step.source !== 'server'))
+        fail(stepPath);
+      if (names.has(step.eventName)) fail(`${stepPath}/eventName`, 'duplicate');
+      names.add(step.eventName);
+      const event = events.find(event => event.name === step.eventName && event.source === step.source);
+      if (!event) fail(stepPath, 'invalid_reference');
+      stages.push(event);
+    }
+    for (const [dimensionIndex, key] of definition.dimensions.entries()) {
+      let expected: string | undefined;
+      for (const stage of stages) {
+        const property = has(stage.properties, key) ? stage.properties[key] : undefined;
+        if (!property?.required) fail(`${path}/dimensions/${dimensionIndex}`, 'dimension_mismatch');
+        const domain = signature(property);
+        if (expected !== undefined && expected !== domain) fail(`${path}/dimensions/${dimensionIndex}`, 'dimension_mismatch');
+        expected = domain;
+      }
+    }
+  }
+}
+
+export function validateFunnelDefinitions(value: unknown, events: EventDefinition[]): asserts value is FunnelDefinition[] {
+  validateSchemaDefinitions({ events, workflows: [], funnels: value });
+}
+/** Preserve absent optional fields so existing publication hashes remain unchanged. */
+export function schemaDefinitions(value: SchemaDefinitions): SchemaDefinitions {
+  return { events: value.events, workflows: value.workflows, ...(has(value, 'funnels') ? { funnels: value.funnels! } : {}) };
 }

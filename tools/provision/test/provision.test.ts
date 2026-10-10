@@ -33,6 +33,23 @@ test('preview writes nothing, registration is atomic and repeated application is
   } finally { await f.mf.dispose(); }
 });
 
+test('offline registration preserves optional funnel definitions across preview, retry and version immutability', async () => {
+  const f = await setup();
+  try {
+    const tool = new Provisioner(f.db), input = example('funnel-registry');
+    const plan = await tool.plan('register', input);
+    assert.equal(await f.db.prepare("SELECT count(*) AS n FROM projects WHERE id='modufile'").first('n'), 0);
+    await tool.apply(plan, now);
+    assert.deepEqual((await f.store.loadRegistry('modufile', 1))!.funnels, input.funnels);
+    assert.equal((await tool.plan('register', input)).changes.length, 0);
+    const changed = structuredClone(input); changed.funnels[0].label = 'Changed funnel';
+    await assert.rejects(tool.plan('register', changed), { code: 'immutable_schema' });
+    changed.schemaVersion = 2; await tool.apply(await tool.plan('register', changed), now + 1);
+    assert.deepEqual((await f.store.loadRegistry('modufile', 1))!.funnels, input.funnels);
+    assert.deepEqual((await f.store.loadRegistry('modufile', 2))!.funnels, changed.funnels);
+  } finally { await f.mf.dispose(); }
+});
+
 test('project updates and higher versions preserve old definitions and reject immutable edits', async () => {
   const f = await setup();
   try {

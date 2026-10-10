@@ -1,5 +1,5 @@
 import { CollectionError } from './types.ts';
-import { canonicalJson, closed, integer } from './value.ts';
+import { canonicalJson, closed, has, integer } from './value.ts';
 import { SchemaDefinitionError, validateSchemaDefinitions } from './schema.ts';
 import type { SchemaDefinitions } from './schema.ts';
 
@@ -14,10 +14,10 @@ export interface SchemaPage {
   page: { limit: number; beforeVersion: number | null };
 }
 export function parseSchemaPublication(value: unknown): SchemaPublication {
-  if (!closed(value, ['expectedLatestVersion', 'privacyReviewed', 'events', 'workflows']) || value.privacyReviewed !== true ||
+  if (!closed(value, ['expectedLatestVersion', 'privacyReviewed', 'events', 'workflows'], ['funnels']) || value.privacyReviewed !== true ||
     (value.expectedLatestVersion !== null && !integer(value.expectedLatestVersion, 1, 2147483647)))
     throw new CollectionError('invalid_request', 400);
-  const definitions = { events: value.events, workflows: value.workflows };
+  const definitions = { events: value.events, workflows: value.workflows, ...(has(value, 'funnels') ? { funnels: value.funnels } : {}) };
   try { validateSchemaDefinitions(definitions); }
   catch (error) {
     if (!(error instanceof SchemaDefinitionError)) throw error;

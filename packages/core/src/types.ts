@@ -13,11 +13,14 @@ export interface WorkflowDefinition {
   id: string; label: string; source: 'browser'; startEvent: string;
   successEvent: string; failureEvent: string | null; dimensions: string[];
 }
+export interface FunnelDefinition {
+  id: string; label: string; steps: { eventName: string; source: EventSource }[]; dimensions: string[];
+}
 export interface Registry {
   project: { id: string; name: string; status: 'active' | 'paused'; timeZone: string };
   schemaVersion: number; schemaStatus: 'active' | 'retired'; allowedOrigins: string[];
   limits: { requestsPerMinute: number; newReceiptsPerUtcDay: number };
-  events: EventDefinition[]; workflows: WorkflowDefinition[];
+  events: EventDefinition[]; workflows: WorkflowDefinition[]; funnels?: FunnelDefinition[];
 }
 export interface Attempt {
   workflowId: string; attemptId: string; startedAt: string;

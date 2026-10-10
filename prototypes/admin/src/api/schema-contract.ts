@@ -1,6 +1,6 @@
 import { ContractError } from './validate.ts';
 
-export type SchemaDraft = { events: unknown[]; workflows: unknown[] };
+export type SchemaDraft = { events: unknown[]; workflows: unknown[]; funnels?: unknown[] };
 export type SchemaIssueCode = 'invalid_definition' | 'definition_limit' | 'duplicate' | 'cardinality_limit' | 'browser_event_required' | 'invalid_reference' | 'dimension_mismatch';
 export type SchemaValidation = { valid: boolean; issues: { path: string; code: SchemaIssueCode }[]; privacyReviewRequired: true };
 export type SchemaMetadata = { schemaVersion: number; schemaStatus: 'active' | 'retired'; publishedAt: string };
@@ -8,8 +8,9 @@ export type SchemaPage = { projectId: string; latestVersion: number | null; data
 export type PublishedSchema = SchemaMetadata & { projectId: string; definitionHash: string };
 export type SchemaPublication = SchemaDraft & { expectedLatestVersion: number | null; privacyReviewed: true };
 function fail(): never { throw new ContractError('Schema response is invalid.'); }
-function object(value: unknown, keys: string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== keys.length || !keys.every(k => Object.hasOwn(value, k))) fail();
+function object(value: unknown, keys: string[], optional: string[] = []): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !keys.every(k => Object.hasOwn(value, k)) ||
+    Object.keys(value).some(key => !keys.includes(key) && !optional.includes(key))) fail();
   return value as Record<string, unknown>;
 }
 function version(value: unknown): number { if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 2147483647) fail(); return value; }
@@ -34,7 +35,7 @@ export function parseSchemaValidation(value: unknown): SchemaValidation {
   if (typeof r.valid !== 'boolean' || r.privacyReviewRequired !== true || !Array.isArray(r.issues) || r.issues.length !== (r.valid ? 0 : 1)) fail();
   const issues = r.issues.map(value => {
     const issue = object(value, ['path', 'code']);
-    if (typeof issue.path !== 'string' || issue.path.length > 160 || !/^(?:\/(?:events|workflows)(?:\/\d+(?:\/(?:name|id|properties|dimensions|startEvent|successEvent|failureEvent)(?:\/[a-z0-9_]+)?)?)?)?$/.test(issue.path) ||
+    if (typeof issue.path !== 'string' || issue.path.length > 160 || !/^(?:\/(?:events|workflows)(?:\/\d+(?:\/(?:name|id|properties|dimensions|startEvent|successEvent|failureEvent)(?:\/[a-z0-9_]+)?)?)?|\/funnels(?:\/\d+(?:\/(?:id|dimensions(?:\/\d+)?|steps\/\d+(?:\/(?:eventName|source))?))?)?)?$/.test(issue.path) ||
       !['invalid_definition', 'definition_limit', 'duplicate', 'cardinality_limit', 'browser_event_required', 'invalid_reference', 'dimension_mismatch'].includes(String(issue.code))) fail();
     return { path: issue.path, code: issue.code as SchemaIssueCode };
   });
@@ -47,8 +48,9 @@ export function parsePublishedSchema(value: unknown): PublishedSchema {
     projectId: projectId(r.projectId), definitionHash: r.definitionHash };
 }
 export function readDraft(text: string): SchemaDraft {
-  const value = object(JSON.parse(text), ['events', 'workflows']);
-  if (!Array.isArray(value.events) || !Array.isArray(value.workflows) || new TextEncoder().encode(JSON.stringify(value)).length > 32768) fail();
+  const value = object(JSON.parse(text), ['events', 'workflows'], ['funnels']);
+  if (!Array.isArray(value.events) || !Array.isArray(value.workflows) ||
+    Object.hasOwn(value, 'funnels') && !Array.isArray(value.funnels) || new TextEncoder().encode(JSON.stringify(value)).length > 32768) fail();
   return value as SchemaDraft;
 }
 export function canonicalDefinitions(value: unknown): string {
@@ -59,4 +61,7 @@ export function canonicalDefinitions(value: unknown): string {
 export async function definitionHash(value: SchemaDraft): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalDefinitions(value)));
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+}
+export function schemaDefinitions(value: SchemaDraft): SchemaDraft {
+  return { events: value.events, workflows: value.workflows, ...(Object.hasOwn(value, 'funnels') ? { funnels: value.funnels! } : {}) };
 }

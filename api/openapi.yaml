@@ -92,7 +92,8 @@ components:
       type: object
       additionalProperties: false
       required: [id, label, steps, dimensions]
-      description: Ordered task funnel core contract. Not yet accepted by Registry or publication endpoints.
+      description: Ordered task funnel definition accepted by Registry and schema validation/publication endpoints.
+        Linked ingestion, persistence and funnel queries are not yet enabled.
         Two to ten distinct registered events, each bound to its registered source, define consecutive milestones.
         Dimensions must be required and have identical domains in every step. No visitor identity.
       properties:
@@ -948,7 +949,8 @@ components:
           uniqueItems: true
     SchemaPublication:
       type: object
-      description: At least one registered event from either source is required. Server-only definitions use an empty workflow list; workflows remain browser-only.
+      description: At least one registered event from either source is required. Server-only definitions use an empty workflow list;
+        workflows remain browser-only. Optional funnels bind ordered registered steps across sources; registration does not enable linked ingestion.
       additionalProperties: false
       required: [expectedLatestVersion, privacyReviewed, events, workflows]
       properties:
@@ -974,6 +976,10 @@ components:
           maxItems: 10
           items:
             $ref: "#/components/schemas/WorkflowDefinition"
+        funnels:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/FunnelDefinition' }
     SchemaMetadata:
       type: object
       additionalProperties: false
@@ -1061,6 +1067,9 @@ components:
         workflows:
           type: array
           items: {}
+        funnels:
+          type: array
+          items: {}
     SchemaValidation:
       type: object
       additionalProperties: false
@@ -1142,6 +1151,10 @@ components:
           maxItems: 10
           items:
             $ref: "#/components/schemas/WorkflowDefinition"
+        funnels:
+          type: array
+          maxItems: 10
+          items: { $ref: '#/components/schemas/FunnelDefinition' }
     QueryMeta:
       type: object
       additionalProperties: false

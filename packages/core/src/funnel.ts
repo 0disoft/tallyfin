@@ -1,13 +1,10 @@
 import { CollectionError } from './types.ts';
-import type { BrowserEvent, EventDefinition, EventSource, Registry } from './types.ts';
+import type { BrowserEvent, EventSource, FunnelDefinition, Registry } from './types.ts';
 import { parseBatch, parseServerBatch, prepareBatch, prepareServerBatch } from './batch.ts';
 import { count } from './query.ts';
-import { SchemaDefinitionError, MAX_SCHEMA_BYTES, validateSchemaDefinitions } from './schema.ts';
-import { closed, DAY, dimensionKey, has, integer, localDate, matches, NAME, sha256, text, utcMillis, UUID } from './value.ts';
+import { closed, DAY, dimensionKey, integer, localDate, matches, sha256, utcMillis, UUID } from './value.ts';
 
-export interface FunnelDefinition {
-  id: string; label: string; steps: { eventName: string; source: EventSource }[]; dimensions: string[];
-}
+export type { FunnelDefinition } from './types.ts';
 /** One random task identity, not a visitor identity, credential or proof of a browser event. */
 export interface FunnelLink { funnelId: string; runId: string; startedAt: string }
 export interface FunnelEvent extends Omit<BrowserEvent, 'attempt'> { funnel: FunnelLink; attempt?: never }
@@ -26,52 +23,6 @@ export interface FunnelDelta {
   cohortDate: string; funnelId: string; dimensionKey: string; stepIndex: number; reachedCount: 1;
 }
 export interface FunnelProgress { state: FunnelRunState; deltas: FunnelDelta[]; duplicate: boolean }
-
-function invalidDefinition(path: string, code: import('./schema.ts').SchemaIssueCode = 'invalid_definition'): never {
-  throw new SchemaDefinitionError(path, code);
-}
-function propertyDomain(property: import('./types.ts').PropertyDefinition): string {
-  return JSON.stringify(property.type === 'enum' ? ['enum', [...property.values].sort()] :
-    property.type === 'integer' ? ['integer', property.minimum, property.maximum] : ['boolean']);
-}
-/** Standalone validation until versioned schema publication is extended to carry funnels. */
-export function validateFunnelDefinitions(value: unknown, events: EventDefinition[]): asserts value is FunnelDefinition[] {
-  validateSchemaDefinitions({ events, workflows: [] });
-  if (!Array.isArray(value) || value.length > 10) invalidDefinition('/funnels', 'definition_limit');
-  if (new TextEncoder().encode(JSON.stringify({ events, workflows: [], funnels: value })).byteLength > MAX_SCHEMA_BYTES)
-    invalidDefinition('/funnels', 'definition_limit');
-  const ids = new Set<string>();
-  for (const [index, definition] of value.entries()) {
-    const path = `/funnels/${index}`;
-    if (!closed(definition, ['id', 'label', 'steps', 'dimensions']) || !matches(definition.id, NAME) || !text(definition.label, 1, 80) ||
-      !Array.isArray(definition.steps) || definition.steps.length < 2 || definition.steps.length > 10 ||
-      !Array.isArray(definition.dimensions) || definition.dimensions.length > 4 || !definition.dimensions.every(key => matches(key, NAME)) ||
-      new Set(definition.dimensions).size !== definition.dimensions.length) invalidDefinition(path);
-    if (ids.has(definition.id)) invalidDefinition(`${path}/id`, 'duplicate');
-    ids.add(definition.id);
-    const names = new Set<string>(); const stages: EventDefinition[] = [];
-    for (const [stepIndex, step] of definition.steps.entries()) {
-      const stepPath = `${path}/steps/${stepIndex}`;
-      if (!closed(step, ['eventName', 'source']) || !matches(step.eventName, NAME) || (step.source !== 'browser' && step.source !== 'server'))
-        invalidDefinition(stepPath);
-      if (names.has(step.eventName)) invalidDefinition(`${stepPath}/eventName`, 'duplicate');
-      names.add(step.eventName);
-      const event = events.find(event => event.name === step.eventName && event.source === step.source);
-      if (!event) invalidDefinition(stepPath, 'invalid_reference');
-      stages.push(event);
-    }
-    for (const [dimensionIndex, key] of definition.dimensions.entries()) {
-      let expected: string | undefined;
-      for (const stage of stages) {
-        const property = has(stage.properties, key) ? stage.properties[key] : undefined;
-        if (!property?.required) invalidDefinition(`${path}/dimensions/${dimensionIndex}`, 'dimension_mismatch');
-        const domain = propertyDomain(property);
-        if (expected !== undefined && expected !== domain) invalidDefinition(`${path}/dimensions/${dimensionIndex}`, 'dimension_mismatch');
-        expected = domain;
-      }
-    }
-  }
-}
 
 /** Uses validated registry/definition; the host must enforce origins or verified publisher permission. */
 export async function prepareFunnelObservation(input: unknown, registry: Registry, definition: FunnelDefinition,

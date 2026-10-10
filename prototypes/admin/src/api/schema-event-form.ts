@@ -2,7 +2,7 @@ import { readDraft } from './schema-contract.ts';
 import type { SchemaDraft, SchemaValidation } from './schema-contract.ts';
 
 export type FormEvent = Record<string, unknown> & { name: string; label: string; source: 'browser' | 'server'; properties: Record<string, unknown> };
-export type EventFormDraft = { events: FormEvent[]; workflows: SchemaDraft['workflows'] };
+export type EventFormDraft = Omit<SchemaDraft, 'events'> & { events: FormEvent[] };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const NAME = /^[a-z][a-z0-9_]{0,47}$/;
 
@@ -16,8 +16,10 @@ export function readEventForm(text: string): EventFormDraft {
 }
 export function eventIsLinked(draft: EventFormDraft, index: number): boolean {
   const name = draft.events[index]?.name;
-  return typeof name === 'string' && name.length > 0 && draft.workflows.some(workflow => record(workflow) &&
-    ['startEvent', 'successEvent', 'failureEvent'].some(key => workflow[key] === name));
+  return typeof name === 'string' && name.length > 0 && (draft.workflows.some(workflow => record(workflow) &&
+    ['startEvent', 'successEvent', 'failureEvent'].some(key => workflow[key] === name)) ||
+    (draft.funnels ?? []).some(funnel => record(funnel) && Array.isArray(funnel.steps) &&
+      funnel.steps.some(step => record(step) && step.eventName === name)));
 }
 export type EventChange = { kind: 'add' } | { kind: 'remove'; index: number } |
   { kind: 'edit'; index: number; field: 'name' | 'label' | 'source'; value: string };
@@ -29,7 +31,7 @@ export function changeEventForm(text: string, change: EventChange): string {
   } else {
     if (!Number.isInteger(change.index) || !draft.events[change.index]) throw Error('편집할 이벤트를 확인해 주세요.');
     if (eventIsLinked(draft, change.index) && (change.kind === 'remove' || change.field !== 'label'))
-      throw Error('작업 흐름에 연결된 이벤트의 이름·출처·삭제는 JSON에서 연결 정의와 함께 수정해 주세요.');
+      throw Error('작업 흐름·퍼널에 연결된 이벤트의 이름·출처·삭제는 JSON에서 연결 정의와 함께 수정해 주세요.');
     if (change.kind === 'remove') draft.events.splice(change.index, 1);
     else {
       if (change.field === 'source' && change.value !== 'browser' && change.value !== 'server') throw Error('발행 출처를 확인해 주세요.');

@@ -98,7 +98,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
       <div className="settings-field"><label className="field-label" htmlFor="schema-draft">스키마 정의 (JSON)</label>
         <textarea id="schema-draft" ref={inputRef} className="text-input schema-textarea" rows={18} spellCheck={false} value={state.draft} readOnly={!editable}
           onChange={e => editorRef.current?.edit('draft', e.target.value)} aria-invalid={Boolean(state.formError || issue) || undefined} aria-describedby="schema-draft-help schema-errors" />
-        <p className="field-help" id="schema-draft-help">events와 workflows 배열만 입력해요. 이벤트는 1~50개, 흐름은 최대 10개예요. 이름은 영문 소문자·숫자·밑줄로 써요.</p>
+        <p className="field-help" id="schema-draft-help">events·workflows 배열과 선택 funnels 배열을 입력해요. 이벤트는 1~50개, 흐름·퍼널은 각각 최대 10개예요. 퍼널 연결 수집은 준비 중이에요. 이름은 영문 소문자·숫자·밑줄로 써요.</p>
       </div></details>
         <div id="schema-errors">{state.formError && <p className="form-error" role="alert">{state.formError}</p>}
           {issue && <p className="form-error" role="alert"><code>{issue.path || '전체 정의'}</code> — {ISSUE_TEXT[issue.code]}</p>}</div>

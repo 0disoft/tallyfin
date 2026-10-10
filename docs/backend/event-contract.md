@@ -21,7 +21,7 @@
 새 스키마 버전은 owner 전용 PUT으로도 발행하며 프로젝트 생성은 별도 생성 권한 POST 또는 CLI를 사용한다. grant 관리는 provisioning CLI가 맡는다. 기존 프로젝트
 설정은 관리자 API에서도 변경할 수 있다([관리자 조회·설정 경계](./administrator.md)).
 
-스키마 버전의 events/workflows는 불변이며 변경은 새 버전으로 발행한다. active만
+스키마 버전의 events/workflows/선택 funnels는 불변이며 변경은 새 버전으로 발행한다. active만
 수집하고 retired는 조회만 한다. 여러 active 버전으로 구형 클라이언트를 수용할 수 있다.
 이벤트는 출처와 관계없이 1~50종·흐름은 최대 10종이며 server 정의만 있는 스키마도
 허용한다. server 전용 스키마는 workflows를 빈 배열로 둔다. 허용 browser 출처는

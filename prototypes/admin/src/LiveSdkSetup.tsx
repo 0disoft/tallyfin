@@ -39,6 +39,7 @@ export default function LiveSdkSetup({ client, projectId, refreshTick }: { clien
     {status === 'empty' && <p className="notice">첫 스키마를 발행하면 연결 코드를 만들 수 있어요. <a href="#schema-heading">이벤트 스키마 등록</a></p>}
     {registry && <>
       <p className="context-note">프로젝트 {projectId} · 최신 스키마 v{registry.schemaVersion}.</p>
+      {!!registry.funnels?.length && <p className="notice">퍼널 정의는 등록되어 있지만 단계 연결 수집은 아직 지원하지 않아요. 아래 코드는 일반 이벤트와 기존 작업 흐름을 수집해요.</p>}
       <label className="field-label" htmlFor="sdk-source">SDK 발행 출처</label>
       <select className="text-input settings-select" id="sdk-source" value={source} onChange={event => {
         setChoice({ key: scope, source: event.target.value === 'server' ? 'server' : 'browser' }); setCopyStatus('');

@@ -127,14 +127,14 @@ UPDATE로 반영한다. owner 자격이 회수되면 403, 해시가 오래됐거
 ## 스키마 초안 검증
 
 기존 `GET /v1/projects/{projectId}/schemas/{schemaVersion}`로 발행된 정의를 읽고,
-`POST /v1/projects/{projectId}/schemas/validate`에 `{events, workflows}`만 보내 검증한다.
+`POST /v1/projects/{projectId}/schemas/validate`에 `{events, workflows, funnels?}`만 보내 검증한다.
 프로젝트·버전·상태·허용 출처 등 다른 필드는 받지 않는다. POST는 인증한 뒤 프로젝트
 설정과 owner grant를 같은 DB 조회에서 확인하며, 권한이 없으면 본문을 읽기 전에 403을
 반환한다. 일시정지된 프로젝트도 검증할 수 있다. reader는 발행된 스키마 조회만 가능하다.
 
 본문은 identity 인코딩의 `application/json` 또는 `text/plain`이며 UTF-8 32KiB가
 상한이다. 다른 수집·설정 경로의 16KiB 상한은 그대로다. 쿼리 파라미터는 받지 않는다.
-JSON 오류·닫힌 envelope 위반·배열이 아닌 events/workflows는 400, 크기 초과는 413,
+JSON 오류·닫힌 envelope 위반·배열이 아닌 events/workflows/선택 funnels는 400, 크기 초과는 413,
 지원하지 않는 미디어·인코딩은 415다.
 
 정의의 의미 검증 결과는 200으로 `{valid, issues, privacyReviewRequired: true}`를
@@ -158,9 +158,13 @@ latestVersion은 커서와 무관하게 해당 snapshot의 최고 번호이며, 
 없으면 null이다. 매 페이지에서 grant를 다시 검사하고 paused 프로젝트·retired 버전도
 표시한다. 정의 전체는 기존 버전별 GET으로 읽는다.
 
-발행 PUT 본문은 `{expectedLatestVersion, privacyReviewed: true, events, workflows}`다.
+발행 PUT 본문은 `{expectedLatestVersion, privacyReviewed: true, events, workflows, funnels?}`다.
 identity 인코딩의 application/json 또는 text/plain을 받고 본문은 UTF-8 33KiB,
 정의 자체는 32KiB가 상한이다. 이벤트·흐름 규칙은 초안 검증과 같은 함수로 다시 검사한다.
+선택 funnels도 같은 한도·검증을 공유한다. 퍼널은 최대 10개, 순서 단계는 2~10개이며
+각 단계의 등록 출처·이벤트와 동일 필수 분류 도메인을 확인한다. 생략한 기존 정의의
+해시는 유지하고, 명시한 funnels는 정의 해시·불변 버전·재요청 비교에 포함한다.
+현재는 정의 등록만 지원하며 단계 연결 수집·집계 조회는 후속이다.
 privacyReviewed는 owner의 검토 확인이며 자동 개인정보 탐지가 아니다. 프로젝트·상태·
 허용 출처·수집 한도는 본문에 넣을 수 없다. 닫힌 입력·잘못된 정의는 400이다.
 

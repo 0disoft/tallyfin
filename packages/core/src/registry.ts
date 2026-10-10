@@ -1,10 +1,10 @@
 import type { Registry } from './types.ts';
 import { validateMutableSettings } from './settings.ts';
-import { validateSchemaDefinitions } from './schema.ts';
+import { schemaDefinitions, validateSchemaDefinitions } from './schema.ts';
 import { closed, integer, matches, PROJECT_ID, text } from './value.ts';
 
 export function validateRegistry(value: unknown, options: { allowLocalHttp?: boolean } = {}): Registry {
-  if (!closed(value, ['project', 'schemaVersion', 'schemaStatus', 'allowedOrigins', 'limits', 'events', 'workflows']) ||
+  if (!closed(value, ['project', 'schemaVersion', 'schemaStatus', 'allowedOrigins', 'limits', 'events', 'workflows'], ['funnels']) ||
     !closed(value.project, ['id', 'name', 'status', 'timeZone']) || !matches(value.project.id, PROJECT_ID) ||
     !text(value.project.name, 1, 80) || !['active', 'paused'].includes(String(value.project.status)) || !text(value.project.timeZone, 1, 64) ||
     !integer(value.schemaVersion, 1, 2_147_483_647) || !['active', 'retired'].includes(String(value.schemaStatus)) ||
@@ -14,7 +14,7 @@ export function validateRegistry(value: unknown, options: { allowLocalHttp?: boo
   new Intl.DateTimeFormat('en', { timeZone: value.project.timeZone });
   validateMutableSettings({ name: value.project.name, status: value.project.status,
     allowedOrigins: value.allowedOrigins, limits: value.limits }, options);
-  validateSchemaDefinitions({ events: value.events, workflows: value.workflows });
+  validateSchemaDefinitions(schemaDefinitions(value as unknown as Registry));
   // Registration still requires the owner's privacy review; syntax cannot detect private enums.
   return structuredClone(value as unknown as Registry);
 }

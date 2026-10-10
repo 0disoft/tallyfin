@@ -1,0 +1,111 @@
+{
+  "project": {
+    "id": "modufile",
+    "name": "ModuFile",
+    "status": "active",
+    "timeZone": "Asia/Seoul"
+  },
+  "schemaVersion": 1,
+  "schemaStatus": "active",
+  "allowedOrigins": [
+    "https://modufile.example.invalid"
+  ],
+  "limits": {
+    "requestsPerMinute": 120,
+    "newReceiptsPerUtcDay": 100000
+  },
+  "events": [
+    {
+      "name": "file_selected",
+      "label": "file_selected",
+      "source": "browser",
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "purpose": "Reviewed format bucket",
+          "values": [
+            "pdf",
+            "image"
+          ]
+        }
+      }
+    },
+    {
+      "name": "upload_finished",
+      "label": "upload_finished",
+      "source": "browser",
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "purpose": "Reviewed format bucket",
+          "values": [
+            "pdf",
+            "image"
+          ]
+        }
+      }
+    },
+    {
+      "name": "job_started",
+      "label": "job_started",
+      "source": "server",
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "purpose": "Reviewed format bucket",
+          "values": [
+            "pdf",
+            "image"
+          ]
+        }
+      }
+    },
+    {
+      "name": "job_finished",
+      "label": "job_finished",
+      "source": "server",
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "required": true,
+          "purpose": "Reviewed format bucket",
+          "values": [
+            "pdf",
+            "image"
+          ]
+        }
+      }
+    }
+  ],
+  "workflows": [],
+  "funnels": [
+    {
+      "id": "conversion",
+      "label": "File conversion",
+      "steps": [
+        {
+          "eventName": "file_selected",
+          "source": "browser"
+        },
+        {
+          "eventName": "upload_finished",
+          "source": "browser"
+        },
+        {
+          "eventName": "job_started",
+          "source": "server"
+        },
+        {
+          "eventName": "job_finished",
+          "source": "server"
+        }
+      ],
+      "dimensions": [
+        "kind"
+      ]
+    }
+  ]
+}

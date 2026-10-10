@@ -43,7 +43,11 @@ export type Registry = {
   limits: { requestsPerMinute: number; newReceiptsPerUtcDay: number };
   events: EventDefinition[];
   workflows: WorkflowDefinition[];
+  funnels?: FunnelDefinition[];
 };
+
+export type FunnelDefinition = { id: string; label: string; dimensions: string[];
+  steps: { eventName: string; source: 'browser' | 'server' }[] };
 
 export type EventSource = 'browser' | 'server';
 export type QueryMeta = {

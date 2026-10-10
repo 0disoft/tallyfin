@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { ApiClient, ApiError } from './client.ts';
 import { SchemaEditor } from './schema-editor.ts';
-import { definitionHash, parseSchemaValidation, parseSchemaPage } from './schema-contract.ts';
+import { definitionHash, parseSchemaValidation, parseSchemaPage, schemaDefinitions } from './schema-contract.ts';
 import { changeEventForm, eventIsLinked, eventIssueTarget, readEventForm } from './schema-event-form.ts';
 import { changePropertyForm, propertyChoices, propertyIsDimension, propertyIssueTarget, readPropertyForm } from './schema-property-form.ts';
 import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflowWarnings, workflowIssueTarget, workflowFocusAfterChange } from './schema-workflow-form.ts';
@@ -21,7 +22,7 @@ function fixture() {
     calls.push({ url, init });
     if (init.method === 'PUT') {
       if (config.write) return config.write(url, init);
-      const version = Number(url.split('/').at(-1)), input = JSON.parse(init.body), draft = { events: input.events, workflows: input.workflows };
+      const version = Number(url.split('/').at(-1)), input = JSON.parse(init.body), draft = schemaDefinitions(input);
       schemas.set(version, draft);
       return response(200, { projectId: 'sample', ...metadata(version), definitionHash: await definitionHash(draft) });
     }
@@ -39,6 +40,37 @@ function fixture() {
   return { client, editor, calls, schemas, config };
 }
 const ready = async editor => { await editor.load(); await editor.validate(); editor.setPrivacy(true); };
+
+const funnelDraft = () => schemaDefinitions(JSON.parse(readFileSync(new URL('../../../../api/examples/funnel-registry.json', import.meta.url), 'utf8')));
+
+test('schema editor/client preserve and hash source-bound funnels through load, edits and publication', async () => {
+  const f = fixture(), original = funnelDraft(); f.schemas.set(1, original);
+  f.config.validate = async (_url, init) => response(200, validateSchemaDraft(JSON.parse(init.body)));
+  await f.editor.load(); assert.deepEqual(JSON.parse(f.editor.state.draft).funnels, original.funnels);
+  const edit = changeEventForm(f.editor.state.draft, { kind: 'edit', index: 0, field: 'label', value: 'Selected file' });
+  assert.deepEqual(JSON.parse(edit).funnels, original.funnels); f.editor.edit('draft', edit);
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish();
+  assert.deepEqual(f.schemas.get(2).funnels, original.funnels);
+  const write = f.calls.find(c => c.init.method === 'PUT');
+  assert.deepEqual(JSON.parse(write.init.body).funnels, original.funnels);
+  const invalid = funnelDraft(); invalid.funnels[0].steps[2].source = 'browser';
+  f.editor.edit('draft', JSON.stringify(invalid)); await f.editor.validate();
+  assert.equal(f.editor.state.report.valid, false); assert.equal(f.editor.state.report.issues[0].path, '/funnels/0/steps/2');
+  const incorrect = fixture(); incorrect.config.write = async (_url, init) => response(200, { projectId: 'sample', ...metadata(2),
+    definitionHash: await definitionHash({ events: JSON.parse(init.body).events, workflows: [] }) });
+  await assert.rejects(incorrect.client.publishSchema('sample', 2, { ...original, expectedLatestVersion: 1, privacyReviewed: true }),
+    e => e instanceof ApiError && e.kind === 'contract');
+});
+
+test('event/property/workflow forms retain funnels and lock referenced names and dimension domains', () => {
+  const original = funnelDraft(), text = JSON.stringify(original), draft = readEventForm(text);
+  assert.equal(eventIsLinked(draft, 0), true); assert.equal(propertyIsDimension(draft, 0, 'kind'), true);
+  assert.throws(() => changeEventForm(text, { kind: 'remove', index: 0 }));
+  assert.throws(() => changeEventForm(text, { kind: 'edit', index: 0, field: 'source', value: 'server' }));
+  assert.throws(() => changePropertyForm(text, 0, { kind: 'required', name: 'kind', value: false }));
+  assert.deepEqual(JSON.parse(changePropertyForm(text, 0, { kind: 'purpose', name: 'kind', value: 'Updated purpose' })).funnels, original.funnels);
+  assert.deepEqual(JSON.parse(changeWorkflowForm(text, { kind: 'add' })).funnels, original.funnels);
+});
 test('schema client uses explicit POST/PUT and checks response identity/hash with protected transport', async () => {
   const f = fixture(); await ready(f.editor); await f.editor.publish();
   const write = f.calls.find(c => c.init.method === 'PUT');

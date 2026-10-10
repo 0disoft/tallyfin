@@ -26,7 +26,7 @@ import {
   parseWorkflowBreakdownResponse,
   parseWorkflowResponse,
 } from './validate.ts';
-import { definitionHash, parsePublishedSchema, parseSchemaPage, parseSchemaValidation } from './schema-contract.ts';
+import { definitionHash, parsePublishedSchema, parseSchemaPage, parseSchemaValidation, schemaDefinitions } from './schema-contract.ts';
 import type { PublishedSchema, SchemaDraft, SchemaPage, SchemaPublication, SchemaValidation } from './schema-contract.ts';
 import { creationHash, parseCreatedProject } from './project-creation.ts';
 import type { CreatedProject, ProjectCreation } from './project-creation.ts';
@@ -274,7 +274,7 @@ export class ApiClient {
   async publishSchema(projectId: string, schemaVersion: number, input: SchemaPublication, options: { signal?: AbortSignal } = {}): Promise<PublishedSchema> {
     const version = this.#version(schemaVersion), body = JSON.stringify(input);
     if (new TextEncoder().encode(body).byteLength > 33792) throw new ApiError('invalid_request', '발행 요청이 너무 커요.');
-    const hash = await definitionHash({ events: input.events, workflows: input.workflows });
+    const hash = await definitionHash(schemaDefinitions(input));
     const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas/${version}`, {}, options.signal, body, 'PUT'), parsePublishedSchema);
     if (result.projectId !== projectId || result.schemaVersion !== version || result.definitionHash !== hash)
       throw new ApiError('contract', '발행 응답이 요청한 정의·프로젝트·버전과 맞지 않아요.');

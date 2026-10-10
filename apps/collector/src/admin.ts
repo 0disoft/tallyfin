@@ -1,4 +1,4 @@
-import { closed, CollectionError, dateMillis, DAY, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseGrantChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
+import { closed, CollectionError, dateMillis, DAY, has, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseGrantChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 
@@ -78,7 +78,8 @@ export async function administrator(request: Request, access: AdministratorAcces
     let value: unknown;
     const body = await readBody(request, MAX_SCHEMA_BYTES);
     try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
-    if (!closed(value, ['events', 'workflows']) || !Array.isArray(value.events) || !Array.isArray(value.workflows))
+    if (!closed(value, ['events', 'workflows'], ['funnels']) || !Array.isArray(value.events) || !Array.isArray(value.workflows) ||
+      (has(value, 'funnels') && !Array.isArray(value.funnels)))
       throw new CollectionError('invalid_request', 400);
     return validateSchemaDraft(value);
   }

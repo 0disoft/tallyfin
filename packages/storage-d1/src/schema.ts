@@ -1,4 +1,4 @@
-import { canonicalJson, CollectionError, integer, parseSchemaPublication, PROJECT_ID, sha256 } from '@tallyfin/core';
+import { canonicalJson, CollectionError, integer, parseSchemaPublication, PROJECT_ID, schemaDefinitions, sha256 } from '@tallyfin/core';
 import type { AdminPrincipal, PublishedSchema, SchemaPage, SchemaPublication } from '@tallyfin/core';
 import type { SchemaRow, SqlDatabase } from './sql.ts';
 import { adminChangeStatement } from './admin-changes.ts';
@@ -35,7 +35,7 @@ export async function publishSchema(db: SqlDatabase, principal: AdminPrincipal, 
   if (!PROJECT_ID.test(id) || !integer(version, 1, 2147483647) || !integer(now, 0, 8640000000000000))
     throw new CollectionError('invalid_request', 400);
   const parsed = parseSchemaPublication(input);
-  const definitions = canonicalJson({ events: parsed.events, workflows: parsed.workflows });
+  const definitions = canonicalJson(schemaDefinitions(parsed));
   const access = grant("'owner'");
   // Conditional insert, revision update, grant check and retry read share one atomic D1 batch.
   // SQLite changes() refers to the immediately preceding INSERT, so retries do not advance the revision.

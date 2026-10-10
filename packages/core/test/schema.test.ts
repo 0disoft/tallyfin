@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { validateRegistry, validateSchemaDraft } from '../src/index.ts';
+import { canonicalJson, parseSchemaPublication, schemaDefinitions, validateRegistry, validateSchemaDraft } from '../src/index.ts';
 
 const registry = () => JSON.parse(readFileSync(new URL('../../../api/examples/registry.json', import.meta.url), 'utf8'));
 const draft = () => { const r = registry(); return { events: r.events, workflows: r.workflows }; };
@@ -50,4 +50,27 @@ test('optional missing buckets count toward cardinality and dimensions compare n
     type: 'integer', minimum: 0, maximum: 15, required: false, purpose: 'optional bucket',
   }]));
   assert.deepEqual(validateSchemaDraft(input).issues, [{ path: '/events/0/properties', code: 'cardinality_limit' }]);
+});
+
+test('optional ordered funnels participate in schema validation/publication without changing legacy definitions', () => {
+  const input = JSON.parse(readFileSync(new URL('../../../api/examples/funnel-registry.json', import.meta.url), 'utf8'));
+  const definitions = schemaDefinitions(validateRegistry(input));
+  assert.deepEqual(definitions.funnels, input.funnels);
+  assert.equal(validateSchemaDraft(definitions).valid, true);
+  const published = parseSchemaPublication({ ...definitions, expectedLatestVersion: 1, privacyReviewed: true });
+  assert.equal(canonicalJson(schemaDefinitions(published)), canonicalJson(definitions));
+  assert.equal(canonicalJson(schemaDefinitions(registry())), canonicalJson(draft()));
+  assert.equal(Object.hasOwn(validateRegistry(registry()), 'funnels'), false);
+  assert.equal(canonicalJson(schemaDefinitions({ ...registry(), funnels: [] })), canonicalJson({ ...draft(), funnels: [] }));
+  for (const [mutate, path, code] of [
+    [(d: any) => { d.funnels[0].steps[2].source = 'browser'; }, '/funnels/0/steps/2', 'invalid_reference'],
+    [(d: any) => { d.funnels[0].steps.push(d.funnels[0].steps[0]); }, '/funnels/0/steps/4/eventName', 'duplicate'],
+    [(d: any) => { d.funnels[0].dimensions = ['missing']; }, '/funnels/0/dimensions/0', 'dimension_mismatch'],
+    [(d: any) => { d.funnels = null; }, '/funnels', 'definition_limit'],
+    [(d: any) => { d.funnels = Array(11).fill(d.funnels[0]); }, '/funnels', 'definition_limit'],
+  ] as const) {
+    const invalid = structuredClone(definitions); mutate(invalid);
+    assert.deepEqual(validateSchemaDraft(invalid).issues, [{ path, code }]);
+    assert.throws(() => parseSchemaPublication({ ...invalid, expectedLatestVersion: 1, privacyReviewed: true }));
+  }
 });

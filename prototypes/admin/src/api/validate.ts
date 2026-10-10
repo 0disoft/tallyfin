@@ -4,6 +4,7 @@
 
 import type {
   EventDefinition,
+  FunnelDefinition,
   EventSeriesResponse,
   Project,
   ProjectPage,
@@ -197,7 +198,7 @@ function parseWorkflowDefinition(value: unknown, path: string): WorkflowDefiniti
 export function parseRegistry(value: unknown): Registry {
   const record = expectRecord(value, 'response');
   const limits = expectRecord(record.limits, 'response.limits');
-  return {
+  const registry: Registry = {
     project: parseProject(record.project, 'response.project'),
     schemaVersion: expectMin(expectInteger(record.schemaVersion, 'response.schemaVersion'), 1, 'response.schemaVersion'),
     schemaStatus: expectEnum(record.schemaStatus, ['active', 'retired'], 'response.schemaStatus') as Registry['schemaStatus'],
@@ -215,6 +216,48 @@ export function parseRegistry(value: unknown): Registry {
       parseWorkflowDefinition(item, `response.workflows[${index}]`),
     ),
   };
+  if (Object.hasOwn(record, 'funnels')) registry.funnels = parseFunnels(record.funnels, registry.events);
+  return registry;
+}
+
+function parseFunnels(value: unknown, events: EventDefinition[]): FunnelDefinition[] {
+  const definitions = expectArray(value, 'response.funnels'), ids = new Set<string>(), name = /^[a-z][a-z0-9_]{0,47}$/;
+  if (definitions.length > 10) fail('response.funnels', 'too many definitions');
+  const closed = (value: unknown, keys: string[], path: string) => {
+    const record = expectRecord(value, path);
+    if (Object.keys(record).length !== keys.length || !keys.every(key => Object.hasOwn(record, key))) fail(path, 'invalid fields');
+    return record;
+  };
+  const domain = (property: PropertyDefinition) => JSON.stringify(property.type === 'enum' ? ['enum', [...property.values].sort()] :
+    property.type === 'integer' ? ['integer', property.minimum, property.maximum] : ['boolean']);
+  return definitions.map((value, index) => {
+    const path = `response.funnels[${index}]`, record = closed(value, ['id', 'label', 'steps', 'dimensions'], path);
+    const id = expectString(record.id, path), label = expectString(record.label, path), seen = new Set<string>();
+    if (!name.test(id) || ids.has(id) || label.length < 1 || label.length > 80) fail(path, 'invalid identity');
+    ids.add(id);
+    const steps = expectArray(record.steps, path).map(value => {
+      const step = closed(value, ['eventName', 'source'], path), eventName = expectString(step.eventName, path);
+      const source = expectEnum(step.source, ['browser', 'server'], path) as 'browser' | 'server';
+      if (!name.test(eventName) || seen.has(eventName) || !events.some(event => event.name === eventName && event.source === source))
+        fail(path, 'invalid event reference');
+      seen.add(eventName); return { eventName, source };
+    });
+    const dimensions = expectArray(record.dimensions, path).map(value => expectString(value, path));
+    if (steps.length < 2 || steps.length > 10 || dimensions.length > 4 || new Set(dimensions).size !== dimensions.length || dimensions.some(key => !name.test(key)))
+      fail(path, 'invalid step or dimension count');
+    for (const key of dimensions) {
+      let expected: string | undefined;
+      for (const step of steps) {
+        const properties = events.find(event => event.name === step.eventName)!.properties;
+        const property = Object.hasOwn(properties, key) ? properties[key] : undefined;
+        if (!property?.required) fail(path, 'invalid dimension');
+        const actual = domain(property);
+        if (expected !== undefined && expected !== actual) fail(path, 'invalid dimension domain');
+        expected = actual;
+      }
+    }
+    return { id, label, steps, dimensions };
+  });
 }
 
 function parseMeta(value: unknown, path: string): QueryMeta {

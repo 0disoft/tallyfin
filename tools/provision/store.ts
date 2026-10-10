@@ -1,4 +1,4 @@
-import { canonicalJson, sha256 } from '@tallyfin/core';
+import { canonicalJson, schemaDefinitions, sha256 } from '@tallyfin/core';
 import { adminChangeStatement, type SqlDatabase, type SqlStatement } from '@tallyfin/storage-d1';
 import type { AdminChangeField, GrantRole } from '@tallyfin/core';
 import type { ProjectRow, SchemaRow, SqlValue } from '../../packages/storage-d1/src/sql.ts';
@@ -12,7 +12,7 @@ interface Snapshot { project: ProjectRow | null; schema: SchemaRow | null; maxVe
 interface Pending { op: Operation; snapshot: Snapshot; changeCount: number }
 const fail = (code: string, message: string): never => { throw new ProvisionError(code, message); };
 const projectId = (op: Operation) => op.kind === 'register' ? op.registry.project.id : op.projectId;
-const definitions = (op: Extract<Operation, { kind: 'register' }>) => canonicalJson({ events: op.registry.events, workflows: op.registry.workflows });
+const definitions = (op: Extract<Operation, { kind: 'register' }>) => canonicalJson(schemaDefinitions(op.registry));
 
 /** Trusted offline DB operator tool. No HTTP endpoint or asserted-login authority. */
 export class Provisioner {
