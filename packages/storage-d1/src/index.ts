@@ -1,5 +1,5 @@
-import { ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validateRegistry } from '@tallyfin/core';
-import type { AttemptState, CollectionStore, PreparedBatch, Receipt, Registry, RejectionReason } from '@tallyfin/core';
+import { ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity, validateRegistry } from '@tallyfin/core';
+import type { AttemptState, PreparedBatch, PreparedServerBatch, Receipt, Registry, RejectionReason, ServerCollectionStore, ServerPrincipal } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
@@ -8,7 +8,7 @@ export { D1Maintenance } from './maintenance.ts';
 export { adminChangeStatement } from './admin-changes.ts';
 export type { CleanupPage } from './maintenance.ts';
 
-export class D1Store implements CollectionStore {
+export class D1Store implements ServerCollectionStore {
   readonly db: SqlDatabase;
   readonly allowLocalHttp: boolean;
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) {
@@ -75,6 +75,24 @@ export class D1Store implements CollectionStore {
     return project && schema ? { project, schema } : null;
   }
   async commit(batch: PreparedBatch, registry: Registry): Promise<{ accepted: number; duplicates: number }> {
+    if (batch.source !== 'browser') throw new CollectionError('invalid_request', 400);
+    return this.commitIngest(batch, registry);
+  }
+  async publisherAccess(projectId: string, principal: ServerPrincipal): Promise<void> {
+    if (!PROJECT_ID.test(projectId) || !validGrantIdentity(principal?.issuer, principal?.subject)) throw new CollectionError('forbidden', 403);
+    const read = await this.db.batch<{ authorized: number }>([this.db.prepare(
+      'SELECT 1 AS authorized FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?')
+      .bind(projectId, principal.issuer, principal.subject)]);
+    if (read.length !== 1 || !read[0]?.success) throw new CollectionError('storage_unavailable', 503);
+    if (read[0].results.length !== 1 || read[0].results[0]?.authorized !== 1) throw new CollectionError('forbidden', 403);
+  }
+  async commitServer(batch: PreparedServerBatch, registry: Registry, principal: ServerPrincipal): Promise<{ accepted: number; duplicates: number }> {
+    if (batch.source !== 'server') throw new CollectionError('invalid_request', 400);
+    if (!validGrantIdentity(principal?.issuer, principal?.subject)) throw new CollectionError('forbidden', 403);
+    if (batch.events.some(event => event.workflow !== undefined || Object.hasOwn(event.event, 'attempt'))) throw new CollectionError('invalid_event', 422);
+    return this.commitIngest(batch, registry, { issuer: principal.issuer, subject: principal.subject });
+  }
+  private async commitIngest(batch: PreparedBatch | PreparedServerBatch, registry: Registry, publisher?: ServerPrincipal): Promise<{ accepted: number; duplicates: number }> {
     const utcDate = new Date(batch.receivedAt).toISOString().slice(0, 10);
     const eventIds = batch.events.map(e => e.event.eventId);
     const attemptIds = [...new Set(batch.events.flatMap(e => e.workflow ? [e.workflow.attemptId] : []))];
@@ -82,13 +100,18 @@ export class D1Store implements CollectionStore {
     // All mutations of ingest state increment projects.ingest_revision. Reads form one consistent snapshot.
     // A CHECK guard inside the write batch rolls back a raced snapshot; bounded retries re-read receipts.
     for (let retry = 0; retry < 3; retry++) {
-      const read = await this.db.batch<ProjectRow | SchemaRow | Receipt | AttemptState | { new_receipts: number }>([
+      const read = await this.db.batch<ProjectRow | SchemaRow | Receipt | AttemptState | { new_receipts: number } | { authorized: number }>([
         this.db.prepare('SELECT * FROM projects WHERE id = ?').bind(batch.projectId),
         this.db.prepare('SELECT * FROM project_schemas WHERE project_id = ? AND version = ?').bind(batch.projectId, batch.schemaVersion),
-        this.db.prepare(`SELECT * FROM event_receipts WHERE project_id = ? AND source = 'browser' AND event_id IN (${placeholders(eventIds)})`).bind(batch.projectId, ...eventIds),
+        this.db.prepare(`SELECT * FROM event_receipts WHERE project_id = ? AND source = ? AND event_id IN (${placeholders(eventIds)})`).bind(batch.projectId, batch.source, ...eventIds),
         this.db.prepare(`SELECT * FROM workflow_attempts WHERE project_id = ? AND source = 'browser' AND attempt_id IN (${placeholders(attemptIds)})`).bind(batch.projectId, ...attemptIds),
         this.db.prepare('SELECT new_receipts FROM ingest_daily_usage WHERE project_id = ? AND utc_date = ?').bind(batch.projectId, utcDate),
+        ...(publisher ? [this.db.prepare('SELECT 1 AS authorized FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?')
+          .bind(batch.projectId, publisher.issuer, publisher.subject)] : []),
       ]);
+      if (read.length !== (publisher ? 6 : 5) || read.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
+      if (publisher && (read[5]?.results.length !== 1 || (read[5]?.results[0] as { authorized?: number })?.authorized !== 1))
+        throw new CollectionError('forbidden', 403);
       const project = read[0]?.results[0] as ProjectRow | undefined;
       const schema = read[1]?.results[0] as SchemaRow | undefined;
       if (!project || project.status !== 'active') throw new CollectionError('project_unavailable', 403);
@@ -103,12 +126,14 @@ export class D1Store implements CollectionStore {
         ingest_revision = CASE WHEN ingest_revision = ? AND status = 'active' AND time_zone = ?
           AND allowed_origins_json = ? AND new_receipts_per_utc_day = ? AND requests_per_minute = ?
           AND EXISTS (SELECT 1 FROM project_schemas WHERE project_id = ? AND version = ? AND status = 'active' AND definitions_json = ?)
+          ${publisher ? 'AND EXISTS (SELECT 1 FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?)' : ''}
           THEN ingest_revision + 1 ELSE -1 END,
         latest_received_at = max(coalesce(latest_received_at, 0), ?) WHERE id = ?`).bind(project.ingest_revision, project.time_zone,
           project.allowed_origins_json, project.new_receipts_per_utc_day, project.requests_per_minute,
-          batch.projectId, batch.schemaVersion, schema.definitions_json, batch.receivedAt, batch.projectId)];
+          batch.projectId, batch.schemaVersion, schema.definitions_json,
+          ...(publisher ? [batch.projectId, publisher.issuer, publisher.subject] : []), batch.receivedAt, batch.projectId)];
       statements.push(...bulk(this.db, 'event_receipts', ['project_id', 'source', 'event_id', 'schema_version', 'payload_hash', 'received_at', 'expires_at'],
-        plan.receipts.map(r => [batch.projectId, 'browser', r.event_id, r.schema_version, r.payload_hash, r.received_at, r.expires_at]),
+        plan.receipts.map(r => [batch.projectId, batch.source, r.event_id, r.schema_version, r.payload_hash, r.received_at, r.expires_at]),
         `ON CONFLICT(project_id, source, event_id) DO UPDATE SET schema_version=excluded.schema_version, payload_hash=excluded.payload_hash, received_at=excluded.received_at, expires_at=excluded.expires_at`));
       statements.push(...bulk(this.db, 'workflow_attempts', ['project_id', 'source', 'attempt_id', 'schema_version', 'workflow_id', 'started_at', 'cohort_date', 'dimension_key', 'start_seen', 'terminal_kind', 'terminal_at', 'expires_at'],
         plan.attempts.map(a => [batch.projectId, 'browser', a.attempt_id, a.schema_version, a.workflow_id, a.started_at, a.cohort_date, a.dimension_key, a.start_seen, a.terminal_kind, a.terminal_at, a.expires_at]),
@@ -117,7 +142,7 @@ export class D1Store implements CollectionStore {
         ON CONFLICT(project_id, utc_date) DO UPDATE SET new_receipts = new_receipts + excluded.new_receipts`).bind(
           batch.projectId, utcDate, plan.receipts.length, Date.parse(`${utcDate}T00:00:00Z`) + 4 * DAY));
       statements.push(...bulk(this.db, 'event_daily_counts', ['project_id', 'schema_version', 'source', 'event_date', 'event_name', 'dimension_key', 'count', 'updated_at'],
-        plan.events.map(e => [batch.projectId, batch.schemaVersion, 'browser', e.event_date, e.event_name, e.dimension_key, e.count, batch.receivedAt]),
+        plan.events.map(e => [batch.projectId, batch.schemaVersion, batch.source, e.event_date, e.event_name, e.dimension_key, e.count, batch.receivedAt]),
         `ON CONFLICT(project_id, schema_version, source, event_date, event_name, dimension_key) DO UPDATE SET count=count+excluded.count, updated_at=max(updated_at, excluded.updated_at)`));
       statements.push(...bulk(this.db, 'workflow_daily_counts', ['project_id', 'schema_version', 'source', 'cohort_date', 'workflow_id', 'dimension_key', 'started_count', 'succeeded_count', 'failed_count', 'updated_at'],
         plan.workflows.map(w => [batch.projectId, batch.schemaVersion, 'browser', w.cohort_date, w.workflow_id, w.dimension_key, 0, 0, 0, batch.receivedAt]),

@@ -90,3 +90,10 @@ export interface CollectionStore {
   loadRegistry(projectId: string, version: number): Promise<import('./types.ts').Registry | null>;
   commit(batch: PreparedBatch, registry: import('./types.ts').Registry): Promise<{ accepted: number; duplicates: number }>;
 }
+
+/** Identity returned only after the host verifies a machine credential, including its API audience. */
+export interface ServerPrincipal { issuer: string; subject: string }
+export interface ServerCollectionStore extends CollectionStore {
+  publisherAccess(projectId: string, principal: ServerPrincipal): Promise<void>;
+  commitServer(batch: PreparedServerBatch, registry: import('./types.ts').Registry, principal: ServerPrincipal): Promise<{ accepted: number; duplicates: number }>;
+}

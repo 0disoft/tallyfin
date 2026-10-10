@@ -1,7 +1,8 @@
 # 저장 계약과 마이그레이션 상태
 
-상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`이 있다.
-0001은 로컬 Miniflare 저장 테스트에서만 적용했고 원격 D1에는 적용하지 않았다.
+상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
+마이그레이션 `0002`~`0006`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
+원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
 [이벤트 계약](../../docs/backend/event-contract.md), 구현 상태와 만료 정리는
@@ -32,7 +33,7 @@ admission·이벤트/목표 일별 집계 테이블을 만든다. 값 CHECK, 프
 이번 범위에서 실행하지 않았다. 만료 정리는 어댑터의 `cleanup`과 로컬 구현한 Worker
 스케줄러가 담당한다. 원격 활성화는 별도 작업이다.
 
-검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005를 로드해 제약·트리거·CAS·
+검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006을 로드해 제약·트리거·CAS·
 할당량·정리를 확인한다.
 
 ## 0002_retention_cleanup.sql
@@ -123,3 +124,40 @@ register 한 번은 생성·설정·스키마 발행·상태 변경 행을 함�
 
 롤백은 이전 코드로 되돌리고 추가 테이블은 남겨도 된다. 다만 새 변경 기록이 멈추고,
 정리가 이미 지운 만료 이력은 마이그레이션 롤백으로 복구되지 않는다.
+
+## 0006_server_collection.sql
+
+`project_publishers`를 추가하고 `event_receipts`·`event_daily_counts`의 source CHECK를
+`browser`에서 `browser|server`로 넓힌다. SQLite는 CHECK를 바꾸는 ALTER를 지원하지 않아 두
+테이블을 새 정의로 만들고 기존 행을 옮긴 뒤 기존 테이블을 지우고 이름을 바꾼다. 옮기는
+열은 그대로이고 `event_receipts_expiry`·`event_daily_counts_retention` 인덱스는
+재생성한다. `(project_id, schema_version)` 외래 키와 기존 CHECK도 새 정의에 다시 둔다.
+`workflow_attempts`·`workflow_daily_counts`는 browser 전용 제약을 유지하고 손대지 않는다.
+임시 이름은 `event_receipts_next`·`event_daily_counts_next`이며 0006 전체를 한 batch로
+적용한다.
+테스트는 0006의 마지막 문장이 실패하도록 강제한 경우에도 기존 행과 제약, marker가
+그대로 롤백되는지 확인한다.
+
+`project_publishers`는 `(project_id, issuer, subject, created_at)`만 보관하고 새 DB에서는
+빈 테이블로 시작한다. 기존 `project_grants`에서 발행 권한을 자동으로 만들지 않고
+backfill하지 않는다. 관리자 reader/owner 여부와 발행 권한은 서로 독립이다.
+
+이 파일은 테이블 복사가 있어 0001~0005보다 비용이 크다. 운영 적용 전에 수집을 멈추고
+백업한 뒤 아래를 확인한다. 지금은 로컬 Miniflare에서만 확인했고 운영 백업·적용은
+실행하지 않았다.
+
+| 시점 | 확인 |
+| --- | --- |
+| 적용 전 | `0001`~`0005` 적용 상태, 제어 영역·스키마·영수증·집계 행 수, 백업 존재 |
+| 적용 중 | 수집 중지 상태, batch 롤백 시 이전 테이블이 그대로 남는지 |
+| 적용 후 | 영수증·집계 행 수가 적용 전과 같은지, source CHECK·인덱스·외래 키 존재, `project_publishers` 비어 있음, browser 수집·조회 정상 |
+
+로컬 초기화(`provision init`)는 `sqlite_master`의 name·sql을 읽어 0006의 안정 marker인
+`project_publishers` 존재와 `event_receipts`·`event_daily_counts`의 source CHECK가
+`browser|server`로 넓혀졌는지를 함께 본다. 두 조건이 어긋나거나
+`event_receipts_next`·`event_daily_counts_next`가 남아 있으면 불완전한 DB로 보고 적용을
+중단한다. 빈 DB에 `0001`~`0006`을 적용하는 fresh 경로와 `0001`~`0005`가 있는 DB에
+0006만 추가하는 upgraded 경로를 나눠 기존 행 보존과 source 제약 확장을 확인한다.
+
+롤백은 이전 browser 코드로 되돌리고 확장 테이블은 남긴다. 이미 저장된 server 행을 지워
+롤백하지 않고 서버 수집을 끈다. `project_publishers` 권한도 삭제하지 않는다.

@@ -14,17 +14,23 @@ export async function openLocal(stateDir: string) {
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
   const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql']) {
+  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql']) {
     const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
     // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
     const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
-    const tables = [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
+    // Rebuilt tables already existed; only the stable publisher table marks migration 0006.
+    const tables = name === '0006_server_collection.sql' ? ['project_publishers'] : [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
     const columns = [...sql.matchAll(/ALTER TABLE ([a-z_]+) ADD COLUMN ([a-z_]+)/g)].map(match => ({ table: match[1]!, name: match[2]! }));
     migrations.push({ name, statements, tables, columns });
   }
-  const result = await db.batch<{ name: string }>([db.prepare("SELECT name FROM sqlite_master WHERE type='table'")]);
+  const result = await db.batch<{ name: string; sql: string }>([db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table'")]);
   if (!result[0]?.success) throw Error();
   const existing = new Set(result[0].results.map(row => row.name));
+  const serverSources = /CHECK\s*\(\s*source\s+IN\s*\(\s*'browser'\s*,\s*'server'\s*\)\s*\)/i;
+  const extended = result[0].results.filter(row => ['event_receipts', 'event_daily_counts'].includes(row.name) && serverSources.test(row.sql)).length;
+  if (existing.has('event_receipts_next') || existing.has('event_daily_counts_next') ||
+    (existing.has('project_publishers') ? extended !== 2 : extended !== 0))
+    throw new ProvisionError('partial_database', '불완전한 서버 수집 DB라 초기화를 중단했어요. DB 상태를 확인해 주세요.');
   const existingColumns = new Set<string>();
   for (const table of new Set(migrations.flatMap(migration => migration.columns.map(column => column.table)))) {
     if (!existing.has(table)) continue;

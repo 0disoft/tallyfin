@@ -33,6 +33,14 @@ Table project_grants {
   }
 }
 
+Table project_publishers {
+  project_id text [not null, ref: > projects.id]
+  issuer text [not null, note: 'Verified machine issuer; independent from administrator grants']
+  subject text [not null, note: 'Opaque machine principal; never an event or visitor identifier']
+  created_at bigint [not null, note: 'UTC epoch milliseconds; explicit provisioning only, no permission backfill']
+  indexes { (project_id, issuer, subject) [pk] }
+}
+
 Table project_creators {
   issuer text [not null, note: 'Trusted admin issuer; separate creation permission']
   subject text [not null, note: 'Verified administrator subject; never a visitor identity']
@@ -83,7 +91,7 @@ Table project_schemas {
 
 Table event_receipts {
   project_id text [not null]
-  source text [not null, note: 'browser in v0.1']
+  source text [not null, note: 'browser | server; receipt identity is source-scoped']
   event_id text [not null, note: 'Random UUIDv4 per event, never a visitor ID']
   schema_version integer [not null]
   payload_hash text [not null, note: 'SHA-256 of canonical event/project/version/source; no raw payload']
@@ -140,7 +148,7 @@ Table ingest_minute_usage {
 Table event_daily_counts {
   project_id text [not null]
   schema_version integer [not null]
-  source text [not null]
+  source text [not null, note: 'browser | server; sources never merged']
   event_date text [not null, note: 'Project-local date of occurredAt']
   event_name text [not null]
   dimension_key text [not null, note: 'Canonical sorted typed properties; absence differs from false/0']

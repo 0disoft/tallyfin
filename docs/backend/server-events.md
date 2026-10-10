@@ -1,21 +1,20 @@
-# 서버 발행 이벤트 계약 (코어 슬라이스)
+# 서버 발행 이벤트 계약 (코어·저장 슬라이스)
 
-상태: 서버 이벤트의 코어 검증·정규화·해시와 `ServerBatch`·`ServerEvent` 계약까지
-로컬에서 구현했다. HTTP 서버 발행 API·서버 인증·DB 저장 경로·서버 SDK·서버 출처
-조회 화면은 아직 없다. 이 문서는 이번 슬라이스에서 확정한 것과 아직 계획인 것을 나눠
-적는다.
+상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획과 저장·발행 권한 슬라이스까지
+로컬에서 구현했다. 저장 슬라이스는 `project_publishers`, source별 영수증·집계 저장,
+발행자 권한 재검사를 포함한다. HTTP 서버 발행 API·발행자 검증기·CLI 권한 관리·서버
+SDK·서버 출처 조회 화면은 아직 없다. 이 문서는 확정한 것과 아직 계획인 것을 나눠 적는다.
 
-형태는 [OpenAPI](../../api/openapi.yaml), 동작 의미는
-[이벤트·집계 계약](./event-contract.md)을 따른다. 브라우저 수집 경로는
+형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
+동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다. 브라우저 수집 경로는
 [수집기 구현](./collector.md)과 [브라우저 SDK](./browser-sdk.md)에 있다.
 
-## 이번 슬라이스에 포함된 것
+## 코어 슬라이스에 포함된 것
 
 - 코어의 `parseServerBatch`·`prepareServerBatch`. 브라우저 `parseBatch`·`prepareBatch`와
   같은 규칙으로 배치 구조·시간 범위·등록 정의를 검사하고 이벤트를 정규화·정렬한다.
   `packages/core/src/batch.ts`·`types.ts`·`value.ts`에 둔다. `parseServerBatch`는
-  계약 검증만 하며 발행자 인증과 프로젝트 권한 검사는 하지 않는다. 그 검사는 수집 HTTP
-  경계의 몫이고 아직 구현하지 않았다.
+  계약 검증만 하며 발행자 인증과 프로젝트 권한 검사는 하지 않는다.
 - source별 payload hash. 영수증 키와 해시 입력에 출처가 들어가 server 이벤트가
   browser와 같은 해시 바이트를 쓰지 않는다. 브라우저 canonical 해시 입력은 바이트
   그대로 유지한다.
@@ -23,12 +22,19 @@
   attempt·workflow 상태는 만들지 않는다.
 - `ServerBatch`·`ServerEvent` 계약. OpenAPI 스키마·예제·테스트를 함께 둔다.
 
-## 포함되지 않은 것
+## 저장·발행 권한 슬라이스에 포함된 것
 
-HTTP 서버 발행 API와 라우트, 서버 인증과 프로젝트 발행 권한 검사, D1 저장 경로
-연결, 서버 SDK, 서버 출처 조회 API·화면. 아래 '다음 슬라이스'의 계획이며, 이번
-슬라이스만으로 서버 수집이 운영에서 동작한다고 보지 않는다. 라우트 경로와 인증
-audience도 정하지 않았으므로 지금은 이름을 확정하지 않는다.
+- `project_publishers` 테이블. `(project_id, issuer, subject, created_at)`만 보관하고
+  새로 적용하는 DB에서는 빈 테이블로 시작한다. 기존 관리자 grant(`project_grants`)에서
+  발행 권한을 만들어 주지 않고 backfill도 하지 않는다. 관리자 reader/owner 여부와 발행
+  권한은 서로 독립이며, owner도 발행 권한을 자동으로 얻지 않는다.
+- `0006_server_collection.sql`. `project_publishers`를 추가하고 `event_receipts`·
+  `event_daily_counts`의 source 제약을 `browser`에서 `browser|server`로 넓힌다. SQLite는
+  CHECK를 직접 바꿀 수 없어 두 테이블을 복사·재생성한다.
+- 저장 어댑터의 `publisherAccess`·`commitServer`. `D1Store`가 `ServerCollectionStore`를
+  구현하고 서버 배치 저장 경로를 맡는다.
+- 코어의 `ServerPrincipal`(issuer·subject)과 `ServerCollectionStore`. 호스트가 검증해
+  넘기는 발행자 주체와 `publisherAccess`·`commitServer` 포트를 나타낸다.
 
 ## ServerEvent 계약
 
@@ -51,9 +57,8 @@ audience도 정하지 않았으므로 지금은 이름을 확정하지 않는다
 보내거나 server 정의로 browser 이벤트를 보내면 거부한다. v0.1 작업 흐름 정의는 browser
 출처만 지원하므로 server 이벤트는 흐름 단계가 되지 않는다.
 
-스키마 검증은 아직 최소 browser 이벤트 하나를 요구한다. 그래서 이번 코어 배치 단계는
-server 정의가 섞인 레지스트리로 검증하고, server 정의만 있는 등록 허용은 인증·저장
-연결 때 조정할 후속이다.
+스키마 검증은 아직 최소 browser 이벤트 하나를 요구한다. 그래서 server 정의가 섞인
+레지스트리로 검증하고, server 정의만 있는 등록 허용은 여전히 후속이다.
 
 ## 중복·해시
 
@@ -68,40 +73,91 @@ server 정의가 섞인 레지스트리로 검증하고, server 정의만 있는
 - 같은 배치 안에서 같은 eventId가 반복되면 `invalid_event`(422)다.
 - 배치는 occurredAt·eventId 순으로 처리한다.
 
-브라우저 canonical 해시 입력은 이번 슬라이스에서 바뀌지 않는다. 이미 저장된 browser
-영수증과 비교해도 같은 값이 나온다.
+브라우저 canonical 해시 입력은 바뀌지 않는다. 이미 저장된 browser 영수증과 비교해도
+같은 값이 나온다.
 
 ## planIngest 범위
 
 `planIngest`는 I/O 없는 순수 함수다. 입력 snapshot의 영수증을 event_id로 비교하므로
 호출자가 그 프로젝트·source에 속한 영수증만 담아야 한다. server 배치에서는 영수증과
-이벤트 일별 집계 delta만 만들고 attempt·workflow 상태는 만들지 않는다.
+이벤트 일별 집계 delta만 만들고 attempt·workflow 상태는 만들지 않는다. 저장 어댑터는
+영수증을 프로젝트·source로 걸러 읽고, UTC 일일 사용량은 source 구분 없이 프로젝트
+단위로 읽어 넘긴다.
 
-영수증 키에 source를 반영한 DB 저장·조회 연결은 아직 없다. 이번 슬라이스는 server
-배치의 검증·정규화·해시와 ingest 계획 함수까지이며, source별 영속과 commit 시점 권한
-재검사는 아래 다음 슬라이스에 남는다.
+## 저장 구조와 출처 분리
+
+- `event_receipts`와 `event_daily_counts`의 source는 `browser`와 `server`를 받는다.
+  영수증 키와 집계 키에 source가 들어가므로 같은 날·같은 이벤트·같은 속성이라도 출처가
+  다르면 다른 행이다.
+- `workflow_attempts`와 `workflow_daily_counts`는 browser 전용 제약을 그대로 유지한다.
+  server 이벤트는 시도·목표 상태를 만들지 않는다.
+- 조회는 한 번에 한 출처만 다룬다. browser와 server 건수를 합쳐 이중 집계하지 않는다.
+
+## 서버 커밋과 발행 권한
+
+서버 배치는 관리자 조회·설정 권한과 다른 경로로 저장한다.
+
+- `publisherAccess`는 프로젝트·발행자 주체의 `project_publishers` 행만 확인하는
+  조회다. 프로젝트 ID나 발행자 형식이 맞지 않거나 행이 없으면 `forbidden`(403),
+  조회 자체가 실패하면 `storage_unavailable`(503)이다.
+- `commitServer`는 일관 읽기 batch에서 프로젝트·스키마·해당 source 영수증·UTC 일일
+  사용량과 함께 발행 권한 행을 읽고, 그 읽기에서 권한이 없으면 쓰기 전에
+  `forbidden`(403)이다. 쓰기 CAS batch는 `EXISTS`로 같은 발행 권한을 다시 확인한다.
+- 읽기와 쓰기 사이에 발행자 행이 지워지면 CAS가 실패해 batch 전체가 롤백되고, 다시
+  읽어 권한이 없으면 `forbidden`(403)이다.
+
+브라우저 저장 경로는 server 배치를 `invalid_request`(400)로, `commitServer`는 attempt나
+workflow가 섞인 배치를 `invalid_event`(422)로 거부한다. 권한 검사와 저장이 같은
+트랜잭션이므로 발행자 회수 경쟁에서 부분 저장이 남지 않는다.
+`project_publishers`에는 발행자 주체(issuer·subject)와 생성 시각만 둔다. 이벤트 입력·
+원문·발행자 토큰은 저장하지 않는다.
+
+호스트(수집 HTTP 경계)는 서명·issuer·audience·exp를 검증한 principal만 넘겨야 한다.
+검증기와 전용 endpoint는 아직 없으므로 이 계약만으로 서버 발행이 열린다고 보지 않는다.
+발행자 토큰은 저장하지 않고 요청 처리 동안에만 쓴다.
+
+## 할당량
+
+분당 admission과 프로젝트 UTC 일일 신규 영수증 한도는 browser와 server가 공유한다.
+두 출처가 한 프로젝트의 같은 분당·일일 예산을 나눠 쓰며, 출처별로 따로 계산하지 않는다.
+같은 ID 재전송도 분당 요청 한도는 소비한다. 같은 내용의 중복은 UTC 일일 신규 영수증
+수와 이벤트 집계를 늘리지 않는다.
+
+## 마이그레이션과 롤백
+
+`0006_server_collection.sql`은 `project_publishers`를 추가하고 `event_receipts`·
+`event_daily_counts`를 복사·재생성해 source 제약을 넓힌다. 테이블 복사가 큰 작업이라
+운영 적용 전에 수집을 잠시 멈추고 백업한 뒤, 적용 전후 행 수와 스키마·외래 키를
+검증해야 한다. 절차와 확인 항목은 [적용 메모](../../db/migrations/README.md)에 둔다.
+이 문서 작성 시점에 운영 DB 백업·적용은 실행하지 않았고 원격 D1에도 적용하지 않았다.
+
+롤백은 이전 browser 코드로 되돌리고 확장 테이블은 남겨 둔다. 이미 저장된 server 행을
+지워 롤백하지 않으며, 서버 수집을 끄고 server 출처 조회를 열지 않는다.
+`project_publishers` 권한도 삭제하지 않는다.
+
+`0006`은 한 batch로 적용한다. 저장 어댑터 테스트는 0006의 마지막 문장이 실패하도록
+강제했을 때 기존 행·제약·marker가 롤백되는지도 확인한다.
 
 ## 아직 정하지 않은 것
 
-- 일일 신규 영수증 한도. 현재 저장 구조는 프로젝트·UTC 수신일 카운터 하나라 browser와
-  server가 같은 분모를 쓴다. 서버 수집이 같은 일일 한도를 나눠 쓰는지, 서버에 별도
-  분당 허용량을 두는지는 저장·인증 슬라이스에서 정한다.
-- 프로젝트별 설정 limits를 browser와 server가 어떻게 나눠 갖는지. 지금은 프로젝트 한
-  값을 공유하며, 출처별 한도를 둘지는 계획이다.
 - 브라우저 시작과 서버 완료를 연결하는 전환율. 지금은 server 이벤트 건수만 다룰 수
   있고 browser/server 시도 연결은 별도 설계다.
-- 서버 발행 인증 방식. 공개 프로젝트 ID와 허용 오리진을 서버 인증 수단으로 재사용하지
-  않는다는 것만 정했고, 자격증명 종류·audience·발급 절차는 정하지 않았다.
+- 발행자 자격증명 종류와 audience·발급 절차. 공개 프로젝트 ID와 허용 오리진을 발행자
+  인증 수단으로 재사용하지 않는다는 것만 정했다.
+- 출처별로 분당·일일 한도를 따로 둘지. 지금은 프로젝트 한 값을 공유한다.
+- server 출처 조회의 API·화면 형태. 현재 조회 계약은 `source`가 browser 고정이다.
 
 ## 다음 슬라이스
 
-1. 별도 머신 principal 인증과 프로젝트 발행 권한 검사. 관리자 reader/owner grant로
-   서버 발행 권한을 추론하지 않는다.
-2. DB 저장 경로. source별 영수증과 `event_daily_counts`를 쓰고, commit 저장 시점에
-   발행 권한을 다시 검사한다.
-3. 전용 서버 발행 endpoint. 경로와 인증 audience는 1~2에서 확정한 뒤 정한다.
-4. dependency-free server SDK.
-5. 서버 출처 일별 조회 API와 화면. 현재 집계 조회는 `source`가 browser 고정이다.
+1. 발행자 검증기와 전용 서버 발행 endpoint. 서명·issuer·audience·exp를 검증한
+   principal을 넘기는 HTTP 경계를 세우고 라우트 경로를 확정한다.
+2. `project_publishers` 권한 관리. CLI 또는 owner API로 부여·회수하며 관리자 grant와
+   섞지 않는다.
+3. dependency-free server SDK.
+4. 서버 출처 일별 조회 API와 화면.
+5. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
+   수집·조회의 빈 정의 처리를 함께 정한다.
 
 관련: [이벤트·집계 계약](./event-contract.md), [수집기 구현](./collector.md),
-[관리자 조회·설정 경계](./administrator.md), [OpenAPI](../../api/openapi.yaml).
+[관리자 조회·설정 경계](./administrator.md), [적용 메모](../../db/migrations/README.md),
+[OpenAPI](../../api/openapi.yaml).

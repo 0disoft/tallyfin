@@ -103,6 +103,41 @@ ServerBatch는 아직 HTTP 경로에 연결하지 않은 계약이라 no-unused-
 컴포넌트 스키마만 추가했고 HTTP 경로·인증·DB·마이그레이션·SDK·의존성·CI 러너·위생
 정책을 바꾸지 않았다. 새 HTTP 서버 인증/저장 smoke와 서버-only 스키마 등록은 아직
 구현하지 않아 실행하지 않았다. 운영 인증·원격 DB 적용·푸시·배포·Sembom 활성화는 없다.
+
+## 서버 발행 권한·출처별 저장 — 2026-10-11
+
+`ServerPrincipal`·`ServerCollectionStore`와 `D1Store.publisherAccess`·`commitServer`를
+추가했다. 새 `project_publishers`는 관리자 reader/owner와 독립인 프로젝트·issuer·subject
+권한이며 자동 부여하지 않는다. 호스트의 인증 검증이 끝난 주체만 이 포트로 전달해야
+한다. 저장 어댑터 자체가 토큰 서명·audience·expiry를 검증하거나 토큰을 발급하지 않는다.
+서버 commit은 일관 읽기에서 권한과 출처별 영수증을 읽고 쓰기 batch의 CAS 조건에서
+현재 권한을 다시 검사한다. 회수 경쟁이면 쓰기 전부가 롤백되고 재조회에서 403이다.
+같은 ID도 browser/server 영수증은 분리되며 UTC 일일 할당량은 프로젝트 전체가 공유한다.
+
+0006은 event_receipts·event_daily_counts의 source CHECK를 browser|server로 넓히기
+위해 두 테이블을 복사·재생성하고 기존 인덱스를 복구한다. project_publishers는 빈
+테이블로 추가한다. 로컬 initialize는 새 marker와 두 확장 CHECK를 함께 확인해 반복
+적용을 막고 임시 테이블·부분 적용 상태를 거부한다. DBML·마이그레이션 안내를 갱신했다.
+
+`node --test packages/storage-d1/test/server-collection.test.ts` 신규 7/7이 통과했고,
+루트 `npm run check`의 타입 검사·210/210 테스트·브라우저 크기 검사도 통과했다.
+테스트는 관리자 권한과의 분리·project/issuer/subject 격리·동일 ID의 출처 분리·재시도·
+충돌·공유 할당량·권한 회수 경쟁·20개 동시 중복 전달·집계 overflow 전체 롤백·보존
+정리를 확인한다. 기존 browser·관리자·등록 CLI·로컬 supervisor 회귀도 실행했다.
+SDK gzip 2667 bytes, Sembom 포함 2949 bytes로 3072 bytes 예산 이내다.
+
+Miniflare의 빈 DB에 0001~0006을 적용하는 경로와 0001~0005의 기존 browser 영수증·
+집계·시도·설정·grant를 가진 DB에 0006만 적용하는 경로를 확인했다. 업그레이드 직전과
+직후 행을 대조했고 인덱스 두 개·foreign_key_check·새 권한 0건·재초기화 no-op를 확인했다.
+마이그레이션 마지막에 count=-1 제약 실패를 주입했을 때 원래 행·테이블 제약을 유지하고
+새 marker와 임시 테이블도 남지 않았다. 확장된 표만 있고 marker를 지운 불완전 상태는
+partial_database로 거부한다. 실제 운영 규모의 table copy 시간·원격 D1은 미검증이다.
+
+`tools/contracts`의 `npm run check` 41/41과 `npm run lint`가 통과했다. ServerBatch의
+미연결 HTTP 컴포넌트 경고 1건은 유지한다. 일반 소스 lint 명령은 없으며 HTTP 서버
+인증 smoke·실제 자격증명·원격 마이그레이션·운영 부하 검증은 아직 연결하지 않아 생략했다.
+API 경로와 기존 인증·SDK·의존성·CI 러너·위생 정책 변경, 푸시·배포·Sembom 활성화는 없다.
+API 설명·제품 명세·로드맵·서버 이벤트 계약·README도 현재 범위에 맞춰 갱신했다.
 실제 OIDC 계정과 원격 D1은 환경이 연결되지 않아 이번 UI 검증에 사용하지 않았다.
 
 ## 관리자 권한 변경 클라이언트 — 2026-10-11

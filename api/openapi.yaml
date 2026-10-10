@@ -8,7 +8,7 @@ info:
     Grant listing and mutation require a current owner grant; grant mutation is implemented locally in this contract and the
     provisioning CLI remains an alternative. Owner-only administrator change history is implemented locally with rolling
     90-day retention and recorded-changes-only coverage. Server batch schemas and core validation are implemented;
-    authenticated server ingestion endpoints and persistence are deferred.
+    guarded server persistence is implemented locally. Authenticated server ingestion endpoints are deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
