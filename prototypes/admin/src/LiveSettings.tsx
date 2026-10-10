@@ -4,7 +4,7 @@
 // that state, forwards edits, and keeps the draft visible when a save hits a
 // conflict or a lost response so the user can compare and choose.
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent, RefObject } from 'react';
 import { WarningCircle } from '@phosphor-icons/react';
 import type { ApiClient } from './api/client.ts';
@@ -18,6 +18,7 @@ export type LiveSettingsProps = {
   onSaved: (settings: ProjectSettings) => void;
   refreshTick: number;
   registry?: Registry | null;
+  onAccessLost?: () => void;
 };
 
 const FIELD_ORDER: (keyof SettingsDraft)[] = ['name', 'status', 'origins', 'requestsPerMinute', 'newReceiptsPerUtcDay'];
@@ -49,10 +50,14 @@ function displayValue(value: string): string {
   return value.length > 0 ? value : '—';
 }
 
-export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null }: LiveSettingsProps) {
+export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null, onAccessLost }: LiveSettingsProps) {
   const [snapshotState, setSnapshotState] = useState<{ client: ApiClient; projectId: string; state: SettingsState } | null>(null);
   const state = snapshotState?.client === client && snapshotState.projectId === projectId ? snapshotState.state : null;
   const editorRef = useRef<SettingsEditor | null>(null);
+  const activeScope = useRef({ client, projectId });
+  activeScope.current = { client, projectId };
+  const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;
+  const [grantLoss, setGrantLoss] = useState<{ client: ApiClient; projectId: string; snapshot: ProjectSettings | null } | null>(null);
   const tickRef = useRef(refreshTick);
   const lastErrorRef = useRef<keyof SettingsDraft | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -106,7 +111,16 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   const reviewing = phase === 'review';
   const loaded = Boolean(snapshot && draft);
   // Read/write follows the server grant; a reader stays read-only.
-  const canEdit = snapshot?.canEdit === true;
+  const lost = grantLoss?.client === client && grantLoss.projectId === projectId;
+  const freshOwner = phase === 'ready' && snapshot?.canEdit === true && snapshot !== grantLoss?.snapshot;
+  const canEdit = snapshot?.canEdit === true && state?.latest?.canEdit !== false && (!lost || freshOwner);
+  const accessLost = useCallback(() => {
+    if (activeScope.current.client !== client || activeScope.current.projectId !== projectId) return;
+    setGrantLoss({ client, projectId, snapshot });
+    void editorRef.current?.checkLatest();
+    accessCallbackRef.current?.();
+  }, [client, projectId, snapshot]);
+  useEffect(() => { if (lost && freshOwner) setGrantLoss(null); }, [lost, freshOwner]);
   // Inputs unlock only in the ready phase for an owner with no lock.
   const inputsLocked = phase !== 'ready' || blocked || !canEdit;
   const canSubmit = loaded && phase === 'ready' && canEdit && !blocked;
@@ -213,7 +227,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
     </form>
 
     <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
-      canView={canEdit && !blocked && !loading && (!reviewing || state.latest?.canEdit === true)} />
+      canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} />
 
     {registry ? <>
       <p className="context-note">등록 정의 · 스키마 v{registry.schemaVersion} · {registry.schemaStatus === 'retired' ? '사용 중지' : '사용 중'}</p>

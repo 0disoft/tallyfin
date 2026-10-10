@@ -221,8 +221,10 @@ grant_conflict(409)다. DELETE에서 null은 grant가 없다고 본 경우이고
 last_owner(409)다. 다른 owner가 있으면 자기 grant를 스스로 낮추거나 회수할 수 있고 그때
 응답은 canManage=false이며 이후 owner API 호출은 403이다. 성공 응답은 200
 `{projectId,issuer,subject,role,createdAt,canManage,changed}`이고 role이 null이면
-createdAt도 null이다. 이 API는 로컬에서 구현·검증했고 관리자 화면의 권한 변경 UI는
-아직 없다. DB·마이그레이션 변경·배포·운영 identity 자격 증명은 없다.
+createdAt도 null이다. 이 API와 관리자 화면의 권한 변경 패널을 로컬에서 구현·검증했다.
+화면은 후보를 준비만 하고 확인 패널에서만 저장하며, 결과가 불명확하면 같은 요청만 다시
+보내고, 권한을 잃으면 목록과 편집을 잠근다. DB·마이그레이션 변경·배포·운영 identity
+자격 증명은 없다.
 
 ## 프로젝트 생성
 

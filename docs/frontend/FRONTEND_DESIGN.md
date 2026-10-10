@@ -505,7 +505,8 @@ API 연결 모드의 기존 설정 섹션 안에 `LiveGrants` 섹션을 붙인�
 조회 실패는 현재 행을 비워 이전 페이지의 식별자를 남기지 않는다. 401·403은 소유자 권한이
 필요하다는 안내를 남기고 해당 페이지 재시도를 잠그며, 계약 위반·네트워크 실패는 일반 오류와
 `이 페이지 다시 시도`를 보여준다. 새로고침과 페이지 이동은 이전 요청을 abort하고 세대 번호가
-다른 응답을 버린다. 이 섹션은 목록만 조회하고, 권한 부여·변경·회수는 운영자 CLI에서만 한다.
+다른 응답을 버린다. 이 섹션은 목록만 조회하고, 권한 부여·변경·회수는 운영자 CLI와 아래
+프로젝트 권한 변경 UI에서 한다.
 
 표는 `settings-section grants-section` 안에서 기존 `settings-head`·`secondary-button`·
 `settings-badge grant-role`·`table-scroll`(안쪽 `table.event-table.grants-table`)을 그대로 쓰고
@@ -514,3 +515,23 @@ API 연결 모드의 기존 설정 섹션 안에 `LiveGrants` 섹션을 붙인�
 `table-scroll` 안에서 가로로 스크롤되어 페이지 전체가 넘치지 않고, 표는 키보드로 스크롤한다
 (`tabIndex=0`). 헤더의 `grants-actions`는 버튼이 줄바꿈되는 flex 행이며 320px에서도 그대로
 유지된다. API·DB·SDK·의존성 계약은 바꾸지 않는다.
+
+## 프로젝트 권한 변경 UI — 2026-10-11
+
+설정 섹션의 `LiveGrants`에 목록 행 actions(`grant-row-actions`)와 기본 접힘 추가 폼
+(`grant-add-disclosure` 안 `grant-add-form`)을 두고, 검토·확인은 `GrantChangePanel` 한
+곳에서 처리한다. 후보는 `GrantEditor.prepare()`로만 만들고 저장은 확인 패널에서만 한다.
+패널은 발급자·계정 식별자와 기존 역할에서 변경 역할로의 전이를 보여주고, 자기 강등·회수일 수
+있으면 항상 안내를 붙인다(현재 principal은 화면에 노출하지 않는다). API 연결 모드에서 추가·
+승격·회수·응답 유실 재확인·last_owner 409·grant_conflict 409·자기 강등 잠금·403 행 제거를
+브라우저에서 확인했다.
+
+상태 경계는 `review`(확인·취소), `saving`(모든 버튼 잠금), `uncertain`(고정 요청의 같은
+요청 재확인만), `error`(메시지 + `최신 목록 확인`, 입력 오류는 닫기), `success`(`status`),
+`denied`(`alert`)로 고정한다. 권한 상실(`onAccessLost`)은 목록을 즉시 비우고 부모 설정
+입력을 잠근다. reader는 폼과 컨트롤러를 만들지 않는다. 스타일은 기존 파란색·흰색 토큰과 18px
+본문을 유지하고 `grant-change-panel`·`grant-change-facts`·`grant-change-impact`·
+`grant-change-actions`만 추가하며 320px에서 폼·확인 버튼이 세로로 쌓인다. 320px에서 문서 폭이
+넘치지 않고(문서 스크롤 폭 303, 표 540은 조회 region 255 안에서만 가로 스크롤, 확인 패널 253) facts
+18px·키보드 표 스크롤을 확인했고 데스크톱·모바일 스크린샷과 콘솔 오류 0도 확인했다. API·DB·SDK
+계약은 바꾸지 않는다.

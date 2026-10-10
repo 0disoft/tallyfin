@@ -416,7 +416,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         <p>먼저 이벤트 스키마를 검증·발행한 뒤 SDK를 연결하세요.</p><a href="#schema-heading">이벤트 스키마로 이동</a> · <a href="#sdk-setup">SDK 연결 안내</a>
       </section>}
       <CollectionDiagnostics key={`diagnostics-${activeProjectId}`} client={client} projectId={activeProjectId} version={validVersion ? version : null} refreshTick={settingsRefreshTick + setupRefreshTick + diagnosticsRevision} />
-      <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />
+      <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick}
+        onAccessLost={retry} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />
       <LiveSchemas key={`schemas-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={settingsRefreshTick} onVersionChange={schemaVersionChanged} />
       <LiveSdkSetup key={`setup-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={setupRefreshTick + settingsRefreshTick} />
     </>}

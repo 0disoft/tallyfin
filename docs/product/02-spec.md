@@ -37,7 +37,8 @@ DELETE는 `{issuer,subject,expectedRole}`로 회수한다. expectedRole은 마�
 역할이 expectedRole과 다르면 `grant_conflict`(409), 마지막 owner를 내리거나 회수하면
 `last_owner`(409)다. 성공 응답은
 `{projectId,issuer,subject,role,createdAt,canManage,changed}`다. 관리자 화면의
-권한 변경 UI는 아직 없고 DB·마이그레이션 변경도 없다.
+권한 변경 UI는 로컬에서 구현·검증했고, 저장 전 확인·불명확 결과의 같은 요청 재확인·권한
+상실 시 잠금을 따른다. DB·마이그레이션 변경은 없다.
 
 프로젝트 ID는 공개 라우팅 정보이며 인증 수단이 아니다. 허용 오리진만으로 봇·위조 이벤트를 막을 수 없다. 프로젝트 간 스키마·데이터·설정은 분리하고, 한 프로젝트의 정의를 다른 프로젝트에 암묵적으로 재사용하지 않는다.
 

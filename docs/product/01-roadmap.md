@@ -216,6 +216,9 @@ grant_conflict(409), 마지막 owner를 내리거나 회수하면 last_owner(409
 createdAt을 유지한다. 성공 응답은
 `{projectId,issuer,subject,role,createdAt,canManage,changed}`다. ErrorResponse enum에
 grant_conflict·last_owner를 추가했다. DB·마이그레이션·SDK·의존성·CI·위생 정책 변경은
-없고 배포·운영 identity 자격 증명도 없다. 관리자 화면의 권한 변경 UI는 아직 없다.
+없고 배포·운영 identity 자격 증명도 없다. 관리자 화면의 권한 변경 패널을 로컬 구현·검증하고
+추가·승격·회수·응답 유실 재확인·last_owner 409·grant_conflict 409·자기 강등 잠금·403 행 제거를
+브라우저에서 확인했다. 320px에서 문서 폭이 넘치지 않고 표만 조회 region 안에서 가로 스크롤되며
+키보드 스크롤·데스크톱/모바일 스크린샷·콘솔 오류 0까지 확인했다.
 grant 변경은 기존 provisioning CLI로도 할 수 있다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
