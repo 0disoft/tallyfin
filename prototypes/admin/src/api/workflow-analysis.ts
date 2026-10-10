@@ -1,8 +1,10 @@
-import { assertMeta, validateWorkflowLoad, validateWorkflowSummary, type DateRange } from './period-comparison.ts';
-import type { Registry, WorkflowBreakdownResponse } from './types.ts';
+import { assertMeta, previousRange, rateChange, validateWorkflowLoad, validateWorkflowSummary, type DateRange } from './period-comparison.ts';
+import type { Registry, WorkflowBreakdownResponse, WorkflowSummary } from './types.ts';
 import { ContractError } from './validate.ts';
 
-export type WorkflowGroupingState = { context: string; groupBy: string; status: 'idle' | 'loading' | 'ready' | 'error'; data?: WorkflowBreakdownResponse };
+export type WorkflowGroupingState = { context: string; groupBy: string; status: 'idle' | 'loading' | 'ready' | 'error'; data?: WorkflowBreakdownResponse;
+  comparisonStatus?: 'idle' | 'loading' | 'ready' | 'error'; comparisonData?: WorkflowBreakdownResponse };
+export type WorkflowPropertyComparison = { value: string | number | boolean; current: WorkflowSummary; previous: WorkflowSummary; rateDifference: number | null; provisional: boolean };
 function invalid(): never { throw new ContractError('흐름 속성별 응답의 값·날짜·합계가 정의와 맞지 않아요.'); }
 export function validateWorkflowBreakdown(response: WorkflowBreakdownResponse, registry: Registry, range: DateRange, workflowId: string, groupBy: string): void {
   const definition = registry.workflows.find(flow => flow.id === workflowId);
@@ -27,4 +29,22 @@ export function validateWorkflowBreakdown(response: WorkflowBreakdownResponse, r
 }
 export function workflowValueLabel(value: string | number | boolean): string {
   return typeof value === 'boolean' ? value ? '참 (true)' : '거짓 (false)' : String(value);
+}
+
+/** Missing observed buckets have zero attempts, never an invented zero completion rate. */
+export function compareWorkflowProperties(current: WorkflowBreakdownResponse, previous: WorkflowBreakdownResponse, registry: Registry): WorkflowPropertyComparison[] {
+  const range = { from: current.meta.from, to: current.meta.to };
+  validateWorkflowBreakdown(current, registry, range, current.workflowId, current.groupBy);
+  validateWorkflowBreakdown(previous, registry, previousRange(range), current.workflowId, current.groupBy);
+  const empty: WorkflowSummary = { startedAttempts: 0, succeededAttempts: 0, failedAttempts: current.summary.failedAttempts === null ? null : 0,
+    pendingAttempts: 0, completionRate: null };
+  const before = new Map(previous.buckets.map(bucket => [JSON.stringify(bucket.value), bucket]));
+  const now = new Map(current.buckets.map(bucket => [JSON.stringify(bucket.value), bucket]));
+  return [...new Set([...now.keys(), ...before.keys()])].map(key => {
+    const currentBucket = now.get(key), previousBucket = before.get(key);
+    const currentSummary = currentBucket?.summary ?? empty, previousSummary = previousBucket?.summary ?? empty;
+    return { value: (currentBucket ?? previousBucket)!.value, current: currentSummary, previous: previousSummary,
+      rateDifference: rateChange(currentSummary.completionRate, previousSummary.completionRate),
+      provisional: [...(currentBucket?.days ?? []), ...(previousBucket?.days ?? [])].some(day => day.provisional) };
+  }).sort((a, b) => b.current.startedAttempts - a.current.startedAttempts || b.previous.startedAttempts - a.previous.startedAttempts);
 }

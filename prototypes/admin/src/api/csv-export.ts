@@ -1,17 +1,18 @@
 import { analyzeEventSeries } from './event-analysis.ts';
 import { comparisonRows, countChange, rateChange, previousRange, validateSnapshot, type PeriodSnapshot } from './period-comparison.ts';
 import type { EventSeriesResponse, QueryMeta, Registry, WorkflowSummary, WorkflowBreakdownResponse } from './types.ts';
-import { validateWorkflowBreakdown } from './workflow-analysis.ts';
+import { compareWorkflowProperties, validateWorkflowBreakdown } from './workflow-analysis.ts';
 import { ContractError } from './validate.ts';
 
 type Cell = string | number | boolean | null | undefined;
 type Row = Partial<Record<typeof CSV_COLUMNS[number], Cell>>;
 export type ExportView = 'overview' | 'events' | 'goals';
 export type ExportInput = { registry: Registry; current: PeriodSnapshot; previous?: PeriodSnapshot;
-  view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse }; workflowSelections?: WorkflowBreakdownResponse[] };
+  view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse };
+  workflowSelections?: WorkflowBreakdownResponse[]; workflowComparisons?: WorkflowBreakdownResponse[] };
 export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'time_zone', 'view', 'event_filter',
   'selected_event', 'selected_group_by', 'period', 'from', 'to', 'generated_at', 'coverage', 'source',
-  'record_type', 'name', 'label', 'cohort_basis', 'date', 'group_by', 'value_type', 'value', 'count', 'share_percent',
+  'record_type', 'metric', 'name', 'label', 'cohort_basis', 'date', 'group_by', 'value_type', 'value', 'count', 'share_percent',
   'started_attempts', 'succeeded_attempts', 'failed_attempts', 'pending_attempts', 'completion_rate_percent',
   'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit'] as const;
 
@@ -96,20 +97,45 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
       for (const day of row.daily) emit(series.meta, 'current', { ...base, ...value, record_type: 'property_day', date: day.date, count: day.count });
     }
   }
-  if (input.workflowSelections?.length && view !== 'goals') invalid();
+  if ((input.workflowSelections?.length || input.workflowComparisons?.length) && view !== 'goals') invalid();
+  if (previous && input.workflowComparisons && input.workflowComparisons.length !== (input.workflowSelections?.length ?? 0)) invalid();
+  const comparisons = new Map<string, WorkflowBreakdownResponse>();
+  for (const prior of input.workflowComparisons ?? []) {
+    if (!previous || comparisons.has(prior.workflowId) || !input.workflowSelections?.some(item => item.workflowId === prior.workflowId && item.groupBy === prior.groupBy)) invalid();
+    comparisons.set(prior.workflowId, prior);
+  }
   const workflowsSeen = new Set<string>();
   for (const selection of input.workflowSelections ?? []) {
     if (workflowsSeen.has(selection.workflowId)) invalid(); workflowsSeen.add(selection.workflowId);
     validateWorkflowBreakdown(selection, registry, current.range, selection.workflowId, selection.groupBy);
     const label = registry.workflows.find(flow => flow.id === selection.workflowId)!.label;
-    emit(selection.meta, 'current', { record_type: 'workflow_property_summary', name: selection.workflowId, label,
-      cohort_basis: selection.cohortBasis, group_by: selection.groupBy, ...workflowFields(selection.summary) });
-    for (const bucket of selection.buckets) {
-      const base: Row = { name: selection.workflowId, label, cohort_basis: selection.cohortBasis, group_by: selection.groupBy,
-        value_type: typeof bucket.value, value: bucket.value };
-      emit(selection.meta, 'current', { ...base, record_type: 'workflow_property_total', ...workflowFields(bucket.summary), provisional: bucket.days.some(day => day.provisional) });
-      for (const day of bucket.days) emit(selection.meta, 'current', { ...base, record_type: 'workflow_property_day', date: day.date,
-        ...workflowFields(day), provisional: day.provisional });
+    const addBreakdown = (breakdown: WorkflowBreakdownResponse, period: string) => {
+      emit(breakdown.meta, period, { record_type: 'workflow_property_summary', name: selection.workflowId, label,
+        cohort_basis: selection.cohortBasis, group_by: selection.groupBy, ...workflowFields(breakdown.summary) });
+      for (const bucket of breakdown.buckets) {
+        const base: Row = { name: selection.workflowId, label, cohort_basis: selection.cohortBasis, group_by: selection.groupBy,
+          value_type: typeof bucket.value, value: bucket.value };
+        emit(breakdown.meta, period, { ...base, record_type: 'workflow_property_total', ...workflowFields(bucket.summary), provisional: bucket.days.some(day => day.provisional) });
+        for (const day of bucket.days) emit(breakdown.meta, period, { ...base, record_type: 'workflow_property_day', date: day.date,
+          ...workflowFields(day), provisional: day.provisional });
+      }
+    };
+    addBreakdown(selection, 'current');
+    const prior = comparisons.get(selection.workflowId);
+    if (prior) {
+      const comparisonRows = compareWorkflowProperties(selection, prior, registry);
+      addBreakdown(prior, 'previous');
+      for (const row of comparisonRows) {
+        for (const [field, rate] of [['startedAttempts', false], ['succeededAttempts', false], ['completionRate', true]] as const) {
+          const change = rate ? row.rateDifference : countChange(row.current[field], row.previous[field]);
+          emit(selection.meta, 'comparison', { record_type: 'workflow_property_comparison', name: selection.workflowId, label,
+            cohort_basis: selection.cohortBasis, group_by: selection.groupBy, value_type: typeof row.value, value: row.value,
+            metric: field, count: rate ? null : row.current[field], completion_rate_percent: rate ? row.current[field] : null,
+            previous_from: prior.meta.from, previous_to: prior.meta.to,
+            previous_value: row.previous[field], change, change_unit: rate ? 'percentage_point' : 'percent',
+            provisional: row.provisional, availability: change === null ? 'not_available' : 'available' });
+        }
+      }
     }
   }
   const safeId = registry.project.id.replace(/[^a-zA-Z0-9_-]/g, '_');

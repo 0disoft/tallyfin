@@ -369,9 +369,11 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     : compare && comparisonError ? '직전 기간이 보존 범위를 벗어나요. 비교를 끄면 현재 기간 CSV를 내려받을 수 있어요.'
     : compare && (currentComparison?.status !== 'ready' || !currentComparison.data) ? '직전 기간 비교를 마치거나 비교를 꺼 주세요.'
     : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.'
-    : currentWorkflowDetails.some(detail => detail.status !== 'ready') ? '속성별 완료율 조회를 마치거나 해당 분류를 해제해 주세요.' : null;
+    : currentWorkflowDetails.some(detail => detail.status !== 'ready') ? '속성별 완료율 조회를 마치거나 해당 분류를 해제해 주세요.'
+    : compare && currentWorkflowDetails.some(detail => detail.comparisonStatus !== 'ready') ? '속성별 기간 비교를 마치거나 비교를 꺼 주세요.' : null;
   const exportInput = data && registry && view !== 'settings' ? { registry, current: data, view,
     filter: query, workflowSelections: currentWorkflowDetails.flatMap(detail => detail.status === 'ready' && detail.data ? [detail.data] : []),
+    workflowComparisons: compare ? currentWorkflowDetails.flatMap(detail => detail.comparisonStatus === 'ready' && detail.comparisonData ? [detail.comparisonData] : []) : [],
     ...(compare && currentComparison?.status === 'ready' ? { previous: currentComparison.data } : {}),
     ...(view === 'events' && selectedEvent && seriesData ? { selection: { eventName: selectedEvent, groupBy: groupBy || null, series: seriesData } } : {}),
   } : null;
@@ -397,7 +399,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
-    {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status])])} input={exportInput} unavailable={exportUnavailable} />}
+    {view !== 'settings' && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} />}
     {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
@@ -469,7 +471,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
             <div><dt>대기</dt><dd>pending<span>{formatCount(load.response.summary.pendingAttempts)}건</span></dd></div>
           </dl>
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
-          <WorkflowPropertyBreakdown key={`${mainKey}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={data.range} context={mainKey} onState={workflowStateChanged} />
+          <WorkflowPropertyBreakdown key={`${mainKey}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={data.range} previous={compare && !comparisonError ? previousRange(data.range) : null} context={mainKey} onState={workflowStateChanged} />
         </section>))}
 
     </>}
