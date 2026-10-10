@@ -32,6 +32,7 @@ import type { CreatedProject, ProjectCreation } from './project-creation.ts';
 import { parseRejectionResponse, type RejectionResponse } from './rejection-diagnostics.ts';
 import { parseProjectGrantPage, parseGrantChangeInput, parseGrantMutationResult } from './grants-contract.ts';
 import type { GrantChange, GrantMutationResult } from './grants-contract.ts';
+import { changeCursor, parseAdminChangePage, type AdminChangePage } from './admin-changes-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -223,6 +224,20 @@ export class ApiClient {
     const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/grants`, { limit, cursor }, options.signal), parseProjectGrantPage);
     if (result.projectId !== projectId || result.page.limit !== limit || (cursor && result.page.nextCursor === cursor))
       throw new ApiError('contract', '권한 목록의 프로젝트나 페이지가 요청과 달라요.');
+    return result;
+  }
+
+  async listChanges(projectId: string, options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<AdminChangePage> {
+    const limit = clampLimit(options.limit), cursor = options.cursor || undefined;
+    let before: [number, string] | null;
+    try {
+      if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId)) throw Error();
+      before = changeCursor(projectId, cursor ?? null);
+    } catch { throw new ApiError('invalid_request', '프로젝트와 페이지 위치를 확인해 주세요.'); }
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/changes`, { limit, cursor }, options.signal), parseAdminChangePage);
+    if (result.projectId !== projectId || result.page.limit !== limit || cursor && result.page.nextCursor === cursor ||
+      before && result.data.some(row => !(Date.parse(row.occurredAt) < before[0] || Date.parse(row.occurredAt) === before[0] && row.id < before[1])))
+      throw new ApiError('contract', '변경 이력의 프로젝트나 페이지가 요청과 달라요.');
     return result;
   }
 

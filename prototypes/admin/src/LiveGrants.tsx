@@ -6,9 +6,9 @@ import { GrantEditor, type GrantEditorState } from './api/grant-editor.ts';
 import type { GrantChange, GrantRole } from './api/grants-contract.ts';
 import GrantChangePanel from './GrantChangePanel.tsx';
 
-export default function LiveGrants({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost }: {
+export default function LiveGrants({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost, onSaved }: {
   client: ApiClient; projectId: string; canView: boolean; timeZone: string; refreshTick: number;
-  locked?: boolean; onAccessLost?: () => void;
+  locked?: boolean; onAccessLost?: () => void; onSaved?: () => void;
 }) {
   const [snapshot, setSnapshot] = useState<{ client: ApiClient; projectId: string; state: GrantListState } | null>(null);
   const [mutation, setMutation] = useState<{ client: ApiClient; projectId: string; state: GrantEditorState } | null>(null);
@@ -19,6 +19,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
   const scopeRef = useRef<{ client: ApiClient; projectId: string } | null>(null);
   const renderedScope = useRef({ client, projectId }); renderedScope.current = { client, projectId };
   const callbacksRef = useRef(onAccessLost); callbacksRef.current = onAccessLost;
+  const savedRef = useRef(onSaved); savedRef.current = onSaved;
   const confirmRef = useRef<HTMLButtonElement>(null), cancelRef = useRef<HTMLButtonElement>(null);
   const addSummaryRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -38,6 +39,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
         if (!current() || !result.canManage) return;
         setForm({ ...scope, issuer: '', subject: '', role: 'reader' });
         void list.refresh();
+        savedRef.current?.();
       },
     }); editorRef.current = editor;
     const unsubscribeEditor = editor.subscribe(state => { if (current()) setMutation({ ...scope, state }); });

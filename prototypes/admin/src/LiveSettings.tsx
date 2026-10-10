@@ -11,6 +11,7 @@ import type { ApiClient } from './api/client.ts';
 import type { ProjectSettings, Registry } from './api/types.ts';
 import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState } from './api/settings-editor.ts';
 import LiveGrants from './LiveGrants.tsx';
+import LiveAdminChanges from './LiveAdminChanges.tsx';
 
 export type LiveSettingsProps = {
   client: ApiClient;
@@ -58,6 +59,14 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   activeScope.current = { client, projectId };
   const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;
   const [grantLoss, setGrantLoss] = useState<{ client: ApiClient; projectId: string; snapshot: ProjectSettings | null } | null>(null);
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const settingsSaved = useCallback((settings: ProjectSettings) => {
+    if (activeScope.current.client !== client || activeScope.current.projectId !== projectId) return;
+    setHistoryRevision(value => value + 1); onSaved(settings);
+  }, [client, projectId, onSaved]);
+  const grantsSaved = useCallback(() => {
+    if (activeScope.current.client === client && activeScope.current.projectId === projectId) setHistoryRevision(value => value + 1);
+  }, [client, projectId]);
   const tickRef = useRef(refreshTick);
   const lastErrorRef = useRef<keyof SettingsDraft | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -76,7 +85,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   // Rebuild the controller on mount and whenever the client or project
   // changes. StrictMode cleanup/replay creates and disposes it cleanly.
   useEffect(() => {
-    const editor = new SettingsEditor(client, projectId, onSaved);
+    const editor = new SettingsEditor(client, projectId, settingsSaved);
     editorRef.current = editor;
     const unsubscribe = editor.subscribe(state => setSnapshotState({ client, projectId, state }));
     void editor.load();
@@ -85,7 +94,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
       editor.destroy();
       if (editorRef.current === editor) editorRef.current = null;
     };
-  }, [client, projectId, onSaved]);
+  }, [client, projectId, settingsSaved]);
 
   // A refreshTick bump re-reads the settings. The first render is skipped so
   // mounting does not fire a second request on top of load().
@@ -227,7 +236,11 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
     </form>
 
     <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
-      canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} />
+      canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} onSaved={grantsSaved} />
+
+    <LiveAdminChanges client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone}
+      refreshTick={`${refreshTick}:${historyRevision}`} canView={canEdit && !blocked}
+      locked={loading || saving || reviewing} onAccessLost={accessLost} />
 
     {registry ? <>
       <p className="context-note">등록 정의 · 스키마 v{registry.schemaVersion} · {registry.schemaStatus === 'retired' ? '사용 중지' : '사용 중'}</p>

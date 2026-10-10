@@ -1231,3 +1231,17 @@ button {
   .grant-change-actions { flex-direction: column; align-items: stretch; }
   .grant-change-actions .primary-button, .grant-change-actions .secondary-button { width: 100%; }
 }
+
+/* ==========================================================================
+   Administrator change history (LiveAdminChanges)
+   ========================================================================== */
+.admin-changes-section { min-width: 0; }
+.admin-changes-section .settings-subheading { margin: 0; }
+.admin-changes-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.admin-changes-section .table-scroll { max-width: 100%; }
+.admin-changes-table th, .admin-changes-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.admin-changes-table th:nth-child(1), .admin-changes-table td:nth-child(1) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.admin-changes-table thead th { font-size: 18px; }
+.admin-changes-cell { display: flex; flex-direction: column; gap: 4px; }
+.admin-changes-actor { color: #0f172a; overflow-wrap: anywhere; }
+.admin-changes-detail { color: #64748b; font-size: 18px; overflow-wrap: anywhere; }
