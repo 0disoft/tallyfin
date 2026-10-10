@@ -1,5 +1,24 @@
 # 검증
 
+## 관리자 서버 출처 클라이언트·비교·CSV — 2026-10-11
+
+관리자 `ApiClient`의 summary·event daily에 선택 source를 연결했다. 파서는 두 이벤트
+출처를 받고 요청한 출처와 응답 meta.source가 다르면 거부한다. workflow 응답은 browser
+전용으로 계속 검사한다. 기간 조회·스냅샷 검증·속성 분석·직전 기간 비교·CSV가 서버 출처를
+지원하며 server 기간에는 workflow 요청/완료율을 넣지 않는다. 출처가 다른 기간·선택
+이벤트를 섞으면 거부한다. CSV에서 미선택 출처 건수는 빈 값·not_selected로 구분하고
+서버 파일명에는 server를 넣는다. 기본 browser 호출과 파일명은 유지한다.
+
+관리자 `npm run typecheck`, `npm test` 128/128 통과. 새 5개 테스트는 명시 source 전송,
+서로 다른 출처 응답과 잘못된 입력의 거부, browser 전용 workflow 파서, 서버 기간의
+workflow 요청 없음, 빈 정의, 타입별 속성/기간 비교, 교차 출처 CSV 거부를 확인한다.
+화면은 아직 이 source 옵션을 선택하지 않으므로 서버 조회 화면 완료로 주장하지 않는다.
+관련 상태 표시·출처 선택·그래프·CSV 버튼 배선은 다음 UI 슬라이스다.
+
+API·DB·SDK·의존성·CI 러너·위생 정책은 변경하지 않았다. UI 마크업 변경이 없어 시각
+검증은 생략하고 백엔드 검사 245/245는 이전 API 커밋 결과를 재사용한다. 일반 소스 lint
+스크립트는 없다. 원격 인증·DB·Sembom 연결·푸시·배포는 실행하지 않았다.
+
 ## 서버 출처 집계 조회 API — 2026-10-11
 
 `GET .../summary`와 `GET .../events/{eventName}/daily`에 선택 `source=browser|server`를

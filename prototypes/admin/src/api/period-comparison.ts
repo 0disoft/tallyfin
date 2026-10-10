@@ -1,6 +1,6 @@
 import type { ApiClient } from './client.ts';
 import { shiftDate } from './dates.ts';
-import type { QueryMeta, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse, WorkflowSummary } from './types.ts';
+import type { EventSource, QueryMeta, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse, WorkflowSummary } from './types.ts';
 import { ContractError } from './validate.ts';
 
 export type DateRange = { from: string; to: string };
@@ -8,6 +8,7 @@ export type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowR
 export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad[]; range: DateRange };
 export type ComparisonRow = { key: string; label: string; current: number | null; previous: number | null; rate?: boolean };
 export function comparisonRows(current: PeriodSnapshot, previous: PeriodSnapshot, view: string): ComparisonRow[] {
+  if (current.summary.meta.source !== previous.summary.meta.source) invalid();
   const rows: ComparisonRow[] = [{ key: 'total', label: '수집 이벤트', current: current.summary.totalEvents, previous: previous.summary.totalEvents }];
   if (view === 'events') {
     const before = new Map(previous.summary.events.map(event => [event.name, event.count]));
@@ -40,10 +41,10 @@ export function countChange(current: number | null, previous: number | null): nu
 export function rateChange(current: number | null, previous: number | null): number | null {
   return current === null || previous === null ? null : current - previous;
 }
-export function assertMeta(meta: QueryMeta, registry: Registry, range: DateRange) {
+export function assertMeta(meta: QueryMeta, registry: Registry, range: DateRange, source: EventSource = 'browser') {
   if (meta.projectId !== registry.project.id || meta.schemaVersion !== registry.schemaVersion ||
     meta.timeZone !== registry.project.timeZone || meta.from !== range.from || meta.to !== range.to ||
-    meta.source !== 'browser' || meta.coverage !== 'observed-only') invalid();
+    !['browser', 'server'].includes(source) || meta.source !== source || meta.coverage !== 'observed-only') invalid();
 }
 export function validateWorkflowSummary(value: WorkflowSummary, definition: WorkflowDefinition): void {
   const start = count(value.startedAttempts), success = count(value.succeededAttempts), pending = count(value.pendingAttempts);
@@ -68,26 +69,26 @@ export function validateWorkflowLoad({ definition, response }: WorkflowLoad, reg
   for (const key of ['startedAttempts', 'succeededAttempts', 'pendingAttempts', 'failedAttempts'] as const)
     if (totals[key] !== (response.summary[key] ?? 0)) invalid();
 }
-export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry): void {
+export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry, source: EventSource = 'browser'): void {
   const { summary, workflows, range } = snapshot;
-  assertMeta(summary.meta, registry, range);
+  assertMeta(summary.meta, registry, range, source);
   days(range);
-  const expected = registry.events.filter(event => event.source === 'browser').map(event => event.name);
+  const expected = registry.events.filter(event => event.source === source).map(event => event.name);
   if (summary.events.length !== expected.length || new Set(summary.events.map(event => event.name)).size !== expected.length ||
     summary.events.some(event => !expected.includes(event.name)) ||
     summary.events.reduce((total, event) => count(total + count(event.count)), 0) !== count(summary.totalEvents)) invalid();
-  if (workflows.length !== registry.workflows.length || new Set(workflows.map(load => load.definition.id)).size !== workflows.length) invalid();
+  if (workflows.length !== (source === 'browser' ? registry.workflows.length : 0) || new Set(workflows.map(load => load.definition.id)).size !== workflows.length) invalid();
   for (const workflow of workflows) validateWorkflowLoad(workflow, registry, range);
 }
 /** Separate requests keep each window within the API's 31-day limit. */
-export async function loadPeriod(client: ApiClient, registry: Registry, range: DateRange, signal: AbortSignal): Promise<PeriodSnapshot> {
+export async function loadPeriod(client: ApiClient, registry: Registry, range: DateRange, signal: AbortSignal, source: EventSource = 'browser'): Promise<PeriodSnapshot> {
   const options = { schemaVersion: registry.schemaVersion, ...range, signal };
   const [summary, workflows] = await Promise.all([
-    client.getSummary(registry.project.id, options),
-    Promise.all(registry.workflows.map(async definition => ({ definition,
+    client.getSummary(registry.project.id, { ...options, source }),
+    Promise.all((source === 'browser' ? registry.workflows : []).map(async definition => ({ definition,
       response: await client.getWorkflowDaily(registry.project.id, definition.id, options) }))),
   ]);
   const snapshot = { summary, workflows, range };
-  validateSnapshot(snapshot, registry);
+  validateSnapshot(snapshot, registry, source);
   return snapshot;
 }

@@ -1,7 +1,7 @@
 import { analyzeEventSeries } from './event-analysis.ts';
 import { compareEventProperties } from './event-property-comparison.ts';
 import { comparisonRows, countChange, rateChange, previousRange, validateSnapshot, type PeriodSnapshot } from './period-comparison.ts';
-import type { EventSeriesResponse, QueryMeta, Registry, WorkflowSummary, WorkflowBreakdownResponse } from './types.ts';
+import type { EventSource, EventSeriesResponse, QueryMeta, Registry, WorkflowSummary, WorkflowBreakdownResponse } from './types.ts';
 import { compareWorkflowProperties, validateWorkflowBreakdown } from './workflow-analysis.ts';
 import { ContractError } from './validate.ts';
 
@@ -9,6 +9,7 @@ type Cell = string | number | boolean | null | undefined;
 type Row = Partial<Record<typeof CSV_COLUMNS[number], Cell>>;
 export type ExportView = 'overview' | 'events' | 'goals';
 export type ExportInput = { registry: Registry; current: PeriodSnapshot; previous?: PeriodSnapshot;
+  source?: EventSource;
   view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse; previousSeries?: EventSeriesResponse };
   workflowSelections?: WorkflowBreakdownResponse[]; workflowComparisons?: WorkflowBreakdownResponse[] };
 export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'time_zone', 'view', 'event_filter',
@@ -31,9 +32,11 @@ function invalid(): never { throw new ContractError('현재 조회 조건과 CSV
 
 export function analyticsCsv(input: ExportInput): { filename: string; text: string; rowCount: number } {
   const { registry, current, previous, view, selection } = input;
-  validateSnapshot(current, registry);
+  const source = input.source ?? 'browser';
+  if (source === 'server' && view === 'goals') invalid();
+  validateSnapshot(current, registry, source);
   if (previous) {
-    validateSnapshot(previous, registry);
+    validateSnapshot(previous, registry, source);
     const expected = previousRange(current.range);
     if (previous.range.from !== expected.from || previous.range.to !== expected.to) invalid();
   }
@@ -56,8 +59,8 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
       for (const event of registry.events) {
         if (view === 'events' && !`${event.name} ${event.label}`.toLowerCase().includes(filter.toLowerCase())) continue;
         emit(snapshot.summary.meta, period, { record_type: 'event_total', name: event.name, label: event.label,
-          source: event.source, count: event.source === 'browser' ? counts.get(event.name) : null,
-          availability: event.source === 'server' ? 'unsupported' : 'available' });
+          source: event.source, count: event.source === source ? counts.get(event.name) : null,
+          availability: event.source === source ? 'available' : 'not_selected' });
       }
     }
     if (view !== 'events') {
@@ -83,11 +86,11 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
   }
   if (selection) {
     const { series, eventName, groupBy, previousSeries } = selection;
-    const event = registry.events.find(item => item.name === eventName && item.source === 'browser');
+    const event = registry.events.find(item => item.name === eventName && item.source === source);
     if (!event || series.eventName !== eventName || series.groupBy !== groupBy || series.meta.projectId !== registry.project.id ||
       series.meta.schemaVersion !== registry.schemaVersion || series.meta.timeZone !== registry.project.timeZone ||
       series.meta.from !== current.range.from || series.meta.to !== current.range.to ||
-      series.meta.source !== 'browser' || series.meta.coverage !== 'observed-only') invalid();
+      series.meta.source !== source || series.meta.coverage !== 'observed-only') invalid();
     const base = { name: eventName, label: event.label, group_by: groupBy };
     const addSeries = (data: EventSeriesResponse, period: string) => {
       const analysis = analyzeEventSeries(data, event);
@@ -160,6 +163,6 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
     }
   }
   const safeId = registry.project.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-  return { filename: `tallyfin-${safeId}-v${registry.schemaVersion}-${view}-${current.range.from}-${current.range.to}.csv`,
+  return { filename: `tallyfin-${safeId}-v${registry.schemaVersion}-${view}${source === 'server' ? '-server' : ''}-${current.range.from}-${current.range.to}.csv`,
     text: serializeCsv([CSV_COLUMNS, ...rows.map(row => CSV_COLUMNS.map(column => row[column]))]), rowCount: rows.length };
 }

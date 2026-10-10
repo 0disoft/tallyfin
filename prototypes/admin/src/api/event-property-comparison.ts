@@ -9,15 +9,15 @@ export type EventPropertyComparison = { rows: { key: string; value: PropertyBuck
   countChange: number | null; shareChange: number | null }[] };
 
 function currentAnalysis(current: EventSeriesResponse, registry: Registry) {
-  assertMeta(current.meta, registry, { from: current.meta.from, to: current.meta.to });
-  const event = registry.events.find(event => event.name === current.eventName && event.source === 'browser');
+  assertMeta(current.meta, registry, { from: current.meta.from, to: current.meta.to }, current.meta.source);
+  const event = registry.events.find(event => event.name === current.eventName && event.source === current.meta.source);
   if (!event || !current.groupBy) throw new ContractError('등록된 이벤트 속성을 선택해야 기간을 비교할 수 있어요.');
   return { event, analysis: analyzeEventSeries(current, event)! };
 }
 
 export function compareEventProperties(current: EventSeriesResponse, previous: EventSeriesResponse, registry: Registry): EventPropertyComparison {
   const { event, analysis: now } = currentAnalysis(current, registry);
-  assertMeta(previous.meta, registry, previousRange(current.meta));
+  assertMeta(previous.meta, registry, previousRange(current.meta), current.meta.source);
   if (previous.eventName !== current.eventName || previous.groupBy !== current.groupBy)
     throw new ContractError('이벤트 속성 비교 응답이 현재 분류와 맞지 않아요.');
   const before = analyzeEventSeries(previous, event)!;
@@ -36,7 +36,7 @@ export async function loadEventPropertyComparison(client: ApiClient, registry: R
   currentAnalysis(current, registry);
   signal.throwIfAborted();
   const series = await client.getEventDaily(registry.project.id, current.eventName, { schemaVersion: registry.schemaVersion,
-    ...previousRange(current.meta), groupBy: current.groupBy!, signal });
+    ...previousRange(current.meta), source: current.meta.source, groupBy: current.groupBy!, signal });
   signal.throwIfAborted();
   return { series, analysis: compareEventProperties(current, series, registry) };
 }

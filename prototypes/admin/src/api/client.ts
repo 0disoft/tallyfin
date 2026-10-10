@@ -5,6 +5,7 @@
 
 import type {
   EventSeriesResponse,
+  EventSource,
   ProjectPage,
   ProjectGrantPage,
   ProjectSettings,
@@ -304,31 +305,34 @@ export class ApiClient {
 
   async getSummary(
     projectId: string,
-    options: { schemaVersion: number; from: string; to: string; signal?: AbortSignal },
+    options: { schemaVersion: number; from: string; to: string; source?: EventSource; signal?: AbortSignal },
   ): Promise<SummaryResponse> {
     const version = this.#version(options.schemaVersion);
-    const params = { schemaVersion: version, from: options.from, to: options.to };
+    const source = this.#source(options.source);
+    const params = { schemaVersion: version, from: options.from, to: options.to, source: options.source };
     const path = `/projects/${encodeURIComponent(projectId)}/summary`;
     const response = this.#parse(await this.#request(path, params, options.signal), parseSummaryResponse);
-    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
+    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to, source });
     return response;
   }
 
   async getEventDaily(
     projectId: string,
     eventName: string,
-    options: { schemaVersion: number; from: string; to: string; groupBy?: string; signal?: AbortSignal },
+    options: { schemaVersion: number; from: string; to: string; source?: EventSource; groupBy?: string; signal?: AbortSignal },
   ): Promise<EventSeriesResponse> {
     const version = this.#version(options.schemaVersion);
+    const source = this.#source(options.source);
     const params = {
       schemaVersion: version,
       from: options.from,
       to: options.to,
       groupBy: options.groupBy ? options.groupBy : undefined,
+      source: options.source,
     };
     const path = `/projects/${encodeURIComponent(projectId)}/events/${encodeURIComponent(eventName)}/daily`;
     const response = this.#parse(await this.#request(path, params, options.signal), parseEventSeriesResponse);
-    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to });
+    this.#assertMeta(response.meta, { projectId, schemaVersion: version, from: options.from, to: options.to, source });
     if (response.eventName !== eventName) throw new ApiError('contract', '응답 이벤트가 요청과 달라요.');
     if ((response.groupBy ?? null) !== (options.groupBy ?? null)) {
       throw new ApiError('contract', '응답 groupBy가 요청과 달라요.');
@@ -366,12 +370,16 @@ export class ApiClient {
     return schemaVersion;
   }
 
-  #assertMeta(meta: QueryMeta, expected: { projectId: string; schemaVersion: number; from: string; to: string }): void {
+  #source(source?: EventSource): EventSource {
+    if (source !== undefined && source !== 'browser' && source !== 'server') throw new ApiError('invalid_request', '발행 출처를 확인해 주세요.');
+    return source ?? 'browser';
+  }
+  #assertMeta(meta: QueryMeta, expected: { projectId: string; schemaVersion: number; from: string; to: string; source?: EventSource }): void {
     if (
       meta.projectId !== expected.projectId ||
       meta.schemaVersion !== expected.schemaVersion ||
       meta.from !== expected.from ||
-      meta.to !== expected.to
+      meta.to !== expected.to || meta.source !== (expected.source ?? 'browser')
     ) {
       throw new ApiError('contract', '응답이 요청한 프로젝트·버전·기간과 맞지 않아요.');
     }

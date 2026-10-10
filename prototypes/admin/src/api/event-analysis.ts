@@ -5,10 +5,10 @@ export type PropertyAnalysis = { total: number; rows: { key: string; value: Prop
   share: number | null; daily: { date: string; count: number }[] }[] };
 export type EventGrouping = { context: string; property: string } | null;
 export function eventContext(registry: Registry, event: EventDefinition): string {
-  return JSON.stringify([registry.project.id, registry.schemaVersion, event.name]);
+  return JSON.stringify([registry.project.id, registry.schemaVersion, event.source, event.name]);
 }
 export function eventPropertyNames(event: EventDefinition | null): string[] {
-  return event?.source === 'browser' ? Object.keys(event.properties) : [];
+  return event ? Object.keys(event.properties) : [];
 }
 export function selectedGrouping(registry: Registry, event: EventDefinition, selection: EventGrouping): string {
   return selection?.context === eventContext(registry, event) && eventPropertyNames(event).includes(selection.property) ? selection.property : '';
@@ -25,7 +25,7 @@ function allowed(event: EventDefinition, name: string, value: PropertyBucket['va
 }
 /** Validate the complete daily response before producing any chart or percentage. */
 export function analyzeEventSeries(series: EventSeriesResponse, event: EventDefinition): PropertyAnalysis | null {
-  if (series.eventName !== event.name || event.source !== 'browser') invalid();
+  if (series.eventName !== event.name || series.meta.source !== event.source) invalid();
   if (series.groupBy !== null && !eventPropertyNames(event).includes(series.groupBy)) invalid();
   const from = Date.parse(`${series.meta.from}T00:00:00Z`), to = Date.parse(`${series.meta.to}T00:00:00Z`);
   const length = (to - from) / 86400000 + 1;

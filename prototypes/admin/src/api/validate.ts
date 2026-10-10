@@ -222,7 +222,7 @@ function parseMeta(value: unknown, path: string): QueryMeta {
   return {
     projectId: expectString(record.projectId, `${path}.projectId`),
     schemaVersion: expectInteger(record.schemaVersion, `${path}.schemaVersion`),
-    source: expectEnum(record.source, ['browser'], `${path}.source`) as 'browser',
+    source: expectEnum(record.source, ['browser', 'server'], `${path}.source`) as QueryMeta['source'],
     from: expectString(record.from, `${path}.from`),
     to: expectString(record.to, `${path}.to`),
     timeZone: expectString(record.timeZone, `${path}.timeZone`),
@@ -280,6 +280,11 @@ export function parseEventSeriesResponse(value: unknown): EventSeriesResponse {
   };
 }
 
+function parseWorkflowMeta(value: unknown): QueryMeta & { source: 'browser' } {
+  const meta = parseMeta(value, 'response.meta');
+  if (meta.source !== 'browser') fail('response.meta.source', 'workflow source must be browser');
+  return { ...meta, source: 'browser' };
+}
 function parseWorkflowSummary(value: unknown, path: string): WorkflowSummary {
   const record = expectRecord(value, path);
   const completionRate = record.completionRate === null ? null : expectNumber(record.completionRate, `${path}.completionRate`);
@@ -296,7 +301,7 @@ function parseWorkflowSummary(value: unknown, path: string): WorkflowSummary {
 export function parseWorkflowResponse(value: unknown): WorkflowResponse {
   const record = expectRecord(value, 'response');
   return {
-    meta: parseMeta(record.meta, 'response.meta'),
+    meta: parseWorkflowMeta(record.meta),
     workflowId: expectString(record.workflowId, 'response.workflowId'),
     cohortBasis: expectEnum(record.cohortBasis, ['startedAt'], 'response.cohortBasis') as 'startedAt',
     summary: parseWorkflowSummary(record.summary, 'response.summary'),
@@ -324,7 +329,7 @@ export function parseWorkflowBreakdownResponse(value: unknown): WorkflowBreakdow
   const record = expectRecord(value, 'response');
   const buckets = expectArray(record.buckets, 'response.buckets');
   if (buckets.length > 32) throw new ContractError('response.buckets exceeds 32');
-  return { meta: parseMeta(record.meta, 'response.meta'), workflowId: expectString(record.workflowId, 'response.workflowId'),
+  return { meta: parseWorkflowMeta(record.meta), workflowId: expectString(record.workflowId, 'response.workflowId'),
     cohortBasis: expectEnum(record.cohortBasis, ['startedAt'], 'response.cohortBasis') as 'startedAt',
     groupBy: expectString(record.groupBy, 'response.groupBy'), summary: parseWorkflowSummary(record.summary, 'response.summary'),
     buckets: buckets.map((item, index) => {

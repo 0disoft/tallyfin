@@ -45,10 +45,11 @@ export type Registry = {
   workflows: WorkflowDefinition[];
 };
 
+export type EventSource = 'browser' | 'server';
 export type QueryMeta = {
   projectId: string;
   schemaVersion: number;
-  source: 'browser';
+  source: EventSource;
   from: string;
   to: string;
   timeZone: string;
@@ -84,7 +85,7 @@ export type WorkflowSummary = {
 export type WorkflowDay = WorkflowSummary & { date: string; provisional: boolean };
 
 export type WorkflowResponse = {
-  meta: QueryMeta;
+  meta: QueryMeta & { source: 'browser' };
   workflowId: string;
   cohortBasis: 'startedAt';
   summary: WorkflowSummary;

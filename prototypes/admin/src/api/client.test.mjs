@@ -54,7 +54,7 @@ test('CSV event search and selected property analysis preserve all typed buckets
   const flags=exportRows(analyticsCsv({registry,current:snapshot,view:'events',selection:{eventName:'view',groupBy:'flag',series}})).filter(row=>row.record_type==='property_total');
   assert.deepEqual(flags.map(row=>[row.value_type,row.value]),[['boolean','false'],['boolean','true'],['null','']]);
 });
-test('CSV rejects stale schema, range, grouping and broken snapshots; unsupported server counts stay blank', () => {
+test('CSV rejects stale schema, range, grouping and broken snapshots; unselected source counts stay blank', () => {
   const {registry,snapshot}=comparisonFixture(); registry.events.push(analysisEvent(),{name:'backend',label:'Backend',source:'server'});
   snapshot.summary.events.push({name:'view',count:10});snapshot.summary.totalEvents+=10;
   const input={registry,current:snapshot,view:'events',selection:{eventName:'view',groupBy:'format',series:analysisSeries()}};
@@ -63,7 +63,7 @@ test('CSV rejects stale schema, range, grouping and broken snapshots; unsupporte
     r=>r.selection.groupBy='flag',r=>r.current.summary.totalEvents++,r=>r.previous=structuredClone(r.current)]) {
     const copy=structuredClone(input); edit(copy); assert.throws(()=>analyticsCsv(copy));
   }
-  const server=exportRows(analyticsCsv(input)).find(row=>row.name==='backend');assert.equal(server.count,'');assert.equal(server.availability,'unsupported');
+  const server=exportRows(analyticsCsv(input)).find(row=>row.name==='backend');assert.equal(server.count,'');assert.equal(server.availability,'not_selected');
 });
 
 test('comparison windows have equal inclusive length across month, leap-year and year boundaries', () => {
@@ -137,11 +137,11 @@ const analysisSeries = () => ({ meta: meta('sembom', 1, '2026-10-07', '2026-10-0
   days: [{ date: '2026-10-07', count: 6, breakdown: [{ value: 'pdf', count: 4 }, { value: 'png', count: 2 }] },
     { date: '2026-10-08', count: 4, breakdown: [{ value: 'pdf', count: 3 }, { value: null, count: 1 }] }] });
 
-test('event grouping uses only the selected browser event and never reuses another project or schema selection', () => {
+test('event grouping uses the selected event source and never reuses another project or schema selection', () => {
   const event = analysisEvent(), registry = { project: project('sembom'), schemaVersion: 1 };
   const selection = { context: eventContext(registry, event), property: 'format' };
   assert.deepEqual(eventPropertyNames(event), ['format', 'flag', 'range']);
-  assert.deepEqual(eventPropertyNames({ ...event, source: 'server' }), []);
+  assert.deepEqual(eventPropertyNames({ ...event, source: 'server' }), ['format', 'flag', 'range']);
   assert.equal(selectedGrouping(registry, event, selection), 'format');
   for (const next of [{ ...registry, schemaVersion: 2 }, { ...registry, project: project('other') }]) assert.equal(selectedGrouping(next, event, selection), '');
   assert.equal(selectedGrouping(registry, { ...event, name: 'other' }, selection), '');
