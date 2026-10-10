@@ -1,4 +1,5 @@
 import { analyzeEventSeries } from './event-analysis.ts';
+import { compareEventProperties } from './event-property-comparison.ts';
 import { comparisonRows, countChange, rateChange, previousRange, validateSnapshot, type PeriodSnapshot } from './period-comparison.ts';
 import type { EventSeriesResponse, QueryMeta, Registry, WorkflowSummary, WorkflowBreakdownResponse } from './types.ts';
 import { compareWorkflowProperties, validateWorkflowBreakdown } from './workflow-analysis.ts';
@@ -8,7 +9,7 @@ type Cell = string | number | boolean | null | undefined;
 type Row = Partial<Record<typeof CSV_COLUMNS[number], Cell>>;
 export type ExportView = 'overview' | 'events' | 'goals';
 export type ExportInput = { registry: Registry; current: PeriodSnapshot; previous?: PeriodSnapshot;
-  view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse };
+  view: ExportView; filter?: string; selection?: { eventName: string; groupBy: string | null; series: EventSeriesResponse; previousSeries?: EventSeriesResponse };
   workflowSelections?: WorkflowBreakdownResponse[]; workflowComparisons?: WorkflowBreakdownResponse[] };
 export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'time_zone', 'view', 'event_filter',
   'selected_event', 'selected_group_by', 'period', 'from', 'to', 'generated_at', 'coverage', 'source',
@@ -81,20 +82,40 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
     }
   }
   if (selection) {
-    const { series, eventName, groupBy } = selection;
+    const { series, eventName, groupBy, previousSeries } = selection;
     const event = registry.events.find(item => item.name === eventName && item.source === 'browser');
     if (!event || series.eventName !== eventName || series.groupBy !== groupBy || series.meta.projectId !== registry.project.id ||
       series.meta.schemaVersion !== registry.schemaVersion || series.meta.timeZone !== registry.project.timeZone ||
       series.meta.from !== current.range.from || series.meta.to !== current.range.to ||
       series.meta.source !== 'browser' || series.meta.coverage !== 'observed-only') invalid();
-    const analysis = analyzeEventSeries(series, event);
     const base = { name: eventName, label: event.label, group_by: groupBy };
-    emit(series.meta, 'current', { ...base, record_type: 'selected_event_total', count: series.totalEvents });
-    for (const day of series.days) emit(series.meta, 'current', { ...base, record_type: 'event_day', date: day.date, count: day.count });
-    for (const row of analysis?.rows ?? []) {
-      const value = { value_type: row.value === null ? 'null' : typeof row.value, value: row.value };
-      emit(series.meta, 'current', { ...base, ...value, record_type: 'property_total', count: row.count, share_percent: row.share });
-      for (const day of row.daily) emit(series.meta, 'current', { ...base, ...value, record_type: 'property_day', date: day.date, count: day.count });
+    const addSeries = (data: EventSeriesResponse, period: string) => {
+      const analysis = analyzeEventSeries(data, event);
+      emit(data.meta, period, { ...base, record_type: 'selected_event_total', count: data.totalEvents });
+      for (const day of data.days) emit(data.meta, period, { ...base, record_type: 'event_day', date: day.date, count: day.count });
+      for (const row of analysis?.rows ?? []) {
+        const value = { value_type: row.value === null ? 'null' : typeof row.value, value: row.value };
+        emit(data.meta, period, { ...base, ...value, record_type: 'property_total', count: row.count, share_percent: row.share });
+        for (const day of row.daily) emit(data.meta, period, { ...base, ...value, record_type: 'property_day', date: day.date, count: day.count });
+      }
+    };
+    addSeries(series, 'current');
+    if (previous && groupBy && !previousSeries) invalid();
+    if (previousSeries) {
+      if (!previous || !groupBy) invalid();
+      const analysis = compareEventProperties(series, previousSeries, registry);
+      addSeries(previousSeries, 'previous');
+      for (const row of analysis.rows) {
+        const value = { value_type: row.value === null ? 'null' : typeof row.value, value: row.value };
+        for (const metric of ['count', 'share'] as const) {
+          const rate = metric === 'share', change = rate ? row.shareChange : row.countChange;
+          emit(series.meta, 'comparison', { ...base, ...value, record_type: 'property_comparison', metric,
+            count: rate ? null : row.currentCount, share_percent: rate ? row.currentShare : null,
+            previous_from: previousSeries.meta.from, previous_to: previousSeries.meta.to,
+            previous_value: rate ? row.previousShare : row.previousCount, change,
+            change_unit: rate ? 'percentage_point' : 'percent', availability: change === null ? 'not_available' : 'available' });
+        }
+      }
     }
   }
   if ((input.workflowSelections?.length || input.workflowComparisons?.length) && view !== 'goals') invalid();
