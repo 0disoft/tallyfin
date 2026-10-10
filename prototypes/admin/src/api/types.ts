@@ -5,6 +5,8 @@
 export type Project = { id: string; name: string; status: 'active' | 'paused'; timeZone: string };
 
 export type ProjectPage = { data: Project[]; page: { limit: number; nextCursor: string | null } };
+export type ProjectGrant = { issuer: string; subject: string; role: 'reader' | 'owner'; createdAt: string };
+export type ProjectGrantPage = { projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null } };
 
 export type CollectionLimits = { requestsPerMinute: number; newReceiptsPerUtcDay: number };
 export type ProjectSettings = { project: Project; allowedOrigins: string[]; limits: CollectionLimits; settingsHash: string; canEdit: boolean };

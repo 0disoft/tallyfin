@@ -10,6 +10,7 @@ import { WarningCircle } from '@phosphor-icons/react';
 import type { ApiClient } from './api/client.ts';
 import type { ProjectSettings, Registry } from './api/types.ts';
 import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState } from './api/settings-editor.ts';
+import LiveGrants from './LiveGrants.tsx';
 
 export type LiveSettingsProps = {
   client: ApiClient;
@@ -49,7 +50,8 @@ function displayValue(value: string): string {
 }
 
 export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null }: LiveSettingsProps) {
-  const [state, setState] = useState<SettingsState | null>(null);
+  const [snapshotState, setSnapshotState] = useState<{ client: ApiClient; projectId: string; state: SettingsState } | null>(null);
+  const state = snapshotState?.client === client && snapshotState.projectId === projectId ? snapshotState.state : null;
   const editorRef = useRef<SettingsEditor | null>(null);
   const tickRef = useRef(refreshTick);
   const lastErrorRef = useRef<keyof SettingsDraft | null>(null);
@@ -71,7 +73,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   useEffect(() => {
     const editor = new SettingsEditor(client, projectId, onSaved);
     editorRef.current = editor;
-    const unsubscribe = editor.subscribe(setState);
+    const unsubscribe = editor.subscribe(state => setSnapshotState({ client, projectId, state }));
     void editor.load();
     return () => {
       unsubscribe();
@@ -209,6 +211,9 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
         <button className="secondary-button" type="button" disabled={inputsLocked} onClick={() => editorRef.current?.reset()}>편집 초기화</button>
       </div>
     </form>
+
+    <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
+      canView={canEdit && !blocked && !loading && (!reviewing || state.latest?.canEdit === true)} />
 
     {registry ? <>
       <p className="context-note">등록 정의 · 스키마 v{registry.schemaVersion} · {registry.schemaStatus === 'retired' ? '사용 중지' : '사용 중'}</p>

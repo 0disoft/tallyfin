@@ -1191,3 +1191,14 @@ button {
 .diagnostic-troubleshooting { margin-top: 1.5rem; }
 .diagnostic-troubleshooting li { margin: 0.65rem 0; }
 @media (max-width: 640px) { .diagnostic-facts { grid-template-columns: minmax(0, 1fr); } }
+
+/* ==========================================================================
+   Owner grant list (LiveGrants)
+   ========================================================================== */
+.grants-section { min-width: 0; }
+.grants-section .settings-subheading { margin: 0; }
+.grants-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.grant-role { white-space: nowrap; }
+.grants-section .table-scroll { max-width: 100%; }
+.grants-table th, .grants-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.grants-table th:last-child, .grants-table td:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }

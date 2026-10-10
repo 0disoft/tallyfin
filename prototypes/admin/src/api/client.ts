@@ -6,6 +6,7 @@
 import type {
   EventSeriesResponse,
   ProjectPage,
+  ProjectGrantPage,
   ProjectSettings,
   ProjectSettingsUpdate,
   QueryMeta,
@@ -29,6 +30,7 @@ import type { PublishedSchema, SchemaDraft, SchemaPage, SchemaPublication, Schem
 import { creationHash, parseCreatedProject } from './project-creation.ts';
 import type { CreatedProject, ProjectCreation } from './project-creation.ts';
 import { parseRejectionResponse, type RejectionResponse } from './rejection-diagnostics.ts';
+import { parseProjectGrantPage } from './grants-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -207,6 +209,15 @@ export class ApiClient {
   async getSettings(projectId: string, options: { signal?: AbortSignal } = {}): Promise<ProjectSettings> {
     const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}`, {}, options.signal), parseProjectSettings);
     if (result.project.id !== projectId) throw new ApiError('contract', '응답 프로젝트가 요청과 달라요.');
+    return result;
+  }
+
+  async listGrants(projectId: string, options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectGrantPage> {
+    const limit = clampLimit(options.limit), cursor = options.cursor || undefined;
+    if (cursor && (cursor.length > 12288 || !/^[A-Za-z0-9_-]+$/.test(cursor))) throw new ApiError('invalid_request', '페이지 위치를 확인해 주세요.');
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/grants`, { limit, cursor }, options.signal), parseProjectGrantPage);
+    if (result.projectId !== projectId || result.page.limit !== limit || (cursor && result.page.nextCursor === cursor))
+      throw new ApiError('contract', '권한 목록의 프로젝트나 페이지가 요청과 달라요.');
     return result;
   }
 

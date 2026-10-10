@@ -1143,3 +1143,32 @@ Miniflare workerd에서 owner 목록과 커서 왕복도 확인했다. 신뢰하
 DB·마이그레이션·SDK·의존성·CI 러너·위생 정책 변경, 운영 배포·푸시·Sembom 연동은 없다.
 각 페이지는 현재 DB를 읽으므로 앞쪽에 새로 추가된 grant는 처음부터 재조회해야 한다.
 권한 관리 UI·grant 부여/변경/회수 API는 후속이며 기존 CLI를 유지한다.
+
+## 관리자 권한 목록 화면 연결 — 2026-10-11
+
+API 모드 설정 화면에 owner 전용 `LiveGrants`를 연결했다. `ApiClient.listGrants`가
+기존 bearer·같은 출처·no-store·no-referrer·credentials omit 정책을 재사용하고, 닫힌
+응답 형태·역할·식별자 길이·등록 시각·프로젝트·페이지 한도·진행하지 않는 커서를 검사한다.
+`GrantList`는 현재 25건 페이지 하나만 보관하며 실패·새 조회·dispose 때 행을 비운다.
+프로젝트/연결 변경의 이전 설정 스냅샷도 렌더링에서 제외해 reader에게 기존 owner 상태를
+적용하지 않는다. 각 응답은 abort와 세대 번호를 함께 확인한다.
+
+`prototypes/admin`에서 `npm test` 111/111(권한 목록 신규 6개 포함), `npm run typecheck`,
+`npm run build`, `npm run test:sites` 4/4와 `git diff --check`가 통과했다. 테스트는
+권한 회수·네트워크 오류 후 행 제거, 실패한 페이지 재시도, 커서 진행/새로고침, 중복 클릭,
+늦은 응답·언마운트 폐기와 응답 계약 오류를 확인한다. 일반 lint 명령은 없어 생략했고,
+백엔드는 변경하지 않아 루트 백엔드 검사와 원격 마이그레이션을 반복하지 않았다.
+
+Codex 인앱 Chromium과 로컬 Vite(127.0.0.1:5182)에서 실제 `LiveSettings`·`LiveGrants`
+컴포넌트에 합성 transport를 주입한 무자격증명 검증 페이지를 사용했다. owner의 25건→2건
+페이지 전환·끝 버튼 비활성화, reader 전환 후 요청 2건 유지/표 제거, 다음 페이지 403 후
+표 제거, 빈 페이지 안내, 다른 프로젝트 데이터만 표시를 확인했다. 콘솔 오류는 없었다.
+실제 CSS innerWidth 320px(기존 90% 확대에 viewport 288px)에서 페이지 scrollWidth
+303px, 표 540px/스크롤 영역 255px로 전체 페이지 넘침이 없고, 508자 식별자를 자르지
+않으며 셀은 18px였다. Tab으로 표 영역 포커스 후 ArrowRight 내부 스크롤을 확인했다.
+뷰포트는 복원했고 검증 탭·서버는 종료했다. 화면은 `.tmp/grants-ui-qa/owner.png`·
+`mobile.png`이며 임시 검증 페이지도 ignore된 `.tmp`에만 둔다.
+
+제품 스펙·로드맵·프론트엔드 설계·검증 기록을 갱신했다. API·DB·SDK·의존성·CI 러너·
+위생 정책 변경, 푸시·배포·Sembom 연동은 없다. 운영 OIDC/실제 계정 연동은 환경이
+연결되지 않아 실행하지 않았고, 이번 화면은 조회만 하며 권한 변경은 기존 CLI가 맡는다.
