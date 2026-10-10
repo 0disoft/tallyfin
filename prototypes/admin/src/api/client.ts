@@ -30,7 +30,8 @@ import type { PublishedSchema, SchemaDraft, SchemaPage, SchemaPublication, Schem
 import { creationHash, parseCreatedProject } from './project-creation.ts';
 import type { CreatedProject, ProjectCreation } from './project-creation.ts';
 import { parseRejectionResponse, type RejectionResponse } from './rejection-diagnostics.ts';
-import { parseProjectGrantPage } from './grants-contract.ts';
+import { parseProjectGrantPage, parseGrantChangeInput, parseGrantMutationResult } from './grants-contract.ts';
+import type { GrantChange, GrantMutationResult } from './grants-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -50,6 +51,8 @@ export type ApiErrorKind =
   | 'schema_conflict'
   | 'project_conflict'
   | 'project_limit_reached'
+  | 'grant_conflict'
+  | 'last_owner'
   | 'http'
   | 'network'
   | 'contract';
@@ -79,6 +82,8 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   schema_conflict: '발행된 스키마가 바뀌었어요. 최신 버전을 확인해 주세요. (HTTP 409)',
   project_conflict: '이미 사용 중이거나 다른 내용으로 생성된 프로젝트 ID예요. (HTTP 409)',
   project_limit_reached: '프로젝트 생성 개수 한도에 도달했어요. 운영자에게 한도를 확인해 주세요. (HTTP 409)',
+  grant_conflict: '계정 권한이 바뀌었어요. 최신 목록을 확인한 뒤 다시 선택해 주세요. (HTTP 409)',
+  last_owner: '마지막 소유자의 권한은 낮추거나 회수할 수 없어요. 다른 소유자를 먼저 추가해 주세요. (HTTP 409)',
   http: '요청이 실패했어요.',
   network: 'API 서버에 연결하지 못했어요.',
   contract: 'API 응답이 계약과 맞지 않아요.',
@@ -221,6 +226,21 @@ export class ApiClient {
     return result;
   }
 
+  async changeGrant(projectId: string, input: GrantChange, options: { signal?: AbortSignal } = {}): Promise<GrantMutationResult> {
+    let change: GrantChange;
+    try { change = parseGrantChangeInput(input); }
+    catch { throw new ApiError('invalid_request', '발급자·계정 식별자와 권한을 확인해 주세요.'); }
+    if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId)) throw new ApiError('invalid_request', '프로젝트 ID를 확인해 주세요.');
+    const { issuer, subject, role, expectedRole } = change;
+    const body = JSON.stringify(role === null ? { issuer, subject, expectedRole } : change);
+    if (new TextEncoder().encode(body).byteLength > 16384) throw new ApiError('invalid_request', '권한 요청은 16KiB 이하여야 해요.');
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/grants`, {}, options.signal,
+      body, role === null ? 'DELETE' : 'PUT'), parseGrantMutationResult);
+    if (result.projectId !== projectId || result.issuer !== issuer || result.subject !== subject || result.role !== role)
+      throw new ApiError('contract', '권한 변경 응답이 요청한 계정·프로젝트·역할과 달라요.');
+    return result;
+  }
+
   async listSchemas(projectId: string, options: { limit?: number; beforeVersion?: number | null; signal?: AbortSignal } = {}): Promise<SchemaPage> {
     const limit = clampLimit(options.limit), beforeVersion = options.beforeVersion == null ? undefined : this.#version(options.beforeVersion);
     const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas`, { limit, beforeVersion }, options.signal), parseSchemaPage);
@@ -358,7 +378,7 @@ export class ApiClient {
     params: Record<string, string | number | undefined> = {},
     signal?: AbortSignal,
     body?: string,
-    method?: 'POST' | 'PUT',
+    method?: 'POST' | 'PUT' | 'DELETE',
   ): Promise<unknown> {
     if (this.#destroyed) throw new ApiError('network', KIND_MESSAGE.network);
     const query = new URLSearchParams();
@@ -442,7 +462,7 @@ export class ApiClient {
     } catch {
       // Body is not JSON; keep the fixed status-based message.
     }
-    const kind = response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached'].includes(code)
+    const kind = response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'last_owner'].includes(code)
       ? code as ApiErrorKind : STATUS_KIND[response.status] ?? 'http';
     const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
     return new ApiError(kind, message, { status: response.status, code, requestId });
