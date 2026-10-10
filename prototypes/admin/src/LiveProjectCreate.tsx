@@ -10,7 +10,7 @@ const fields: { key: keyof CreationDraft; label: string; help: string; placehold
   { key: 'name', label: '프로젝트 이름', help: '관리자 목록에 표시할 이름, 1~80자.', placeholder: '예: 내 서비스', max: 80 },
   { key: 'id', label: '공개 프로젝트 ID', help: '소문자로 시작하며 소문자·숫자·하이픈을 사용해요. 생성 후에는 바꿀 수 없어요.', placeholder: 'my-service', max: 48 },
   { key: 'timeZone', label: '집계 시간대', help: 'IANA 시간대 이름이에요. 생성 후에는 바꿀 수 없어요.', placeholder: 'Asia/Seoul', max: 64 },
-  { key: 'origins', label: '허용 출처', help: '이벤트를 보낼 서비스의 출처를 한 줄에 하나씩 넣으세요. 경로는 제외해요. HTTP는 서버가 허용한 로컬 개발에서만 사용할 수 있어요.', placeholder: 'https://my-service.com' },
+  { key: 'origins', label: '브라우저 허용 출처 (선택)', help: '한 줄에 출처 하나씩, 최대 16개. 서버 전용이면 비워 두세요. 빈 목록은 브라우저 수집을 차단해요. 경로는 제외하고 HTTP는 허용된 로컬 개발에만 사용해요.', placeholder: 'https://my-service.com' },
   { key: 'requestsPerMinute', label: '분당 요청 한도', help: '1~600 사이 정수. 기본 입력값은 120이에요.' },
   { key: 'newReceiptsPerUtcDay', label: 'UTC 하루 신규 수신 한도', help: '1~1,000,000 사이 정수. 기본 입력값은 100,000이에요.' },
 ];

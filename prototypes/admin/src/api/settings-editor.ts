@@ -19,7 +19,7 @@ function buildUpdate(draft: SettingsDraft, snapshot: ProjectSettings): { update:
   const name = draft.name.trim();
   if (!name || name.length > 80) errors.name = '프로젝트 이름을 1~80자로 입력해 주세요.';
   const origins = draft.origins.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
-  if (origins.length < 1 || origins.length > 16 || new Set(origins).size !== origins.length) errors.origins = '허용 출처를 중복 없이 1~16개 입력해 주세요.';
+  if (origins.length > 16 || new Set(origins).size !== origins.length) errors.origins = '허용 출처를 중복 없이 최대 16개 입력해 주세요.';
   for (const origin of origins) {
     try {
       const url = new URL(origin);

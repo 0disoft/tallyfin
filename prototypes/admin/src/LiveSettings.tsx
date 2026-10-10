@@ -211,7 +211,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
       <div className="settings-field">
         <label className="field-label" htmlFor={FIELD_ID.origins}>허용 출처</label>
         <textarea id={FIELD_ID.origins} ref={originsRef} className="text-input settings-textarea" rows={5} spellCheck={false} value={activeDraft.origins} disabled={inputsLocked} onChange={event => edit('origins', event.target.value)} aria-invalid={errors?.origins ? true : undefined} aria-describedby={describedBy('origins', errors, true)} />
-        <p id={`${FIELD_ID.origins}-help`} className="field-help">한 줄에 출처 하나씩, 최대 16개.</p>
+        <p id={`${FIELD_ID.origins}-help`} className="field-help">브라우저 출처를 한 줄에 하나씩, 최대 16개. 비워 두면 브라우저 수집이 차단돼요. 서버 발행에는 이 목록을 사용하지 않아요.</p>
         {errors?.origins && <p id={`${FIELD_ID.origins}-error`} className="form-error" role="alert">{errors.origins}</p>}
       </div>
 

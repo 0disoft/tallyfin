@@ -15,7 +15,7 @@ export function creationInput(draft: CreationDraft): { input: ProjectCreation; e
   try { if (!/^[A-Za-z][A-Za-z0-9_+./-]{0,63}$/.test(timeZone)) throw Error(); new Intl.DateTimeFormat('en', { timeZone }); }
   catch { errors.timeZone = 'Asia/Seoul, UTC처럼 유효한 IANA 시간대를 입력해 주세요.'; }
   const allowedOrigins = draft.origins.split(/\r?\n/).map(v => v.trim()).filter(Boolean).sort();
-  if (!allowedOrigins.length || allowedOrigins.length > 16 || new Set(allowedOrigins).size !== allowedOrigins.length) errors.origins = '출처를 중복 없이 1~16개 입력해 주세요.';
+  if (allowedOrigins.length > 16 || new Set(allowedOrigins).size !== allowedOrigins.length) errors.origins = '출처를 중복 없이 최대 16개 입력해 주세요.';
   for (const origin of allowedOrigins) {
     try {
       const url = new URL(origin);

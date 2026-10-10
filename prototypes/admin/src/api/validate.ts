@@ -111,7 +111,7 @@ export function parseProjectSettings(value: unknown): ProjectSettings {
       fail('response.allowedOrigins', 'invalid origin');
     return origin;
   });
-  if (allowedOrigins.length < 1 || allowedOrigins.length > 16 || new Set(allowedOrigins).size !== allowedOrigins.length)
+  if (allowedOrigins.length > 16 || new Set(allowedOrigins).size !== allowedOrigins.length)
     fail('response.allowedOrigins', 'invalid origin count');
   const hash = expectString(record.settingsHash, 'response.settingsHash');
   if (!/^[0-9a-f]{64}$/.test(hash)) fail('response.settingsHash', 'invalid hash');

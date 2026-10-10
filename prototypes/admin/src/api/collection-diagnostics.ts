@@ -2,7 +2,7 @@ import type { ApiClient } from './client.ts';
 import { ApiError } from './client.ts';
 import { todayInZone } from './dates.ts';
 import { assertMeta } from './period-comparison.ts';
-import type { ProjectSettings, Registry, SummaryResponse } from './types.ts';
+import type { EventSource, ProjectSettings, Registry, SummaryResponse } from './types.ts';
 import { rejectionRange, type RejectionResponse } from './rejection-diagnostics.ts';
 
 export type DiagnosticRead<T> = { value: T; error?: never } | { value?: never; error: ApiError };
@@ -31,12 +31,12 @@ function timestamp(value: string): number {
   return result;
 }
 
-export function validateReceipt(summary: SummaryResponse, schema: Registry, date: string): SummaryResponse {
-  assertMeta(summary.meta, schema, { from: date, to: date });
+export function validateReceipt(summary: SummaryResponse, schema: Registry, date: string, source: EventSource = 'browser'): SummaryResponse {
+  assertMeta(summary.meta, schema, { from: date, to: date }, source);
   timestamp(summary.meta.generatedAt);
   // generatedAt is captured before the DB read; a concurrent receipt may be later.
   if (summary.meta.latestReceivedAt !== null) timestamp(summary.meta.latestReceivedAt);
-  const expected = schema.events.filter(event => event.source === 'browser').map(event => event.name);
+  const expected = schema.events.filter(event => event.source === source).map(event => event.name);
   if (summary.events.length !== expected.length || new Set(summary.events.map(event => event.name)).size !== expected.length ||
     summary.events.some(event => !expected.includes(event.name) || !Number.isSafeInteger(event.count) || event.count < 0) ||
     !Number.isSafeInteger(summary.totalEvents) || summary.totalEvents < 0 ||
@@ -47,7 +47,7 @@ export function validateReceipt(summary: SummaryResponse, schema: Registry, date
 
 /** Independent explicit reads; no polling, probe event or rejection inference. */
 export async function loadCollectionDiagnostics(client: ApiClient, projectId: string, version: number | null,
-  signal: AbortSignal, now = new Date()): Promise<CollectionDiagnostics> {
+  signal: AbortSignal, now = new Date(), selectedSource?: EventSource): Promise<CollectionDiagnostics> {
   const [settings, schema, rejections] = await Promise.all([
     read(() => client.getSettings(projectId, { signal })),
     read(() => version === null ? Promise.reject(new ApiError('invalid_request', '유효한 스키마 버전을 입력해 주세요.'))
@@ -60,7 +60,9 @@ export async function loadCollectionDiagnostics(client: ApiClient, projectId: st
     const definition = schema.value;
     receipt = await read(async () => {
       const date = todayInZone(definition.project.timeZone, now);
-      return validateReceipt(await client.getSummary(projectId, { schemaVersion: definition.schemaVersion, from: date, to: date, signal }), definition, date);
+      const source = selectedSource ?? (definition.events.some(event => event.source === 'browser') ? 'browser' : 'server');
+      return validateReceipt(await client.getSummary(projectId, { schemaVersion: definition.schemaVersion, from: date, to: date, signal,
+        ...(source === 'browser' ? {} : { source }) }), definition, date, source);
     });
   }
   if (signal.aborted) throw new DOMException('Aborted', 'AbortError');

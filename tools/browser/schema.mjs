@@ -4,6 +4,7 @@ import { validateRegistry } from '../../packages/core/src/index.ts';
 export function projectBrowserSchema(input) {
   const registry = validateRegistry(input);
   if (registry.project.status !== 'active' || registry.schemaStatus !== 'active') throw Error('inactive browser schema');
+  if (!registry.events.some(event => event.source === 'browser')) throw Error('Registered browser event definitions are required.');
   const rule = definition => definition.type === 'boolean' ? ['boolean', definition.required] : definition.type === 'enum'
     ? ['enum', definition.required, definition.values] : ['integer', definition.required, definition.minimum, definition.maximum];
   return {
