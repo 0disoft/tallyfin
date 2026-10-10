@@ -1,5 +1,22 @@
 # 검증
 
+## 관리자 퍼널 조회·CSV 계층 — 2026-10-11
+
+관리자 `ApiClient.getFunnelDaily`에 같은 출처·메모리 bearer·취소·no-store 전송을 연결했다.
+닫힌 응답의 날짜·정의·단계 건수·분모·합계·잠정값을 검증하고 선택한 레지스트리와
+다르면 표시하지 않는다. `FunnelReport`는 새 요청·오류에서 이전 데이터를 지우고 취소와
+세대 번호로 늦은 결과를 폐기한다. CSV는 검증한 요약/일별 전체 단계, 각 단계 출처,
+미지의 비율 빈 셀과 잠정값 여부를 담으며 기존 UTF-8 BOM·수식 방어 직렬화를 재사용한다.
+
+`prototypes/admin`의 `node --test src/api/funnel-analysis.test.mjs` 7/7와 `npm run
+typecheck`를 실행해 통과했다. 날짜/합계/비율 불일치·0 분모·DST 잠정값 경계·선택 정의
+불일치·403·재시도·취소·늦은 응답·dispose·CSV 수식 방어를 확인했다. 화면 연결 전 조회
+계층 검증이며 실제 브라우저 화면·다운로드는 다음 UI 작업에서 확인한다.
+
+OpenAPI·DBML·마이그레이션·SDK·의존성·CI 러너·위생 정책은 바꾸지 않았다. API·DB를
+변경하지 않아 백엔드 검증은 반복하지 않았고 운영 인증·원격 DB·배포·Sembom 연동은
+환경 연결 전이므로 실행하지 않았다. 푸시는 하지 않았다.
+
 ## 작업 퍼널 일별 조회 API — 2026-10-11
 
 `GET /v1/projects/{projectId}/funnels/{funnelId}/daily`와 코어 응답 타입, D1 조회·응답

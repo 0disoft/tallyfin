@@ -34,6 +34,7 @@ import { parseRejectionResponse, type RejectionResponse } from './rejection-diag
 import { parseProjectGrantPage, parseGrantChangeInput, parseGrantMutationResult } from './grants-contract.ts';
 import type { GrantChange, GrantMutationResult } from './grants-contract.ts';
 import { changeCursor, parseAdminChangePage, type AdminChangePage } from './admin-changes-contract.ts';
+import { parseFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -337,6 +338,16 @@ export class ApiClient {
     if ((response.groupBy ?? null) !== (options.groupBy ?? null)) {
       throw new ApiError('contract', '응답 groupBy가 요청과 달라요.');
     }
+    return response;
+  }
+
+  async getFunnelDaily(projectId: string, funnelId: string,
+    options: { schemaVersion: number; from: string; to: string; signal?: AbortSignal }): Promise<FunnelResponse> {
+    const version = this.#version(options.schemaVersion);
+    const response = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/funnels/${encodeURIComponent(funnelId)}/daily`,
+      { schemaVersion: version, from: options.from, to: options.to }, options.signal), parseFunnelResponse);
+    if (response.meta.projectId !== projectId || response.meta.schemaVersion !== version || response.funnelId !== funnelId ||
+      response.meta.from !== options.from || response.meta.to !== options.to) throw new ApiError('contract', '퍼널 응답의 프로젝트·버전·기간이 요청과 달라요.');
     return response;
   }
 
