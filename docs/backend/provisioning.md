@@ -10,6 +10,8 @@ npm run provision -- init --local --state-dir .tmp/provision-db
 npm run provision -- init --local --state-dir .tmp/provision-db --apply
 npm run provision -- register --local --state-dir .tmp/provision-db --file api/examples/registry.json
 npm run provision -- register --local --state-dir .tmp/provision-db --file api/examples/registry.json --apply
+npm run provision -- publisher-grant --local --state-dir .tmp/provision-db --file .tmp/publisher-grant.json
+npm run provision -- publisher-revoke --local --state-dir .tmp/provision-db --file .tmp/publisher-revoke.json --apply
 ```
 
 기본은 미리보기다. `--apply`를 줘야 실제로 쓴다.
@@ -23,7 +25,7 @@ npm run provision -- register --local --state-dir .tmp/provision-db --file api/e
 
 ## init
 
-`init --apply`가 저장소 마이그레이션 `0001_initial.sql`, `0002_retention_cleanup.sql`, `0003_project_creation.sql` 중 테이블이 아직 없는 마이그레이션을 로컬 DB에 적용한다. 적용할 마이그레이션이 없으면 변경하지 않는다. 한 마이그레이션의 테이블이 일부만 있는 상태면 `partial_database`로 멈춘다.
+`init --apply`가 저장소 마이그레이션 `0001_initial.sql`부터 `0006_server_collection.sql`까지 중 아직 적용되지 않은 것을 로컬 DB에 적용한다. 0006은 재생성 테이블 대신 `project_publishers` 존재로 적용 여부를 판단한다. 적용할 마이그레이션이 없으면 변경하지 않는다. 한 마이그레이션의 테이블이나 열이 일부만 있는 상태면 `partial_database`로 멈춘다.
 
 ## register
 
@@ -46,7 +48,33 @@ issuer·subject만 받는다. 명령의 --local·--file·미리보기·--expect-
 생성 권한·생성 개수를 적용 직전에 비교하며, 권한 회수는 기존 프로젝트 grant와
 생성 이력을 지우지 않는다. 한도를 사용 개수 이하로 낮추면 추가 생성만 막힌다.
 
-모든 수정 SQL은 하나의 트랜잭션 D1 배치로 돈다. 충돌하면 롤백한다. 적용 전에 ingest 리비전과 스키마·grant 스냅샷을 CAS로 검사한다. no-op 계획도 스냅샷을 다시 확인한다. 계획에는 issuer/subject 대신 해시된 principal이 나온다. planHash는 입력과 DB 스냅샷을 비교한 값이다. 출력 해시는 비교용이고 암호화가 아니다. 수집이 동시에 돌면 계획이 무효가 될 수 있으니 미리보기를 다시 뜬다.
+### publisher-grant / publisher-revoke
+
+서버 발행 권한(`project_publishers`)은 관리자 권한과 별개로 운영자가 부여·회수한다.
+JSON은 `projectId`, `issuer`, `subject`만 받고 role이나 프로젝트 한도는 받지 않는다.
+issuer·subject 형식은 코어 `validGrantIdentity`로 검사한다. 프로젝트가 DB에 없으면
+미리보기 단계에서 `project_not_found`로 멈춘다.
+
+- 이 명령은 `project_publishers` 행만 넣고 지운다. 관리자 `project_grants`는 건드리지
+  않고 마지막 owner 검사도 하지 않는다. 자격증명·토큰 발급이나 관리자 역할 부여는 없다.
+- 적용 직전에 프로젝트 생성 시각(`created_at`)과 현재 발행 권한 상태를 CAS로 비교한다.
+  이미 원하는 상태면 no-op(변경 0)이고 기존 행의 생성 시각을 다시 쓰지 않는다. 프로젝트나
+  권한이 그 사이 바뀌면 `apply_conflict`이고 아무것도 쓰지 않는다.
+- 적용 SQL 자체가 실패하면 `database_unavailable`로 끝난다. 이때는 반영 여부가 확인되지
+  않은 상태이므로 롤백됐다고 단정하지 말고 DB를 확인한 뒤 미리보기를 다시 뜬다.
+- `--local`·`--file`(64KiB)·미리보기·`--expect-plan`·`--apply` 방식은 기존 명령과 같다.
+- 계획 출력은 `operation`, `projectId`, `principalHash`(canonical `[issuer, subject]`의
+  SHA-256), `granted`, `changes`(`target: publisher`, `field: granted`, before/after),
+  `planHash`다. 원본 issuer·subject는 출력에 넣지 않는다. 출력 해시는 비교용이고 암호화가
+  아니다. 계획은 도구 인스턴스 내부 WeakMap에만 두고 적용 시 지우므로 같은 프로세스에서
+  만든 계획만 적용된다.
+- 발행 권한 변경은 관리자 변경 이력(`admin_changes`)에 기록하지 않는다. 이 이력의 action
+  형식은 프로젝트·설정·스키마·관리자 grant만 다룬다.
+- 0006 마이그레이션이 `project_publishers`를 이미 만들므로 스키마·마이그레이션 변경은 없다.
+
+### register / grant / revoke의 동시성
+
+이 세 명령의 수정 SQL은 하나의 트랜잭션 D1 배치로 돈다. 충돌하면 롤백한다. 적용 전에 ingest 리비전과 스키마·grant 스냅샷을 CAS로 검사한다. no-op 계획도 스냅샷을 다시 확인한다. 계획에는 issuer/subject 대신 해시된 principal이 나온다. planHash는 입력과 DB 스냅샷을 비교한 값이다. 출력 해시는 비교용이고 암호화가 아니다. 수집이 동시에 돌면 계획이 무효가 될 수 있으니 미리보기를 다시 뜬다. 발행자 CLI의 동시성·실패 처리는 위 별도 절을 따른다.
 
 ## 롤백
 
@@ -55,10 +83,13 @@ issuer·subject만 받는다. 명령의 --local·--file·미리보기·--expect-
 ## 오류 코드
 
 - `invalid_input`: JSON 형식이나 필드가 규칙에 안 맞음
+- `project_not_found`: 발행 권한을 부여·회수할 프로젝트가 DB에 없음
 - `immutable_timezone`: 시간대를 바꾸려 함
 - `immutable_schema`: 발행된 스키마 정의를 바꾸려 함
 - `invalid_version`: 새 버전이 기존 최대 버전 이하
 - `last_owner`: 마지막 owner를 빼거나 강등하려 함
-- `apply_conflict`: 상태 충돌 또는 DB 쓰기 실패. 변경 배치는 롤백됨
+- `apply_conflict`: 스냅샷이 미리보기와 달라 적용을 취소함. `register`·`grant`·`revoke`는
+  배치 쓰기 실패도 이 코드로 롤백하지만, 발행자 CLI는 스냅샷 충돌에만 쓴다.
 - `plan_changed`: 스냅샷이 미리보기와 달라짐
-- `database_unavailable`: 로컬 D1을 열거나 등록 상태를 읽지 못함. 초기화·경로 확인 필요
+- `database_unavailable`: 로컬 D1을 열거나 상태를 읽지 못함. 적용 SQL 실패도 여기로 오며,
+  그때는 반영 여부가 확인되지 않았다. 초기화·경로·DB 상태를 확인한다.

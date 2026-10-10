@@ -2,8 +2,9 @@
 
 상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획, 저장·발행 권한, 전용 발행
 endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현했고 좁은 범위 검증을
-통과했다. 발행자 OIDC 제공자 값과 발행자 권한 관리 CLI·서버 SDK·서버 출처 조회 화면은
-아직 없다. 이 문서는 확정한 것과 아직 계획인 것을 나눠 적는다.
+통과했다. `project_publishers` 부여·회수 CLI까지 로컬 구현했다. 실제 발행자 OIDC 제공자
+설정과 서버 SDK·서버 출처 조회 화면은 아직 없다. 이 문서는 확정한 것과 아직 계획인 것을
+나눠 적는다.
 
 형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
 동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다. 브라우저 수집 경로는
@@ -183,23 +184,40 @@ OIDC 제공자 값과 원격 등록·배포는 아직 넣지 않았다.
 `0006`은 한 batch로 적용한다. 저장 어댑터 테스트는 0006의 마지막 문장이 실패하도록
 강제했을 때 기존 행·제약·marker가 롤백되는지도 확인한다.
 
+## 발행자 권한 CLI
+
+`project_publishers` 부여·회수는 오프라인 provisioning CLI의 `publisher-grant`·
+`publisher-revoke`로 로컬 구현했다. 닫힌 JSON `{projectId, issuer, subject}`만 받고
+issuer·subject는 코어 `validGrantIdentity`로 검사한다. role이나 프로젝트 한도는 없다.
+프로젝트가 없으면 미리보기에서 `project_not_found`로 멈춘다. 기본은 미리보기이고
+`--apply`·`--expect-plan`으로 검토한 계획만 적용한다. 계획 출력은 원본 식별값 대신
+`principalHash`를 넣고, 프로젝트 생성 시각과 현재 권한 상태를 CAS로 비교한다.
+
+이 명령은 `project_publishers`만 바꾸고 관리자 `project_grants`·마지막 owner 검사·
+자격증명 발급은 건드리지 않는다. 발행 권한 변경은 관리자 변경 이력(`admin_changes`)에
+남지 않는다. 이 이력의 action 형식이 프로젝트·설정·스키마·관리자 grant만 다루기 때문이다.
+0006이 `project_publishers`를 이미 만들어 스키마·마이그레이션 변경은 없다. 세부 형식은
+[등록·권한 관리 CLI](./provisioning.md)에 있다.
+
 ## 아직 정하지 않은 것
 
 - 브라우저 시작과 서버 완료를 연결하는 전환율. 지금은 server 이벤트 건수만 다룰 수
   있고 browser/server 시도 연결은 별도 설계다.
 - 발행자 OIDC 운영 설정과 실제 audience 값·발급 절차. 공개 프로젝트 ID와 허용 오리진을
-  발행자 인증 수단으로 재사용하지 않는다는 것만 정했다.
+  발행자 인증 수단으로 재사용하지 않는다는 것만 정했다. 운영 제공자와 audience 값 확정은
+  사용자가 운영 인증을 정한 뒤로 미룬다.
 - 출처별로 분당·일일 한도를 따로 둘지. 지금은 프로젝트 한 값을 공유한다.
 - server 출처 조회의 API·화면 형태. 현재 조회 계약은 `source`가 browser 고정이다.
 
 ## 다음 슬라이스
 
-1. 발행자 OIDC 운영 설정값을 채워 server 경로를 켜고, `project_publishers` 권한을
-   부여·회수하는 CLI 또는 owner API를 만든다. 관리자 grant와 섞지 않는다.
-2. dependency-free server SDK.
-3. 서버 출처 일별 조회 API와 화면.
-4. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
+1. dependency-free server SDK.
+2. 서버 출처 일별 조회 API와 화면.
+3. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
    수집·조회의 빈 정의 처리를 함께 정한다.
+
+발행자 OIDC 운영 설정값과 원격 등록·배포는 별도의 운영 후속이다. 사용자가 운영 인증
+방식을 정한 뒤에 채워 server 경로를 켠다.
 
 관련: [이벤트·집계 계약](./event-contract.md), [수집기 구현](./collector.md),
 [관리자 조회·설정 경계](./administrator.md), [적용 메모](../../db/migrations/README.md),

@@ -11,12 +11,13 @@
   저장 어댑터의 `publisherAccess`·`commitServer`, 코어 `ServerPrincipal`·
   `ServerCollectionStore`, 전용 `POST .../server-batches`와 `PublisherAccess` 발행자
   인증 배선까지다. 발행자 회수 경쟁은 쓰기 batch의 권한 재검사로 롤백한다. 발행자
-  OIDC 운영 설정값과 발행자 권한 CLI·서버 SDK·서버 출처 조회 화면은 아직 없다.
+  권한 부여·회수 CLI(`publisher-grant`·`publisher-revoke`)도 로컬 구현 완료다. 발행자
+  OIDC 운영 설정값과 서버 SDK·서버 출처 조회 화면은 아직 없다.
   [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
-- 다음 구현은 발행자 권한 관리와 서버 SDK다. 발행자 OIDC 운영 설정값을 채워 server
-  경로를 켜고 `project_publishers` 부여·회수 수단을 만든 뒤 dependency-free server
-  SDK와 서버 일별 조회·UI를 잇는다. 브라우저 공개 ID나 Origin을 서버의 인증 수단으로
-  재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도 설계한다.
+- 다음 구현은 dependency-free server SDK와 서버 출처 일별 조회·UI, server 정의만 있는
+  스키마 허용이다. 발행자 OIDC 운영 설정값은 사용자가 운영 인증을 정한 뒤 채운다.
+  브라우저 공개 ID나 Origin을 서버의 인증 수단으로 재사용하지 않는다. 브라우저/서버 간
+  작업 연결은 별도 설계한다.
 - 이후 다단계 퍼널의 연결·보존 기준을 설계하고 조회와 화면을 작은 단위로 구현한다.
 - 실제 인증 제공자·원격 DB·정리 작업·복구·부하 검증을 마친 뒤 서비스 파일럿을 진행한다.
 - Sembom과 다른 종류의 서비스 한 곳에서 범용성을 확인하고 라이선스·독립 설치·공개
@@ -315,6 +316,17 @@ admission을 browser와 공유한다. 발행자 OIDC 검증기는 `exclusiveAudi
 하나만 통과시키고 관리자 검증기는 기존 `includes` 정책을 유지하며,
 `createOidcWorker`는 두 audience가 같으면 거부한다. 배포 설정에서 발행자 인증을 켜지
 않으면 server 경로는 닫혀 있다. 발행자 OIDC 운영 설정값과 발행자 권한 CLI, 서버 SDK,
-서버 출처 조회 화면은 아직 없다. server 정의만 있는 레지스트리는 여전히 허용하지
+서버 출처 조회 화면은 그 단계에 없었다. server 정의만 있는 레지스트리는 여전히 허용하지
 않는다. 원격 DB 적용·배포·실제 제공자 인증은 없다.
+검증은 [검증 기록](../../VALIDATION.md)에 둔다.
+2026-10-11 발행자 권한 CLI: `publisher-grant`·`publisher-revoke`를 로컬 구현했다.
+닫힌 JSON `{projectId, issuer, subject}`만 받고 issuer·subject는 코어
+`validGrantIdentity`로 검사하며 프로젝트가 없으면 미리보기에서 `project_not_found`로
+멈춘다. 기본은 미리보기이고 `--apply`·`--expect-plan`으로 검토한 계획만 적용한다. 계획은
+원본 식별값 대신 `principalHash`를 넣고 프로젝트 생성 시각과 현재 권한 상태를 CAS로
+비교하며, 이미 원하는 상태면 기존 행의 생성 시각을 바꾸지 않고 no-op로 끝낸다. 관리자
+`project_grants`·마지막 owner 검사·자격증명 발급은 건드리지 않는다. 스냅샷이 달라지면
+`apply_conflict`이고, 적용 SQL 자체가 실패하면 `database_unavailable`로 남아 반영 여부가
+확인되지 않는다. 발행 권한 변경은 관리자 변경 이력(`admin_changes`)의 action 형식에 없어
+기록하지 않는다. 0006이 `project_publishers`를 이미 만들어 스키마·마이그레이션 변경은 없다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
