@@ -1,6 +1,7 @@
 import { canonicalJson, CollectionError, integer, parseSchemaPublication, PROJECT_ID, sha256 } from '@tallyfin/core';
 import type { AdminPrincipal, PublishedSchema, SchemaPage, SchemaPublication } from '@tallyfin/core';
 import type { SchemaRow, SqlDatabase } from './sql.ts';
+import { adminChangeStatement } from './admin-changes.ts';
 
 const grant = (roles: string) => `EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = p.id AND g.issuer = ? AND g.subject = ? AND g.role IN (${roles}))`;
 interface PublishedRow extends SchemaRow { published_at: number }
@@ -46,15 +47,16 @@ export async function publishSchema(db: SqlDatabase, principal: AdminPrincipal, 
       ON CONFLICT(project_id, version) DO NOTHING RETURNING *`)
       .bind(version, definitions, now, id, principal.issuer, principal.subject, parsed.expectedLatestVersion, version),
     db.prepare('UPDATE projects SET ingest_revision = ingest_revision + 1 WHERE id = ? AND changes() = 1').bind(id),
+    adminChangeStatement(db, id, principal, { action: 'schema.published', schemaVersion: version }, now),
     db.prepare(`SELECT p.id FROM projects p WHERE p.id = ? AND ${access}`).bind(id, principal.issuer, principal.subject),
     db.prepare(`SELECT s.* FROM project_schemas s JOIN projects p ON p.id = s.project_id
       WHERE p.id = ? AND s.version = ? AND ${access}`).bind(id, version, principal.issuer, principal.subject),
   ]);
-  if (result.length !== 4 || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
-  if (!integer(result[0]!.meta.changes, 0, 1) || result[1]!.meta.changes !== result[0]!.meta.changes)
+  if (result.length !== 5 || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
+  if (!integer(result[0]!.meta.changes, 0, 1) || result[1]!.meta.changes !== result[0]!.meta.changes || result[2]!.meta.changes !== result[0]!.meta.changes)
     throw new CollectionError('storage_unavailable', 503);
-  if (!result[2]!.results[0]) throw new CollectionError('forbidden', 403);
-  const row = result[3]!.results[0] as PublishedRow | undefined;
+  if (!result[3]!.results[0]) throw new CollectionError('forbidden', 403);
+  const row = result[4]!.results[0] as PublishedRow | undefined;
   if (!row) throw new CollectionError('schema_conflict', 409);
   let persisted: string;
   try { persisted = canonicalJson(JSON.parse(row.definitions_json)); } catch { throw new CollectionError('storage_unavailable', 503); }

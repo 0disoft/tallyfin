@@ -11,6 +11,7 @@ const input = { id: 'api-created', name: 'API created', timeZone: 'Asia/Seoul', 
 before(async () => { f = await setup(); });
 after(async () => { await f?.mf.dispose(); });
 beforeEach(async () => {
+  await f.db.prepare('DELETE FROM admin_changes').run();
   for (const table of ['project_grants', 'project_schemas', 'project_creations']) await f.db.prepare(`DELETE FROM ${table}`).run();
   await f.db.prepare("DELETE FROM projects WHERE id != 'sembom'").run();
   await f.db.prepare('DELETE FROM project_creators').run();

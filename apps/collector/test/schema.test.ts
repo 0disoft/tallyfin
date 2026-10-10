@@ -12,7 +12,7 @@ const draft = () => structuredClone({ events: registry.events, workflows: regist
 before(async () => { fixture = await setup(); });
 after(async () => { await fixture?.mf.dispose(); });
 beforeEach(async () => {
-  await fixture.db.batch(['project_grants', 'project_schemas', 'projects'].map(table => fixture.db.prepare(`DELETE FROM ${table}`)));
+  await fixture.db.batch(['admin_changes', 'project_grants', 'project_schemas', 'projects'].map(table => fixture.db.prepare(`DELETE FROM ${table}`)));
   await seed(fixture.db);
   await fixture.db.prepare('INSERT INTO project_grants (project_id,issuer,subject,role,created_at) VALUES (?,?,?,?,?)')
     .bind('sembom', principal.issuer, principal.subject, 'owner', now).run();

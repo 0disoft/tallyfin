@@ -1,5 +1,6 @@
 import { canonicalJson, sha256 } from '@tallyfin/core';
-import type { SqlDatabase, SqlStatement } from '@tallyfin/storage-d1';
+import { adminChangeStatement, type SqlDatabase, type SqlStatement } from '@tallyfin/storage-d1';
+import type { AdminChangeField, GrantRole } from '@tallyfin/core';
 import type { ProjectRow, SchemaRow, SqlValue } from '../../packages/storage-d1/src/sql.ts';
 import { operation, ProvisionError } from './input.ts';
 import type { Operation } from './input.ts';
@@ -128,6 +129,26 @@ export class Provisioner {
     } else if (op.kind === 'grant') statements.push(this.#db.prepare(`INSERT INTO project_grants (project_id, issuer, subject, role, created_at) VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(project_id, issuer, subject) DO UPDATE SET role = excluded.role`).bind(id, op.issuer, op.subject, op.role, now));
     else statements.push(this.#db.prepare('DELETE FROM project_grants WHERE project_id = ? AND issuer = ? AND subject = ?').bind(id, op.issuer, op.subject));
+    // No authenticated human identity exists in this offline tool. Never attribute it to the grant target.
+    if (op.kind === 'register') {
+      const r = op.registry;
+      if (!p) statements.push(adminChangeStatement(this.#db, id, null, { action: 'project.created' }, now, 'always'));
+      else {
+        const values: [AdminChangeField, unknown, unknown][] = [
+          ['name', p.name, r.project.name], ['status', p.status, r.project.status],
+          ['allowedOrigins', JSON.parse(p.allowed_origins_json).sort(), r.allowedOrigins],
+          ['requestsPerMinute', p.requests_per_minute, r.limits.requestsPerMinute],
+          ['newReceiptsPerUtcDay', p.new_receipts_per_utc_day, r.limits.newReceiptsPerUtcDay],
+        ];
+        const fields = values.filter(([, before, after]) => canonicalJson(before) !== canonicalJson(after)).map(([field]) => field);
+        if (fields.length) statements.push(adminChangeStatement(this.#db, id, null, { action: 'project.settings_changed', fields }, now, 'always'));
+      }
+      if (!snapshot.schema || snapshot.schema.status !== r.schemaStatus) statements.push(adminChangeStatement(this.#db, id, null,
+        { action: snapshot.schema ? 'schema.status_changed' : 'schema.published', schemaVersion: r.schemaVersion }, now, 'always'));
+    } else statements.push(adminChangeStatement(this.#db, id, null, {
+      action: op.role === null ? 'grant.revoked' : snapshot.role === null ? 'grant.created' : 'grant.role_changed',
+      target: { issuer: op.issuer, subject: op.subject }, beforeRole: snapshot.role as GrantRole | null, afterRole: op.role,
+    }, now, 'always'));
     try {
       const result = await this.#db.batch(statements);
       if (result.length !== statements.length || result.some(row => !row.success) || result[0]?.meta.changes !== 1) throw Error();

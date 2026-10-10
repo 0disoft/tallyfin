@@ -15,7 +15,7 @@ const principal: AdminPrincipal = { issuer: 'https://identity.example.invalid', 
 before(async () => { fixture = await setup(); });
 after(async () => { await fixture?.mf.dispose(); });
 beforeEach(async () => {
-  for (const table of ['workflow_daily_counts', 'event_daily_counts', 'ingest_daily_usage', 'ingest_minute_usage', 'workflow_attempts', 'event_receipts', 'project_grants', 'project_schemas', 'projects'])
+  for (const table of ['workflow_daily_counts', 'event_daily_counts', 'ingest_daily_usage', 'ingest_minute_usage', 'workflow_attempts', 'event_receipts', 'admin_changes', 'project_grants', 'project_schemas', 'projects'])
     await fixture.db.prepare(`DELETE FROM ${table}`).run();
   await seed(fixture.db);
   await grant('sembom');

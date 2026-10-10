@@ -102,9 +102,11 @@ check('response totals and denominators agree', () => {
 const database = new Parser().parse(read('db/schema.dbml'),'dbml');
 check('DBML parses with project-scoped storage and no raw visitor tables', () => {
   const tables=database.schemas.flatMap(schema=>schema.tables);
-  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_creators','project_creations','project_schemas','event_receipts','workflow_attempts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
+  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_creators','project_creations','project_schemas','admin_changes','event_receipts','workflow_attempts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
   for (const table of tables.filter(t=>!['projects','project_creators','retention_cleanup_state'].includes(t.name))) assert.ok(table.fields.some(f=>f.name==='project_id'));
   assert.deepEqual(tables.find(t=>t.name==='retention_cleanup_state').fields.map(f=>f.name).sort(),['id','last_project_id','revision']);
+  assert.deepEqual(tables.find(t=>t.name==='admin_changes').fields.map(f=>f.name).sort(),
+    ['id','project_id','occurred_at','actor_kind','actor_issuer','actor_subject','action','fields_json','schema_version','target_issuer','target_subject','before_role','after_role'].sort());
 });
 check('API auth declarations remain explicit', () => {
   assert.deepEqual(spec.paths['/v1/projects/{projectId}/batches'].post.security,[]);

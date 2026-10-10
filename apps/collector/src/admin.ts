@@ -94,7 +94,7 @@ export async function administrator(request: Request, access: AdministratorAcces
     let value: unknown;
     const body = await readBody(request);
     try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
-    return access.store.updateSettings(principal, settings[1]!, parseSettingsUpdate(value));
+    return access.store.updateSettings(principal, settings[1]!, parseSettingsUpdate(value), now);
   }
   if (url.pathname === '/v1/projects') {
     parameters(url, ['limit', 'cursor']);

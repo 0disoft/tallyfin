@@ -37,8 +37,8 @@ export class D1Queries implements AdminStore {
     return publishSchema(this.db, principal, id, version, input, now);
   }
   settings(principal: AdminPrincipal, id: string) { return projectSettings(this.db, principal, id, this.options); }
-  updateSettings(principal: AdminPrincipal, id: string, update: ProjectSettingsUpdate) {
-    return updateProjectSettings(this.db, principal, id, update, this.options);
+  updateSettings(principal: AdminPrincipal, id: string, update: ProjectSettingsUpdate, now = Date.now()) {
+    return updateProjectSettings(this.db, principal, id, update, this.options, now);
   }
   async list(principal: AdminPrincipal, limit: number, cursor: string) {
     if (!integer(limit, 1, 100) || (cursor && !PROJECT_ID.test(cursor))) throw new CollectionError('invalid_request', 400);

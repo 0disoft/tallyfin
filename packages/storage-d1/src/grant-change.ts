@@ -1,6 +1,7 @@
 import { CollectionError, integer, PROJECT_ID, validateGrantChange } from '@tallyfin/core';
 import type { AdminPrincipal, GrantChange, GrantChangeResult } from '@tallyfin/core';
 import type { SqlDatabase, SqlStatement } from './sql.ts';
+import { adminChangeStatement } from './admin-changes.ts';
 
 const owner = "EXISTS (SELECT 1 FROM project_grants a WHERE a.project_id = p.id AND a.issuer = ? AND a.subject = ? AND a.role = 'owner')";
 const targetRole = '(SELECT role FROM project_grants WHERE project_id = p.id AND issuer = ? AND subject = ?)';
@@ -30,15 +31,19 @@ export async function changeProjectGrant(db: SqlDatabase, principal: AdminPrinci
   const results = await db.batch<{ id: string } | StateRow>([
     db.prepare(`SELECT p.id FROM projects p WHERE p.id = ? AND ${owner}`).bind(id, ...caller),
     mutation,
+    adminChangeStatement(db, id, principal, {
+      action: change.role === null ? 'grant.revoked' : change.expectedRole === null ? 'grant.created' : 'grant.role_changed',
+      target: { issuer: change.issuer, subject: change.subject }, beforeRole: change.expectedRole, afterRole: change.role,
+    }, now),
     db.prepare(`SELECT ${targetRole} AS role,
       (SELECT created_at FROM project_grants WHERE project_id = p.id AND issuer = ? AND subject = ?) AS created_at,
       ${ownerCount} AS owners, ${owner} AS can_manage FROM projects p WHERE p.id = ?`)
       .bind(...target, ...target, ...caller, id),
   ]);
-  if (results.length !== 3 || results.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
+  if (results.length !== 4 || results.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
   if (!results[0]!.results.length) throw new CollectionError('forbidden', 403);
-  const state = results[2]!.results[0] as StateRow | undefined, changed = results[1]!.meta.changes;
-  if (!state || !integer(changed, 0, 1) || !integer(state.owners, 1, Number.MAX_SAFE_INTEGER) || !integer(state.can_manage, 0, 1) ||
+  const state = results[3]!.results[0] as StateRow | undefined, changed = results[1]!.meta.changes;
+  if (!state || !integer(changed, 0, 1) || results[2]!.meta.changes !== changed || !integer(state.owners, 1, Number.MAX_SAFE_INTEGER) || !integer(state.can_manage, 0, 1) ||
     (state.role !== null && state.role !== 'reader' && state.role !== 'owner') ||
     (state.role === null ? state.created_at !== null : !integer(state.created_at, 0, 8640000000000000)))
     throw new CollectionError('storage_unavailable', 503);

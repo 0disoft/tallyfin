@@ -1,10 +1,11 @@
-import { canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validateRegistry } from '@tallyfin/core';
+import { ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validateRegistry } from '@tallyfin/core';
 import type { AttemptState, CollectionStore, PreparedBatch, Receipt, Registry, RejectionReason } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
 export { D1Queries } from './query.ts';
 export { D1Maintenance } from './maintenance.ts';
+export { adminChangeStatement } from './admin-changes.ts';
 export type { CleanupPage } from './maintenance.ts';
 
 export class D1Store implements CollectionStore {
@@ -153,6 +154,9 @@ export class D1Store implements CollectionStore {
         Math.floor(now / DAY) * DAY - 6 * DAY, Math.floor(now / 60_000) * 60_000 - 120_000, limit));
     for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date']])
       statements.push(this.db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND ${column} < ? LIMIT ?)`).bind(projectId, oldest, limit));
+    statements.push(this.db.prepare(`DELETE FROM admin_changes WHERE id IN
+      (SELECT id FROM admin_changes WHERE project_id = ? AND occurred_at < ? ORDER BY occurred_at, id LIMIT ?)`)
+      .bind(projectId, now - ADMIN_CHANGE_RETENTION_DAYS * DAY, limit));
     const result = await this.db.batch(statements);
     if (result.length !== statements.length || result.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
   }

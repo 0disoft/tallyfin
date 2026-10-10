@@ -14,6 +14,7 @@ const input = { id: 'new-product', name: 'New product', timeZone: 'Asia/Seoul', 
 before(async () => { f = await setup(); });
 after(async () => { await f?.mf.dispose(); });
 beforeEach(async () => {
+  await f.db.prepare('DELETE FROM admin_changes').run();
   await f.db.prepare("DELETE FROM project_grants WHERE project_id != 'sembom'").run();
   await f.db.prepare('DELETE FROM project_creations').run();
   await f.db.prepare("DELETE FROM projects WHERE id != 'sembom'").run();

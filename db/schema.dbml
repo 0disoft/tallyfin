@@ -41,6 +41,24 @@ Table project_creators {
   indexes { (issuer, subject) [pk] }
 }
 
+Table admin_changes {
+  id text [pk, not null, note: 'Random UUID, used only as a history record and pagination tie-breaker']
+  project_id text [not null, ref: > projects.id]
+  occurred_at bigint [not null, note: 'UTC epoch milliseconds; retain 90 days; cleanup bounded per project']
+  actor_kind text [not null, note: 'administrator | local_operator']
+  actor_issuer text [note: 'Verified admin issuer, null for offline operator']
+  actor_subject text [note: 'Verified admin subject, null for offline operator; never a visitor identity']
+  action text [not null, note: 'project.created | project.settings_changed | schema.published | schema.status_changed | grant.created | grant.role_changed | grant.revoked']
+  fields_json text [not null, default: '[]', note: 'Changed setting keys only: name, status, allowedOrigins, requestsPerMinute, newReceiptsPerUtcDay; <=256 bytes; no values']
+  schema_version integer [note: 'Present only for schema actions']
+  target_issuer text [note: 'Grant target only; never credentials']
+  target_subject text [note: 'Grant target only']
+  before_role text [note: 'reader | owner | null; only grant actions']
+  after_role text [note: 'reader | owner | null; only grant actions']
+  indexes { (project_id, occurred_at, id) }
+  Note: 'Append-only control plane history written atomically with API/CLI changes. No backfill, raw request/definition/setting values or capture of direct SQL writes. Owner-only reads are a following slice.'
+}
+
 Table project_creations {
   project_id text [pk, not null, ref: > projects.id]
   issuer text [not null]
