@@ -6,8 +6,9 @@
 
 선택한 [개요 시안](../../docs/frontend/SELECTED_VISUAL.md)을 기반으로 구현한 관리자 앱이다.
 ModuFile·Sembom·Orchid Pass는 가상의 데이터이며 실제 서비스를 조회하지 않는다.
-헤더의 모드 전환으로 **Sample**과 **API 연결**(같은 출처 `/v1` 관리자 API 조회·설정 저장)을
-나눠 볼 수 있다. API 모드는 OIDC 로그인과 관리자 bearer 직접 연결을 제공한다.
+기본 주소와 `/auth/callback`은 **API 연결**(같은 출처 `/v1` 관리자 API 조회·설정 저장)로
+시작한다. `/demo` 또는 `/demo/`에서만 **Sample**과 **API 연결** 모드 전환을 제공한다.
+일반 주소의 쿼리로 데모를 켜지 않는다. API 모드는 OIDC 로그인과 관리자 bearer 직접 연결을 제공한다.
 실제 인증 제공자 설정과 운영 배포는 아직 연결하지 않았다.
 
 ## 실행

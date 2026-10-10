@@ -79,7 +79,9 @@ test('one command serves admin, proxies to the initialized collector and shuts d
     try {
       await ready;
       const admin = `http://127.0.0.1:${adminPort}`;
-      const page = await fetch(admin); assert.equal(page.status, 200); assert.match(await page.text(), /id="root"/);
+      const page = await fetch(admin); assert.equal(page.status, 200);
+      const pageText = await page.text(); assert.match(pageText, /id="root"/); assert.match(pageText, /Tallyfin · 관리자/);
+      const demo = await fetch(`${admin}/demo`); assert.equal(demo.status, 200); assert.match(await demo.text(), /id="root"/);
       const callback = await fetch(`${admin}/auth/callback?error=access_denied`);
       assert.equal(callback.status, 200); assert.match(await callback.text(), /id="root"/);
       const response = await fetch(`${admin}/v1/projects`);

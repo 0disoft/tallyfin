@@ -1,5 +1,24 @@
 # 검증
 
+## 운영 API 기본 진입·데모 분리 — 2026-10-11
+
+`apps/admin`의 기본 주소와 `/auth/callback`은 API 관리자 모드로 시작한다.
+`/demo`·`/demo/` 경로에서만 Sample/API 전환을 제공하고 제목에 샘플 데모를 표시한다.
+일반 주소의 쿼리를 모드 선택에 사용하지 않는다. 실제 관리자 진입에는 가상 프로젝트·
+샘플 KPI·Sample 버튼이 없으며 인증 미설정 상태는 기존 비활성화 안내를 사용한다.
+
+실행·통과: 루트 `npm run check:admin`(타입 검사, 테스트 155/155, 빌드, 번들 검사 2/2,
+Sites 검사 4/4), 변경한 실제 stack 검사 2/2, 계약 `npm run check` 53/53. stack은 관리자 제목·demo HTML·callback
+경로·프록시된 401 JSON과 종료를 확인한다. 프로덕션 preview/Chromium에서 기본 주소의
+로그인 진입·Sample 버튼 0개·샘플 지표 0개, `/demo`의 샘플 지표와 제목·모드 전환,
+`/?mode=sample`의 API 유지, callback error 쿼리 제거, 콘솔 오류 0건과 CSS 320px의
+문서 폭 320px를 확인했다. 증거는 ignore된 `.tmp/admin-workspace-ui/operational-entry.jpg`·
+`demo.jpg`에 둔다. 검증 탭·서버는 종료했다.
+
+ADR·설계·로드맵·앱 안내를 갱신했다. API·DB·마이그레이션·SDK·의존성·CI 러너·위생
+정책 변경은 없다. 백엔드 전체 검사는 반복하지 않았고 운영 OIDC·원격 DB·배포·Sembom
+활성화는 미실행이다. 푸시는 하지 않았다. 다음은 운영 같은 출처 경로와 인증 설정이다.
+
 ## 관리자 앱 워크스페이스 이전 — 2026-10-11
 
 기존 관리자 소스·자산·설정·검사를 `apps/admin`으로 이전하고 private workspace
