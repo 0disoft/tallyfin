@@ -5,5 +5,5 @@
     "exactOptionalPropertyTypes": true, "declaration": true, "emitDeclarationOnly": true, "allowImportingTsExtensions": true,
     "rootDir": "src", "outDir": "dist"
   },
-  "include": ["src/index.ts"]
+  "include": ["src/index.ts", "src/funnels.ts"]
 }

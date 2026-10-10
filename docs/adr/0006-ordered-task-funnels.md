@@ -1,8 +1,8 @@
 # ADR 0006: 순서가 있는 작업 퍼널과 출처 간 연결
 
 - 상태: 계약·코어·버전별 등록/검증/발행/정의 조회와 연결 상태·단계 집계 저장, 수집
-  경로의 연결 이벤트 수신·서버 SDK 전송을 로컬 구현·검증했다. 브라우저 SDK·관리자 SDK
-  코드 생성·조회 API·관리자 퍼널 집계 화면은 후속이다.
+  경로의 연결 이벤트 수신·서버 SDK 전송·브라우저 SDK 퍼널 전송을 로컬 구현·검증했다.
+  관리자 SDK 코드 생성·조회 API·관리자 퍼널 집계 화면은 후속이다.
 - 날짜: 2026-10-11
 
 ## 결정
@@ -55,6 +55,31 @@ runId는 인증 수단이나 소유권 증명이 아니다. 브라우저 단계�
 구분하며 Tallyfin에는 내부 업무 ID를 보내지 않는다. 분류는 검토된 유한 값만 유지한다.
 서버만으로 이루어진 퍼널도 같은 계약을 따른다.
 
+## 브라우저 퍼널 프로필
+
+브라우저 연결 전송은 기본 SDK 엔트리와 분리한 선택 프로필
+`@tallyfin/browser/funnels`의 `createTallyfinFunnels(options, host?)`가 맡는다. 버퍼·재시도·
+배치 전송은 기본 클라이언트와 같은 메모리 전송을 공유하고 별도 저장소나 엔드포인트를
+만들지 않는다. 프로필은 workflow 진입점을 두지 않으므로 workflow로 시작한 작업을
+퍼널 프로필로 이어받지 않고 그 반대도 같다.
+
+`createFunnelRun(id)`는 `{funnelId, runId, startedAt}` 동결 값을 만들고 이벤트를 넣지
+않으며 네트워크·저장소·방문자 식별자를 쓰지 않는다. runId는 매번 새 UUIDv4다. 첫 단계가
+browser가 아닌 퍼널은 브라우저에서 작업을 만들 수 없고, 서버에서 시작해 브라우저로 넘어온
+연결은 `trackFunnel`로 browser 단계만 받는다. `track`은 일반 이벤트만 받고 등록된 퍼널
+단계 이름을 거부한다.
+
+`trackFunnel(name, properties, link, occurredAt?)`은 link를 복사해 `funnelId`·UUIDv4
+runId·엄격한 UTC startedAt을 검증하고 그 뒤에는 바꾸지 않는다. 수동 재시도에는 원래
+occurredAt을 넘겨 최초 논리 발생 시각을 유지하며, 같은 발생 시각의 재전송은 위 중복
+규칙으로 단계 중복이다. 분류값은 한 퍼널 안에서 단계마다 같은 유한 값 집합이어야 하고
+단계 사이에서 어긋나면 서버가 거부하므로 호스트는 연결이 살아 있는 동안 차원과 논리
+발생 시각을 바꾸지 않아야 한다. 서버 단계는 빌드 시점 투영에서 null 자리로만 남아 출처
+경계를 지킨다.
+
+기본 엔트리는 퍼널 코드를 포함하지 않는다. 예시는 `examples/funnels`에 두고, gzip 예산은
+퍼널 SDK 2942 B·퍼널+예제 3068 B로 기존 3072 B 안이다.
+
 ## 구현 순서와 경계
 
 1. OpenAPI의 독립 FunnelDefinition·FunnelLink·FunnelEvent·FunnelCounts와 코어
@@ -64,14 +89,15 @@ runId는 인증 수단이나 소유권 증명이 아니다. 브라우저 단계�
 3. DBML에 funnel_runs·funnel_daily_counts를 더하고 0007 마이그레이션을 추가했다. 원자
    저장·정리와 기존 출처별 수집 경로의 연결 이벤트 수신도 로컬에서 구현·검증했다.
 4. 서버 SDK 연결 전송과 Node·native Worker·실제 로컬 D1 통합을 구현·검증했다.
-   브라우저 SDK의 연결 전송과 관리자 SDK 코드 생성은 후속이다.
+   브라우저 SDK의 연결 전송은 선택 퍼널 프로필로 로컬 구현·검증했고, 관리자 SDK 코드
+   생성은 후속이다.
 5. reader/owner 조회 API와 단계별 관리자 화면·CSV를 연결한다. 아직 후속이다.
 
 Registry·스키마 발행은 선택 funnels를 받으며 생략한 기존 정의의 해시는 유지한다.
 BrowserBatch·ServerBatch는 각 이벤트에 funnel 링크를 선택으로 받고, 등록된 그 출처의
 단계 정의와 맞을 때만 수집 경로가 연결을 저장한다. 한 이벤트에 attempt와 funnel을 함께
 넣으면 거부한다. 연결 이벤트의 payload hash는 funnel-v1 접두사를 쓰고 funnel이 없는
-일반 이벤트·workflow 해시는 그대로다. 서버 SDK는 연결 전송을 지원하며 브라우저 SDK·
-관리자 SDK 코드 생성·조회 API·화면은 아직 연결하지 않았다.
+일반 이벤트·workflow 해시는 그대로다. 서버 SDK와 브라우저 SDK의 선택 퍼널 프로필이
+연결 전송을 지원한다. 관리자 SDK 코드 생성·조회 API·화면은 아직 연결하지 않았다.
 코어 진행 함수는 인증이나 연결 상태 저장을 수행하지 않는다. 완료한 부분과 후속을
 [로드맵](../product/01-roadmap.md)에 구분한다. HTTP 계약의 원본은 [OpenAPI](../../api/openapi.yaml)다.

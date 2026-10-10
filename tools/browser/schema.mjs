@@ -17,3 +17,18 @@ export function projectBrowserSchema(input) {
     }])),
   };
 }
+
+/** Optional funnel profile; server stages remain null positions, never runtime definitions. */
+export function projectFunnelBrowserSchema(input) {
+  const registry = validateRegistry(input), browser = projectBrowserSchema(input);
+  const funnels = (registry.funnels ?? []).filter(funnel => funnel.steps.some(step => step.source === 'browser'));
+  if (!funnels.length) throw Error('Registered browser funnel definitions are required.');
+  const stages = new Set(funnels.flatMap(funnel => funnel.steps.filter(step => step.source === 'browser').map(step => step.eventName)));
+  const legacy = new Set(registry.workflows.flatMap(workflow => [workflow.startEvent, workflow.successEvent, workflow.failureEvent]));
+  return { version: browser.version,
+    events: Object.fromEntries(Object.entries(browser.events).filter(([name]) => !legacy.has(name) || stages.has(name))),
+    funnels: Object.fromEntries(funnels.map(funnel => [funnel.id, {
+      steps: funnel.steps.map(step => step.source === 'browser' ? step.eventName : null), dimensions: [...funnel.dimensions],
+    }])),
+  };
+}

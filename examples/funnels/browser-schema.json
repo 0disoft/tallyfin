@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "events": {
+    "file_selected": {
+      "kind": [
+        "enum",
+        true,
+        [
+          "pdf",
+          "image"
+        ]
+      ]
+    },
+    "upload_finished": {
+      "kind": [
+        "enum",
+        true,
+        [
+          "pdf",
+          "image"
+        ]
+      ]
+    }
+  },
+  "funnels": {
+    "conversion": {
+      "steps": [
+        "file_selected",
+        "upload_finished",
+        null,
+        null
+      ],
+      "dimensions": [
+        "kind"
+      ]
+    }
+  }
+}

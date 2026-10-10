@@ -8,6 +8,9 @@ import { DEFAULT_SETTINGS } from '../src/config.ts';
 import { example, migrationStatements } from '../../../packages/storage-d1/test/helpers.ts';
 import { createTallyfinServer } from '../../../packages/server/src/index.ts';
 import { projectServerSchema } from '../../../tools/server/schema.mjs';
+import { createTallyfinFunnels } from '../../../packages/browser/src/funnels.ts';
+import { projectFunnelBrowserSchema } from '../../../tools/browser/schema.mjs';
+import { FakeBrowser } from '../../../packages/browser/test/helpers.ts';
 
 test('native Worker joins public browser milestones and authenticated server milestones through real D1', async () => {
   const registry = example('funnel-registry'), issuer = 'https://machine.example.invalid', subject = crypto.randomUUID();
@@ -38,7 +41,20 @@ test('native Worker joins public browser milestones and authenticated server mil
       bindings: { SIGNED_TEST_TOKEN: token }, outboundService: 'collector' },
   ], log: new Log(LogLevel.NONE) });
   try {
-    const db = await mf.getD1Database('DB', 'collector'), started = Date.now() - 5000, runId = crypto.randomUUID();
+    const db = await mf.getD1Database('DB', 'collector'), started = Date.now() - 5000;
+    const browserHost = new FakeBrowser(); browserHost.time = started;
+    const browserResults: { status: number; result: unknown }[] = [];
+    browserHost.send = async (endpoint, body, signal) => {
+      const response = await mf.dispatchFetch(endpoint, { method: 'POST', body, signal,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8', Origin: registry.allowedOrigins[0] } });
+      browserResults.push({ status: response.status, result: await response.json() });
+      return { status: response.status, retryAfter: response.headers.get('Retry-After') };
+    };
+    const browserSdk = createTallyfinFunnels({ endpoint: `https://collector.example.invalid/v1/projects/${registry.project.id}/batches`,
+      schema: projectFunnelBrowserSchema(registry) }, browserHost);
+    const browserRun = browserSdk.createFunnelRun(registry.funnels[0].id)!;
+    assert.ok(browserRun); assert.equal(browserSdk.pending, 0);
+    const runId = browserRun.runId;
     for (const sql of migrationStatements()) await db.prepare(sql).run();
     await db.prepare(`INSERT INTO projects (id,name,status,time_zone,allowed_origins_json,requests_per_minute,new_receipts_per_utc_day,created_at)
       VALUES (?,?,?,?,?,?,?,?)`).bind(registry.project.id, registry.project.name, 'active', registry.project.timeZone,
@@ -83,12 +99,24 @@ test('native Worker joins public browser milestones and authenticated server mil
         assert.deepEqual(await sdk.send([event]), { status: 'delivered', accepted: index === 3 ? 0 : 1,
           duplicates: index === 3 ? 1 : 0, attempts: index === 3 ? 2 : 1 });
       } else {
-        const response = await send(bodies[index]);
-        assert.equal(response.status, 200); assert.deepEqual(await response.json(), { accepted: 1, duplicates: 0 });
+        const raw = bodies[index].events[0]; browserHost.time = started + 4000;
+        assert.equal(browserSdk.trackFunnel(raw.name, raw.properties, browserRun, raw.occurredAt), true);
+        browserSdk.flush(); await browserHost.tick(0);
+        // Real Worker I/O settles beyond the fake timer's microtask drain.
+        for (let poll = 0; poll < 100 && browserSdk.pending; poll++) await new Promise(resolve => setTimeout(resolve, 10));
+        assert.equal(browserSdk.pending, 0);
+        assert.deepEqual(browserResults.at(-1), { status: 200, result: { accepted: 1, duplicates: 0 } });
       }
       if (index === 3) assert.deepEqual(await stages(), []);
       if (index === 2) assert.deepEqual(await stages(), [{ step_index: 0, reached_count: 1 }]);
     }
+    assert.deepEqual(await stages(), Array.from({ length: 4 }, (_, step_index) => ({ step_index, reached_count: 1 })));
+    const replay = bodies[1].events[0];
+    assert.equal(browserSdk.trackFunnel(replay.name, replay.properties, browserRun, replay.occurredAt), true);
+    browserSdk.flush(); await browserHost.tick(0);
+    for (let poll = 0; poll < 100 && browserSdk.pending; poll++) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(browserSdk.pending, 0);
+    assert.deepEqual(browserResults.at(-1), { status: 200, result: { accepted: 0, duplicates: 1 } });
     assert.deepEqual(await stages(), Array.from({ length: 4 }, (_, step_index) => ({ step_index, reached_count: 1 })));
     const native = await mf.getWorker('producer');
     assert.deepEqual(await (await native.fetch('https://producer.example.invalid/run', { method: 'POST',
@@ -101,8 +129,9 @@ test('native Worker joins public browser milestones and authenticated server mil
       body: JSON.stringify(bodies[3].events[0]) })).json() as any;
     assert.equal(revoked.status, 'rejected'); assert.equal(revoked.httpStatus, 403); assert.equal(revoked.attempts, 1);
     assert.equal((await send(bodies[3], { Authorization: 'Bearer ' + token })).status, 403);
-    assert.equal(await count('event_receipts'), 4); assert.equal(await count('funnel_runs'), 1);
+    assert.equal(await count('event_receipts'), 5); assert.equal(await count('funnel_runs'), 1);
     assert.equal(await count('workflow_attempts'), 0);
     assert.equal(await db.prepare('SELECT sum(count) AS n FROM event_daily_counts').first('n'), 4);
+    browserSdk.destroy(); assert.equal(browserHost.listeners.size, 0); assert.equal(browserHost.timers.size, 0);
   } finally { await mf.dispose(); }
 });

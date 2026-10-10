@@ -1,12 +1,12 @@
 # 브라우저 SDK (packages/browser)
 
-상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
+상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 기본 엔트리와 분리한 선택 프로필 `@tallyfin/browser/funnels`의 퍼널 연결 전송도 로컬 구현·검증했다. 전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
 
 ## 경계
 `createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
 
 내부 파일은 `types.ts`가 기존 공개 타입을, `common.ts`가 속성 검증·네이티브 어댑터·큐·재시도·숨김 전송·destroy 처리를, `index.ts`가 workflow 검증과 track/start 진입점을 맡는다.
-내부 enqueue는 연결 필드를 공통으로 받도록 분리했으며 기존 workflow의 `{ attempt }` 형식과 공개 BrowserClient API는 유지하고, 브라우저 퍼널 모듈은 후속으로 둔다.
+내부 enqueue는 연결 필드를 공통으로 받도록 분리했으며 기존 workflow의 `{ attempt }` 형식과 공개 BrowserClient API는 유지한다. 브라우저 퍼널 모듈은 기본 엔트리와 분리한 선택 엔트리 `@tallyfin/browser/funnels`로 구현했고 기본 번들에는 넣지 않는다.
 
 ## 비활성·SSR·잘못된 설정
 다음 경우 리스너 없이 무동작 클라이언트를 돌려준다. `enabled: false`, 커스텀 호스트 없이 브라우저 환경(`document`·`fetch`·`crypto`)을 사용할 수 없음, 잘못된 엔드포인트·스키마, 검사 중 예외다. 무동작 클라이언트는 `track`이 `false`, `start`가 `undefined`, `pending`이 0이다.
@@ -26,6 +26,20 @@
 
 이벤트는 넣기 전에 한 번 스냅샷하고 등록 규칙으로 검사한다. 알 수 없는 이름·키, 자유 문자열, 중첩 객체·배열은 버린다. 이벤트 ID는 `crypto.randomUUID`로 만들고 실패하면 보내지 않으며 약한 난수로 대체하지 않는다.
 
+## 퍼널 프로필 (`@tallyfin/browser/funnels`)
+
+기본 엔트리는 퍼널 코드를 넣지 않는다. 퍼널을 쓰는 서비스만 선택 엔트리 `@tallyfin/browser/funnels`에서 `createTallyfinFunnels(options, host?)`를 가져온다. `options`는 `FunnelSchema`(`version`·`events`·`funnels`)를 받고, `host`는 커스텀 호스트를 붙이는 기존 `BrowserPlatform` 선택 포트다. 버퍼·재시도·배치 전송·`flush`·`destroy`·`pending`은 기본 클라이언트와 같은 메모리 전송(`createTransport`)을 공유하며 별도 저장소나 추가 엔드포인트를 만들지 않는다.
+
+`FunnelClient`는 `track`·`flush`·`destroy`·`pending`에 `createFunnelRun`·`trackFunnel`을 더하고 workflow 진입점 `start`는 두지 않는다. 퍼널 작업은 기본 workflow 시도와 다른 엔트리라서 한쪽에서 시작한 작업을 다른 쪽으로 이어받지 않는다.
+
+- `createFunnelRun(id)`: 등록된 퍼널의 새 작업 컨텍스트를 만든다. 돌려주는 `{ funnelId, runId, startedAt }`는 동결된 값이고 이벤트를 넣지 않으며 네트워크도 쓰지 않는다. `runId`는 매번 새 UUIDv4이고 방문자 식별자로 재사용하지 않는다. 저장소·쿠키·`localStorage`를 쓰지 않는다. 첫 단계가 browser가 아닌 퍼널·미등록·비활성·destroy 뒤에는 `undefined`다. 그래서 브라우저에서는 browser로 시작하는 퍼널만 작업을 만들 수 있다.
+- `trackFunnel(name, properties, link, occurredAt?)`: `link`를 복사해 검증한 뒤 단계 이벤트를 넣는다. `link`는 `funnelId`·`runId`(UUIDv4)·`startedAt`(엄격한 UTC)만 가진 불변이고 한 번 검증하면 바꾸지 않는다. 서버에서 시작해 브라우저로 넘어온 퍼널의 browser 단계도 이 경로로 받는다. 수동 재시도에는 원래 `occurredAt`을 넘겨 최초 논리 발생 시각을 유지한다.
+- `track(name, properties?)`: 일반 이벤트만 넣는다. 등록된 퍼널 단계 이름이면 `false`로 거부한다.
+
+퍼널 분류값(`dimensions`)은 단계마다 같은 등록 규칙을 쓰는 유한 값 집합이다. 단계 사이에서 분류 정의가 어긋나면 서버가 거부하므로 호스트는 연결이 살아 있는 동안 차원과 논리 발생 시각을 바꾸지 않아야 한다. 서버 단계는 빌드 시점 투영(`projectFunnelBrowserSchema`)에서 `null` 자리로만 남아 순서를 지키고, 브라우저 번들은 서버 정의를 싣지 않는다.
+
+예시는 `examples/funnels/browser.ts`와 `examples/funnels/browser-schema.json`에 있다.
+
 ## 버퍼·재시도·전송
 - 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
 - 429·503·네트워크 실패만 최대 2회 재시도한다. Retry-After 정수 초를 존중하고, 배치는 시작 시각부터 10분이 지나면 버린다. 재시도는 원래 ID·시각·바디를 유지한다.
@@ -42,10 +56,11 @@ npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 실행 결과와 실측값은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 로컬 실측 gzip은 기본 SDK 2772 B·Sembom 3053 B·퍼널 SDK 2942 B·퍼널+예제 3068 B다. 집중 검증은 `node --test packages/browser/test/*.test.ts packages/server/test/funnels.test.ts apps/collector/test/funnels.test.ts apps/collector/test/collector.test.ts` 53건 통과(브라우저 8·기존 19·수집기 18·native D1 1·서버 7)와 `npm run typecheck`·`npm run build:browser` 통과다. 전체 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 남은 검증
 합성 화면의 실브라우저 초기 실행·동기 호출·전송과 수집기 종료 시 동작은
 [측정 도구](../../tools/browser-bench/README.md)로 확인했다.
 실제 Sembom 설치·활성화와 서비스 지연·처리량, 모바일·운영 환경, 원격 배포는 남았다.
-서버 발행 수집과 실제 운영 관리자 인증 연결도 후속이다.
+퍼널 예제의 실제 서비스 적용과 관리자 퍼널 집계 연결도 남았다.
+실제 운영 발행자·관리자 인증 연결도 후속이다.

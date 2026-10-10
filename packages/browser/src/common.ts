@@ -11,7 +11,7 @@ interface Transport {
 export const namePattern = /^[a-z][a-z0-9_]{0,47}$/;
 const enumPattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-export const own = (value: object, key: string) => Object.hasOwn(value, key);
+export const own = Object.hasOwn;
 export const integer = (value: number, low: number, high: number) => Number.isSafeInteger(value) && value >= low && value <= high;
 
 function schemaValid(schema: EventSchema): boolean {
@@ -72,8 +72,9 @@ export function createTransport<Schema extends EventSchema>(options: Omit<Browse
     if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash ||
       !/^\/v1\/projects\/[a-z][a-z0-9-]{0,47}\/batches$/.test(endpoint.pathname) ||
       !(endpoint.protocol === 'https:' || (options.allowLocalHttp && local && endpoint.protocol === 'http:'))) return undefined;
-    if (JSON.stringify(options.schema).length > 32768) return undefined;
-    const schema: Schema = JSON.parse(JSON.stringify(options.schema));
+    const serialized = JSON.stringify(options.schema);
+    if (serialized.length > 32768) return undefined;
+    const schema: Schema = JSON.parse(serialized);
     if (!schemaValid(schema) || !validate(schema)) return undefined;
     return client(endpoint.href, schema, platform);
   } catch { return undefined; }
