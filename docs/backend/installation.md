@@ -91,5 +91,8 @@ npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 직접 등록하는 기존 CLI는 로컬만 지원한다. 첫 운영 적용에는 원격 D1 마이그레이션·정리
 예약·백업/복구도 필요하며, 도구 구현과 실제 원격 권한 등록 완료를 구분한다.
 
+현재 스키마의 복구 경로는 `npm run verify:restore`로 새 로컬 합성 DB에 연습할 수 있다.
+실제 운영 백업·원격 복구와 RTO/RPO 확인은 [백업·복구 절차](../ops/backup-and-restore.md)를 따른다.
+
 현재는 제공자 등록·CORS·JWT 발급·갱신·원격 Worker 연결을 검증하지 않았다.
 설정 준비 완료와 운영 로그인 완료를 구분한다.

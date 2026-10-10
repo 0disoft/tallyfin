@@ -1,19 +1,79 @@
-# Backup and Restore
+# 백업과 복구
 
-- Status: Draft
+상태: 현재 전체 마이그레이션의 로컬 합성 데이터 복구 연습을 구현·검증했다.
+운영 DB 백업·원격 복구·장애 전환·운영 RTO/RPO는 아직 검증하지 않았다.
+설치를 관리하는 DB 운영자가 수행하며 실제 담당자·주기·보관 기간·RTO/RPO 목표는
+운영 리소스를 정한 뒤 확정한다(UNDECIDED).
 
-## Operational Contract
+## 로컬 복구 연습
 
-Focus on restore, including restore owner, schedule, test cadence, RTO, RPO, integrity checks, and partial restore behavior.
+```powershell
+npm run verify:restore -- --help
+npm run verify:restore
+```
 
-## Owners
+매번 `.tmp/restore-drill/run-*` 아래에 서로 다른 새 로컬 DB를 만든다. 기존 개발 DB·
+운영 DB·사용자 백업을 열지 않으며 원격/대상/파일 옵션도 받지 않는다.
+전체 연습은 기본 CI에 추가하지 않았고 필요한 시점에 명시적으로 실행한다.
 
-- Primary owner: UNASSIGNED
-- Backup owner: UNASSIGNED
-- Escalation path: UNDECIDED
+현재 마이그레이션 0001~0007과 브라우저 workflow·혼합 출처 4단계 퍼널·권한·생성 이력·
+관리자 이력·영수증·사용량/거부·정리 커서를 저장한다. 마지막 퍼널 단계가 먼저 도착한
+실행과 최대 안전 정수 카운터도 포함한다. DB를 닫은 뒤 실제 Wrangler의
+`d1 export --local`로 전체 SQL을 내보내고 별도 새 DB에 `d1 execute --local --file`로 복원한다.
 
-## Validation
+복원 검사는 다음을 확인한다.
 
-- Required validation names: VALIDATION.md
-- Release blocker status: UNDECIDED
-- Remaining operational risk: UNDECIDED
+- 16개 애플리케이션 테이블이 모두 비어 있지 않고 모든 행의 내용 해시·개수가 동일하다.
+- 테이블·인덱스·트리거의 스키마 해시가 동일하다. 행의 물리적 순서와 SQL의 따옴표 밖
+  공백만 비교에서 제외하며, 문자열 안의 공백은 그대로 비교한다.
+- `PRAGMA quick_check`가 `ok`이고 `PRAGMA foreign_key_check`에 위반이 없다.
+- 브라우저·서버 이벤트 재전송이 새 집계를 만들지 않는다.
+- 스키마 정의·생성 이력 변경과 잘못된 퍼널 누계를 DB가 거부하고 데이터가 그대로다.
+
+근거는 [D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/)와
+[지원 PRAGMA](https://developers.cloudflare.com/d1/sql-api/sql-statements/#pragma-quick_check),
+설치된 CLI의 로컬 실행이다. `integrity_check`는 이 D1 환경에서 허용되지 않아
+`quick_check`와 별도 내용·스키마·제약 조건 검사를 사용한다.
+
+`report.json`은 실행 버전·마이그레이션 파일 해시·SQL 크기/해시·테이블별 내용 해시와
+행 수·재전송/검사 결과·소요 시간을 담는다. 원본 행이나 인증 토큰을 보고서에 넣지 않는다.
+`backup.sql`과 두 DB는 조사용으로 남긴다. 공개 예제·합성 계정만 사용한다.
+실패는 0이 아닌 종료 코드와 `failure.json`, 내용 불일치는 `mismatch.json`으로 남긴다.
+소유한 Miniflare 인스턴스는 성공·실패 뒤 닫는다.
+
+## 운영 백업 준비
+
+대상 계정·DB ID·수집기·마이그레이션 상태를 [설치 묶음](../backend/installation.md)과
+대조한다. 운영 백업은 별도 승인한 작업으로 수행한다. 다음 예시는 **원격** export이며
+로컬 연습 명령과 다르다.
+
+```powershell
+node node_modules/wrangler/bin/wrangler.js d1 export DB --config .tmp/installation/collector.wrangler.json --remote --output <새-백업-SQL-경로>
+```
+
+SQL export는 다른 DB 요청을 막을 수 있어 작업 시간을 정하고 수집 쓰기를 중단하며
+진행 중 쓰기의 완료를 확인한다. 관리자 조회·서버 SDK 전송도 고려한다.
+계정/DB ID·백업 시각·코드/마이그레이션 버전·파일 해시·수집 중지 범위를 기록한다.
+파일이 생성됐다는 사실만으로 복구 가능한 백업이라고 판단하지 않는다.
+현재 카운터의 최대 안전 정수 보존을 로컬에서 확인했으며 다른 int64 스키마는 미검증이다.
+
+운영 SQL은 관리자 식별자·제품 집계를 포함한다. 접근/보관을 제한하고 암호화한 별도
+위치에 두며 공개 저장소·정적 자산·로그에 넣지 않는다. 인증 제공자·Worker 설정·배포
+자격증명은 SQL 백업과 별도로 관리한다.
+
+## 운영 복구 순서
+
+1. 장애 범위와 마지막 백업 시각을 확인하고 수집/설정 쓰기를 중단한다.
+2. 원본을 보존한 채 별도 새 DB와 접근이 제한된 복구 환경을 준비한다.
+3. 백업의 코드·마이그레이션 버전과 SQL 해시를 확인한다. 전체 스키마 SQL을 빈 DB에
+   복원할 때 같은 마이그레이션을 먼저 중복 적용하지 않는다.
+4. SQL을 복원하고 스키마·행 내용/개수·외래 키·정수 값·변경 금지/퍼널 제약을 검사한다.
+   프로젝트·권한·영수증·workflow·퍼널·사용량·정리 커서를 일부만 골라 복원하지 않는다.
+5. 실제 OIDC·owner/reader 조회·권한 회수·새 이벤트·중복 재전송·정리 작업을 복구
+   환경에서 확인한다. 원본 서비스에 시험 이벤트를 보내지 않는다.
+6. 데이터 손실 범위·복구 시간·새 DB 대상·트래픽 전환 계획을 검토한 뒤 전환한다.
+
+현재 도구는 합성 로컬 DB만 검증하며 사용자 제공 운영 백업의 자동 복원이나 원격
+전환은 제공하지 않는다. 실제 DB 크기·리전·네트워크·동시 수집을 포함한 연습과 시간
+측정은 별도로 필요하다. 로컬 수초 측정은 운영 RTO의 근거가 아니다. 복구는 백업 이후의
+영수증·권한·집계 변경을 되돌릴 수 있으므로 이후 재전송·권한 회수 상태도 확인한다.
