@@ -1,0 +1,242 @@
+export type Value = string | boolean | number;
+export type Properties = Readonly<Record<string, Value>>;
+export type Rule = readonly ['boolean', boolean] | readonly ['enum', boolean, readonly string[]] |
+  readonly ['integer', boolean, number, number];
+/** Build-time projection of reviewed server definitions only; never workflows or browser definitions. */
+export interface ServerSchema { version: number; events: Readonly<Record<string, Readonly<Record<string, Rule>>>> }
+export interface ServerEvent {
+  readonly eventId: string; readonly name: string; readonly occurredAt: string; readonly properties: Properties;
+}
+export interface ServerOptions {
+  endpoint: string; schema: ServerSchema;
+  /** Obtain a dedicated publisher credential. It is never persisted by this SDK. */
+  getToken(signal: AbortSignal): string | Promise<string>;
+  allowLocalHttp?: boolean;
+  maxAttempts?: number;
+  requestTimeoutMs?: number;
+  retryBudgetMs?: number;
+}
+export type FailureReason = 'invalid_batch' | 'invalid_event' | 'authentication_unavailable' |
+  'transport_unavailable' | 'invalid_response' | 'http_error' | 'retry_deferred' | 'aborted';
+export type DeliveryResult =
+  { status: 'delivered'; accepted: number; duplicates: number; attempts: number } |
+  { status: 'rejected' | 'unavailable' | 'aborted'; reason: FailureReason; httpStatus: number | null; retryable: boolean; attempts: number };
+export interface ServerClient {
+  /** Preserve the returned ID/time/content for delivery retries, including process restarts. */
+  createEvent(name: string, properties?: Properties, metadata?: { eventId?: string; occurredAt?: string }): ServerEvent;
+  /** One atomic batch of 1..20 events. No implicit queue, listener or fire-and-forget work. */
+  send(events: readonly ServerEvent[], options?: { signal?: AbortSignal }): Promise<DeliveryResult>;
+}
+export interface ServerPlatform {
+  now(): number;
+  monotonicNow(): number;
+  uuid(): string;
+  fetch: typeof fetch;
+  wait(milliseconds: number, signal: AbortSignal): Promise<void>;
+}
+export class ServerInputError extends Error {
+  readonly code = 'invalid_event';
+  constructor() { super('Invalid or unregistered server event.'); }
+}
+const NAME = /^[a-z][a-z0-9_]{0,47}$/;
+const ENUM = /^[a-z0-9][a-z0-9_-]{0,31}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const integer = (value: unknown, low: number, high: number): value is number => Number.isSafeInteger(value) && Number(value) >= low && Number(value) <= high;
+const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
+const own = (value: object, key: string) => Object.hasOwn(value, key);
+const aborted = Symbol('aborted'); const timedOut = Symbol('timedOut'); const authFailed = Symbol('authFailed'); const badResponse = Symbol('badResponse');
+
+function schemaValid(value: unknown): value is ServerSchema {
+  if (!record(value) || Object.keys(value).sort().join(',') !== 'events,version' ||
+    !integer(value.version, 1, 2147483647) || !record(value.events)) return false;
+  const events = Object.entries(value.events);
+  if (!events.length || events.length > 50) return false;
+  for (const [name, properties] of events) {
+    if (!NAME.test(name) || !record(properties) || Object.keys(properties).length > 4) return false;
+    let combinations = 1;
+    for (const [key, rule] of Object.entries(properties)) {
+      if (!NAME.test(key) || !Array.isArray(rule) || typeof rule[1] !== 'boolean') return false;
+      let count: number;
+      if (rule[0] === 'boolean' && rule.length === 2) count = 2;
+      else if (rule[0] === 'enum' && rule.length === 3 && Array.isArray(rule[2]) &&
+        rule[2].every(value => typeof value === 'string' && ENUM.test(value)) && new Set(rule[2]).size === rule[2].length) count = rule[2].length;
+      else if (rule[0] === 'integer' && rule.length === 4 && integer(rule[2], -1000000, 1000000) &&
+        integer(rule[3], -1000000, 1000000)) count = rule[3] - rule[2] + 1;
+      else return false;
+      if (count < 1 || count > 32) return false;
+      combinations *= count + (rule[1] ? 0 : 1);
+    }
+    if (combinations > 256) return false;
+  }
+  return true;
+}
+function utc(value: unknown): string {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(value)) throw new ServerInputError();
+  const ms = Date.parse(value);
+  const normalized = value.includes('.') ? value.replace(/\.(\d{1,3})Z$/, (_, digits: string) => '.' + digits.padEnd(3, '0') + 'Z')
+    : value.replace('Z', '.000Z');
+  if (!Number.isFinite(ms) || new Date(ms).toISOString() !== normalized) throw new ServerInputError();
+  return normalized;
+}
+function eventSnapshot(value: unknown, schema: ServerSchema, now: number): ServerEvent {
+  if (!record(value) || Object.keys(value).sort().join(',') !== 'eventId,name,occurredAt,properties' ||
+    typeof value.eventId !== 'string' || !UUID.test(value.eventId) || typeof value.name !== 'string' ||
+    !own(schema.events, value.name) || !record(value.properties)) throw new ServerInputError();
+  const rules = schema.events[value.name]!; const properties: [string, Value][] = [];
+  for (const [key, item] of Object.entries(value.properties)) {
+    if (!own(rules, key)) throw new ServerInputError();
+    const rule = rules[key]!;
+    if (!(rule[0] === 'boolean' ? typeof item === 'boolean' : rule[0] === 'enum' ? typeof item === 'string' && rule[2].includes(item)
+      : integer(item, rule[2], rule[3]))) throw new ServerInputError();
+    properties.push([key, item as Value]);
+  }
+  if (Object.entries(rules).some(([key, rule]) => rule[1] && !own(value.properties as object, key))) throw new ServerInputError();
+  const occurredAt = utc(value.occurredAt); const ms = Date.parse(occurredAt);
+  if (!integer(now, 0, 8640000000000000) || ms < now - 86400000 || ms > now + 300000) throw new ServerInputError();
+  properties.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  return Object.freeze({ eventId: value.eventId, name: value.name, occurredAt, properties: Object.freeze(Object.fromEntries(properties)) });
+}
+function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(aborted); return; }
+    const cleanup = () => { clearTimeout(timer); signal.removeEventListener('abort', stop); };
+    const stop = () => { cleanup(); reject(aborted); };
+    const timer = setTimeout(() => { cleanup(); resolve(); }, milliseconds);
+    signal.addEventListener('abort', stop, { once: true });
+  });
+}
+function platform(): ServerPlatform {
+  return { now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(),
+    fetch: (input, init) => globalThis.fetch(input, init), wait };
+}
+/** Timeout covers credential acquisition, request and response body; all timers/listeners are removed. */
+async function limited<T>(work: (signal: AbortSignal) => Promise<T>, milliseconds: number, parent?: AbortSignal): Promise<T> {
+  const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+  let stop = () => {};
+  try {
+    return await new Promise<T>((resolve, reject) => {
+      stop = () => { controller.abort(); reject(aborted); };
+      if (parent?.aborted) { stop(); return; }
+      parent?.addEventListener('abort', stop, { once: true });
+      timer = setTimeout(() => { controller.abort(); reject(timedOut); }, milliseconds);
+      Promise.resolve().then(() => {
+        if (controller.signal.aborted) throw aborted;
+        return work(controller.signal);
+      }).then(resolve, reject);
+    });
+  } finally { clearTimeout(timer!); parent?.removeEventListener('abort', stop); controller.abort(); }
+}
+async function receipt(response: Response, count: number, signal: AbortSignal): Promise<{ accepted: number; duplicates: number }> {
+  const length = response.headers.get('Content-Length');
+  if (!response.body || !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(response.headers.get('Content-Type') ?? '') ||
+    (length !== null && (!/^\d+$/.test(length) || Number(length) > 1024))) {
+    await response.body?.cancel(); throw badResponse;
+  }
+  const reader = response.body.getReader(); const buffer = new Uint8Array(1024); let size = 0;
+  const cancel = () => { void reader.cancel().catch(() => {}); };
+  signal.addEventListener('abort', cancel, { once: true });
+  try {
+    if (signal.aborted) throw aborted;
+    while (true) {
+      const chunk = await reader.read(); if (chunk.done) break;
+      if (size + chunk.value.byteLength > buffer.length) { await reader.cancel(); throw badResponse; }
+      buffer.set(chunk.value, size); size += chunk.value.byteLength;
+    }
+    const result: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, size)));
+    if (!record(result) || Object.keys(result).sort().join(',') !== 'accepted,duplicates' ||
+      !integer(result.accepted, 0, count) || !integer(result.duplicates, 0, count) || result.accepted + result.duplicates !== count) throw badResponse;
+    return { accepted: result.accepted, duplicates: result.duplicates };
+  } catch (error) { throw error === aborted ? aborted : badResponse; }
+  finally { signal.removeEventListener('abort', cancel); reader.releaseLock(); }
+}
+function retryDelay(header: string | null, attempt: number, now: number): number {
+  if (header !== null && header.length <= 128) {
+    if (/^\d+$/.test(header)) return Math.max(1000, Number(header) * 1000);
+    if (/^[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(header)) {
+      const date = Date.parse(header); if (Number.isFinite(date)) return Math.max(1000, date - now);
+    }
+  }
+  return 1000 * 2 ** (attempt - 1);
+}
+export function createTallyfinServer(options: ServerOptions, host: ServerPlatform = platform()): ServerClient {
+  let schema: ServerSchema; let endpoint: string;
+  const attempts = options.maxAttempts ?? 3; const timeout = options.requestTimeoutMs ?? 5000; const budget = options.retryBudgetMs ?? 30000;
+  try {
+    const url = new URL(options.endpoint); const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if (url.username || url.password || url.search || url.hash ||
+      !/^\/v1\/projects\/[a-z][a-z0-9-]{0,47}\/server-batches$/.test(url.pathname) ||
+      !(url.protocol === 'https:' || (options.allowLocalHttp === true && local && url.protocol === 'http:')) ||
+      typeof options.getToken !== 'function' || !integer(attempts, 1, 3) || !integer(timeout, 10, 30000) || !integer(budget, 10, 600000) ||
+      [host.now, host.monotonicNow, host.uuid, host.fetch, host.wait].some(fn => typeof fn !== 'function')) throw Error();
+    const text = JSON.stringify(options.schema);
+    if (text.length > 32768) throw Error();
+    const copy: unknown = JSON.parse(text); if (!schemaValid(copy)) throw Error();
+    schema = copy; endpoint = url.href;
+  } catch { throw new TypeError('Invalid server SDK configuration.'); }
+  const getToken = options.getToken; const encoder = new TextEncoder();
+  return {
+    createEvent(name, properties = {}, metadata = {}) {
+      try {
+        if (!record(metadata) || Object.keys(metadata).some(key => !['eventId', 'occurredAt'].includes(key))) throw new ServerInputError();
+        const now = host.now();
+        return eventSnapshot({ eventId: metadata.eventId === undefined ? host.uuid() : metadata.eventId, name,
+          occurredAt: metadata.occurredAt === undefined ? new Date(now).toISOString() : metadata.occurredAt, properties }, schema, now);
+      } catch { throw new ServerInputError(); }
+    },
+    async send(events, sendOptions = {}) {
+      let sent = 0; let httpStatus: number | null = null;
+      const fail = (status: 'rejected' | 'unavailable' | 'aborted', reason: FailureReason, retryable: boolean): DeliveryResult =>
+        ({ status, reason, httpStatus, retryable, attempts: sent });
+      const signal = sendOptions.signal;
+      if (signal?.aborted) return fail('aborted', 'aborted', false);
+      let body: string; let count: number;
+      try {
+        if (!Array.isArray(events) || !events.length || events.length > 20) return fail('rejected', 'invalid_batch', false);
+        const now = host.now(); const snapshot = events.map(event => eventSnapshot(event, schema, now));
+        if (new Set(snapshot.map(e => e.eventId)).size !== snapshot.length) return fail('rejected', 'invalid_batch', false);
+        count = snapshot.length;
+        body = JSON.stringify({ schemaVersion: schema.version, source: 'server', events: snapshot });
+        if (encoder.encode(body).byteLength > 16384) return fail('rejected', 'invalid_batch', false);
+      } catch { return fail('rejected', 'invalid_event', false); }
+      const deadline = host.monotonicNow() + budget;
+      let reason: FailureReason = 'transport_unavailable';
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const remaining = deadline - host.monotonicNow();
+        if (remaining <= 0) return fail('unavailable', 'retry_deferred', true);
+        let header: string | null = null; let issued = false;
+        try {
+          const outcome = await limited(async requestSignal => {
+            let token: string;
+            try { token = await getToken(requestSignal); }
+            catch { throw authFailed; }
+            if (requestSignal.aborted) throw aborted;
+            if (typeof token !== 'string' || !token || token.length > 8185 || /[\s,]/.test(token)) throw authFailed;
+            issued = true; sent++;
+            const response = await host.fetch(endpoint, { method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body,
+              signal: requestSignal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+            httpStatus = response.status; header = response.headers.get('Retry-After');
+            if (response.status === 200) return await receipt(response, count, requestSignal);
+            await response.body?.cancel();
+            return null;
+          }, Math.min(timeout, remaining), signal);
+          if (outcome) return { status: 'delivered', ...outcome, attempts: sent };
+          reason = 'http_error';
+          if (httpStatus !== 429 && httpStatus !== 408 && !(httpStatus! >= 500 && httpStatus! <= 599))
+            return httpStatus! >= 400 && httpStatus! < 500 ? fail('rejected', reason, false) : fail('unavailable', 'invalid_response', true);
+        } catch (error) {
+          if (signal?.aborted || error === aborted) return fail('aborted', 'aborted', false);
+          if (!issued || error === authFailed) return fail('unavailable', 'authentication_unavailable', true);
+          reason = error === badResponse ? 'invalid_response' : 'transport_unavailable';
+        }
+        if (attempt === attempts) return fail('unavailable', reason, true);
+        const delay = retryDelay(header, attempt, host.now());
+        const remainingWait = deadline - host.monotonicNow();
+        if (delay >= remainingWait) return fail('unavailable', 'retry_deferred', true);
+        try { await limited(waitSignal => host.wait(delay, waitSignal), remainingWait, signal); }
+        catch { return signal?.aborted ? fail('aborted', 'aborted', false) : fail('unavailable', 'retry_deferred', true); }
+      }
+      return fail('unavailable', reason, true);
+    },
+  };
+}

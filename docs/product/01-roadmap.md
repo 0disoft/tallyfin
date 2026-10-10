@@ -11,13 +11,12 @@
   저장 어댑터의 `publisherAccess`·`commitServer`, 코어 `ServerPrincipal`·
   `ServerCollectionStore`, 전용 `POST .../server-batches`와 `PublisherAccess` 발행자
   인증 배선까지다. 발행자 회수 경쟁은 쓰기 batch의 권한 재검사로 롤백한다. 발행자
-  권한 부여·회수 CLI(`publisher-grant`·`publisher-revoke`)도 로컬 구현 완료다. 발행자
-  OIDC 운영 설정값과 서버 SDK·서버 출처 조회 화면은 아직 없다.
-  [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
-- 다음 구현은 dependency-free server SDK와 서버 출처 일별 조회·UI, server 정의만 있는
-  스키마 허용이다. 발행자 OIDC 운영 설정값은 사용자가 운영 인증을 정한 뒤 채운다.
-  브라우저 공개 ID나 Origin을 서버의 인증 수단으로 재사용하지 않는다. 브라우저/서버 간
-  작업 연결은 별도 설계한다.
+  권한 부여·회수 CLI(`publisher-grant`·`publisher-revoke`)와 dependency-free 서버 SDK
+  (`packages/server`)도 로컬 구현 완료다. 발행자 OIDC 운영 설정값과 서버 출처 조회 화면은
+  아직 없다. [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
+- 다음 구현은 서버 출처 일별 조회·UI와 server 정의만 있는 스키마 허용이다. 발행자 OIDC
+  운영 설정값은 사용자가 운영 인증을 정한 뒤 채운다. 브라우저 공개 ID나 Origin을 서버의
+  인증 수단으로 재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도 설계한다.
 - 이후 다단계 퍼널의 연결·보존 기준을 설계하고 조회와 화면을 작은 단위로 구현한다.
 - 실제 인증 제공자·원격 DB·정리 작업·복구·부하 검증을 마친 뒤 서비스 파일럿을 진행한다.
 - Sembom과 다른 종류의 서비스 한 곳에서 범용성을 확인하고 라이선스·독립 설치·공개
@@ -330,3 +329,15 @@ admission을 browser와 공유한다. 발행자 OIDC 검증기는 `exclusiveAudi
 확인되지 않는다. 발행 권한 변경은 관리자 변경 이력(`admin_changes`)의 action 형식에 없어
 기록하지 않는다. 0006이 `project_publishers`를 이미 만들어 스키마·마이그레이션 변경은 없다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
+2026-10-11 서버 SDK: `packages/server`(`@tallyfin/server`)에 dependency-free 서버 발행
+클라이언트를 로컬 구현했다. `createTallyfinServer({endpoint, schema, getToken, …})`가
+endpoint·검토한 server 스키마·토큰 콜백을 검증하고, `createEvent`는 eventId·UTC occurredAt·
+속성을 얼려 만들며 `send`는 1~20개·16KiB 이하 배치 하나를 재시도 예산 안에서 보낸다.
+`getToken` 실패는 자동 재시도하지 않고 401·403·409·422 같은 4xx는 영구 실패다. 408·429·5xx와
+네트워크·타임아웃, 규칙에 안 맞는 200 영수증만 `Retry-After`·백오프로 재시도하고 예산을
+넘으면 `retry_deferred`로 미룬다. 실패 시 서버가 이미 저장했을 수 있어 저장한
+eventId·occurredAt·본문으로 다시 보낸다. 지속 큐·아웃박스·정확히 한 번 보장은 없다. 실제
+발급자 선택과 자격증명 발급은 호스트 책임이다. 서버 정의만 있는 레지스트리와 서버 출처
+조회 UI는 아직 없다. 다음 슬라이스는 로컬 Miniflare Worker·D1 통합이고 원격 배포는 범위
+밖이다. 검증은
+[검증 기록](../../VALIDATION.md)에 둔다.

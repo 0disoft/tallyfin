@@ -20,7 +20,9 @@
     "collector:dry-run": "wrangler deploy --dry-run --outdir .tmp/collector-bundle",
     "test:core": "node --test packages/core/test/*.test.ts",
     "test:browser": "node --test packages/browser/test/*.test.ts",
+    "test:server": "node --test packages/server/test/*.test.ts",
     "build:browser": "npm run build --workspace @tallyfin/browser",
+    "build:server": "npm run build --workspace @tallyfin/server",
     "check:browser-size": "node tools/browser/check.mjs",
     "bench:browser": "node tools/browser-bench/run.mjs",
     "check": "npm run typecheck && npm test && npm run check:browser-size"

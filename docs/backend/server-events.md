@@ -2,9 +2,9 @@
 
 상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획, 저장·발행 권한, 전용 발행
 endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현했고 좁은 범위 검증을
-통과했다. `project_publishers` 부여·회수 CLI까지 로컬 구현했다. 실제 발행자 OIDC 제공자
-설정과 서버 SDK·서버 출처 조회 화면은 아직 없다. 이 문서는 확정한 것과 아직 계획인 것을
-나눠 적는다.
+통과했다. `project_publishers` 부여·회수 CLI와 dependency-free 서버 SDK까지 로컬
+구현했다. 실제 발행자 OIDC 제공자 설정과 서버 출처 조회 화면은 아직 없다. 이 문서는
+확정한 것과 아직 계획인 것을 나눠 적는다.
 
 형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
 동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다. 브라우저 수집 경로는
@@ -199,6 +199,14 @@ issuer·subject는 코어 `validGrantIdentity`로 검사한다. role이나 프�
 0006이 `project_publishers`를 이미 만들어 스키마·마이그레이션 변경은 없다. 세부 형식은
 [등록·권한 관리 CLI](./provisioning.md)에 있다.
 
+## 서버 SDK
+
+`@tallyfin/server`(`packages/server`)가 서버 발행 클라이언트를 로컬 구현했다. 호스트가
+`createTallyfinServer`에 endpoint·검토한 server 스키마·`getToken`을 주면 `createEvent`가
+eventId·UTC occurredAt·속성을 얼려 만들고, `send`가 1~20개·16KiB 이하 배치 하나를 보낸다.
+재시도·취소·영수증·재전송 규칙은 [서버 SDK](./server-sdk.md)에 있고, 실제 발급자 선택과
+자격증명 발급은 호스트 책임이다.
+
 ## 아직 정하지 않은 것
 
 - 브라우저 시작과 서버 완료를 연결하는 전환율. 지금은 server 이벤트 건수만 다룰 수
@@ -211,9 +219,8 @@ issuer·subject는 코어 `validGrantIdentity`로 검사한다. role이나 프�
 
 ## 다음 슬라이스
 
-1. dependency-free server SDK.
-2. 서버 출처 일별 조회 API와 화면.
-3. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
+1. 서버 출처 일별 조회 API와 화면.
+2. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
    수집·조회의 빈 정의 처리를 함께 정한다.
 
 발행자 OIDC 운영 설정값과 원격 등록·배포는 별도의 운영 후속이다. 사용자가 운영 인증

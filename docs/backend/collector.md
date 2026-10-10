@@ -165,7 +165,7 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
   규칙은 [서버 발행 이벤트](./server-events.md)에 있다.
 - 발행 권한 부여·회수 CLI는 로컬 구현했다. [등록·권한 관리 CLI](./provisioning.md)를 따른다.
 - 아직 없음: 발행자 OIDC 운영 설정값과 실제 제공자 연결·운영 토큰 발급,
-  서버 SDK, 서버 출처 조회 API·화면,
+  서버 출처 조회 API·화면,
   원격 D1 마이그레이션, 운영 Wrangler 바인딩·시크릿, 원격 정리 Cron Trigger 등록.
   정리 스케줄러와 커서는 로컬 구현·검증했다.
 - 측정: 브라우저 SDK가 gzip 3KiB 예산 안(실측값은 [VALIDATION.md](../../VALIDATION.md)).
