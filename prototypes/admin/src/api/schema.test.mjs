@@ -8,6 +8,7 @@ import { changeEventForm, eventIsLinked, eventIssueTarget, readEventForm } from 
 import { changePropertyForm, propertyChoices, propertyIsDimension, propertyIssueTarget, readPropertyForm } from './schema-property-form.ts';
 import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflowWarnings, workflowIssueTarget, workflowFocusAfterChange } from './schema-workflow-form.ts';
 import { validateSchemaDraft } from '../../../../packages/core/src/schema.ts';
+import { changeFunnelForm } from './schema-funnel-form.ts';
 
 const definitions = () => ({ events: [{ name: 'operation_completed', label: '작업 완료', source: 'browser', properties: {} }], workflows: [] });
 const metadata = version => ({ schemaVersion: version, schemaStatus: 'active', publishedAt: '2026-10-09T00:00:00.000Z' });
@@ -42,6 +43,22 @@ function fixture() {
 const ready = async editor => { await editor.load(); await editor.validate(); editor.setPrivacy(true); };
 
 const funnelDraft = () => schemaDefinitions(JSON.parse(readFileSync(new URL('../../../../api/examples/funnel-registry.json', import.meta.url), 'utf8')));
+
+test('funnel form edits reset review gates and publish only server-validated new versions; reader cannot edit', async () => {
+  const f = fixture(); f.schemas.set(1, funnelDraft());
+  f.config.validate = async (_url, init) => response(200, validateSchemaDraft(JSON.parse(init.body)));
+  await ready(f.editor);
+  f.editor.edit('draft', changeFunnelForm(f.editor.state.draft, { kind: 'edit', index: 0, field: 'label', value: '파일 변환' }));
+  assert.equal(f.editor.state.validatedKey, null); assert.equal(f.editor.state.privacyReviewed, false);
+  await f.editor.publish(); assert.equal(f.calls.filter(c => c.init.method === 'PUT').length, 0);
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish();
+  assert.equal(f.schemas.get(2).funnels[0].label, '파일 변환'); assert.equal(f.schemas.get(1).funnels[0].label, 'File conversion');
+  const saved = f.editor.state.draft;
+  f.config.owner = false; await f.editor.load();
+  f.editor.edit('draft', changeFunnelForm(saved, { kind: 'remove', index: 0 }));
+  assert.equal(f.editor.state.draft, saved); assert.equal(f.editor.canEdit, false);
+  f.editor.destroy(); f.client.destroy();
+});
 
 test('schema editor/client preserve and hash source-bound funnels through load, edits and publication', async () => {
   const f = fixture(), original = funnelDraft(); f.schemas.set(1, original);
