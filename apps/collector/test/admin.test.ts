@@ -156,7 +156,7 @@ test('retired versions and paused projects remain readable; different versions d
 test('unknown schemas/definitions, invalid dates/grouping and duplicate parameters are rejected', async () => {
   for (const suffix of ['/schemas/2', `/events/unknown/daily${range}`, `/workflows/unknown/daily${range}`])
     assert.equal((await read(`/v1/projects/sembom${suffix}`, 404)).error.code, 'not_found');
-  for (const suffix of [range + '&schemaVersion=1', range + '&source=server', range.replace('2026-10-08', '2026-02-30'),
+  for (const suffix of [range + '&schemaVersion=1', range + '&source=all', range.replace('2026-10-08', '2026-02-30'),
     range.replace('2026-10-08', '2026-08-01'), range.replace('2026-10-09', '2026-10-10'),
     '?schemaVersion=1&from=2026-09-01&to=2026-10-09', '?from=2026-10-08&to=2026-10-09'])
     await read(`/v1/projects/sembom/summary${suffix}`, 400);

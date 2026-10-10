@@ -21,6 +21,7 @@ const check = (name, action) => { action(); checks++; console.log(`OK ${name}`);
 for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry':'Registry', 'browser-batch':'BrowserBatch', 'server-batch':'ServerBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
+  'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
   'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
@@ -42,6 +43,22 @@ check('server batch is closed, source-specific and forbids browser attempt ident
     '#/components/schemas/BrowserBatch');
 });
 const batch = example('browser-batch');
+check('event reads select one source, preserve browser defaults and never enable server workflow cohorts', () => {
+  assert.deepEqual(spec.components.parameters.EventSource.schema, { type: 'string', enum: ['browser', 'server'], default: 'browser' });
+  for (const path of ['/v1/projects/{projectId}/summary', '/v1/projects/{projectId}/events/{eventName}/daily'])
+    assert.ok(spec.paths[path].get.parameters.some(p => p.$ref === '#/components/parameters/EventSource'));
+  for (const path of ['/v1/projects/{projectId}/workflows/{workflowId}/daily', '/v1/projects/{projectId}/workflows/{workflowId}/breakdown'])
+    assert.ok(!spec.paths[path].get.parameters.some(p => p.$ref === '#/components/parameters/EventSource'));
+  for (const [schema, file] of [['SummaryResponse', 'summary-response'], ['EventSeriesResponse', 'event-series-response']]) {
+    const value = example(file); value.meta.source = 'server'; assert.ok(validate(schema, value));
+    value.meta.source = 'all'; assert.equal(validate(schema, value), false);
+  }
+  const empty = example('summary-response'); empty.meta.source = 'server'; empty.events = []; empty.totalEvents = 0;
+  assert.ok(validate('SummaryResponse', empty));
+  const workflow = example('workflow-response'); workflow.meta.source = 'server';
+  assert.equal(validate('WorkflowResponse', workflow), false);
+  assert.equal(validate('BrowserQueryMeta', workflow.meta), false);
+});
 for (const [name, mutate] of [
   ['unknown envelope key', b => { b.userId = 'private'; }],
   ['unknown event key', b => { b.events[0].url = 'https://private.invalid'; }],

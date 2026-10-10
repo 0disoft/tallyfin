@@ -9,6 +9,7 @@ info:
     provisioning CLI remains an alternative. Owner-only administrator change history is implemented locally with rolling
     90-day retention and recorded-changes-only coverage. Server batch schemas and core validation are implemented;
     guarded server persistence and dedicated authenticated server ingestion are implemented locally.
+    Event summary and daily reads select browser or server source, defaulting to browser; workflow cohorts remain browser-only.
 tags:
   - name: Collection
     description: Explicit registered browser and server events; no visitor identifiers or free text.
@@ -32,6 +33,15 @@ components:
         issuer/subject to project grants. Anonymous access and decode-only JWT handling are forbidden.
         Identity provider is not selected by this contract.
   parameters:
+    EventSource:
+      name: source
+      in: query
+      required: false
+      schema:
+        type: string
+        enum: [browser, server]
+        default: browser
+      description: Read exactly one publishing source. Omission preserves browser counts; sources are never merged.
     ProjectId:
       name: projectId
       in: path
@@ -1067,7 +1077,7 @@ components:
           maximum: 2147483647
         source:
           type: string
-          const: browser
+          enum: [browser, server]
         from:
           type: string
           format: date
@@ -1084,6 +1094,7 @@ components:
           pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
           maxLength: 30
         latestReceivedAt:
+          description: Latest new receipt for the whole project, across sources, versions and query dates; not a source-specific timestamp.
           anyOf:
             - type: string
               format: date-time
@@ -1094,6 +1105,14 @@ components:
           type: string
           const: observed-only
           description: Counts of received events only. Does not prove delivery completeness or visitor authenticity.
+    BrowserQueryMeta:
+      allOf:
+        - $ref: "#/components/schemas/QueryMeta"
+        - type: object
+          properties:
+            source:
+              type: string
+              const: browser
     EventCount:
       type: object
       additionalProperties: false
@@ -1125,7 +1144,7 @@ components:
           maximum: 9007199254740991
         events:
           type: array
-          minItems: 1
+          minItems: 0
           maxItems: 50
           items:
             $ref: "#/components/schemas/EventCount"
@@ -1283,7 +1302,7 @@ components:
         - days
       properties:
         meta:
-          $ref: "#/components/schemas/QueryMeta"
+          $ref: "#/components/schemas/BrowserQueryMeta"
         workflowId:
           type: string
           pattern: ^[a-z][a-z0-9_]{0,47}$
@@ -1323,7 +1342,7 @@ components:
       required: [meta, workflowId, cohortBasis, groupBy, summary, buckets]
       properties:
         meta:
-          $ref: "#/components/schemas/QueryMeta"
+          $ref: "#/components/schemas/BrowserQueryMeta"
         workflowId:
           type: string
           pattern: ^[a-z][a-z0-9_]{0,47}$
@@ -2774,6 +2793,7 @@ paths:
       operationId: getEventSummary
       summary: Read event counts for one version and period
       parameters:
+        - $ref: "#/components/parameters/EventSource"
         - $ref: "#/components/parameters/ProjectId"
         - $ref: "#/components/parameters/SchemaVersion"
         - $ref: "#/components/parameters/From"
@@ -2833,6 +2853,7 @@ paths:
       operationId: getEventDailySeries
       summary: Read daily counts and optional registered-property buckets
       parameters:
+        - $ref: "#/components/parameters/EventSource"
         - $ref: "#/components/parameters/ProjectId"
         - $ref: "#/components/parameters/SchemaVersion"
         - $ref: "#/components/parameters/From"

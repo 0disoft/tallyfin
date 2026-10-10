@@ -1,8 +1,9 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
-상태: 관리자 조회(GET)·프로젝트 설정 조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수
-(PUT·DELETE)·프로젝트 변경 이력 조회(GET)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서
-구현·검증했다. 실제 인증 제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
+상태: 관리자 조회(GET)·출처별 집계 조회(source)·프로젝트 설정 조회/변경(PATCH)·프로젝트
+권한 부여/역할 변경/회수(PUT·DELETE)·프로젝트 변경 이력 조회(GET)·검증기 포트·OIDC JWT
+서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증 제공자·로그인 흐름·토큰 발급과 운영
+설정은 아직 연결하지 않았다.
 
 호스트는 `createWorker(verifyBearer)`로 신뢰하는 검증기를 연결한다. `verifyBearer`는
 서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
@@ -48,15 +49,24 @@ export default createWorker(bearer => hostVerify(bearer));
 - `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
 - `PUT /v1/projects/{projectId}/schemas/{schemaVersion}` — owner의 새 버전 발행.
 - `POST /v1/projects/{projectId}/schemas/validate` — owner 전용 초안 검증, 저장 없음.
-- `GET /v1/projects/{projectId}/summary` — 한 버전·기간의 이벤트별 건수.
-- `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷.
-- `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — 시작일 cohort.
-- `GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}` — 시작 시점 속성별 cohort.
+- `GET /v1/projects/{projectId}/summary` — 한 버전·기간의 이벤트별 건수. 선택 `source`(기본 browser, browser|server).
+- `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷. 선택 `source`.
+- `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — 시작일 cohort. browser 출처 전용.
+- `GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}` — 시작 시점 속성별 cohort. browser 출처 전용.
 
 집계 조회는 정확한 schemaVersion, 프로젝트 시간대의 from/to, 보존 90일 안에서 최대
 31일을 요구한다. retired 버전과 paused 프로젝트도 같은 grant로 조회한다. 빈 날짜는 0으로
 채우고, 흐름 완료율은 시작 cohort의 succeeded/started이며 실패 단계가 없으면
 failedAttempts는 null, 날짜 끝 + 48시간까지 provisional=true다.
+
+`summary`와 `events/{eventName}/daily`만 선택 `source`(기본 browser)를 받고 한 요청에 한
+출처만 읽는다. browser와 server 건수를 합치거나 서로 바꿔 세지 않는다. server 정의도 daily
+속성 분류를 지원하고 등록된 출처·속성 이름만 허용한다. 그 출처에 정의가 없으면 summary는
+`events=[]`·`totalEvents=0`이고, 다른 출처에만 있는 이벤트 이름을 daily로 요청하면 404다.
+workflow 경로는 `source`를 받지 않고 browser 기록만 읽는다(source를 주면 400). meta.source는
+요청 출처(기본 browser)이고 meta.latestReceivedAt는 프로젝트 전체의 최신 수신 시각이라 특정
+출처·버전·날짜 값이 아니다. 조회 권한은 매 요청마다 `project_grants` reader/owner로 다시
+검사하며 `project_publishers` 발행 권한으로는 조회할 수 없다.
 
 속성별 흐름 조회는 등록 workflow.dimensions 중 한 속성만 groupBy로 받는다. 시작
 시점에 저장한 차원 키를 사용하고 이벤트 발생일별 건수로 완료율을 추론하지 않는다.

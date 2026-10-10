@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "projectId": "jobs", "schemaVersion": 1, "source": "server",
+    "from": "2026-10-10", "to": "2026-10-11", "timeZone": "UTC",
+    "generatedAt": "2026-10-11T06:00:00Z", "latestReceivedAt": "2026-10-11T05:00:00Z",
+    "coverage": "observed-only"
+  },
+  "totalEvents": 3,
+  "events": [{ "name": "job_finished", "count": 3 }]
+}

@@ -3,7 +3,8 @@
 상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획, 저장·발행 권한, 전용 발행
 endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현했고 좁은 범위 검증을
 통과했다. `project_publishers` 부여·회수 CLI와 dependency-free 서버 SDK까지 로컬
-구현했다. 실제 발행자 OIDC 제공자 설정과 서버 출처 조회 화면은 아직 없다. 이 문서는
+구현했다. 출처별 조회 API(`source` 선택, 기본 browser)는 로컬에서 구현·검증 완료했고 실제
+발행자 OIDC 제공자 설정과 서버 출처 조회 화면은 아직 없다. 이 문서는
 확정한 것과 아직 계획인 것을 나눠 적는다.
 
 형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
@@ -207,6 +208,16 @@ eventId·UTC occurredAt·속성을 얼려 만들고, `send`가 1~20개·16KiB �
 재시도·취소·영수증·재전송 규칙은 [서버 SDK](./server-sdk.md)에 있고, 실제 발급자 선택과
 자격증명 발급은 호스트 책임이다.
 
+## 서버 출처 조회
+
+`GET .../summary`와 `GET .../events/{eventName}/daily`가 선택 `source`(기본 browser,
+browser|server)를 받는다. 한 요청에 한 출처만 읽고 browser·server 건수를 합치지 않는다.
+server 정의도 daily 속성 분류를 지원한다. 그 출처에 정의가 없으면 summary는 `events=[]`·
+`totalEvents=0`, 다른 출처에만 있는 이름의 daily는 404다. workflow 조회는 browser 전용이라
+`source`를 받지 않는다. 조회 권한은 관리자 `project_grants` reader/owner로만 검사하고
+`project_publishers` 발행 권한으로는 읽을 수 없다. meta.latestReceivedAt는 출처·버전·날짜를
+가리지 않은 프로젝트 전체 최신 수신 시각이다. 화면은 아직 없다.
+
 ## 아직 정하지 않은 것
 
 - 브라우저 시작과 서버 완료를 연결하는 전환율. 지금은 server 이벤트 건수만 다룰 수
@@ -215,11 +226,11 @@ eventId·UTC occurredAt·속성을 얼려 만들고, `send`가 1~20개·16KiB �
   발행자 인증 수단으로 재사용하지 않는다는 것만 정했다. 운영 제공자와 audience 값 확정은
   사용자가 운영 인증을 정한 뒤로 미룬다.
 - 출처별로 분당·일일 한도를 따로 둘지. 지금은 프로젝트 한 값을 공유한다.
-- server 출처 조회의 API·화면 형태. 현재 조회 계약은 `source`가 browser 고정이다.
+- 서버 출처 조회 화면의 형태. API는 `source` 선택으로 구현했고 화면은 후속이다.
 
 ## 다음 슬라이스
 
-1. 서버 출처 일별 조회 API와 화면.
+1. 서버 출처 조회 화면(UI).
 2. server 정의만 있는 레지스트리 허용. 스키마 검증의 최소 browser 이벤트 요구를 풀 때
    수집·조회의 빈 정의 처리를 함께 정한다.
 

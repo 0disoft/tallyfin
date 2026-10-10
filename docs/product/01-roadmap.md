@@ -12,9 +12,10 @@
   `ServerCollectionStore`, 전용 `POST .../server-batches`와 `PublisherAccess` 발행자
   인증 배선까지다. 발행자 회수 경쟁은 쓰기 batch의 권한 재검사로 롤백한다. 발행자
   권한 부여·회수 CLI(`publisher-grant`·`publisher-revoke`)와 dependency-free 서버 SDK
-  (`packages/server`)도 로컬 구현 완료이며 Node·Worker·D1 통합을 검증했다. 발행자 OIDC 운영 설정값과 서버 출처 조회 화면은
-  아직 없다. [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
-- 다음 구현은 서버 출처 일별 조회·UI와 server 정의만 있는 스키마 허용이다. 발행자 OIDC
+  (`packages/server`)도 로컬 구현 완료이며 Node·Worker·D1 통합을 검증했다. 출처별 조회
+  API(`source` 선택)도 로컬에서 구현·검증 완료했다. 발행자 OIDC 운영 설정값과 서버 출처 조회
+  화면은 아직 없다. [서버 발행 이벤트 계약](../backend/server-events.md)에서 확정과 계획을 나눠 적었다.
+- 다음 구현은 서버 출처 조회 화면(UI)과 server 정의만 있는 스키마 허용이다. 발행자 OIDC
   운영 설정값은 사용자가 운영 인증을 정한 뒤 채운다. 브라우저 공개 ID나 Origin을 서버의
   인증 수단으로 재사용하지 않는다. 브라우저/서버 간 작업 연결은 별도 설계한다.
 - 이후 다단계 퍼널의 연결·보존 기준을 설계하고 조회와 화면을 작은 단위로 구현한다.
@@ -348,3 +349,12 @@ eventId·occurredAt·본문으로 다시 보낸다. 지속 큐·아웃박스·�
 조회 UI는 아직 없다. 다음 슬라이스는 로컬 Miniflare Worker·D1 통합이고 원격 배포는 범위
 밖이다. 검증은
 [검증 기록](../../VALIDATION.md)에 둔다.
+2026-10-11 서버 출처 조회 API: `GET .../summary`와 `GET .../events/{eventName}/daily`에 선택
+`source`(기본 browser, browser|server)를 추가했다. 한 요청에 한 출처만 읽고 browser·server를
+합치지 않는다. server 정의도 daily 속성 분류를 지원하고, 그 출처에 정의가 없으면 summary는
+`events=[]`·`totalEvents=0`, 다른 출처에만 있는 이름의 daily는 404다. workflow 조회는 browser
+전용이라 `source`를 주면 400이다. 조회 권한은 매 요청마다 관리자 `project_grants`
+reader/owner로 다시 검사하고 `project_publishers` 발행 권한으로는 읽을 수 없다. meta.source는
+요청 출처, meta.latestReceivedAt는 프로젝트 전체 최신 수신 시각이다. 날짜·31일·90일·타입
+속성 한도는 그대로다. API는 로컬에서 구현·검증 완료했고 조회 화면과 server 정의만 있는 레지스트리는
+후속이다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.

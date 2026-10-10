@@ -18,10 +18,10 @@ export interface ProjectGrantPage {
 export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown';
 export interface AdminQuery {
   projectId: string; version: number; kind: QueryKind;
-  from?: string; to?: string; name?: string; groupBy?: string;
+  from?: string; to?: string; name?: string; groupBy?: string; source?: 'browser' | 'server';
 }
 export interface QueryMeta {
-  projectId: string; schemaVersion: number; source: 'browser'; from: string; to: string;
+  projectId: string; schemaVersion: number; source: 'browser' | 'server'; from: string; to: string;
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {

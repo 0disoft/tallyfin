@@ -55,6 +55,9 @@ export class D1Queries implements AdminStore {
       page: { limit, nextCursor: rows.length > limit ? rows[limit - 1]!.id : null } };
   }
   async query(principal: AdminPrincipal, input: AdminQuery, now: number) {
+    const source = input.source ?? 'browser';
+    if (input.source !== undefined && (!['browser', 'server'].includes(input.source) || !['summary', 'event'].includes(input.kind)))
+      throw new CollectionError('invalid_request', 400);
     if (!PROJECT_ID.test(input.projectId) || !integer(input.version, 1, 2147483647) || !['registry', 'summary', 'event', 'workflow', 'workflow-breakdown'].includes(input.kind))
       throw new CollectionError('invalid_request', 400);
     if (input.kind !== 'registry') {
@@ -67,11 +70,11 @@ export class D1Queries implements AdminStore {
       this.db.prepare(`SELECT * FROM project_schemas WHERE project_id = ? AND version = ? AND ${access}`).bind(input.projectId, input.version, ...grant),
     ];
     if (input.kind === 'summary') statements.push(this.db.prepare(`SELECT event_name, SUM(count) AS count FROM event_daily_counts
-      WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND event_date BETWEEN ? AND ? AND ${access}
-      GROUP BY event_name LIMIT 51`).bind(input.projectId, input.version, input.from!, input.to!, ...grant));
+      WHERE project_id = ? AND schema_version = ? AND source = ? AND event_date BETWEEN ? AND ? AND ${access}
+      GROUP BY event_name LIMIT 51`).bind(input.projectId, input.version, source, input.from!, input.to!, ...grant));
     else if (input.kind === 'event') statements.push(this.db.prepare(`SELECT event_date, dimension_key, count FROM event_daily_counts
-      WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND event_name = ? AND event_date BETWEEN ? AND ? AND ${access}
-      ORDER BY event_date, dimension_key LIMIT 7937`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
+      WHERE project_id = ? AND schema_version = ? AND source = ? AND event_name = ? AND event_date BETWEEN ? AND ? AND ${access}
+      ORDER BY event_date, dimension_key LIMIT 7937`).bind(input.projectId, input.version, source, input.name!, input.from!, input.to!, ...grant));
     else if (input.kind === 'workflow-breakdown') statements.push(this.db.prepare(`SELECT cohort_date, dimension_key, started_count, succeeded_count, failed_count FROM workflow_daily_counts
       WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND ${access}
       ORDER BY cohort_date, dimension_key LIMIT 7937`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
@@ -93,13 +96,13 @@ export class D1Queries implements AdminStore {
       limits: { requestsPerMinute: p.requests_per_minute, newReceiptsPerUtcDay: p.new_receipts_per_utc_day } }, this.options);
     if (input.kind === 'registry') return registry;
     const dates = queryDates(input.from!, input.to!, p.time_zone, now);
-    const meta: QueryMeta = { projectId: p.id, schemaVersion: schema.version, source: 'browser', from: input.from!, to: input.to!,
+    const meta: QueryMeta = { projectId: p.id, schemaVersion: schema.version, source, from: input.from!, to: input.to!,
       timeZone: p.time_zone, generatedAt: new Date(now).toISOString(),
       latestReceivedAt: p.latest_received_at === null ? null : new Date(p.latest_received_at).toISOString(), coverage: 'observed-only' };
     const rows = result[2]?.results ?? [];
     if (input.kind === 'summary') {
       const counts = new Map((rows as EventRow[]).map(row => [row.event_name, count(row.count)]));
-      const definitions = registry.events.filter(e => e.source === 'browser');
+      const definitions = registry.events.filter(e => e.source === source);
       if (rows.length > 50 || [...counts.keys()].some(name => !definitions.some(e => e.name === name))) throw new CollectionError('storage_unavailable', 503);
       const events = definitions.map(e => ({ name: e.name, count: counts.get(e.name) ?? 0 }));
       return { meta, totalEvents: events.reduce((sum, e) => addCounts(sum, e.count), 0), events };
@@ -121,7 +124,7 @@ export class D1Queries implements AdminStore {
       summary: workflowCounts(totals.started, totals.succeeded, totals.failed, definition.failureEvent !== null), days };
   }
   private series(registry: Registry, input: AdminQuery, meta: QueryMeta, dates: string[], rows: EventRow[]) {
-    const definition = registry.events.find(e => e.name === input.name && e.source === 'browser');
+    const definition = registry.events.find(e => e.name === input.name && e.source === meta.source);
     if (!definition) throw new CollectionError('not_found', 404);
     if (input.groupBy && !Object.hasOwn(definition.properties, input.groupBy)) throw new CollectionError('invalid_request', 400);
     if (rows.length > 7936) throw new CollectionError('storage_unavailable', 503);

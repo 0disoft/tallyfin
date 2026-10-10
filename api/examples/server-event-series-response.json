@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "projectId": "jobs", "schemaVersion": 1, "source": "server",
+    "from": "2026-10-10", "to": "2026-10-11", "timeZone": "UTC",
+    "generatedAt": "2026-10-11T06:00:00Z", "latestReceivedAt": "2026-10-11T05:00:00Z",
+    "coverage": "observed-only"
+  },
+  "eventName": "job_finished", "groupBy": "retried", "totalEvents": 3,
+  "days": [
+    { "date": "2026-10-10", "count": 1, "breakdown": [{ "value": false, "count": 1 }] },
+    { "date": "2026-10-11", "count": 2, "breakdown": [{ "value": null, "count": 1 }, { "value": true, "count": 1 }] }
+  ]
+}

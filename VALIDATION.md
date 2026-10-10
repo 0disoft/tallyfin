@@ -1,5 +1,30 @@
 # 검증
 
+## 서버 출처 집계 조회 API — 2026-10-11
+
+`GET .../summary`와 `GET .../events/{eventName}/daily`에 선택 `source=browser|server`를
+추가했다. 생략하면 기존 browser 조회다. D1의 출처 조건은 bind하며 한 번에 한 출처의
+등록 정의·집계만 읽는다. 새 API나 테이블을 만들지 않고 기존 쿼리 한도·권한 조건·일관
+batch를 유지했다. 잘못된 출처와 중복 파라미터는 400, 선택 출처에 없는 이벤트는 404다.
+workflow 조회는 browser 전용이고 source 파라미터를 받지 않는다. 선택 출처에 정의가
+없으면 summary는 events=[]·totalEvents=0으로 응답한다. meta.latestReceivedAt는 여전히
+프로젝트 전체의 마지막 신규 수신이며 출처·버전·조회 기간별 수신 시각이 아니다.
+
+루트 `npm run check`의 타입 검사·전체 테스트 245/245·브라우저 크기 검사 통과.
+신규 7개 테스트는 실제 D1에 서버/브라우저 이벤트를 같은 ID로 저장하고 중복 재전송,
+출처 분리·기본값·날짜 경계·false/0/누락 속성·빈 정의·버전 분리·retired/paused 조회,
+발행자 조회 거부·다른 issuer/프로젝트·권한 회수·잘못된 source·저장 손상 거부를 확인한다.
+실제 Miniflare Worker에서도 서버 합계·일별 속성 조회와 grant 회수 후 403을 확인했다.
+관리자 인증 포트는 테스트용 검증기를 주입했고 실제 제공자 토큰 검증을 새로 실행하지
+않았다. 운영 인증은 기존 검증 어댑터 범위다. 관리자 `npm run typecheck`도 통과했다.
+OpenAPI lint와 계약/문서 링크 검사 46/46, `git diff --check` 통과.
+
+OpenAPI의 출처 파라미터·QueryMeta와 browser 전용 workflow meta를 확장했다. 응답 예제와
+계약 검사에 서버 응답·빈 합계·서버 workflow 거부를 추가했다. DB·마이그레이션·SDK·
+의존성·CI 러너·위생 정책은 변경하지 않았다. UI 코드를 바꾸지 않아 화면 빌드/시각 검증은
+반복하지 않았고 일반 소스 lint 명령은 없다. 서버 이벤트 화면 연결과 서버 전용 등록은
+후속이다. 원격 DB·운영 연결·Sembom 활성화·푸시·배포는 실행하지 않았다.
+
 ## 서버 SDK Node·Worker·D1 통합 — 2026-10-11
 
 `apps/collector/test/server-sdk.test.ts`에서 서버 작업 예제와 등록 정의 투영을 확인했다.
