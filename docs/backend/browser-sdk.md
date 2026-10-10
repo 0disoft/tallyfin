@@ -1,6 +1,6 @@
 # 브라우저 SDK (packages/browser)
 
-상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 기본 엔트리와 분리한 선택 프로필 `@tallyfin/browser/funnels`의 퍼널 연결 전송도 로컬 구현·검증했다. 전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
+상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 기본 엔트리와 분리한 선택 프로필 `@tallyfin/browser/funnels`의 퍼널 연결 전송도 로컬 구현·검증했고, 관리자 연결 안내가 이 프로필 코드를 만드는 경로도 로컬 구현·검증했다. 전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
 
 ## 경계
 `createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
@@ -40,6 +40,19 @@
 
 예시는 `examples/funnels/browser.ts`와 `examples/funnels/browser-schema.json`에 있다.
 
+관리자 연결 안내는 이 프로필을 그대로 만든다. 브라우저 출처에서 작업 퍼널을 고르면
+`sdkSetup(registry, origin, 'browser', { profile: 'funnels', funnelId })`가
+`@tallyfin/browser/funnels` 팩토리와 `tools/browser/schema.mjs`의 퍼널 투영(브라우저
+단계는 이름, 서버 단계는 `null` 자리)을 만들고, 고른 퍼널의 사용 예제를 주석으로 붙인다.
+일반 프로필은 기존 `createTallyfin`·workflow 코드를 만들고, 퍼널 프로필은 일반 이벤트와
+등록 단계만 싣고 작업 흐름 전용 이벤트는 스키마에서 뺀다. 예제는 자격 증명을 넣지 않고
+첫 출처가 browser인 퍼널만 `createFunnelRun`을 쓰며 나머지는 호스트가 검증한 전달
+컨텍스트를 쓴다.
+
+빌드는 SDK 내부 Batch의 `__tfBatch` 예약 필드 6개만 짧게 만든다. 공개 SDK·HTTP 키는
+이름을 유지한다. 고정 endpoint와 설정을 포함한 관리자 생성 코드의 로컬 번들은 gzip
+3063 B이며 현재 SDK 실측은 기본 2743 B·Sembom 3022 B·퍼널 2912 B·참조 예제 3038 B다.
+
 ## 버퍼·재시도·전송
 - 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
 - 429·503·네트워크 실패만 최대 2회 재시도한다. Retry-After 정수 초를 존중하고, 배치는 시작 시각부터 10분이 지나면 버린다. 재시도는 원래 ID·시각·바디를 유지한다.
@@ -56,11 +69,13 @@ npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 로컬 실측 gzip은 기본 SDK 2772 B·Sembom 3053 B·퍼널 SDK 2942 B·퍼널+예제 3068 B다. 집중 검증은 `node --test packages/browser/test/*.test.ts packages/server/test/funnels.test.ts apps/collector/test/funnels.test.ts apps/collector/test/collector.test.ts` 53건 통과(브라우저 8·기존 19·수집기 18·native D1 1·서버 7)와 `npm run typecheck`·`npm run build:browser` 통과다. 전체 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2743 B·Sembom 3022 B·퍼널 SDK 2912 B·퍼널+참조 예제 3038 B다. 내부 필드 압축 뒤 브라우저 SDK·빌드·수집기 관련 48개 테스트와 루트 타입 검사·SDK 빌드를 통과했다. 서버 SDK·관리자 생성 코드 검증을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 남은 검증
 합성 화면의 실브라우저 초기 실행·동기 호출·전송과 수집기 종료 시 동작은
 [측정 도구](../../tools/browser-bench/README.md)로 확인했다.
 실제 Sembom 설치·활성화와 서비스 지연·처리량, 모바일·운영 환경, 원격 배포는 남았다.
-퍼널 예제의 실제 서비스 적용과 관리자 퍼널 집계 연결도 남았다.
+퍼널 예제의 실제 서비스 적용과 관리자 퍼널 집계 연결도 남았다. 관리자 SDK 코드 생성은
+표준·퍼널 프로필과 서버 설정을 만들도록 로컬 구현·검증했고, reader/owner 퍼널 조회 API와
+집계 화면이 다음이다.
 실제 운영 발행자·관리자 인증 연결도 후속이다.

@@ -1,5 +1,46 @@
 # 검증
 
+## 관리자 퍼널 SDK 코드 생성 — 2026-10-11
+
+`sdkSetup`은 기존 세 인자 호출을 유지하고 선택 profile·funnelId를 받는다. 브라우저는
+일반 이벤트/workflow가 기본이며 별도 퍼널 프로필을 고르면 `/funnels` 엔트리의 팩토리와
+source별 압축 정의를 만든다. 서버 안내도 등록된 서버 참여 퍼널을 투영한다. 다른 출처의
+단계 이름·규칙은 null 위치로만 남긴다. 선택 퍼널의 source별 사용 예제는 주석으로만
+생성하며 등록된 필수 속성의 예시 값·작업 링크 전달·원래 발생 시각·서버 eventId 보존과
+실제 단계 발생 뒤 발행할 조건을 안내한다. 생성만으로 이벤트나 인증 요청을 보내지 않는다.
+
+`LiveSdkSetup`에 브라우저 SDK 종류와 source별 퍼널 예제 선택을 연결했다. 일반 프로필과
+기존 workflow를 자동 전환하지 않는다. 유효하지 않은 이전 선택은 현재 등록에 맞춰
+대체하고, 복사 상태는 client·조회 key·현재 코드에 묶어 늦은 결과를 새 코드에 표시하지
+않는다. 실제 연결 수집 미지원이라는 오래된 문구를 제거했다.
+
+관련 generator·프로젝트 생성·서버 안내 테스트 18/18, 관리자 typecheck·build와 생성된
+브라우저/서버 TypeScript의 실제 패키지 선언 소비자 컴파일을 통과했다. 생성 코드와
+고정 endpoint를 합친 최초 gzip 3091 bytes가 예산을 넘겨 SDK 내부 Batch의 여섯 필드만
+`__tfBatch` 예약 이름으로 표시하고 빌드 때 짧게 만든다. HTTP 본문·공개 SDK 키는 그대로다.
+이 최적화는 별도 로컬 커밋으로 나눴다. 브라우저 SDK·빌드·HTTP·native Worker/D1
+48/48, 루트 typecheck·브라우저 build·크기 검사를 통과했다. 새 빌드 테스트 2개는
+여섯 내부 키만 압축하는지, source와 압축 번들의 workflow/funnel 바디·ID·재시도·
+destroy가 같은지 확인한다. generator의 새 1개 테스트는 dist가 없는 checkout에서도
+source를 빌드해 고정 endpoint와 설정을 포함한 3072-byte 예산을 검사한다.
+일반 SDK gzip 2743·Sembom 3022·퍼널 SDK 2912·참조 예제 3038 bytes다. 설치용 패키지에서
+관리자 생성 코드를 번들한 실측도 gzip 3063 bytes로 한도 안이다. 생성/조회 외 관리자
+흐름과 HTTP/DB 계약을 바꾸지 않아 전체 저장·관리자 테스트는 반복하지 않았다.
+인앱 Chromium·직접 띄운 로컬 Vite(127.0.0.1:5185)에서 공개 예제 정의와 토큰 없는 합성
+클라이언트를 실제 LiveSdkSetup에 연결했다. 기본/퍼널 프로필·server source·출처별
+이름 분리·퍼널 예제·복사·프로젝트 전환 후 새 endpoint와 이전 코드/상태 제거를 확인했다.
+뷰포트 360을 요청했지만 브라우저 실제 innerWidth는 400이었다. 관찰한 400px 화면에서
+문서 scrollWidth 383으로 페이지 가로 넘침이 없고 코드 영역은 읽기 전용이었다.
+새 콘솔 오류는 0이며 desktop/mobile 화면은 ignore된
+`prototypes/admin/.tmp/funnel-setup-ui/`에 저장했다. 코드 갱신 후 폼 상태가 초기화되어
+복사 버튼 조회가 한 번 실패했고, 현재 상태를 확인한 뒤 입력해 복사를 확인했다.
+검증 서버·탭을 종료하고 임시 HTML·TSX·예제 JSON을 지웠다. 계약 검사 51/51·문서 링크·
+`git diff --check`도 통과했고 문서 링크 검사 대상에 프론트엔드 설계를 추가했다.
+
+제품 명세·로드맵·ADR·브라우저 SDK 안내·프론트엔드 설계를 갱신했다. HTTP API·DB 계약·
+마이그레이션·의존성·CI·호스팅 파일 변경은 없다. 운영 인증·원격 DB·서비스 적용·푸시·
+배포는 실행하지 않았다. 다음은 reader/owner 퍼널 조회 API와 관리자 단계 집계 화면이다.
+
 ## 선택 브라우저 퍼널 SDK — 2026-10-11
 
 `@tallyfin/browser/funnels`에서 별도 `createTallyfinFunnels` 진입점을 제공한다.
