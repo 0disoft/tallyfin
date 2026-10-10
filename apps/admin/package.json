@@ -1,8 +1,9 @@
 {
-  "name": "tallyfin-admin-prototype",
+  "name": "@tallyfin/admin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": { "node": ">=24" },
   "scripts": {
     "dev": "vite",
     "build": "vite build && node scripts/prepare-sites-build.mjs",

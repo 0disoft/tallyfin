@@ -1,18 +1,16 @@
 # 워크스페이스 경계
 
-상태: 부분 구현. npm workspaces를 초기화했고 아래 생성한 패키지의 로컬 구현·검증을 마쳤다. `apps/admin`와 운영 배포는 계획이다.
+상태: 부분 구현. npm workspaces와 아래 패키지를 로컬 구현했다. 운영 인증·원격 배포는 후속이다.
 
 ## 생성한 패키지
 - packages/core — 프로젝트별 이벤트/속성 정의, 검증, 정규화, 해시, 목표·집계 기준 (비공개 ZDP·Cloudflare 의존 없음). 로컬 구현·검증 완료.
 - packages/storage-d1 — D1 분석 저장 어댑터 (원자적 커밋·CAS 가드·할당량·만료 정리). 로컬 구현·검증 완료.
 - apps/collector — 네이티브 Cloudflare Worker fetch 수신 경계 (프레임워크 없음). 최소 browser 수집 로컬 구현·검증 완료.
+- apps/admin — private `@tallyfin/admin` 워크스페이스, React/Vite 관리자 앱. 기존 관리자 소스를 이전하고 루트 실행·검증에 연결했다. [ADR 0007](../adr/0007-admin-application.md)을 따른다.
 - packages/browser — 브라우저 SDK (외부 런타임 의존성 없음, 서버 core/D1 런타임 미포함). 로컬 구현·검증 완료.
 - packages/server — 서버 발행 SDK (`send` await + 호출자 수명 주기·자격증명 콜백, 외부 런타임 의존성 없음, 브라우저/core/storage 런타임 미포함). 로컬 구현·검증 완료, 로컬 Node·Worker·D1 통합 검증 완료.
 - packages/auth-oidc — 서버용 OIDC JWT 검증 어댑터 (`jose ^6`, Cloudflare/D1 비의존). collector가 명시적으로 연결하며 core/SDK에 포함하지 않는다.
 - examples/sembom — Sembom 연동 예제 (등록 스키마 투영 + 호스트 어댑터 예시). 로컬 구현·검증 완료, 실제 Sembom 저장소에 설치·활성화하지 않음.
-
-## 계획된 패키지
-- apps/admin — 대시보드 (프레임워크 미결정)
 
 ## 임포트 경계
 - core/SDK는 비공개 ZDP나 Cloudflare에 의존하지 않는다.

@@ -27,7 +27,7 @@ try {
     await supervise([
       { cwd: root, args: ['tools/runtime/dev.ts', '--local', '--state-dir', state, '--port', collector,
         ...(options.has('--settings') ? ['--settings', options.get('--settings')!] : [])] },
-      { cwd: root, args: ['prototypes/admin/scripts/dev-local.mjs', '--port', admin],
+      { cwd: root, args: ['apps/admin/scripts/dev-local.mjs', '--port', admin],
         env: { ...process.env, TALLYFIN_COLLECTOR_ORIGIN: origin } },
     ], servers => {
       if (servers[0]?.url !== origin || servers[1]?.url !== `http://127.0.0.1:${Number(admin)}`) throw Error();

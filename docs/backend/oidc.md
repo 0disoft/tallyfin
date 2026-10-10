@@ -101,7 +101,7 @@ key와 bearer를 파일·로그에 남기지 않는다. 외부 제공자·운영
 
 ## 브라우저 관리자 로그인
 
-`prototypes/admin/src/auth`는 공개 클라이언트 OIDC를 사용한다. 클라이언트 비밀값
+`apps/admin/src/auth`는 공개 클라이언트 OIDC를 사용한다. 클라이언트 비밀값
 없이 Authorization Code + PKCE(S256), state, nonce와 ID token 서명을 검증한다.
 ID token은 로그인 세션을 확인하는 용도이며 `/v1`에는 access token만 보낸다.
 프로젝트 권한은 서버의 D1 `project_grants`로 검사한다.

@@ -27,14 +27,13 @@ npm run collector:dev -- --local --state-dir .tmp/collector-db
 
 ## 통합 개발 실행
 
-루트의 `npm run dev`는 수집기와 기존 관리자 프로토타입을 함께 실행한다.
-Node 24 이상이 필요하며 두 패키지의 의존성을 각각 설치한다. DB 초기화와
+루트의 `npm run dev`는 수집기와 `apps/admin` 관리자 앱을 함께 실행한다.
+Node 24 이상이 필요하며 루트 lockfile로 워크스페이스 의존성을 설치한다. DB 초기화와
 프로젝트 등록은 [등록 CLI](./provisioning.md)로 먼저 마친다. 개발 실행은
 마이그레이션·등록·권한 부여를 자동으로 수행하지 않는다.
 
 ```powershell
 npm ci --ignore-scripts
-npm ci --prefix prototypes/admin --ignore-scripts
 npm run provision -- init --local --state-dir .tmp/collector-db --apply
 npm run provision -- register --local --state-dir .tmp/collector-db --file api/examples/registry.json --apply
 npm run dev -- --local --state-dir .tmp/collector-db
@@ -55,8 +54,8 @@ Ctrl+C·SIGTERM·부모 IPC 연결 종료·시작 실패·자식의 예기치 �
 
 관리자 서버의 `/v1`과 그 하위 경로만 수집기로 전달한다. 경로·쿼리·헤더를
 유지하고 `changeOrigin`은 false다. `/auth/callback`과 `/v10`은 프록시 대상이
-아니며 관리자 SPA가 처리한다. 설정은 `prototypes/admin/vite.config.mjs`와
-`prototypes/admin/scripts/local-proxy.mjs`에 있다.
+아니며 관리자 SPA가 처리한다. 설정은 `apps/admin/vite.config.mjs`와
+`apps/admin/scripts/local-proxy.mjs`에 있다.
 
 관리자 프로토타입을 따로 실행해도 기본 프록시 대상은 `http://127.0.0.1:5188`이다.
 서버 환경 변수 `TALLYFIN_COLLECTOR_ORIGIN`으로 다른 포트를 지정할 수 있다.
@@ -65,7 +64,7 @@ Ctrl+C·SIGTERM·부모 IPC 연결 종료·시작 실패·자식의 예기치 �
 
 기본 설정에서 관리자 API가 반환하는 401은 실제 수집기의 인증 응답이다.
 로그인하려면 실제 인증 제공자 설정과 로컬 관리자 권한이 필요하다.
-클라이언트 `VITE_OIDC_` 설정은 `prototypes/admin/.env`에 따로 두고, 콜백 주소는
+클라이언트 `VITE_OIDC_` 설정은 `apps/admin/.env`에 따로 두고, 콜백 주소는
 선택한 관리자 오리진의 `/auth/callback`을 등록한다.
 [OIDC 연결 안내](./oidc.md#브라우저-관리자-로그인)를 따른다.
 실제 제공자 로그인과 원격 실행은 아직 검증하지 않았다.

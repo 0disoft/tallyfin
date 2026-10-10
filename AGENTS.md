@@ -29,7 +29,7 @@ DB structure is sourced from `db/schema.dbml`.
 
 ## Hard Rules
 
-- Do not infer production application code from generic scaffold examples. The user-authorized sample-data prototype may live in `prototypes/admin/`; it does not establish production API, DB, authentication, or framework contracts.
+- Do not infer production application code from generic scaffold examples. The admin source lives in `apps/admin/` under ADR 0007. Sample data remains a demo and does not prove operational authentication or deployed analytics.
 - Do not invent technology choices. Use UNDECIDED when a decision is not known.
 - Do not create fake credentials, tokens, secrets, or private values.
 - Do not rely on generated, cache, or build output as source truth.
@@ -51,7 +51,7 @@ DB structure is sourced from `db/schema.dbml`.
 ## Out of Scope
 
 - Deployment, credentials and infrastructure provisioning without explicit authorization.
-- Framework apps beyond the selected native fetch collector and portable TypeScript packages.
+- Framework apps beyond the selected React/Vite admin, native fetch collector and portable TypeScript packages.
 - Project-specific credentials or deployment secrets.
 
 ## Final Response Requirements

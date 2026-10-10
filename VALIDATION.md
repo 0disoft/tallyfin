@@ -1,5 +1,37 @@
 # 검증
 
+## 관리자 앱 워크스페이스 이전 — 2026-10-11
+
+기존 관리자 소스·자산·설정·검사를 `apps/admin`으로 이전하고 private workspace
+`@tallyfin/admin`으로 등록했다. React/Vite 채택과 범위는 ADR 0007에 기록했다.
+`prototypes/admin`에는 초기 디자인 QA와 이전 안내만 남긴다. 관리자 의존성은 루트
+lockfile에 통합하고 별도 prototype lockfile을 제거했다. 캐시를 사용한
+`npm install --ignore-scripts --offline --no-audit --no-fund`로 설치했다. 관리자 직접
+의존성 13개의 버전이 모두 이전 lockfile과 일치함을 확인했다.
+
+루트 `dev:admin`·`build:admin`·`typecheck:admin`·`test:admin`·`check:admin`을 추가했다.
+통합 dev 감독기는 새 앱의 dev-local을 실행한다. 루트 NodeNext 타입 검사에서 admin은
+제외하고 별도 bundler/React 타입 검사를 루트 typecheck에 연결한다. 이전 단계의
+Sample/API 전환 동작은 유지하며 API 기본·데모 분리는 다음 슬라이스다.
+
+실행·통과: 루트 `npm run check:admin`(타입 검사, 관리자 테스트 155/155, 빌드,
+번들 검사 2/2, Sites 검사 4/4), `npm run typecheck`,
+`node --test --test-timeout=30000 tools/runtime/test/stack.test.ts` 2/2.
+통합 검사에서 실제 로컬 D1 초기화·등록 후 SPA·auth/callback·프록시된 관리자 401 JSON,
+두 서버 정상 종료·형제 프로세스 실패 시 종료와 계약 `npm run check` 53/53을 확인했다. Sites hosting 설정·worker·
+패키징 스크립트·Sites 테스트 4개 파일의 내용이 이전 경로와 byte 단위로 같았다.
+첫 JS는 262,512 B로 코드 분리 결과를 유지했다.
+
+실제 루트 `npm run dev:admin -- --host 127.0.0.1 --port 5186 --strictPort`와 Chromium으로
+샘플 설정·API 로그인 진입, 설정 없는 로그인 비활성화, callback error 쿼리 제거를
+확인했다. 콘솔 오류 0건, CSS 320px에서 문서 폭 320px였다. 증거는 ignore된
+`.tmp/admin-workspace-ui/login.jpg`·`mobile.jpg`에 있다. 검증 탭·서버는 종료했다.
+
+앱 경로·워크스페이스/타입 검사·개발 실행·의존성 소유권과 ADR·명세·로드맵·설계·실행
+안내를 변경했다. API·DB·마이그레이션·SDK·의존성 버전·CI 러너·위생 정책은 바꾸지 않았다.
+전체 백엔드 회귀 검사는 반복하지 않았고 영향받은 실제 stack만 검사했다. 운영 인증·
+원격 D1·배포·Sembom 활성화는 환경 연결 전으로 미실행이며 푸시도 하지 않았다.
+
 ## 관리자 화면 코드 분리 — 2026-10-11
 
 `App`에서 API 관리자 모드를 지연 로드하고 `LiveDashboard`에서 설정 작업 공간·목표·
