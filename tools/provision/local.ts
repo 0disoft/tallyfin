@@ -14,7 +14,7 @@ export async function openLocal(stateDir: string) {
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
   const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql']) {
+  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql']) {
     const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
     // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
     const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
@@ -31,6 +31,12 @@ export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ mig
   if (existing.has('event_receipts_next') || existing.has('event_daily_counts_next') ||
     (existing.has('project_publishers') ? extended !== 2 : extended !== 0))
     throw new ProvisionError('partial_database', '불완전한 서버 수집 DB라 초기화를 중단했어요. DB 상태를 확인해 주세요.');
+  if (existing.has('funnel_runs') && existing.has('funnel_daily_counts')) {
+    const guards = await db.batch<{ name: string }>([db.prepare("SELECT name FROM sqlite_master WHERE type IN ('trigger','index') AND tbl_name IN ('funnel_runs','funnel_daily_counts')")]);
+    const required = ['funnel_run_insert', 'funnel_run_update', 'funnel_daily_insert', 'funnel_daily_update', 'funnel_runs_expiry', 'funnel_daily_retention'];
+    if (!guards[0]?.success || required.some(name => !guards[0]!.results.some(row => row.name === name)))
+      throw new ProvisionError('partial_database', '퍼널 DB의 제약·인덱스가 빠져 초기화를 중단했어요. DB 상태를 확인해 주세요.');
+  }
   const existingColumns = new Set<string>();
   for (const table of new Set(migrations.flatMap(migration => migration.columns.map(column => column.table)))) {
     if (!existing.has(table)) continue;

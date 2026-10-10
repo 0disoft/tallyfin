@@ -1,12 +1,12 @@
 import { CollectionError } from './types.ts';
-import type { BrowserEvent, EventSource, FunnelDefinition, Registry } from './types.ts';
+import type { BrowserEvent, EventSource, FunnelDefinition, FunnelLink, Registry } from './types.ts';
 import { parseBatch, parseServerBatch, prepareBatch, prepareServerBatch } from './batch.ts';
 import { count } from './query.ts';
-import { closed, DAY, dimensionKey, integer, localDate, matches, sha256, utcMillis, UUID } from './value.ts';
+import { closed, DAY, integer } from './value.ts';
 
 export type { FunnelDefinition } from './types.ts';
 /** One random task identity, not a visitor identity, credential or proof of a browser event. */
-export interface FunnelLink { funnelId: string; runId: string; startedAt: string }
+export type { FunnelLink } from './types.ts';
 export interface FunnelEvent extends Omit<BrowserEvent, 'attempt'> { funnel: FunnelLink; attempt?: never }
 export interface PreparedFunnelObservation {
   projectId: string; schemaVersion: number; source: EventSource; receivedAt: number;
@@ -29,29 +29,12 @@ export async function prepareFunnelObservation(input: unknown, registry: Registr
   source: EventSource, receivedAt: number): Promise<PreparedFunnelObservation> {
   if ((source !== 'browser' && source !== 'server') || !integer(receivedAt, 0, 8_640_000_000_000_000))
     throw new CollectionError('invalid_request', 400);
-  if (!closed(input, ['eventId', 'name', 'occurredAt', 'properties', 'funnel']) ||
-    !closed(input.funnel, ['funnelId', 'runId', 'startedAt']) || input.funnel.funnelId !== definition.id || !matches(input.funnel.runId, UUID))
-    throw new CollectionError('invalid_event', 422);
-  const stepIndex = definition.steps.findIndex(step => step.eventName === input.name && step.source === source);
-  if (stepIndex < 0) throw new CollectionError('invalid_event', 422);
-  // Reuse the actual property, timestamp, project and schema checks without treating a funnel as a legacy workflow.
-  const { funnel: _link, ...ordinary } = input;
-  const body = JSON.stringify({ schemaVersion: registry.schemaVersion, source, events: [ordinary] });
-  const plainRegistry = { ...registry, workflows: [] };
-  const prepared = source === 'browser' ? (await prepareBatch(parseBatch(body), plainRegistry, receivedAt)).events[0]! :
-    (await prepareServerBatch(parseServerBatch(body), plainRegistry, receivedAt)).events[0]!;
-  const startedAt = utcMillis(input.funnel.startedAt);
-  if (startedAt > prepared.occurredAt || prepared.occurredAt - startedAt > DAY || (stepIndex === 0 && startedAt !== prepared.occurredAt))
-    throw new CollectionError('invalid_event', 422);
-  const event: FunnelEvent = { eventId: prepared.event.eventId, name: prepared.event.name, properties: prepared.event.properties,
-    occurredAt: prepared.event.occurredAt, funnel: { funnelId: definition.id, runId: input.funnel.runId,
-    startedAt: new Date(startedAt).toISOString() } };
-  const dimensions = dimensionKey(event.properties, definition.dimensions);
-  const payloadHash = await sha256(JSON.stringify(['funnel-v1', registry.project.id, registry.schemaVersion, source,
-    event.eventId, event.name, event.occurredAt, dimensionKey(event.properties), event.funnel.funnelId, event.funnel.runId, event.funnel.startedAt]));
-  return { projectId: registry.project.id, schemaVersion: registry.schemaVersion, source, receivedAt, event,
-    eventDate: prepared.eventDate, eventDimensionKey: prepared.dimensionKey, payloadHash, stepIndex, stepCount: definition.steps.length,
-    startedAt, occurredAt: prepared.occurredAt, cohortDate: localDate(startedAt, registry.project.timeZone), dimensionKey: dimensions };
+  if (!closed(input, ['eventId', 'name', 'occurredAt', 'properties', 'funnel'])) throw new CollectionError('invalid_event', 422);
+  const body = JSON.stringify({ schemaVersion: registry.schemaVersion, source, events: [input] });
+  const scoped = { ...registry, workflows: [], funnels: [definition] };
+  const prepared = source === 'browser' ? (await prepareBatch(parseBatch(body), scoped, receivedAt)).events[0]! :
+    (await prepareServerBatch(parseServerBatch(body), scoped, receivedAt)).events[0]!;
+  return prepared.funnel!;
 }
 
 const prefixLength = (times: (number | null)[]): number => {

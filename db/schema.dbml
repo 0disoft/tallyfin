@@ -2,6 +2,35 @@ Project tallyfin {
   Note: 'v0.1 D1 adapter contract; migrations are locally tested only. UTC epoch milliseconds and ISO project-local dates; no visitor, content or raw event table.'
 }
 
+Table funnel_runs {
+  project_id text [not null]
+  run_id text [not null, note: 'New UUIDv4 per task; shared browser/server linkage, never visitor identity or credential']
+  schema_version integer [not null]
+  funnel_id text [not null, note: 'Registered ordered funnel in this version']
+  started_at bigint [not null, note: 'UTC milliseconds, immutable during the 72-hour active run']
+  cohort_date text [not null, note: 'Project-local start date']
+  dimension_key text [not null, note: 'Same required finite dimensions in all stages; typed JSON <=512 bytes']
+  step_times_json text [not null, note: '2..10 nullable UTC millisecond milestones <=256 bytes; nondecreasing within 24 hours of start; first is start or null']
+  expires_at bigint [not null, note: 'started_at + 72 hours; no extension on retry']
+  indexes { (project_id, run_id) [pk]
+    (project_id, expires_at) }
+}
+Ref: funnel_runs.(project_id, schema_version) > project_schemas.(project_id, version)
+
+Table funnel_daily_counts {
+  project_id text [not null]
+  schema_version integer [not null]
+  cohort_date text [not null, note: 'Project-local start date; retain today and preceding 89 days']
+  funnel_id text [not null]
+  dimension_key text [not null, note: 'Start-cohort finite classification <=512 bytes']
+  step_index integer [not null, note: '0..9; consecutive reached counts are nonincreasing by index']
+  reached_count bigint [not null, default: 0, note: 'Nonnegative safe integer; SQL trigger enforces neighbor invariant']
+  updated_at bigint [not null]
+  indexes { (project_id, schema_version, cohort_date, funnel_id, dimension_key, step_index) [pk]
+    (project_id, cohort_date) }
+}
+Ref: funnel_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)
+
 Table retention_cleanup_state {
   id integer [pk, not null, note: 'Singleton row, id = 1']
   last_project_id text [not null, default: '', note: 'Last attempted project, including failures; no FK so deleted projects do not reset the sweep']

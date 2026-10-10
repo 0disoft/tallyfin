@@ -51,6 +51,8 @@ export function dimensionKey(properties: Properties, keys = Object.keys(properti
 }
 export function canonicalEvent(projectId: string, batchVersion: number, event: import('./types.ts').BrowserEvent,
   source: import('./types.ts').EventSource = 'browser'): string {
+  if (event.funnel) return JSON.stringify(['funnel-v1', projectId, batchVersion, source, event.eventId, event.name,
+    event.occurredAt, dimensionKey(event.properties), event.funnel.funnelId, event.funnel.runId, event.funnel.startedAt]);
   return JSON.stringify([projectId, batchVersion, source, event.eventId, event.name,
     event.occurredAt, dimensionKey(event.properties), event.attempt
       ? [event.attempt.workflowId, event.attempt.attemptId, event.attempt.startedAt] : null]);

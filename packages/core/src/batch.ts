@@ -1,4 +1,5 @@
 import { CollectionError } from './types.ts';
+import { prepareFunnelStage } from './funnel-preparation.ts';
 import type { BrowserBatch, BrowserEvent, EventSource, PreparedBatch, PreparedEvent, PreparedServerBatch, Properties, PropertyDefinition, Registry, ServerBatch } from './types.ts';
 import { canonicalEvent, closed, DAY, dimensionKey, has, integer, localDate, matches, MAX_BODY_BYTES, NAME, record, sha256, utcMillis, UUID } from './value.ts';
 
@@ -17,7 +18,8 @@ function parseForSource(body: string, source: EventSource): BrowserBatch | Serve
     !Array.isArray(value.events) || value.events.length < 1 || value.events.length > 20) throw new CollectionError('invalid_request', 400);
   const ids = new Set<string>();
   for (const event of value.events) {
-    if (!closed(event, ['eventId', 'name', 'occurredAt', 'properties'], source === 'browser' ? ['attempt'] : []) || !matches(event.eventId, UUID) || !matches(event.name, NAME) ||
+    if (!closed(event, ['eventId', 'name', 'occurredAt', 'properties'], source === 'browser' ? ['attempt', 'funnel'] : ['funnel']) ||
+      has(event, 'attempt') && has(event, 'funnel') || !matches(event.eventId, UUID) || !matches(event.name, NAME) ||
       !record(event.properties) || Object.keys(event.properties).length > 4) throw new CollectionError('invalid_event', 422);
     utcMillis(event.occurredAt);
     if (ids.has(event.eventId)) throw new CollectionError('invalid_event', 422);
@@ -26,6 +28,11 @@ function parseForSource(body: string, source: EventSource): BrowserBatch | Serve
       if (!closed(event.attempt, ['workflowId', 'attemptId', 'startedAt']) || !matches(event.attempt.workflowId, NAME) || !matches(event.attempt.attemptId, UUID))
         throw new CollectionError('invalid_event', 422);
       utcMillis(event.attempt.startedAt);
+    }
+    if (has(event, 'funnel')) {
+      if (!closed(event.funnel, ['funnelId', 'runId', 'startedAt']) || !matches(event.funnel.funnelId, NAME) || !matches(event.funnel.runId, UUID))
+        throw new CollectionError('invalid_event', 422);
+      utcMillis(event.funnel.startedAt);
     }
   }
   // Property values are narrowed by registered definitions in prepareBatch.
@@ -46,7 +53,8 @@ export async function prepareServerBatch(batch: ServerBatch, registry: Registry,
   const events = await prepareEvents(batch, registry, receivedAt);
   return { projectId: registry.project.id, schemaVersion: batch.schemaVersion, source: 'server', receivedAt,
     events: events.map(({ event, workflow: _workflow, ...prepared }) => ({ ...prepared,
-      event: { eventId: event.eventId, name: event.name, occurredAt: event.occurredAt, properties: event.properties } })) };
+      event: { eventId: event.eventId, name: event.name, occurredAt: event.occurredAt, properties: event.properties,
+        ...(event.funnel ? { funnel: event.funnel } : {}) } })) };
 }
 async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Registry, receivedAt: number): Promise<PreparedEvent[]> {
   if (!Number.isSafeInteger(receivedAt)) throw Error('invalid clock');
@@ -68,7 +76,8 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
     const event: BrowserEvent = { ...input, properties: { ...input.properties }, occurredAt: new Date(occurredAt).toISOString() };
     const prepared: PreparedEvent = { event, occurredAt, eventDate: localDate(occurredAt, registry.project.timeZone),
       dimensionKey: dimensionKey(input.properties, Object.keys(definition.properties)), payloadHash: '' };
-    const workflow = batch.source === 'browser' ? registry.workflows.find(w => [w.startEvent, w.successEvent, w.failureEvent].includes(input.name)) : undefined;
+    if (has(input, 'attempt') && has(input, 'funnel')) throw new CollectionError('invalid_event', 422);
+    const workflow = batch.source === 'browser' && !has(input, 'funnel') ? registry.workflows.find(w => [w.startEvent, w.successEvent, w.failureEvent].includes(input.name)) : undefined;
     if (workflow) {
       if (!input.attempt || input.attempt.workflowId !== workflow.id) throw new CollectionError('invalid_event', 422);
       const startedAt = utcMillis(input.attempt.startedAt);
@@ -79,7 +88,12 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
       prepared.workflow = { id: workflow.id, phase, attemptId: input.attempt.attemptId, startedAt,
         cohortDate: localDate(startedAt, registry.project.timeZone), dimensionKey: dimensionKey(dimensions) };
     } else if (input.attempt) throw new CollectionError('invalid_event', 422);
+    if (has(input, 'funnel')) {
+      prepared.funnel = prepareFunnelStage(prepared, registry, batch.source, receivedAt);
+      event.funnel = prepared.funnel.event.funnel;
+    }
     prepared.payloadHash = await sha256(canonicalEvent(registry.project.id, batch.schemaVersion, event, batch.source));
+    if (prepared.funnel) prepared.funnel.payloadHash = prepared.payloadHash;
     events.push(prepared);
   }
   events.sort((a, b) => a.occurredAt - b.occurredAt || a.event.eventId.localeCompare(b.event.eventId));

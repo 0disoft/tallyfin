@@ -1,5 +1,33 @@
 # 검증
 
+## 퍼널 연결 수집·저장과 0007 마이그레이션 — 2026-10-11
+
+BrowserBatch·ServerBatch가 이벤트별 선택 funnel 링크를 받고, 한 이벤트에 attempt와 funnel을
+함께 넣으면 거부한다. funnel 링크가 있으면 workflow로 해석하지 않는다. 연결 이벤트의
+payload hash는 funnel-v1 접두사를 쓰며 funnel이 없는 기존 일반·workflow 해시는 그대로다.
+코어 `prepareFunnelStage`가 등록 정의의 출처·단계 이름·24시간 창을 검사하고,
+`funnel_runs`·`funnel_daily_counts`(0007)와 저장 어댑터의 `funnelStatements`가 영수증·
+할당량·시도·이벤트·목표 집계·`projects.ingest_revision` CAS와 같은 D1 batch에서 연결
+상태·연속 도달 단계를 반영한다. 정리는 연결 상태 72시간·단계 집계 90일을 같은 순회
+한도로 지운다.
+
+루트 `npm run check`가 타입 검사·268/268 테스트·SDK 크기 검사를 통과했다. SDK gzip
+2667 bytes·SDK+Sembom gzip 2949 bytes는 예산 3072 bytes 안이다. `tools/contracts`의
+`npm run lint`(OpenAPI)는 오류 없이 FunnelCounts 후속 조회 미사용 경고 1건만 남았고
+`npm run check`는 51/51을 통과했다. 신규 저장 테스트 7개는 역순 browser/server 도착과
+영수증·단계 재전송 중복, 실행·영수증·버전·시간 충돌의 batch 롤백, 동시 쓰기와 발행 권한
+회수의 공유 revision 가드, 카운터 상한·SQL 시각/순서 가드의 부분 반영 방지, 20 runs·
+10 steps·20 dimensions 지연 시작의 100 bind·50 statement 예산, 선택 프로젝트만 지우는
+bounded cleanup, 0007 추가 전용과 트리거 누락 감지를 확인한다. native Worker 실제 D1
+ephemeral·서명 JWT HTTP 통합 1개는 공개 browser 단계와 인증 server 단계를 같은 run에
+연결해 저장하는 것을 확인한다.
+
+OpenAPI·DBML 계약, 코어·저장 어댑터와 수집기 통합 테스트, 0007 마이그레이션과 계약 검사 스크립트를
+바꿨다. 제품 스펙·로드맵·이벤트 계약·저장 모델·정리·마이그레이션·서버 이벤트 문서도
+함께 갱신했다. 의존성·CI 워커플로·위생 정책 변경은 없다. 원격 D1 적용·운영 OIDC·푸시·
+배포·Sembom 연동은 실행하지 않았다. 다음은 브라우저·서버 SDK 전송과 reader/owner 조회
+API·관리자 퍼널 집계 화면이다.
+
 ## 퍼널의 공용 수집 계획 연결 — 2026-10-11
 
 PreparedEvent와 IngestSnapshot/Plan에 최소 퍼널 관찰·연결 상태·단계 delta를 연결했다.

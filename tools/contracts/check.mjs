@@ -45,7 +45,7 @@ check('server batch is closed, source-specific and forbids browser attempt ident
     '#/components/schemas/BrowserBatch');
 });
 const batch = example('browser-batch');
-check('funnel registrations accept optional definitions while linked collection stays closed', () => {
+check('funnel definitions and source-specific linked collection are closed and mutually exclusive with workflow attempts', () => {
   const definition = example('funnel-definition'), event = example('funnel-event');
   for (const mutate of [v => v.steps = [], v => v.steps = Array(11).fill(v.steps[0]),
     v => v.steps[0].source = 'mixed', v => v.steps[0].userId = 'private', v => v.dimensions = ['kind', 'kind']]) {
@@ -56,8 +56,11 @@ check('funnel registrations accept optional definitions while linked collection 
     const value = structuredClone(event); mutate(value); assert.equal(validate('FunnelEvent', value), false);
   }
   const envelope = { schemaVersion: 1, source: 'browser', events: [event] };
-  assert.equal(validate('BrowserBatch', envelope), false);
-  envelope.source = 'server'; assert.equal(validate('ServerBatch', envelope), false);
+  assert.equal(validate('BrowserBatch', envelope), true);
+  envelope.source = 'server'; assert.equal(validate('ServerBatch', envelope), true);
+  envelope.events[0] = { ...event, attempt: example('browser-batch').events[0].attempt };
+  assert.equal(validate('ServerBatch', envelope), false);
+  envelope.source = 'browser'; assert.equal(validate('BrowserBatch', envelope), false);
   assert.equal(validate('Registry', example('funnel-registry')), true);
   const registry = example('funnel-registry');
   assert.ok(validate('SchemaPublication', { events: registry.events, workflows: [], funnels: registry.funnels,
@@ -162,7 +165,11 @@ check('response totals and denominators agree', () => {
 const database = new Parser().parse(read('db/schema.dbml'),'dbml');
 check('DBML parses with project-scoped storage and no raw visitor tables', () => {
   const tables=database.schemas.flatMap(schema=>schema.tables);
-  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_publishers','project_creators','project_creations','project_schemas','admin_changes','event_receipts','workflow_attempts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
+  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_publishers','project_creators','project_creations','project_schemas','admin_changes','event_receipts','workflow_attempts','funnel_runs','funnel_daily_counts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
+  assert.deepEqual(tables.find(t=>t.name==='funnel_runs').fields.map(f=>f.name).sort(),
+    ['project_id','run_id','schema_version','funnel_id','started_at','cohort_date','dimension_key','step_times_json','expires_at'].sort());
+  assert.deepEqual(tables.find(t=>t.name==='funnel_daily_counts').fields.map(f=>f.name).sort(),
+    ['project_id','schema_version','cohort_date','funnel_id','dimension_key','step_index','reached_count','updated_at'].sort());
   assert.deepEqual(tables.find(t=>t.name==='project_publishers').fields.map(f=>f.name).sort(), ['project_id','issuer','subject','created_at'].sort());
   for (const table of tables.filter(t=>!['projects','project_creators','retention_cleanup_state'].includes(t.name))) assert.ok(table.fields.some(f=>f.name==='project_id'));
   assert.deepEqual(tables.find(t=>t.name==='retention_cleanup_state').fields.map(f=>f.name).sort(),['id','last_project_id','revision']);

@@ -49,7 +49,7 @@ test('funnel definitions bind source and identical required dimension domains wi
   validateFunnelDefinitions([], registry.events);
 });
 
-test('preparation uses registered property rules and canonical timestamps; current endpoints stay closed', async () => {
+test('preparation uses registered property rules, canonical timestamps and shared source-specific batch parsing', async () => {
   const input = event(0);
   const first = await prepare(0, input);
   const spelling = structuredClone(input); spelling.occurredAt = startedAt.replace('.000Z', 'Z'); spelling.funnel.startedAt = spelling.occurredAt;
@@ -59,8 +59,8 @@ test('preparation uses registered property rules and canonical timestamps; curre
   assert.equal(end.cohortDate, '2026-10-11'); assert.equal(end.eventDate, '2026-10-12');
   const otherRun = event(0); otherRun.funnel.runId = crypto.randomUUID();
   assert.notEqual((await prepare(0, otherRun)).payloadHash, first.payloadHash);
-  assert.throws(() => parseBatch(JSON.stringify({ schemaVersion: 1, source: 'browser', events: [input] })), code('invalid_event'));
-  assert.throws(() => parseServerBatch(JSON.stringify({ schemaVersion: 1, source: 'server', events: [event(3)] })), code('invalid_event'));
+  assert.deepEqual(parseBatch(JSON.stringify({ schemaVersion: 1, source: 'browser', events: [input] })).events[0]!.funnel, input.funnel);
+  assert.deepEqual(parseServerBatch(JSON.stringify({ schemaVersion: 1, source: 'server', events: [event(3)] })).events[0]!.funnel, event(3).funnel);
   for (const mutate of [
     (e: any) => { e.properties.kind = 'private text'; }, (e: any) => { delete e.properties.kind; },
     (e: any) => { e.properties.user_id = 'private'; }, (e: any) => { e.properties.toString = 'private'; },

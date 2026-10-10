@@ -25,8 +25,9 @@ export interface Registry {
 export interface Attempt {
   workflowId: string; attemptId: string; startedAt: string;
 }
+export interface FunnelLink { funnelId: string; runId: string; startedAt: string }
 export interface BrowserEvent {
-  eventId: string; name: string; occurredAt: string; properties: Properties; attempt?: Attempt;
+  eventId: string; name: string; occurredAt: string; properties: Properties; attempt?: Attempt; funnel?: FunnelLink;
 }
 export interface BrowserBatch {
   schemaVersion: number; source: 'browser'; events: BrowserEvent[];

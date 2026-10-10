@@ -1,7 +1,7 @@
 # 저장 계약과 마이그레이션 상태
 
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0006`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
+마이그레이션 `0002`~`0007`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
@@ -33,7 +33,7 @@ admission·이벤트/목표 일별 집계 테이블을 만든다. 값 CHECK, 프
 이번 범위에서 실행하지 않았다. 만료 정리는 어댑터의 `cleanup`과 로컬 구현한 Worker
 스케줄러가 담당한다. 원격 활성화는 별도 작업이다.
 
-검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006을 로드해 제약·트리거·CAS·
+검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006·0007을 로드해 제약·트리거·CAS·
 할당량·정리를 확인한다.
 
 ## 0002_retention_cleanup.sql
@@ -161,3 +161,40 @@ backfill하지 않는다. 관리자 reader/owner 여부와 발행 권한은 서�
 
 롤백은 이전 browser 코드로 되돌리고 확장 테이블은 남긴다. 이미 저장된 server 행을 지워
 롤백하지 않고 서버 수집을 끈다. `project_publishers` 권한도 삭제하지 않는다.
+
+## 0007_task_funnels.sql
+
+연결 상태 `funnel_runs`와 퍼널 단계 집계 `funnel_daily_counts` 두 테이블을 추가한다.
+기존 테이블을 복사하거나 데이터를 backfill하지 않고 `0001`~`0006` 뒤 한 batch로
+적용한다. 새 테이블은 빈 상태로 시작한다.
+
+- `funnel_runs`는 `(project_id, run_id)` 기본 키로 프로젝트·스키마 버전·퍼널·시작
+  시각·시작일·dimensions·단계 시각 배열을 보관한다. `run_id`는 코어에서 UUIDv4를,
+  SQL에서 36자 길이를 검사한다.
+  `funnel_id`는 1~48자, 단계 시각 배열은 2~10개·256bytes 이하다.
+- `expires_at = started_at + 72시간`을 CHECK로 강제하고 재전송으로 늘리지 않는다.
+  `funnel_runs_expiry` 인덱스가 `(project_id, expires_at)` 정리를 받치며
+  `(project_id, schema_version)` 외래 키를 둔다.
+- `funnel_daily_counts`는 `(project_id, schema_version, cohort_date, funnel_id,
+  dimension_key, step_index)` 기본 키로 시작일 cohort의 연속 도달 수를 보관한다.
+  `funnel_daily_retention` 인덱스가 `(project_id, cohort_date)` 90일 정리를 받친다.
+- `funnel_run_insert`·`funnel_run_update` 트리거가 단계 시각의 타입, 24시간 창,
+  첫 단계 = 시작 시각, 비감소 순서를 검사하고 어긋나면 batch를 롤백한다.
+- `funnel_daily_insert`·`funnel_daily_update` 트리거가 인접 단계 도달 수의 비증가를
+  강제한다. 기존 키 후보는 delta 값이 아니라 이 UPDATE 조건으로 검증한다.
+- 추가되는 것은 테이블 2개, 트리거 4개, 인덱스 2개다.
+
+| 시점 | 확인 |
+| --- | --- |
+| 적용 전 | `0001`~`0006` 적용 상태, 기존 `projects`·`project_schemas`·영수증·집계 행 수 |
+| 적용 후 | 두 테이블·트리거 4개·인덱스 2개 존재, 기존 행 수 변동 없음, `funnel_runs`가 비어 있음, `PRAGMA foreign_key_check` 결과 없음 |
+
+로컬 초기화(`provision init`)는 두 테이블이 있으면 `sqlite_master`에서 트리거 4개와
+`funnel_runs_expiry`·`funnel_daily_retention` 인덱스가 모두 있는지 확인하고, 빠져 있으면
+불완전한 DB로 보고 적용을 중단한다. 빈 DB에 `0001`~`0007`을 적용하는 fresh 경로와
+`0001`~`0006`이 있는 DB에 0007만 추가하는 upgraded 경로를 나눠 기존 행 보존과 새 테이블
+생성을 확인한다.
+
+롤백은 이전 코드로 되돌리고 추가 테이블은 남겨도 된다. 퍼널 수집을 끄면 새 연결·단계
+집계가 쌓이지 않는다. 정리가 이미 지운 만료 연결과 오래된 시작일 cohort는 마이그레이션
+롤백으로 복구되지 않는다.

@@ -2,6 +2,8 @@ import { ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DA
 import type { AttemptState, PreparedBatch, PreparedServerBatch, Receipt, Registry, RejectionReason, ServerCollectionStore, ServerPrincipal } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
+import { funnelStatements, readFunnelRun } from './funnels.ts';
+import type { FunnelRunRow } from './funnels.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
 export { D1Queries } from './query.ts';
 export { D1Maintenance } from './maintenance.ts';
@@ -96,11 +98,12 @@ export class D1Store implements ServerCollectionStore {
     const utcDate = new Date(batch.receivedAt).toISOString().slice(0, 10);
     const eventIds = batch.events.map(e => e.event.eventId);
     const attemptIds = [...new Set(batch.events.flatMap(e => e.workflow ? [e.workflow.attemptId] : []))];
+    const runIds = [...new Set(batch.events.flatMap(e => e.funnel ? [e.funnel.event.funnel.runId] : []))];
     const placeholders = (ids: string[]) => ids.map(() => '?').join(',') || 'NULL';
     // All mutations of ingest state increment projects.ingest_revision. Reads form one consistent snapshot.
     // A CHECK guard inside the write batch rolls back a raced snapshot; bounded retries re-read receipts.
     for (let retry = 0; retry < 3; retry++) {
-      const read = await this.db.batch<ProjectRow | SchemaRow | Receipt | AttemptState | { new_receipts: number } | { authorized: number }>([
+      const read = await this.db.batch<ProjectRow | SchemaRow | Receipt | AttemptState | FunnelRunRow | { new_receipts: number } | { authorized: number }>([
         this.db.prepare('SELECT * FROM projects WHERE id = ?').bind(batch.projectId),
         this.db.prepare('SELECT * FROM project_schemas WHERE project_id = ? AND version = ?').bind(batch.projectId, batch.schemaVersion),
         this.db.prepare(`SELECT * FROM event_receipts WHERE project_id = ? AND source = ? AND event_id IN (${placeholders(eventIds)})`).bind(batch.projectId, batch.source, ...eventIds),
@@ -108,8 +111,11 @@ export class D1Store implements ServerCollectionStore {
         this.db.prepare('SELECT new_receipts FROM ingest_daily_usage WHERE project_id = ? AND utc_date = ?').bind(batch.projectId, utcDate),
         ...(publisher ? [this.db.prepare('SELECT 1 AS authorized FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?')
           .bind(batch.projectId, publisher.issuer, publisher.subject)] : []),
+        ...(runIds.length ? [this.db.prepare(`SELECT * FROM funnel_runs WHERE project_id = ? AND run_id IN (${placeholders(runIds)})`)
+          .bind(batch.projectId, ...runIds)] : []),
       ]);
-      if (read.length !== (publisher ? 6 : 5) || read.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
+      const runIndex = publisher ? 6 : 5;
+      if (read.length !== runIndex + Number(runIds.length > 0) || read.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
       if (publisher && (read[5]?.results.length !== 1 || (read[5]?.results[0] as { authorized?: number })?.authorized !== 1))
         throw new CollectionError('forbidden', 403);
       const project = read[0]?.results[0] as ProjectRow | undefined;
@@ -118,9 +124,8 @@ export class D1Store implements ServerCollectionStore {
       if (!schema || schema.status !== 'active') throw new CollectionError('unknown_schema', 422);
       const currentRegistry = this.registry(project, schema);
       if (canonicalJson(currentRegistry) !== canonicalJson(registry)) throw new CollectionError('storage_unavailable', 503);
-      // The next storage slice must persist every funnel delta atomically before accepting linked events.
-      if (batch.events.some(event => event.funnel !== undefined)) throw new CollectionError('storage_unavailable', 503);
       const plan = planIngest(batch, { receipts: read[2]!.results as Receipt[], attempts: read[3]!.results as AttemptState[],
+        funnelRuns: runIds.length ? (read[runIndex]!.results as FunnelRunRow[]).map(readFunnelRun) : [],
         newReceiptsToday: (read[4]?.results[0] as { new_receipts: number } | undefined)?.new_receipts ?? 0 }, project.new_receipts_per_utc_day);
       // Pure retransmission needs no write; it is linearized at the consistent read snapshot.
       if (!plan.receipts.length) return { accepted: plan.accepted, duplicates: plan.duplicates };
@@ -157,6 +162,7 @@ export class D1Store implements ServerCollectionStore {
         updated_at=max(updated_at, ?) WHERE project_id=? AND schema_version=? AND source='browser'
         AND cohort_date=? AND workflow_id=? AND dimension_key=?`).bind(w.started_count, w.succeeded_count,
           w.failed_count, batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
+      statements.push(...funnelStatements(this.db, batch.projectId, batch.schemaVersion, batch.receivedAt, plan));
       try {
         const committed = await this.db.batch(statements);
         if (committed[0]?.meta.changes !== 1 || committed.some(r => !r.success)) throw new CollectionError('storage_unavailable', 503);
@@ -173,13 +179,13 @@ export class D1Store implements ServerCollectionStore {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw Error('invalid cleanup limit');
     const today = localDate(now, timeZone);
     const oldest = new Date(Date.parse(`${today}T00:00:00Z`) - 89 * DAY).toISOString().slice(0, 10);
-    const statements = ['event_receipts', 'workflow_attempts', 'ingest_daily_usage'].map(table => this.db.prepare(
+    const statements = ['event_receipts', 'workflow_attempts', 'funnel_runs', 'ingest_daily_usage'].map(table => this.db.prepare(
       `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND expires_at <= ? LIMIT ?)`
     ).bind(projectId, now, limit));
     statements.push(this.db.prepare(`DELETE FROM ingest_minute_usage WHERE rowid IN (SELECT rowid FROM ingest_minute_usage WHERE project_id = ?
       AND (minute_start < ? OR (rejections_json = '{}' AND minute_start < ?)) LIMIT ?)`).bind(projectId,
         Math.floor(now / DAY) * DAY - 6 * DAY, Math.floor(now / 60_000) * 60_000 - 120_000, limit));
-    for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date']])
+    for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date'], ['funnel_daily_counts', 'cohort_date']])
       statements.push(this.db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND ${column} < ? LIMIT ?)`).bind(projectId, oldest, limit));
     statements.push(this.db.prepare(`DELETE FROM admin_changes WHERE id IN
       (SELECT id FROM admin_changes WHERE project_id = ? AND occurred_at < ? ORDER BY occurred_at, id LIMIT ?)`)

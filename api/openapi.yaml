@@ -93,7 +93,7 @@ components:
       additionalProperties: false
       required: [id, label, steps, dimensions]
       description: Ordered task funnel definition accepted by Registry and schema validation/publication endpoints.
-        Linked ingestion, persistence and funnel queries are not yet enabled.
+        Linked ingestion and persistence are implemented locally; funnel queries are not yet enabled.
         Two to ten distinct registered events, each bound to its registered source, define consecutive milestones.
         Dimensions must be required and have identical domains in every step. No visitor identity.
       properties:
@@ -137,7 +137,7 @@ components:
       type: object
       additionalProperties: false
       required: [eventId, name, occurredAt, properties, funnel]
-      description: Core-only linked observation. Current collection endpoints still reject this shape.
+      description: Linked task milestone accepted on its source-specific collection endpoint when registered in that schema.
         Source is supplied by the collector boundary, never inferred from the run ID. Server stages require the
         existing verified publisher and explicit project permission. A funnel link is not an authentication token.
       properties:
@@ -253,6 +253,15 @@ components:
           $ref: "#/components/schemas/EventProperties"
         attempt:
           $ref: "#/components/schemas/Attempt"
+        funnel:
+          $ref: "#/components/schemas/FunnelLink"
+      allOf:
+        - if:
+            type: object
+            properties: { funnel: {} }
+            required: [funnel]
+          then:
+            $ref: "#/components/schemas/FunnelEvent"
     BrowserBatch:
       type: object
       additionalProperties: false
