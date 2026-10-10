@@ -1,4 +1,4 @@
-import { closed, CollectionError, dateMillis, DAY, has, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseGrantChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
+import { closed, CollectionError, dateMillis, DAY, has, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseGrantChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft, validGrantIdentity } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 
@@ -16,6 +16,13 @@ export async function administrator(request: Request, access: AdministratorAcces
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
+  if (url.pathname === '/v1/identity') {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    parameters(url, []);
+    if (!validGrantIdentity(principal.issuer, principal.subject)) throw new CollectionError('unauthorized', 401);
+    // Only the caller's verified access-token principal; no DB read or authority assignment.
+    return { issuer: principal.issuer, subject: principal.subject };
+  }
   const changes = /^\/v1\/projects\/([^/]+)\/changes$/.exec(url.pathname);
   if (changes) {
     if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);

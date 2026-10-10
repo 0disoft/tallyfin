@@ -1,5 +1,19 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
+## 현재 로그인 계정 확인
+
+`GET /v1/identity`는 관리자 access token의 서명·issuer·audience·유효기간을 검증한
+후 호출자의 `{ issuer, subject }`만 반환한다. 최초 운영 계정도 식별자를 확인할 수
+있도록 프로젝트 grant·생성 권한은 요구하지 않는다. 권한·자격 증명을 발급하거나
+DB를 읽고 쓰지 않으며 이메일·프로필·다른 계정·토큰·역할은 반환하지 않는다.
+OIDC ID token의 sub나 브라우저가 입력한 subject를 대신 사용하지 않는다.
+
+GET만 받고 쿼리는 거부한다. 인증 미설정·잘못된 bearer·검증 실패는 401,
+잘못된 쿼리는 400, 다른 메서드는 405(Allow: GET)다. 응답은 no-store·
+Vary: Authorization이고 쿠키나 CORS 허용을 추가하지 않는다. issuer/subject는
+각각 최대 512자이며 검증한 grant identity 규칙을 따른다. 운영자가 최초 권한을
+등록하기 전에 해당 계정과 제공자가 일치하는지 확인하는 용도다.
+
 상태: 관리자 조회(GET)·출처별 집계 조회(source)·퍼널 일별 조회(funnel)·프로젝트 설정
 조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수(PUT·DELETE)·프로젝트 변경 이력
 조회(GET)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증

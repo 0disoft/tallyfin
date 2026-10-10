@@ -1,0 +1,4 @@
+{
+  "issuer": "https://identity.example.invalid",
+  "subject": "example-administrator"
+}

@@ -3,7 +3,9 @@
 상태: grant 검사와 로컬 프로젝트 등록·권한 관리 CLI를 구현·로컬 검증했다.
 실제 인증 제공자의 사용자 등록과 원격 운영 배포는 아직 없다.
 
-관리자 조회마다 검증된 issuer/subject의 project_grants를 확인한다. D1 조회는 매
+자기 계정만 반환하는 `GET /v1/identity`는 검증된 관리자 bearer가 필요하며 프로젝트
+grant는 요구하지 않는다. 이 경로는 DB 접근·다른 계정 조회·권한 부여를 하지 않는다.
+프로젝트 관리자 조회마다 검증된 issuer/subject의 project_grants를 확인한다. D1 조회는 매
 statement에 `EXISTS (project_grants ... role IN ('reader','owner'))` 조건을 붙이고
 정의·버전 읽기와 집계를 한 배치 스냅샷으로 처리한다. reader와 owner는 조회 가능하고
 설정 PATCH·스키마 발행 PUT은 owner만 사용할 수 있다. 프로젝트 생성 POST는

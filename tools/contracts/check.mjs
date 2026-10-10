@@ -24,10 +24,21 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
-  'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage',
+  'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage', 'admin-identity':'AdminIdentity',
   'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry', 'funnel-response':'FunnelResponse' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
+check('self identity is authenticated, bounded, closed and independent of project grants', () => {
+  const identity = example('admin-identity');
+  for (const changed of [{ ...identity, accessToken: 'not-a-token' }, { ...identity, role: 'owner' },
+    { ...identity, email: 'not-returned' }, { ...identity, issuer: 'http://identity.example.invalid' },
+    { ...identity, subject: '' }, { ...identity, subject: 'x'.repeat(513) }, { ...identity, subject: 'a\nb' }])
+    assert.equal(validate('AdminIdentity', changed), false);
+  const operation = spec.paths['/v1/identity'].get;
+  assert.deepEqual(operation.security, [{ adminBearer: [] }]);
+  assert.equal(operation.responses['405'].headers.Allow.schema.const, 'GET');
+  assert.equal(operation.requestBody, undefined); assert.equal(operation.parameters, undefined);
+});
 check('server batch is closed, source-specific and forbids browser attempt identities', () => {
   const server = example('server-batch');
   assert.equal(validate('BrowserBatch', server), false);

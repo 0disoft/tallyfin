@@ -51,6 +51,38 @@ async function events() {
   ] };
   await fixture.store.commit(await prepareBatch(parseBatch(JSON.stringify(input)), registry, now), registry);
 }
+test('self identity returns the verified caller without grants, queries or DB writes', async () => {
+  await fixture.db.prepare('DELETE FROM project_grants').run();
+  const store = new D1Queries(fixture.db);
+  const noReads = new Proxy(store, { get() { assert.fail('self identity must not read the administrator store'); } });
+  const h = createCollector(fixture.store, { admin: { store: noReads, verifyBearer: async () => ({ ...principal, email: 'never-returned', role: 'owner' }) } });
+  const result = await h(request('/v1/identity'));
+  assert.equal(result.status, 200); assert.equal(result.headers.get('Cache-Control'), 'no-store');
+  assert.equal(result.headers.get('Vary'), 'Authorization'); assert.equal(result.headers.get('Set-Cookie'), null);
+  assert.equal(result.headers.get('Access-Control-Allow-Origin'), null);
+  assert.deepEqual(await result.json(), principal);
+  assert.equal(await fixture.db.prepare('SELECT count(*) AS n FROM project_grants').first('n'), 0);
+  for (const path of ['/v1/identity?projectId=sembom', '/v1/identity?subject=someone', '/v1/identity?x=1&x=2'])
+    assert.equal((await h(request(path))).status, 400);
+  for (const method of ['POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']) {
+    const response = await h(request('/v1/identity', method)); assert.equal(response.status, 405); assert.equal(response.headers.get('Allow'), 'GET');
+  }
+});
+
+test('self identity fails closed for missing authentication, verifier errors and malformed principals', async () => {
+  const h = handler();
+  for (const header of [null, 'Bearer', 'Bearer a b', 'Basic ignored', 'Bearer ' + 'x'.repeat(8190)])
+    assert.equal((await h(request('/v1/identity', 'GET', header))).status, 401);
+  assert.equal((await createCollector(fixture.store)(request('/v1/identity'))).status, 401);
+  for (const verify of [async () => null, async () => { throw Error('private-verifier-detail'); },
+    async () => ({ issuer: 'http://identity.example.invalid', subject: 'x' }),
+    async () => ({ ...principal, subject: 'x\ny' }), async () => ({ ...principal, subject: 'x'.repeat(513) })]) {
+    const response = await handler(verify)(request('/v1/identity'));
+    assert.equal(response.status, 401); assert.equal(response.headers.get('WWW-Authenticate'), 'Bearer');
+    assert.ok(!(await response.text()).includes('private-verifier-detail'));
+  }
+});
+
 test('administrator authentication is closed without a verifier or on invalid identity/exception', async () => {
   for (const verify of [null, async () => null, async () => { throw Error('private verifier detail'); }, async () => ({ issuer: '', subject: 'x' })]) {
     const h = verify === null ? createCollector(fixture.store) : handler(verify);

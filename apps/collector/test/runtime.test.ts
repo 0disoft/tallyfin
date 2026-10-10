@@ -34,6 +34,12 @@ test('configured runtime verifies OIDC bindings and runs scheduled cleanup again
     assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/projects')).status, 401);
     assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/projects', { headers: { Authorization: `Bearer ${token}` } })).status, 200);
     await db.prepare('DELETE FROM project_grants').run();
+    const identity = await mf.dispatchFetch('https://runtime.example.invalid/v1/identity', { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(identity.status, 200); assert.deepEqual(await identity.json(), { issuer, subject });
+    assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/identity', { headers: { Authorization: `Bearer ${token}x` } })).status, 401);
+    const wrongAudience = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'ephemeral', typ: 'at+jwt' })
+      .setIssuer(issuer).setAudience('publisher-audience').setSubject(subject).setIssuedAt().setExpirationTime('5m').sign(privateKey);
+    assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/identity', { headers: { Authorization: `Bearer ${wrongAudience}` } })).status, 401);
     const denied = await mf.dispatchFetch('https://runtime.example.invalid/v1/projects/sembom/schemas/1', { headers: { Authorization: `Bearer ${token}` } });
     assert.equal(denied.status, 403);
     assert.equal((await (await mf.getWorker()).scheduled({ scheduledTime: Date.now(), cron: '* * * * *' })).outcome, 'ok');

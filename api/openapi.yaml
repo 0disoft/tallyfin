@@ -3,7 +3,8 @@ info:
   title: Tallyfin API
   version: 0.1.0
   description: Browser collection and administrator query/settings/schema publication boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
-    Administrator reads require a verified principal and project grant; settings updates require an owner grant.
+    Project-scoped administrator reads require a verified principal and project grant; settings updates require an owner grant.
+    Self identity lookup returns only the verified access-token principal without requiring or assigning a project grant.
     Schema publication requires an owner grant and explicit privacy review. Project creation requires a separately provisioned creator permission.
     Grant listing and mutation require a current owner grant; grant mutation is implemented locally in this contract and the
     provisioning CLI remains an alternative. Owner-only administrator change history is implemented locally with rolling
@@ -14,7 +15,7 @@ tags:
   - name: Collection
     description: Explicit registered browser and server events; no visitor identifiers or free text.
   - name: Administration
-    description: Authenticated project-scoped definitions and aggregates.
+    description: Authenticated self identity and project-scoped definitions and aggregates.
 security:
   - adminBearer: []
 components:
@@ -97,6 +98,22 @@ components:
         pattern: ^[a-z][a-z0-9_]{0,47}$
         maxLength: 48
   schemas:
+    AdminIdentity:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject]
+      properties:
+        issuer:
+          type: string
+          format: uri
+          pattern: ^https://
+          minLength: 1
+          maxLength: 512
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 512
+          pattern: '^[^\x00-\x1f\x7f]+$'
     FunnelDefinition:
       type: object
       additionalProperties: false
@@ -1748,6 +1765,59 @@ components:
           items:
             $ref: "#/components/schemas/CollectionRejectionDay"
 paths:
+  /v1/identity:
+    get:
+      tags: [Administration]
+      operationId: getAdministratorIdentity
+      summary: Read the caller's verified administrator identity
+      description: >
+        Returns only issuer and subject from the trusted administrator access-token verifier.
+        Requires a valid administrator bearer but no existing project grant or creation authority.
+        Does not read or change the database, issue credentials, return profile claims, or assign permissions.
+        No query parameters, cookies or CORS permission. Responses use Cache-Control no-store and Vary Authorization.
+        Intended for verifying the exact principal before an operator provisions initial authority.
+      security:
+        - adminBearer: []
+      responses:
+        "200":
+          description: Verified identity of the requesting administrator only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminIdentity"
+              examples:
+                identity:
+                  externalValue: ./examples/admin-identity.json
+        "400":
+          description: Unsupported query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing, invalid or disabled administrator authentication.
+          headers:
+            WWW-Authenticate:
+              schema: { type: string, const: Bearer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported.
+          headers:
+            Allow:
+              schema: { type: string, const: GET }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Runtime unavailable before authentication could be performed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/projects/{projectId}/server-batches:
     post:
       tags: [Collection]

@@ -31,6 +31,11 @@ JSON 편집/발행 보존도 연결했다. 연결 이벤트 수집과 D1 연결 
 
 ## 프로젝트 레지스트리와 스키마
 
+관리자 `GET /v1/identity`는 검증한 access token의 호출자 issuer/subject만 반환한다.
+초기 권한 등록 전에도 자기 계정을 확인할 수 있으며 프로젝트 grant는 요구하지 않는다.
+DB 접근·권한 부여·프로필·다른 계정·토큰 반환은 없다. no-store·Vary Authorization과
+기존 관리자 인증을 적용한다. 실제 제공자 로그인·운영 권한 등록은 후속이다.
+
 서비스별 독립 프로젝트에 이벤트·속성 스키마 버전·출처·권한·수집 한도를 설정한다. 조회는 신뢰하는 검증기가 확인한 관리자 issuer/subject와 프로젝트 grant를 요구하며 인증 제공자 미설정 배포는 닫는다. 설정 조회는 reader/owner, 변경은 owner grant를 요구하고 조회 시 받은 settingsHash로 동시 변경을 막는다. 관리자 설정 화면은 이 조회·변경을 로컬에서 연결해 owner가 이름·상태·허용 출처·수집 한도를 편집·저장하고, 응답의 canEdit가 false인 grant는 읽기 전용으로 연다. 프로젝트는 CLI 또는 별도 생성 권한을 요구하는 API로 만들고 관리자 화면에서도 생성한다. grant 부여·역할 변경·회수는 owner 전용 PUT·DELETE API로도 처리하고 provisioning CLI는 대안으로 유지한다. 새 스키마 버전은 owner 전용 API로도 발행한다. 수집기는 활성 상태·등록 스키마·정확한 오리진·한도를 검사한다. 공개 브라우저에는 관리자 토큰을 넣지 않는다. 서버 수집은 관리자 audience와 분리한 전용 발행자 bearer 인증으로만 열고, owner/reader 관리자 grant로는 발행 권한을 얻지 못한다.
 
 권한 목록은 현재 프로젝트 owner 전용 `GET /v1/projects/{projectId}/grants`에서 페이지로
