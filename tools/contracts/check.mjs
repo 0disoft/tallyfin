@@ -21,7 +21,8 @@ const check = (name, action) => { action(); checks++; console.log(`OK ${name}`);
 for (const [file, schema] of Object.entries({ registry:'Registry', 'browser-batch':'BrowserBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
-  'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation' })) {
+  'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
+  'project-grants':'ProjectGrantPage' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 const batch = example('browser-batch');
@@ -123,6 +124,15 @@ check('project creation requires explicit authority, closed input and immutable 
   const route = spec.paths['/v1/projects'].post;
   assert.ok(route.responses['403']); assert.ok(route.responses['409']); assert.ok(route.responses['413']);
   assert.equal(spec.paths['/v1/projects'].get.responses['405'].headers.Allow.schema.const, 'GET, POST');
+});
+check('grant list is closed, paginated and owner-protected', () => {
+  const page = example('project-grants');
+  for (const value of [{ ...page, accessToken: 'unexpected' }, { ...page, data: [{ ...page.data[0], role: 'admin' }] },
+    { ...page, data: [{ ...page.data[0], email: 'unexpected' }] }, { ...page, page: { limit: 101, nextCursor: null } }])
+    assert.equal(validate('ProjectGrantPage', value), false);
+  const route = spec.paths['/v1/projects/{projectId}/grants'].get;
+  assert.ok(route.responses['401']); assert.ok(route.responses['403']);
+  assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET');
 });
 check('schema drafts separate malformed envelopes from semantic errors and reports have consistent validity', () => {
   const draft = { events: registry.events, workflows: registry.workflows };

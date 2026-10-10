@@ -6,6 +6,7 @@ import { listSchemas, publishSchema } from './schema.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
 import { collectionRejections } from './rejections.ts';
+import { listProjectGrants } from './grants.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 
 const access = "EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = ? AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))";
@@ -17,6 +18,9 @@ export class D1Queries implements AdminStore {
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = options; }
+  grants(principal: AdminPrincipal, id: string, limit: number, cursor: string) {
+    return listProjectGrants(this.db, principal, id, limit, cursor);
+  }
   rejections(principal: AdminPrincipal, projectId: string, from: string, to: string, now: number) {
     return collectionRejections(this.db, principal, projectId, from, to, now);
   }

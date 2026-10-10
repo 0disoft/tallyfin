@@ -4,7 +4,8 @@ info:
   version: 0.1.0
   description: Browser collection and administrator query/settings/schema publication boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
     Administrator reads require a verified principal and project grant; settings updates require an owner grant.
-    Schema publication requires an owner grant and explicit privacy review. Project creation requires a separately provisioned creator permission; grant management is out of band and server ingestion is deferred.
+    Schema publication requires an owner grant and explicit privacy review. Project creation requires a separately provisioned creator permission.
+    Grant listing requires an owner grant; grant mutations remain out of band and server ingestion is deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
@@ -394,6 +395,57 @@ components:
                 - type: string
                   pattern: ^[a-z][a-z0-9-]{0,47}$
                   maxLength: 48
+                - type: "null"
+    ProjectGrant:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject, role, createdAt]
+      properties:
+        issuer:
+          type: string
+          format: uri
+          minLength: 1
+          maxLength: 512
+          description: Provisioned HTTPS identity issuer, without credentials, query or fragment.
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 512
+          description: Provisioned opaque identity subject; no email or display name is inferred.
+        role:
+          type: string
+          enum: [reader, owner]
+        createdAt:
+          type: string
+          format: date-time
+          description: Original grant creation time; role updates do not reset it.
+    ProjectGrantPage:
+      type: object
+      additionalProperties: false
+      required: [projectId, data, page]
+      properties:
+        projectId:
+          $ref: "#/components/schemas/ProjectId"
+        data:
+          type: array
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/ProjectGrant"
+        page:
+          type: object
+          additionalProperties: false
+          required: [limit, nextCursor]
+          properties:
+            limit:
+              type: integer
+              minimum: 1
+              maximum: 100
+            nextCursor:
+              anyOf:
+                - type: string
+                  minLength: 1
+                  maxLength: 12288
+                  pattern: ^[A-Za-z0-9_-]+$
                 - type: "null"
     BooleanProperty:
       type: object
@@ -1637,6 +1689,75 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/grants:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [Administration]
+      operationId: listProjectGrants
+      summary: List project reader and owner grants
+      description: Requires a current owner grant, reapplied on every page. Rows and permission share one database snapshot.
+        Ordered by issuer then subject in SQLite BINARY order. Includes paused projects and projects without schemas.
+        Cursor is an opaque project-bound position, not an authorization claim; clients must reuse it unchanged.
+        Pages are live reads, so concurrent grants inserted before the cursor require restarting the list.
+        Duplicate/extra query parameters and query strings longer than 12352 characters are rejected.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 12288
+            pattern: ^[A-Za-z0-9_-]*$
+          description: Previous nextCursor, omitted or empty for the first page. Malformed and cross-project cursors are rejected.
+      responses:
+        "200":
+          description: Project grants and next page position; Cache-Control no-store. Only provisioned issuer/subject, role and creation time; no tokens or profiles.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectGrantPage"
+        "400":
+          description: Invalid project ID, pagination or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No current owner grant, including missing projects.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable or invalid stored grant data.
           content:
             application/json:
               schema:

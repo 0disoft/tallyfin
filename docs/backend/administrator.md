@@ -168,10 +168,32 @@ D1 batch의 rollback·실행 순서는 [공식 D1 문서](https://developers.clo
 기준으로 구현하고 Miniflare에서 발행·재요청·동시 발행·실패 rollback을 확인했다.
 
 프로젝트 생성은 별도 생성 권한 API 또는 provisioning CLI를 사용한다.
-grant 관리와 스키마 상태 변경은 기존 provisioning CLI가 맡는다.
-grant provisioning API, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
+grant 부여·역할 변경·회수와 스키마 상태 변경은 기존 provisioning CLI가 맡는다.
+grant 변경 API, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
 [OpenAPI](../../api/openapi.yaml)를 따르고, 동작 의미는
 [이벤트·집계 계약](./event-contract.md)을 따른다.
+
+## 프로젝트 권한 목록
+
+`GET /v1/projects/{projectId}/grants`는 현재 프로젝트 owner만 읽는다. reader·다른
+프로젝트 owner·권한이 없는 사용자·없는 프로젝트는 403이다. 프로젝트가 paused이거나
+스키마가 없어도 조회하며, 검증된 호출자 issuer/subject로 매 페이지에서 owner를 다시
+확인한다. 권한 검사와 목록은 같은 D1 batch에서 읽는다.
+[D1 batch 문서](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)의
+트랜잭션 의미를 따르며, 조회 도중 회수된 권한은 다음 페이지에서 다시 검사한다.
+
+응답은 `{projectId,data:[{issuer,subject,role,createdAt}],page:{limit,nextCursor}}`다.
+createdAt은 최초 grant 생성 시각이며 역할 변경으로 초기화되지 않는다. 이름·이메일을
+추측하거나 인증 토큰·사용자 프로필을 반환하지 않는다. issuer/subject와 커서는 관리자
+식별 정보로 다루고 요청/응답 로그에 기록하지 않는다. 응답은 no-store다.
+
+limit은 기본 25·최대 100이고 issuer, subject의 SQLite BINARY 순서로 읽는다.
+다음 페이지에는 nextCursor를 그대로 보내며 null이면 끝이다. 커서는 프로젝트와 마지막
+식별값을 담은 base64url 위치값(최대 12288자)으로 권한을 부여하지 않는다. 잘못된 형식·
+다른 프로젝트 커서·중복/추가 파라미터·12352자를 넘는 쿼리는 400이다. 첫 페이지는
+cursor를 생략하거나 빈 값으로 보낸다. 식별자 둘의 최대 512자·Unicode도 지원한다.
+각 페이지는 현재 DB를 읽으므로 이전 위치보다 앞에 추가된 grant는 목록을 처음부터
+다시 읽어야 보인다. 조회로 grant·설정·수집 사용량을 변경하지 않는다.
 
 ## 프로젝트 생성
 

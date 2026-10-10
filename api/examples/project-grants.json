@@ -1,0 +1,12 @@
+{
+  "projectId": "sembom",
+  "data": [
+    {
+      "issuer": "https://identity.example.invalid",
+      "subject": "test-owner",
+      "role": "owner",
+      "createdAt": "2026-10-08T15:00:15.000Z"
+    }
+  ],
+  "page": { "limit": 25, "nextCursor": null }
+}

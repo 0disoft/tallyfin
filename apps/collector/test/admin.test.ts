@@ -243,6 +243,23 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
     const freshSchemas = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/schemas',
       { headers: { Authorization: 'Bearer not-a-credential' } });
     assert.equal(freshSchemas.status, 200); assert.equal((await freshSchemas.json() as { latestVersion: number | null }).latestVersion, null);
+    const grants = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/grants',
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    assert.equal(grants.status, 200); assert.equal(grants.headers.get('Cache-Control'), 'no-store');
+    const grantCreatedAt = await db.prepare("SELECT created_at FROM project_grants WHERE project_id='worker-created'").first<number>('created_at');
+    assert.ok(grantCreatedAt !== null);
+    assert.deepEqual((await grants.json() as { data: unknown[] }).data,
+      [{ ...principal, role: 'owner', createdAt: new Date(grantCreatedAt).toISOString() }]);
+    await db.prepare("INSERT INTO project_grants VALUES ('worker-created',?,?,'reader',?)").bind(principal.issuer, 'z-reader', now).run();
+    const grantPage = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/grants?limit=1',
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    const grantCursor = (await grantPage.json() as { page: { nextCursor: string } }).page.nextCursor;
+    assert.ok(grantCursor);
+    const nextGrants = await runtime.dispatchFetch(`https://collector.example.invalid/v1/projects/worker-created/grants?cursor=${grantCursor}`,
+      { headers: { Authorization: 'Bearer not-a-credential' } });
+    assert.equal(nextGrants.status, 200);
+    assert.deepEqual((await nextGrants.json() as { data: unknown[] }).data,
+      [{ issuer: principal.issuer, subject: 'z-reader', role: 'reader', createdAt: new Date(now).toISOString() }]);
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
   } finally { await runtime.dispose(); }

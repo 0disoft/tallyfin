@@ -9,6 +9,10 @@ import { DAY, integer, localDate } from './value.ts';
 /** Supplied only by a host verifier, never derived from an unverified request claim. */
 export interface AdminPrincipal { issuer: string; subject: string }
 export type Project = Registry['project'];
+export interface ProjectGrant { issuer: string; subject: string; role: 'reader' | 'owner'; createdAt: string }
+export interface ProjectGrantPage {
+  projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null };
+}
 export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown';
 export interface AdminQuery {
   projectId: string; version: number; kind: QueryKind;
@@ -19,6 +23,7 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  grants(principal: AdminPrincipal, projectId: string, limit: number, cursor: string): Promise<ProjectGrantPage>;
   rejections(principal: AdminPrincipal, projectId: string, from: string, to: string, now: number): Promise<RejectionResponse>;
   creationAccess(principal: AdminPrincipal): Promise<void>;
   createProject(principal: AdminPrincipal, input: unknown, now: number): Promise<CreatedProject>;

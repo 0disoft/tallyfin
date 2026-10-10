@@ -1116,3 +1116,30 @@ encoded CSS는 113783에서 33732 bytes다. 첫 화면 폰트는 28건/324224 by
 API/DB·SDK·의존성 위생 정책·CI 러너·운영 인증은 바꾸지 않았고 프론트엔드 의존성과
 Vite 플러그인·테스트 명령만 바뀌었다. 푸시·배포·Sembom 연동은 없다. Fontsource 가변 폰트
 근거는 [Fontsource 가변 폰트 안내](https://fontsource.org/docs/getting-started/variable)다.
+
+## 프로젝트 owner 전용 권한 목록 — 2026-10-11
+
+`GET /v1/projects/{projectId}/grants`와 `AdminStore.grants`를 추가했다. 권한과 목록을
+같은 D1 batch로 읽고 issuer/subject의 복합 기본키 순서로 페이지를 나눈다. limit은
+기본 25·최대 100이고 커서는 프로젝트별 위치값이며 매 페이지에서 owner를 재검사한다.
+응답은 최초 생성 시각과 등록 식별값·역할만 반환하고 no-store를 유지한다.
+
+루트 `npm run check`가 타입 검사·177/177 테스트·SDK 크기 검사를 통과했다.
+SDK gzip 2667 bytes, SDK+Sembom gzip 2949 bytes는 그대로다. 이후 커서 상한을
+12288자(쿼리 12352자)로 확장하고 Worker smoke에 실제 커서 왕복을 추가했다.
+변경 후 `npm run typecheck`와 관리자 기존 테스트 13/13(Worker smoke 포함), 최종
+`node --test --test-timeout=30000 apps/collector/test/grants.test.ts` 6/6이 통과했다.
+마지막 상한·smoke 수정 이후 전체 177개는 반복하지 않고 해당 범위를 재검사했다.
+
+추가 테스트는 다른 프로젝트 식별값 제외, reader/외부 owner/발급자 변경 차단,
+삭제된 커서 위치 이후 조회, 페이지 사이 역할 강등과 batch 직전 회수, 긴 Unicode·따옴표
+식별값 커서, 잘못된/다른 프로젝트 커서, 파라미터·인증·저장 오류와 비공개 예외를 확인한다.
+Miniflare workerd에서 owner 목록과 커서 왕복도 확인했다. 신뢰하는 검증기를 테스트에서
+주입했으며 실제 제공자의 로그인·운영 토큰·원격 DB는 연동 환경이 없어 실행하지 않았다.
+
+`tools/contracts`의 `npm run lint`(OpenAPI)와 `npm run check` 36/36, `git diff --check`
+통과. API·제품 스펙·로드맵·관리자 경계 문서와 검증 기록을 갱신하고 계약 검사에 새 응답
+예제와 닫힌 형태·페이지 상한 검사를 더했다. 일반 소스 lint 명령은 없어 생략했다.
+DB·마이그레이션·SDK·의존성·CI 러너·위생 정책 변경, 운영 배포·푸시·Sembom 연동은 없다.
+각 페이지는 현재 DB를 읽으므로 앞쪽에 새로 추가된 grant는 처음부터 재조회해야 한다.
+권한 관리 UI·grant 부여/변경/회수 API는 후속이며 기존 CLI를 유지한다.

@@ -16,6 +16,15 @@ export async function administrator(request: Request, access: AdministratorAcces
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
+  const grants = /^\/v1\/projects\/([^/]+)\/grants$/.exec(url.pathname);
+  if (grants) {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    if (!PROJECT_ID.test(grants[1]!)) throw new CollectionError('invalid_request', 400);
+    // A cursor can contain two provisioned identities of up to 512 characters each.
+    parameters(url, ['limit', 'cursor'], 12352);
+    return access.store.grants(principal, grants[1]!, positive(url.searchParams.get('limit') ?? '25', 100),
+      url.searchParams.get('cursor') ?? '');
+  }
   const rejections = /^\/v1\/projects\/([^/]+)\/collection\/rejections$/.exec(url.pathname);
   if (rejections) {
     if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
@@ -103,8 +112,8 @@ export async function administrator(request: Request, access: AdministratorAcces
   }
   return access.store.query(principal, query, now);
 }
-function parameters(url: URL, allowed: string[]) {
-  if (url.search.length > 512) throw new CollectionError('invalid_request', 400);
+function parameters(url: URL, allowed: string[], maximumLength = 512) {
+  if (url.search.length > maximumLength) throw new CollectionError('invalid_request', 400);
   const seen = new Set();
   for (const key of url.searchParams.keys()) {
     if (!allowed.includes(key) || seen.has(key)) throw new CollectionError('invalid_request', 400);
