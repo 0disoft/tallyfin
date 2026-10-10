@@ -132,7 +132,34 @@ check('grant list is closed, paginated and owner-protected', () => {
     assert.equal(validate('ProjectGrantPage', value), false);
   const route = spec.paths['/v1/projects/{projectId}/grants'].get;
   assert.ok(route.responses['401']); assert.ok(route.responses['403']);
-  assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET');
+  assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET, PUT, DELETE');
+});
+check('grant mutations declare guarded writes, closed requests and exact result metadata', () => {
+  const identity = { issuer: 'https://identity.example.invalid', subject: 'test-reader' };
+  const add = { ...identity, role: 'reader', expectedRole: null };
+  assert.ok(validate('GrantChangeRequest', add));
+  assert.ok(validate('GrantChangeRequest', { ...add, role: 'owner', expectedRole: 'reader' }));
+  assert.ok(validate('GrantRevokeRequest', { ...identity, expectedRole: 'owner' }));
+  for (const value of [{ ...add, caller: 'asserted-owner' }, { ...add, role: null },
+    { ...add, role: 'admin' }, { ...add, expectedRole: 'admin' }, { ...add, expectedRole: undefined }])
+    assert.equal(validate('GrantChangeRequest', value), false);
+  assert.equal(validate('GrantRevokeRequest', add), false);
+  const result = { projectId: 'sembom', ...identity, role: 'reader', createdAt: '2026-10-11T00:00:00.000Z', canManage: true, changed: true };
+  assert.ok(validate('GrantMutationResult', result));
+  assert.ok(validate('GrantMutationResult', { ...result, role: null, createdAt: null, canManage: false }));
+  for (const value of [{ ...result, accessToken: 'unexpected' }, { ...result, role: 'admin' },
+    { ...result, changed: undefined }, { ...result, createdAt: 'invalid' },
+    { ...result, role: null }, { ...result, createdAt: null }])
+    assert.equal(validate('GrantMutationResult', value), false);
+  for (const method of ['put', 'delete']) {
+    const route = spec.paths['/v1/projects/{projectId}/grants'][method];
+    for (const code of ['200', '400', '401', '403', '405', '409', '413', '415', '503']) assert.ok(route.responses[code]);
+    assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET, PUT, DELETE');
+    assert.equal(route.requestBody.required, true);
+    assert.equal(route.responses['200'].content['application/json'].schema.$ref, '#/components/schemas/GrantMutationResult');
+  }
+  for (const code of ['grant_conflict', 'last_owner'])
+    assert.ok(validate('ErrorResponse', { error: { ...example('error-response').error, code, message: 'Safe generic error.' } }));
 });
 check('schema drafts separate malformed envelopes from semantic errors and reports have consistent validity', () => {
   const draft = { events: registry.events, workflows: registry.workflows };

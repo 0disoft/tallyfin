@@ -5,7 +5,8 @@ info:
   description: Browser collection and administrator query/settings/schema publication boundaries are implemented and tested locally; no endpoints deployed. Browser ingestion is public and untrusted.
     Administrator reads require a verified principal and project grant; settings updates require an owner grant.
     Schema publication requires an owner grant and explicit privacy review. Project creation requires a separately provisioned creator permission.
-    Grant listing requires an owner grant; grant mutations remain out of band and server ingestion is deferred.
+    Grant listing and mutation require a current owner grant; grant mutation is implemented locally in this contract and the
+    provisioning CLI remains an alternative. Server ingestion is deferred.
 tags:
   - name: Collection
     description: Explicit browser events; no visitor identifiers or free text.
@@ -208,6 +209,8 @@ components:
                 - schema_conflict
                 - project_conflict
                 - project_limit_reached
+                - grant_conflict
+                - last_owner
                 - quota_exceeded
                 - unauthorized
                 - forbidden
@@ -447,6 +450,104 @@ components:
                   maxLength: 12288
                   pattern: ^[A-Za-z0-9_-]+$
                 - type: "null"
+    GrantIssuer:
+      type: string
+      format: uri
+      minLength: 1
+      maxLength: 512
+      description: Provisioned HTTPS identity issuer URL without credentials, query or fragment and without surrounding
+        whitespace; the same constraint the provisioning CLI applies. Treated as administrator identity and kept out of logs.
+    GrantSubject:
+      type: string
+      minLength: 1
+      maxLength: 512
+      description: Provisioned opaque identity subject, 1 to 512 characters, never blank and without ASCII control characters;
+        the same constraint the provisioning CLI applies. No email or display name is inferred and it is kept out of logs.
+    GrantChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject, role, expectedRole]
+      properties:
+        issuer:
+          $ref: "#/components/schemas/GrantIssuer"
+        subject:
+          $ref: "#/components/schemas/GrantSubject"
+        role:
+          type: string
+          enum: [reader, owner]
+        expectedRole:
+          anyOf:
+            - type: string
+              enum: [reader, owner]
+            - type: "null"
+          description: Role the caller last observed for the target. null registers a new grant and otherwise conflicts when a
+            grant already exists; reader or owner is a compare-and-swap guard against the stored role. When the target already
+            holds the requested role the request still succeeds with changed=false and no write, even if expectedRole does not
+            match, which is what keeps an exact retry safe.
+    GrantRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject, expectedRole]
+      properties:
+        issuer:
+          $ref: "#/components/schemas/GrantIssuer"
+        subject:
+          $ref: "#/components/schemas/GrantSubject"
+        expectedRole:
+          anyOf:
+            - type: string
+              enum: [reader, owner]
+            - type: "null"
+          description: Role the caller last observed for the target. null states the caller saw no grant; the revoke of an
+            absent grant is an idempotent success. reader or owner is a compare-and-swap guard against the stored role.
+    GrantMutationResult:
+      type: object
+      additionalProperties: false
+      required: [projectId, issuer, subject, role, createdAt, canManage, changed]
+      properties:
+        projectId:
+          $ref: "#/components/schemas/ProjectId"
+        issuer:
+          $ref: "#/components/schemas/GrantIssuer"
+        subject:
+          $ref: "#/components/schemas/GrantSubject"
+        role:
+          anyOf:
+            - type: string
+              enum: [reader, owner]
+            - type: "null"
+          description: Stored role for the target after the write; null when no grant remains.
+        createdAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          description: Original grant creation time; null exactly when role is null. Role changes never reset it.
+        canManage:
+          type: boolean
+          description: Whether the verified caller still holds an owner grant after the write.
+        changed:
+          type: boolean
+          description: Whether this request changed stored state; an identical retry or no-op reports false.
+      allOf:
+        - if:
+            required: [role]
+            properties:
+              role:
+                type: "null"
+          then:
+            properties:
+              createdAt:
+                type: "null"
+        - if:
+            required: [createdAt]
+            properties:
+              createdAt:
+                type: "null"
+          then:
+            properties:
+              role:
+                type: "null"
     BooleanProperty:
       type: object
       additionalProperties: false
@@ -1746,18 +1847,180 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "405":
-          description: Only GET is supported.
+          description: Only GET, PUT and DELETE are supported.
           headers:
             Allow:
               schema:
                 type: string
-                const: GET
+                const: GET, PUT, DELETE
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
           description: Storage unavailable or invalid stored grant data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Administration]
+      operationId: putProjectGrant
+      summary: Add or change a reader or owner grant as owner
+      description: Requires a current owner grant. Ownership is checked before the body is read and rechecked inside one atomic
+        database batch with the write, so a revoked owner cannot mutate. The closed body holds only issuer, subject, role and
+        expectedRole with the same identity constraints as the provisioning CLI. expectedRole is the role the caller last
+        observed; null registers a new grant, reader or owner is a compare-and-swap guard. When the target already holds the
+        requested role the request succeeds with changed=false and writes nothing, including an exact retry of an earlier
+        success. A different stored role returns grant_conflict (409). Moving the last remaining owner down to reader returns
+        last_owner (409). A caller may also demote their own grant while another owner remains; the response then reports
+        canManage=false and later owner calls fail with 403. Role changes preserve the original createdAt. No query parameters.
+      requestBody:
+        required: true
+        description: UTF-8 JSON, at most 16 KiB; identity content encoding only.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantChangeRequest"
+          text/plain:
+            schema:
+              $ref: "#/components/schemas/GrantChangeRequest"
+      responses:
+        "200":
+          description: Stored grant after the write, or unchanged metadata when the requested role was already present; no-store.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrantMutationResult"
+        "400":
+          description: Invalid project ID, unexpected query parameters, malformed JSON or invalid identity fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No current owner grant, including missing projects or ownership revoked before the write.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET, PUT and DELETE are supported.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, PUT, DELETE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Stored role no longer matches expectedRole (grant_conflict), or the last owner cannot be demoted (last_owner).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Body exceeds 16 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported content type or encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; read the grant list before retrying because the earlier outcome may be unknown.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Administration]
+      operationId: deleteProjectGrant
+      summary: Revoke a reader or owner grant as owner
+      description: Requires a current owner grant, checked before the body is read and rechecked inside one atomic database
+        batch with the delete. The closed body holds only issuer, subject and expectedRole. expectedRole is the role the caller
+        last observed; null states the caller saw no grant and the revoke of an absent grant is an idempotent success,
+        reader or owner is a compare-and-swap guard. A stored role that differs from expectedRole returns grant_conflict
+        (409). Revoking the last remaining owner returns last_owner (409). A caller may revoke their own grant while another
+        owner remains; the response then reports canManage=false and later owner calls fail with 403. No query parameters.
+      requestBody:
+        required: true
+        description: UTF-8 JSON, at most 16 KiB; identity content encoding only.
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GrantRevokeRequest"
+          text/plain:
+            schema:
+              $ref: "#/components/schemas/GrantRevokeRequest"
+      responses:
+        "200":
+          description: Grant state after the revoke; role and createdAt are null when no grant remains, and an absent grant is an unchanged success; no-store.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GrantMutationResult"
+        "400":
+          description: Invalid project ID, unexpected query parameters, malformed JSON or invalid identity fields.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No current owner grant, including missing projects or ownership revoked before the write.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET, PUT and DELETE are supported.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET, PUT, DELETE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Stored role no longer matches expectedRole (grant_conflict), or the last owner cannot be revoked (last_owner).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: Body exceeds 16 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "415":
+          description: Unsupported content type or encoding.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; read the grant list before retrying because the earlier outcome may be unknown.
           content:
             application/json:
               schema:

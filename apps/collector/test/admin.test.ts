@@ -260,6 +260,16 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
     assert.equal(nextGrants.status, 200);
     assert.deepEqual((await nextGrants.json() as { data: unknown[] }).data,
       [{ issuer: principal.issuer, subject: 'z-reader', role: 'reader', createdAt: new Date(now).toISOString() }]);
+    const grantUpdate = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/grants', {
+      method: 'PUT', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', role: 'owner', expectedRole: 'reader' }),
+    });
+    assert.equal(grantUpdate.status, 200); assert.equal((await grantUpdate.json() as { role: string }).role, 'owner');
+    const grantDelete = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/grants', {
+      method: 'DELETE', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', expectedRole: 'owner' }),
+    });
+    assert.equal(grantDelete.status, 200); assert.equal((await grantDelete.json() as { role: string | null }).role, null);
     await db.prepare('DELETE FROM project_grants').run();
     assert.equal((await get()).status, 403);
   } finally { await runtime.dispose(); }

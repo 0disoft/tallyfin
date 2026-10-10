@@ -192,7 +192,8 @@ limit은 기본 25·최대 100이며 프로젝트별 커서로 다음 페이지�
 프로젝트 owner·회수된 권한은 403이고, 오류·응답은 기존 관리자 경계를 유지한다.
 OpenAPI와 코어 저장 포트에 조회 계약을 추가했다. DB·마이그레이션·SDK·의존성·CI·위생
 정책 변경은 없다. 다음 단계는 관리자 권한 목록 화면이며, grant 부여·역할 변경·회수는
-기존 CLI를 유지한다. 운영 인증·Sembom 연동·푸시·배포는 없다.
+기존 CLI를 유지한다. 이후 아래 2026-10-11 프로젝트 권한 변경 API 항목에서 owner 전용
+API로도 구현했다. 운영 인증·Sembom 연동·푸시·배포는 없다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 
 2026-10-11 관리자 권한 목록 연결: API 모드 설정 화면의 `LiveGrants`에서 owner 전용
@@ -200,5 +201,21 @@ OpenAPI와 코어 저장 포트에 조회 계약을 추가했다. DB·마이그�
 표시하고 다음 페이지·처음부터 새로고침을 제공한다. reader는 목록을 요청하지 않는다.
 실패·권한 회수 때 행을 지우고 프로젝트/연결 변경과 언마운트 때 취소·늦은 응답 차단을
 적용한다. API·DB·SDK·의존성·CI·위생 정책 변경은 없다. grant 부여·역할 변경·회수는
-기존 CLI를 유지하며, 변경 API·관리 화면과 운영 연동은 후속이다.
+기존 CLI를 유지하고, 아래 2026-10-11 프로젝트 권한 변경 API 항목에서 owner 전용 API로도
+구현했다. 관리 화면의 권한 변경 UI와 운영 연동은 후속이다.
+검증은 [검증 기록](../../VALIDATION.md)에 둔다.
+
+2026-10-11 프로젝트 권한 변경 API: 현재 프로젝트 owner 전용
+`PUT`/`DELETE /v1/projects/{projectId}/grants`를 로컬 구현했다. PUT은
+`{issuer,subject,role,expectedRole}`로 reader/owner를 등록·변경하고, DELETE는
+`{issuer,subject,expectedRole}`로 회수한다. 본문은 닫힌 JSON·UTF-8 16KiB 이하
+identity 인코딩이고 조회 파라미터는 받지 않는다. owner 여부는 본문을 읽기 전에 확인하고
+쓰기 직전 원자 DB batch에서 다시 검사한다. expectedRole이 저장 역할과 다르면
+grant_conflict(409), 마지막 owner를 내리거나 회수하면 last_owner(409)다. 대상이 이미
+원하는 역할이면 다시 쓰지 않고 200 `changed=false`로 성공하며 역할 변경은 최초
+createdAt을 유지한다. 성공 응답은
+`{projectId,issuer,subject,role,createdAt,canManage,changed}`다. ErrorResponse enum에
+grant_conflict·last_owner를 추가했다. DB·마이그레이션·SDK·의존성·CI·위생 정책 변경은
+없고 배포·운영 identity 자격 증명도 없다. 관리자 화면의 권한 변경 UI는 아직 없다.
+grant 변경은 기존 provisioning CLI로도 할 수 있다.
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.

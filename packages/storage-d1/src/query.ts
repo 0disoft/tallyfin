@@ -1,5 +1,5 @@
 import { addCounts, closed, CollectionError, count, dateEnd, DAY, dateMillis, integer, NAME, PROJECT_ID, queryDates, validateRegistry, workflowCounts } from '@tallyfin/core';
-import type { AdminPrincipal, AdminQuery, AdminStore, ProjectSettingsUpdate, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
+import type { AdminPrincipal, AdminQuery, AdminStore, GrantChange, ProjectSettingsUpdate, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
 import { readDimensions } from './dimensions.ts';
 import { workflowBreakdown, type WorkflowDimensionRow } from './workflow-breakdown.ts';
 import { listSchemas, publishSchema } from './schema.ts';
@@ -7,6 +7,7 @@ import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
 import { collectionRejections } from './rejections.ts';
 import { listProjectGrants } from './grants.ts';
+import { changeProjectGrant } from './grant-change.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 
 const access = "EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = ? AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))";
@@ -18,6 +19,9 @@ export class D1Queries implements AdminStore {
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = options; }
+  changeGrant(principal: AdminPrincipal, id: string, change: GrantChange, now: number) {
+    return changeProjectGrant(this.db, principal, id, change, now);
+  }
   grants(principal: AdminPrincipal, id: string, limit: number, cursor: string) {
     return listProjectGrants(this.db, principal, id, limit, cursor);
   }

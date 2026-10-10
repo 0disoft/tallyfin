@@ -104,7 +104,7 @@ test('malformed/cross-project cursors, unbounded/duplicate/extra parameters and 
     assert.equal((await handler()(request(`/v1/projects/sembom/grants${suffix}`))).status, 400);
   assert.equal((await handler()(request('/v1/projects/INVALID/grants'))).status, 400);
   const denied = await handler()(request(undefined, 'POST'));
-  assert.equal(denied.status, 405); assert.equal(denied.headers.get('Allow'), 'GET');
+  assert.equal(denied.status, 405); assert.equal(denied.headers.get('Allow'), 'GET, PUT, DELETE');
 });
 
 test('missing verifier/auth and storage failures return generic errors without identity or exception disclosure', async () => {

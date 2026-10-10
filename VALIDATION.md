@@ -1,5 +1,25 @@
 # 검증
 
+## 프로젝트 권한 변경 API — 2026-10-11
+
+owner 전용 `PUT/DELETE /v1/projects/{projectId}/grants`를 로컬 구현했다.
+조회한 `expectedRole`로 동시 변경을 검사하고 마지막 owner의 강등·회수를 거부한다.
+권한 검사·변경·결과 조회는 같은 D1 batch에 두며, 같은 목표 상태의 재요청은
+추가 변경 없이 성공한다. 기존 생성 시각은 보존하고 자기 권한을 바꾸면 결과의
+`canManage`에 남은 owner 권한을 반영한다.
+
+루트 `npm run check`의 타입 검사·전체 테스트 186/186·브라우저 크기 검사 통과.
+신규 요청 검증 1개와 변경 API 8개, 기존 목록 6개를 함께 실행한 관련 테스트도
+15/15 통과했다. 동시 변경·마지막 owner 보호·권한 회수 경합·다른 프로젝트 접근 거부·
+재요청·DB 실패 롤백을 확인했고 기존 Worker smoke에서 실제 PUT/DELETE도 실행했다.
+`tools/contracts` OpenAPI lint와 계약 검사 37/37, `git diff --check` 통과.
+SDK gzip 2667 bytes, Sembom 예제 포함 2949 bytes로 유지된다.
+
+OpenAPI·코어 저장 포트·수집기 오류 계약을 변경했다. DB 구조·마이그레이션·SDK·
+의존성·CI 러너·위생 정책 변경은 없다. 화면은 조회만 지원하므로 변경 폼 연결이
+남았다. 실제 OIDC 계정·원격 D1·운영 배포는 환경이 연결되지 않아 검증하지 않았고,
+푸시·배포·Sembom 활성화도 하지 않았다.
+
 상태: 코어·D1 저장·수집기·브라우저 SDK·관리자 조회/설정 변경 API·OIDC 검증 어댑터와 v0.1 계약·샘플 UI를 로컬에서 검증했다. 브라우저 SDK는 커밋 `cb3f2ff`와 뒤이은 예제·크기 검사·수집기 통합 테스트 및 합성 화면의 실브라우저 측정으로 확인했다. Sembom 예제는 저장소 안에만 두었고 실제 서비스에는 설치·활성화하지 않았다. 실제 인증 제공자·운영 로그인·원격 DB 마이그레이션과 운영 배포는 아직 없다.
 
 2026-10-08 관리자 조회 슬라이스 검증: `apps/collector/src/admin.ts`에 관리자 GET 조회를, `index.ts`에 `createWorker(verifyBearer)` 검증기 포트를 구현했고, 모킹한 trusted 검증기와 실제 D1 grant 경계를 Miniflare에서 확인하는 native Worker 팩토리 smoke 테스트 1개를 추가했다. `node --test`로 `apps/collector/test/admin.test.ts` 9/9 통과. 부모 검증은 루트 `npm run check`(typecheck + 테스트 86개 + SDK+Sembom gzip 2949 bytes 예산)와 `tools/contracts` lint/check 27개 통과다. 이후 추가한 관리자 테스트 1개로 현재 전체 테스트는 87개지만 루트 full check 87은 다시 돌리지 않았다(루트 check 86 → 이후 관리자 9/9). DB 스키마·SQL 마이그레이션 변경은 없고 OpenAPI는 관리자 GET 405 응답 추가와 설명 문구 갱신만 있었다(경로·본문 형태는 그대로). 검증기는 테스트에서만 모킹했고 실제 서명 검증·인증 제공자·토큰 발급은 미구현·미검증이다. 자격증명·토큰은 만들지 않았다. backend 커밋 `404875c`, smoke 추가는 별도 커밋.

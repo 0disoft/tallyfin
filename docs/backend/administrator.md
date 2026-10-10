@@ -1,15 +1,16 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
-상태: 관리자 조회(GET)·프로젝트 설정 조회/변경(PATCH)·검증기 포트·OIDC JWT 서명 검증
-어댑터를 로컬에서 구현·검증했다. 실제 인증 제공자·로그인 흐름·토큰 발급과 운영 설정은
-아직 연결하지 않았다.
+상태: 관리자 조회(GET)·프로젝트 설정 조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수
+(PUT·DELETE)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증
+제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
 
 호스트는 `createWorker(verifyBearer)`로 신뢰하는 검증기를 연결한다. `verifyBearer`는
 서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
 null을 돌려준다. `apps/collector/src/index.ts`의 기본 export는 검증기 없이 만들어져
 관리자 경로를 401로 닫는다. 검증기가 없거나 bearer·issuer·subject가 비면 401이다.
-프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 초안 검증
-경로는 POST만 받고 그 밖은 405(Allow: POST), 프로젝트 목록/생성 경로는 GET·POST
+프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 프로젝트 권한
+경로는 GET·PUT·DELETE를 받고 그 밖은 405(Allow: GET, PUT, DELETE), 초안 검증 경로는
+POST만 받고 그 밖은 405(Allow: POST), 프로젝트 목록/생성 경로는 GET·POST
 (Allow: GET, POST), 버전별 스키마 경로는 GET·PUT을
 받으며 나머지 조회 경로는 GET이 아니면 405(Allow: GET)다.
 
@@ -32,12 +33,15 @@ export default createWorker(bearer => hostVerify(bearer));
 화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이
 없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
 
-지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 생성 POST·설정 PATCH·버전별 스키마 PUT이다.
-초안 검증 POST는 저장하지 않는 읽기 작업이다.
+지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 생성 POST·설정 PATCH·버전별 스키마 PUT·
+프로젝트 권한 PUT·DELETE다. 초안 검증 POST는 저장하지 않는 읽기 작업이다.
 
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
+- `GET /v1/projects/{projectId}/grants` — 현재 owner 전용 권한 목록. 아래 목록 규칙을 따른다.
+- `PUT /v1/projects/{projectId}/grants` — owner의 reader/owner grant 등록·역할 변경. 아래 변경 규칙을 따른다.
+- `DELETE /v1/projects/{projectId}/grants` — owner의 grant 회수. 아래 변경 규칙을 따른다.
 - `GET /v1/projects/{projectId}/collection/rejections?from={UTC-date}&to={UTC-date}` — reader/owner의 수집 거부 진단. 아래 UTC 진단 규칙을 따른다.
 - `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
 - `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
@@ -168,8 +172,9 @@ D1 batch의 rollback·실행 순서는 [공식 D1 문서](https://developers.clo
 기준으로 구현하고 Miniflare에서 발행·재요청·동시 발행·실패 rollback을 확인했다.
 
 프로젝트 생성은 별도 생성 권한 API 또는 provisioning CLI를 사용한다.
-grant 부여·역할 변경·회수와 스키마 상태 변경은 기존 provisioning CLI가 맡는다.
-grant 변경 API, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
+스키마 상태 변경은 기존 provisioning CLI가 맡는다. grant 부여·역할 변경·회수는 새 owner
+API(PUT·DELETE)로 로컬 구현했고 provisioning CLI는 대안으로 유지한다. 관리자 화면의
+권한 변경 UI, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
 [OpenAPI](../../api/openapi.yaml)를 따르고, 동작 의미는
 [이벤트·집계 계약](./event-contract.md)을 따른다.
 
@@ -194,6 +199,30 @@ limit은 기본 25·최대 100이고 issuer, subject의 SQLite BINARY 순서로 
 cursor를 생략하거나 빈 값으로 보낸다. 식별자 둘의 최대 512자·Unicode도 지원한다.
 각 페이지는 현재 DB를 읽으므로 이전 위치보다 앞에 추가된 grant는 목록을 처음부터
 다시 읽어야 보인다. 조회로 grant·설정·수집 사용량을 변경하지 않는다.
+
+## 프로젝트 권한 변경
+
+`PUT /v1/projects/{projectId}/grants`와 `DELETE .../grants`는 현재 프로젝트
+owner만 쓴다. reader·다른 프로젝트 owner·발급자가 다른 호출자·회수된 owner·없는
+프로젝트는 403이다. 라우터는 본문을 읽기 전에 검증된 호출자가 owner인지 preflight로
+확인하고, 쓰기 직전 원자 DB batch에서 owner 조건·CAS·last-owner 가드·결과 조회를 함께
+수행한다. 본문은 닫힌 JSON이며 UTF-8 16KiB 이하 identity 인코딩만 받고 조회 파라미터는
+받지 않는다. issuer·subject는 [provisioning CLI](./provisioning.md)와 같은 제약을 쓴다.
+PUT 본문은 `{issuer,subject,role,expectedRole}`, DELETE 본문은
+`{issuer,subject,expectedRole}`이다.
+
+`expectedRole`은 호출자가 마지막으로 본 역할이다. PUT에서 null은 신규 등록,
+reader/owner는 현재 저장 역할과 비교하는 CAS다. 대상이 이미 원하는 역할이면 다시 쓰지
+않고 200 `changed=false`로 성공하며, 그 밖에 저장 역할이 expectedRole과 다르면
+grant_conflict(409)다. DELETE에서 null은 grant가 없다고 본 경우이고 grant가 없으면
+멱등 성공(changed=false)이다. 저장 역할이 expectedRole과 다르면 grant_conflict(409)다.
+
+역할 변경은 최초 createdAt을 유지하고, 마지막 owner를 reader로 내리거나 회수하면
+last_owner(409)다. 다른 owner가 있으면 자기 grant를 스스로 낮추거나 회수할 수 있고 그때
+응답은 canManage=false이며 이후 owner API 호출은 403이다. 성공 응답은 200
+`{projectId,issuer,subject,role,createdAt,canManage,changed}`이고 role이 null이면
+createdAt도 null이다. 이 API는 로컬에서 구현·검증했고 관리자 화면의 권한 변경 UI는
+아직 없다. DB·마이그레이션 변경·배포·운영 identity 자격 증명은 없다.
 
 ## 프로젝트 생성
 

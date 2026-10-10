@@ -6,6 +6,7 @@ export * from './schema-publication.ts';
 export * from './batch.ts';
 export * from './ingest.ts';
 export * from './query.ts';
+export * from './grants.ts';
 export * from './settings.ts';
 export * from './project-creation.ts';
 export * from './rejections.ts';

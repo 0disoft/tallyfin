@@ -20,14 +20,24 @@ Tallyfin은 Rodisoft의 여러 서비스에서 사용하는 범용 제품 이벤
 
 ## 프로젝트 레지스트리와 스키마
 
-서비스별 독립 프로젝트에 이벤트·속성 스키마 버전·출처·권한·수집 한도를 설정한다. 조회는 신뢰하는 검증기가 확인한 관리자 issuer/subject와 프로젝트 grant를 요구하며 인증 제공자 미설정 배포는 닫는다. 설정 조회는 reader/owner, 변경은 owner grant를 요구하고 조회 시 받은 settingsHash로 동시 변경을 막는다. 관리자 설정 화면은 이 조회·변경을 로컬에서 연결해 owner가 이름·상태·허용 출처·수집 한도를 편집·저장하고, 응답의 canEdit가 false인 grant는 읽기 전용으로 연다. 프로젝트는 CLI 또는 별도 생성 권한을 요구하는 API로 만들고 관리자 화면에서도 생성한다. grant 관리는 provisioning CLI가 맡는다. 새 스키마 버전은 owner 전용 API로도 발행한다. 수집기는 활성 상태·등록 스키마·정확한 오리진·한도를 검사한다. 공개 브라우저에는 관리자 토큰을 넣지 않으며 서버 수집 인증은 후속이다.
+서비스별 독립 프로젝트에 이벤트·속성 스키마 버전·출처·권한·수집 한도를 설정한다. 조회는 신뢰하는 검증기가 확인한 관리자 issuer/subject와 프로젝트 grant를 요구하며 인증 제공자 미설정 배포는 닫는다. 설정 조회는 reader/owner, 변경은 owner grant를 요구하고 조회 시 받은 settingsHash로 동시 변경을 막는다. 관리자 설정 화면은 이 조회·변경을 로컬에서 연결해 owner가 이름·상태·허용 출처·수집 한도를 편집·저장하고, 응답의 canEdit가 false인 grant는 읽기 전용으로 연다. 프로젝트는 CLI 또는 별도 생성 권한을 요구하는 API로 만들고 관리자 화면에서도 생성한다. grant 부여·역할 변경·회수는 owner 전용 PUT·DELETE API로도 처리하고 provisioning CLI는 대안으로 유지한다. 새 스키마 버전은 owner 전용 API로도 발행한다. 수집기는 활성 상태·등록 스키마·정확한 오리진·한도를 검사한다. 공개 브라우저에는 관리자 토큰을 넣지 않으며 서버 수집 인증은 후속이다.
 
 권한 목록은 현재 프로젝트 owner 전용 `GET /v1/projects/{projectId}/grants`에서 페이지로
 조회한다. 목록에는 등록된 issuer/subject·reader/owner 역할·최초 생성 시각을 표시하고,
-페이지마다 owner 권한을 다시 검사한다. grant 부여·역할 변경·회수는 provisioning CLI를
-유지하며 grant 변경 API는 후속이다. API 연결 모드의 설정 화면에는 owner만 읽는 권한
+페이지마다 owner 권한을 다시 검사한다. grant 부여·역할 변경·회수는 owner 전용
+PUT·DELETE API로 로컬 구현했고 provisioning CLI는 대안으로 유지한다. API 연결 모드의
+설정 화면에는 owner만 읽는 권한
 목록을 연결했다. 한 페이지 25건을 보여주고 새로고침·다음 페이지를 제공하며, 권한 회수나
 조회 실패·프로젝트/연결 전환 때 이전 목록을 비운다. reader는 권한 목록 API를 호출하지 않는다.
+
+권한 변경도 현재 프로젝트 owner만 `PUT`/`DELETE /v1/projects/{projectId}/grants`로
+한다. PUT은 `{issuer,subject,role,expectedRole}`를 받아 reader/owner를 등록·변경하고,
+DELETE는 `{issuer,subject,expectedRole}`로 회수한다. expectedRole은 마지막으로 본
+역할이며 대상이 이미 원하는 상태면 다시 쓰지 않고 200 `changed=false`로 성공한다.
+역할이 expectedRole과 다르면 `grant_conflict`(409), 마지막 owner를 내리거나 회수하면
+`last_owner`(409)다. 성공 응답은
+`{projectId,issuer,subject,role,createdAt,canManage,changed}`다. 관리자 화면의
+권한 변경 UI는 아직 없고 DB·마이그레이션 변경도 없다.
 
 프로젝트 ID는 공개 라우팅 정보이며 인증 수단이 아니다. 허용 오리진만으로 봇·위조 이벤트를 막을 수 없다. 프로젝트 간 스키마·데이터·설정은 분리하고, 한 프로젝트의 정의를 다른 프로젝트에 암묵적으로 재사용하지 않는다.
 
