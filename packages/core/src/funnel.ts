@@ -20,7 +20,7 @@ export interface FunnelRunState {
   cohortDate: string; dimensionKey: string; stepTimes: (number | null)[]; expiresAt: number;
 }
 export interface FunnelDelta {
-  cohortDate: string; funnelId: string; dimensionKey: string; stepIndex: number; reachedCount: 1;
+  cohortDate: string; funnelId: string; dimensionKey: string; stepIndex: number; reachedCount: number;
 }
 export interface FunnelProgress { state: FunnelRunState; deltas: FunnelDelta[]; duplicate: boolean }
 

@@ -118,6 +118,8 @@ export class D1Store implements ServerCollectionStore {
       if (!schema || schema.status !== 'active') throw new CollectionError('unknown_schema', 422);
       const currentRegistry = this.registry(project, schema);
       if (canonicalJson(currentRegistry) !== canonicalJson(registry)) throw new CollectionError('storage_unavailable', 503);
+      // The next storage slice must persist every funnel delta atomically before accepting linked events.
+      if (batch.events.some(event => event.funnel !== undefined)) throw new CollectionError('storage_unavailable', 503);
       const plan = planIngest(batch, { receipts: read[2]!.results as Receipt[], attempts: read[3]!.results as AttemptState[],
         newReceiptsToday: (read[4]?.results[0] as { new_receipts: number } | undefined)?.new_receipts ?? 0 }, project.new_receipts_per_utc_day);
       // Pure retransmission needs no write; it is linearized at the consistent read snapshot.

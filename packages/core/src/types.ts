@@ -40,6 +40,7 @@ export interface ServerBatch {
 export interface PreparedEvent {
   event: BrowserEvent; occurredAt: number; eventDate: string; dimensionKey: string;
   payloadHash: string;
+  funnel?: import('./funnel.ts').PreparedFunnelObservation;
   workflow?: {
     id: string; phase: 'start' | 'success' | 'failure'; attemptId: string;
     startedAt: number; cohortDate: string; dimensionKey: string;

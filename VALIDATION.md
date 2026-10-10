@@ -1,5 +1,23 @@
 # 검증
 
+## 퍼널의 공용 수집 계획 연결 — 2026-10-11
+
+PreparedEvent와 IngestSnapshot/Plan에 최소 퍼널 관찰·연결 상태·단계 delta를 연결했다.
+planIngest가 먼저 source별 영수증 중복을 검사하고 새 영수증·프로젝트 일일 한도와 함께
+작업의 연속 도달 단계를 계획한다. browser/server는 같은 runId 상태를 공유하며 일반
+이벤트와 기존 workflow 계획은 유지한다. 같은 단계의 새 ID 재전송은 영수증 한도를
+소모하되 이벤트/단계 집계를 더하지 않는다. 입력 snapshot은 변경하지 않는다.
+
+타입 검사·코어 44/44 테스트·SDK 크기 검사를 통과했다. 새 2개 테스트는 역순 server
+완료→browser 시작/중간→server 중간 연결, 자정 전 시작일 집계, 원래 ID/새 ID 중복,
+할당량·영수증·분류 충돌과 snapshot 보존을 확인했다. SDK gzip 2667·Sembom 포함
+2949 bytes를 유지한다. 현재 HTTP parser는 아직 funnel 필드를 거부하며 D1 어댑터도
+내부 PreparedEvent에 funnel이 있으면 저장 연결 전에는 503으로 닫는다.
+
+다음 커밋에서 DBML·0007·원자 저장·정리와 wire 준비 경로를 연결한다. 아직 신규 퍼널의
+D1 통합은 실행하지 않았고 API·DB·SDK·화면·의존성·CI·위생 정책은 변경하지 않았다.
+전체 DB/HTTP 테스트는 실제 저장 연결 커밋에서 실행한다. 푸시·배포는 없다.
+
 ## 퍼널 정의의 버전별 등록·검증·발행·읽기 — 2026-10-11
 
 Registry·SchemaDraft·SchemaPublication에 선택 funnels를 연결했다. 공용 검증기는

@@ -1,6 +1,8 @@
 import { CollectionError } from './types.ts';
 import type { PreparedBatch, PreparedServerBatch } from './types.ts';
 import { DAY } from './value.ts';
+import { planFunnelProgress } from './funnel.ts';
+import type { FunnelDelta, FunnelRunState } from './funnel.ts';
 
 export interface Receipt { event_id: string; schema_version: number; payload_hash: string; received_at: number; expires_at: number }
 export interface AttemptState {
@@ -13,9 +15,10 @@ export interface WorkflowDelta {
   cohort_date: string; workflow_id: string; dimension_key: string;
   started_count: number; succeeded_count: number; failed_count: number;
 }
-export interface IngestSnapshot { receipts: Receipt[]; attempts: AttemptState[]; newReceiptsToday: number }
+export interface IngestSnapshot { receipts: Receipt[]; attempts: AttemptState[]; newReceiptsToday: number; funnelRuns?: FunnelRunState[] }
 export interface IngestPlan {
   receipts: Receipt[]; attempts: AttemptState[]; events: EventDelta[]; workflows: WorkflowDelta[];
+  funnelRuns: FunnelRunState[]; funnels: FunnelDelta[];
   accepted: number; duplicates: number;
 }
 
@@ -23,8 +26,10 @@ export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot:
   const receipts = new Map(snapshot.receipts.filter(r => r.expires_at > batch.receivedAt).map(r => [r.event_id, r]));
   const attempts = new Map(snapshot.attempts.filter(a => a.expires_at > batch.receivedAt).map(a => [a.attempt_id, { ...a }]));
   const changed = new Map<string, AttemptState>();
+  const runs = new Map((snapshot.funnelRuns ?? []).filter(run => run.expiresAt > batch.receivedAt).map(run => [run.runId, run]));
+  const changedRuns = new Map<string, FunnelRunState>(); const funnelDeltas = new Map<string, FunnelDelta>();
   const eventDeltas = new Map<string, EventDelta>(); const workflowDeltas = new Map<string, WorkflowDelta>();
-  const plan: IngestPlan = { receipts: [], attempts: [], events: [], workflows: [], accepted: 0, duplicates: 0 };
+  const plan: IngestPlan = { receipts: [], attempts: [], events: [], workflows: [], funnelRuns: [], funnels: [], accepted: 0, duplicates: 0 };
   const addWorkflow = (state: AttemptState, start: number, success: number, failure: number) => {
     const key = JSON.stringify([state.cohort_date, state.workflow_id, state.dimension_key]);
     const delta = workflowDeltas.get(key) ?? { cohort_date: state.cohort_date, workflow_id: state.workflow_id,
@@ -43,6 +48,17 @@ export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot:
       payload_hash: prepared.payloadHash, received_at: batch.receivedAt, expires_at: batch.receivedAt + 2 * DAY };
     plan.receipts.push(receipt); receipts.set(receipt.event_id, receipt);
     let duplicatePhase = false;
+    if (prepared.funnel) {
+      if (prepared.workflow) throw new CollectionError('invalid_event', 422);
+      const id = prepared.funnel.event.funnel.runId;
+      const progress = planFunnelProgress(prepared.funnel, runs.get(id) ?? null);
+      runs.set(id, progress.state); changedRuns.set(id, progress.state); duplicatePhase = progress.duplicate;
+      for (const delta of progress.deltas) {
+        const key = JSON.stringify([delta.cohortDate, delta.funnelId, delta.dimensionKey, delta.stepIndex]);
+        const total = funnelDeltas.get(key);
+        funnelDeltas.set(key, total ? { ...total, reachedCount: total.reachedCount + delta.reachedCount } : delta);
+      }
+    }
     if (prepared.workflow) {
       const workflow = prepared.workflow;
       const state = attempts.get(workflow.attemptId) ?? {
@@ -78,6 +94,7 @@ export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot:
     !Number.isSafeInteger(snapshot.newReceiptsToday + plan.receipts.length)) throw new CollectionError('storage_unavailable', 503);
   if (snapshot.newReceiptsToday + plan.receipts.length > dailyLimit) throw new CollectionError('quota_exceeded', 429);
   plan.attempts = [...changed.values()]; plan.events = [...eventDeltas.values()]; plan.workflows = [...workflowDeltas.values()];
+  plan.funnelRuns = [...changedRuns.values()]; plan.funnels = [...funnelDeltas.values()];
   return plan;
 }
 
