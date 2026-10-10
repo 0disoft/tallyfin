@@ -8,6 +8,7 @@
     "build": "vite build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
+    "test:bundle": "node --test tests/bundle-split.test.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --test src/model.test.mjs src/api/*.test.mjs src/auth/client.test.mjs tests/local-proxy.test.mjs tests/font-assets.test.mjs"
   },

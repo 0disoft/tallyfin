@@ -1,20 +1,15 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserLogin } from './auth/client';
 import { CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import { Trend } from './Dashboard';
-import LiveSettings from './LiveSettings';
-import LiveSchemas from './LiveSchemas';
-import LiveProjectCreate from './LiveProjectCreate';
-import LiveSdkSetup from './LiveSdkSetup';
+import DeferredPanel from './DeferredPanel';
 import SourceEventTable, { sourceLabel, type EventRow } from './SourceEventTable';
 import SourceMetrics from './SourceMetrics';
-import CollectionDiagnostics from './CollectionDiagnostics';
 import DateRangePicker from './DateRangePicker';
 import { formatCount, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
-import LiveGoals from './LiveGoals';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
 import { loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
@@ -31,6 +26,9 @@ type MainData = PeriodSnapshot & { registry: Registry };
 type ActiveProject = { name: string; timeZone: string };
 type Session = { basePath: string; token?: string; login?: BrowserLogin };
 const OidcLogin = lazy(() => import('./auth/OidcLogin'));
+const LiveSettingsWorkspace = lazy(() => import('./LiveSettingsWorkspace'));
+const LiveProjectCreate = lazy(() => import('./LiveProjectCreate'));
+const LiveGoals = lazy(() => import('./LiveGoals'));
 
 const MAX_SCHEMA_VERSION = 2147483647;
 
@@ -332,7 +330,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
 
   if (!client) {
     return <>
-    <Suspense fallback={<p className="context-note" role="status">로그인 화면을 준비하고 있어요.</p>}><OidcLogin onConnected={connected} /></Suspense>
+    <DeferredPanel label="로그인"><OidcLogin onConnected={connected} /></DeferredPanel>
     <details className="manual-connection"><summary>관리자 토큰으로 직접 연결</summary><section className="settings-section">
       <h2>API 연결</h2>
       <p className="context-note">같은 출처의 관리자 API에 연결해요. 프로젝트 설정은 소유자만 저장할 수 있어요. 기본 엔드포인트는 현재 출처의 {API_BASE_PATH}예요. 다른 출처는 이번 범위가 아니라 연결하지 않아요.</p>
@@ -410,21 +408,16 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 작업 흐름은 브라우저 기준이며, 퍼널은 등록된 단계의 출처를 함께 조회해요.'}</p>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
     {view !== 'settings' && (view !== 'goals' || !!data?.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
-    {showCreate && <LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} />}
+    {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} /></DeferredPanel>}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
     {!showCreate && projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>생성 권한이 있다면 프로젝트 추가로 시작할 수 있어요. 기존 프로젝트를 조회하려면 운영자에게 해당 프로젝트 권한을 확인해 주세요.</p></section>}
-    {view === 'settings' && activeProjectId && <>
-      {newProjectId === activeProjectId && <section className="project-onboarding" aria-label="새 프로젝트 연결" role="status">
-        <h2>프로젝트 생성을 확인했어요</h2><ol className="setup-steps"><li>1 프로젝트 완료</li><li aria-current={settingsRegistry ? undefined : 'step'}>2 이벤트 스키마</li><li aria-current={settingsRegistry ? 'step' : undefined}>3 SDK 연결</li></ol>
-        <p>먼저 이벤트 스키마를 검증·발행한 뒤 SDK를 연결하세요.</p><a href="#schema-heading">이벤트 스키마로 이동</a> · <a href="#sdk-setup">SDK 연결 안내</a>
-      </section>}
-      <CollectionDiagnostics key={`diagnostics-${activeProjectId}`} client={client} projectId={activeProjectId} version={validVersion ? version : null} refreshTick={settingsRefreshTick + setupRefreshTick + diagnosticsRevision} />
-      <LiveSettings key={activeProjectId} client={client} projectId={activeProjectId} onSaved={settingsSaved} refreshTick={settingsRefreshTick}
-        onAccessLost={retry} registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} />
-      <LiveSchemas key={`schemas-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={settingsRefreshTick} onVersionChange={schemaVersionChanged} />
-      <LiveSdkSetup key={`setup-${activeProjectId}`} client={client} projectId={activeProjectId} refreshTick={setupRefreshTick + settingsRefreshTick} />
-    </>}
+    {view === 'settings' && activeProjectId && <DeferredPanel key={activeProjectId} label="프로젝트 설정">
+      <LiveSettingsWorkspace client={client} projectId={activeProjectId} version={validVersion ? version : null}
+        registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} newlyCreated={newProjectId === activeProjectId}
+        refreshTick={settingsRefreshTick} setupRefreshTick={setupRefreshTick} diagnosticsRevision={diagnosticsRevision}
+        onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} />
+    </DeferredPanel>}
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
@@ -470,8 +463,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           </>}
         </section>}
       </>}
-      {view === 'goals' && <LiveGoals client={client} registry={registry} workflows={data.workflows} range={data.range}
-        previous={compare && !comparisonError ? previousRange(data.range) : null} context={mainKey} onState={workflowStateChanged} />}
+      {view === 'goals' && <DeferredPanel key={activeProjectId} label="목표"><LiveGoals client={client} registry={registry} workflows={data.workflows} range={data.range}
+        previous={compare && !comparisonError ? previousRange(data.range) : null} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
 
     </>}
   </>;

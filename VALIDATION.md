@@ -1,5 +1,38 @@
 # 검증
 
+## 관리자 화면 코드 분리 — 2026-10-11
+
+`App`에서 API 관리자 모드를 지연 로드하고 `LiveDashboard`에서 설정 작업 공간·목표·
+프로젝트 생성 화면을 지연 로드한다. 진단·설정·권한·이력·스키마·SDK 안내를
+`LiveSettingsWorkspace`로 추출했다. 부모 client·선택 프로젝트·조회 상태는 유지하고
+projectId key로 설정 컨트롤러를 교체한다. `DeferredPanel`은 로딩·청크 실패 안내와
+새로고침을 제공하며 새로고침 때 초안·직접 연결 토큰의 초기화를 안내한다.
+OIDC callback URL 정리는 첫 엔트리에 유지한다.
+
+같은 Node gzip 설정으로 첫 JS를 비교했다. 524,427 B / gzip 142,248 B에서
+262,512 B / gzip 78,634 B로 감소했다(원본 49.94%, gzip 44.72%). 모든 JS 파일의
+합계는 약 911 kB이며 로딩 시점 분리다. 500 kB 경고는 없어졌고 LiveDashboard는
+38,139 B다. Vite manifest를 생성하고 빌드 후 별도 `npm run test:bundle`로 첫 정적
+그래프 gzip 100KiB·개별 JS 500kB 예산과 설정/목표/생성/로그인/차트의 지연 경계·
+CSS 자산 존재를 검사한다. 일반 테스트는 빌드를 요구하지 않고 CI 러너는 바꾸지 않았다.
+
+실행·통과: 관리자 `npm run typecheck`, `npm test` 155/155, `npm run build`,
+`npm run test:bundle` 2/2, `npm run test:sites` 4/4, 계약 `npm run check` 53/53.
+Vite preview의 프로덕션 자산을 Chromium으로 확인했다. 캐시를 끈 첫 Script 요청은
+index·TrendChart뿐이고 API 모드 진입 때 LiveDashboard·client·OidcLogin이 추가됐으며
+설정/목표/생성 코드는 요청되지 않았다. 로그인 전 endpoint 초안은 설정 메뉴 전환에도
+유지됐다. 실제 제공자 로그인은 실행하지 않았다. CDP로 LiveDashboard 파일만 임시
+차단해 오류 경계·새로고침 버튼을 확인했고 차단 해제 후 새로고침으로 정상 복구했다.
+차단·cache override는 복원했다. 새 탭 정상 진입의 콘솔 오류 0건, CSS 320px에서
+document scrollWidth 320px였다. 스크린샷은 ignore된
+`prototypes/admin/.tmp/admin-split-ui/`, 크기 기록은 `.tmp/admin-split-result.json`에 둔다.
+Web Vitals trace 도구가 없어 LCP·INP·CLS 개선이나 운영 지연 수치는 측정하지 않았다.
+
+설계·로드맵·프로토타입 안내를 갱신했다. API·DB·마이그레이션·SDK·의존성·위생 정책은
+변경하지 않았고 백엔드 실행 테스트는 반복하지 않았다. 검증 탭·preview 서버는 종료했다.
+운영 인증·원격 D1·배포·Sembom
+활성화는 미실행이고 푸시도 하지 않았다. 다음은 운영 관리자 앱 구조 정리다.
+
 ## 관리자 퍼널 단계 편집 폼 — 2026-10-11
 
 `LiveSchemas`에 `SchemaFunnelForm`과 공유 JSON 초안 변환기를 연결했다. 퍼널 ID·표시

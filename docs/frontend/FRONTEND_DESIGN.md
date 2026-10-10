@@ -476,6 +476,16 @@ API·DB 계약·인증·의존성·러너 변경은 없다.
 
 ## 관리자 차트 지연 로드 — 2026-10-11
 
+추가로 API 관리자 모드와 설정·목표·프로젝트 생성 화면의 로딩 경계를 분리했다.
+첫 엔트리는 샘플 개요·탐색과 OIDC callback URL 정리를 유지한다. API 모드를 고를 때
+`LiveDashboard`를 가져오고 부모 client·연결 상태는 화면 전환 동안 유지한다. 설정
+선택 때 `LiveSettingsWorkspace`의 진단·설정·권한·변경 이력·스키마·SDK 안내가 마운트된다.
+프로젝트 전환 때는 projectId key로 교체한다. 목표·프로젝트 생성도 해당 조건에만
+마운트한다. `DeferredPanel`은 로딩/실패를 알리고 실패한 import는 새로고침으로 다시
+시도하며 초안·직접 연결 토큰의 초기화를 안내한다. 동일 압축 설정의 첫 JS gzip은
+142,248 B에서 78,634 B로 감소했다. 빌드 뒤 `test:bundle`로 초기 JS gzip 100KiB·
+개별 JS 500kB 예산을 검사한다. 운영 Web Vitals 수치는 별도 측정해야 한다.
+
 개요의 일별 추이 차트는 `Trend`가 첫 렌더링 뒤 `useEffect`에서
 `import('./TrendChart')`로 불러오는 별도 청크이며 차트가 필요한 화면에서만 받는다.
 Recharts JSX는 `TrendChart.tsx`로 옮겼다. 그림 자리는 불러오는 동안과 실패해도
