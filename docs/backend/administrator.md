@@ -1,9 +1,9 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
-상태: 관리자 조회(GET)·출처별 집계 조회(source)·프로젝트 설정 조회/변경(PATCH)·프로젝트
-권한 부여/역할 변경/회수(PUT·DELETE)·프로젝트 변경 이력 조회(GET)·검증기 포트·OIDC JWT
-서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증 제공자·로그인 흐름·토큰 발급과 운영
-설정은 아직 연결하지 않았다.
+상태: 관리자 조회(GET)·출처별 집계 조회(source)·퍼널 일별 조회(funnel)·프로젝트 설정
+조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수(PUT·DELETE)·프로젝트 변경 이력
+조회(GET)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증
+제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
 
 호스트는 `createWorker(verifyBearer)`로 신뢰하는 검증기를 연결한다. `verifyBearer`는
 서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
@@ -53,6 +53,7 @@ export default createWorker(bearer => hostVerify(bearer));
 - `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷. 선택 `source`.
 - `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — 시작일 cohort. browser 출처 전용.
 - `GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}` — 시작 시점 속성별 cohort. browser 출처 전용.
+- `GET /v1/projects/{projectId}/funnels/{funnelId}/daily` — 시작일 cohort 퍼널 도달 수·전환율. 아래 퍼널 일별 조회 규칙을 따른다.
 
 집계 조회는 정확한 schemaVersion, 프로젝트 시간대의 from/to, 보존 90일 안에서 최대
 31일을 요구한다. retired 버전과 paused 프로젝트도 같은 grant로 조회한다. 빈 날짜는 0으로
@@ -76,6 +77,23 @@ workflow 경로는 `source`를 받지 않고 browser 기록만 읽는다(source�
 null 버킷은 없고 관찰된 값만 반환한다. 빈 결과는 buckets=[], 0시도 완료율은 null이다.
 기존 reader/owner grant를 정의·집계와 같은 D1 batch에서 다시 확인한다. 최대7936개
 원본 행을 읽고 초과·손상 데이터는503으로 실패한다. 저장/마이그레이션 변경은 없다.
+
+## 퍼널 일별 조회
+
+`GET /v1/projects/{projectId}/funnels/{funnelId}/daily`는 등록 퍼널의 시작일 cohort 도달 수와
+전환율을 읽는다. `schemaVersion`·`from`·`to`가 필수이고 프로젝트-local 최근 90일 안에서
+1~31일(양끝 포함)을 읽는다. 정의 조회·집계·reader/owner grant 검사는 같은 D1 batch에서
+수행한다. `source`·`groupBy`는 받지 않고 400이다. 등록된 각 단계의 browser/server 출처와
+모든 차원 조합을 하나로 합쳐 시작일 cohort로 세며 출처별 분리나 방문자 재구성은 없다.
+
+응답은 meta(source 없음)·funnelId·definition·cohortBasis(startedAt)·summary(FunnelCounts)와
+0으로 채운 days다. 각 step은 stepIndex·reachedRuns·reachRate·conversionRate·notReachedNext를
+담고 reachedRuns는 비증가한다. reachRate는 첫 단계 기준, conversionRate는 직전 단계 기준이고
+분모가 0인 비율·첫 단계 conversionRate·마지막 notReachedNext는 null이다. 프로젝트-local
+날짜 끝 +48시간까지 provisional이며 미완료·미전달 작업도 포함하므로 다음 단계 미도달은
+실패나 이탈의 증거가 아니다. paused 프로젝트·retired 버전도 조회한다. 알 수 없는
+스키마·퍼널 404·미인증 401·grant 없음 403·malformed 400·손상·초과 503, no-store, run ID
+미노출, 묶인 행 최대 310개이고 초과 시 503으로 실패한다. 저장·마이그레이션 변경은 없다.
 
 ## 수집 거부 진단 — UTC 수신일
 
@@ -164,7 +182,7 @@ identity 인코딩의 application/json 또는 text/plain을 받고 본문은 UTF
 선택 funnels도 같은 한도·검증을 공유한다. 퍼널은 최대 10개, 순서 단계는 2~10개이며
 각 단계의 등록 출처·이벤트와 동일 필수 분류 도메인을 확인한다. 생략한 기존 정의의
 해시는 유지하고, 명시한 funnels는 정의 해시·불변 버전·재요청 비교에 포함한다.
-현재는 정의 등록만 지원하며 단계 연결 수집·집계 조회는 후속이다.
+단계 연결 수집과 퍼널 일별 조회 API는 로컬 구현·검증했고, 관리자 퍼널 화면은 후속이다.
 privacyReviewed는 owner의 검토 확인이며 자동 개인정보 탐지가 아니다. 프로젝트·상태·
 허용 출처·수집 한도는 본문에 넣을 수 없다. 닫힌 입력·잘못된 정의는 400이다.
 

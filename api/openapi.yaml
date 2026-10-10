@@ -33,6 +33,15 @@ components:
         issuer/subject to project grants. Anonymous access and decode-only JWT handling are forbidden.
         Identity provider is not selected by this contract.
   parameters:
+    FunnelId:
+      name: funnelId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^[a-z][a-z0-9_]{0,47}$
+        maxLength: 48
+      description: ID of one registered ordered task funnel in the selected schema version.
     EventSource:
       name: source
       in: query
@@ -93,7 +102,7 @@ components:
       additionalProperties: false
       required: [id, label, steps, dimensions]
       description: Ordered task funnel definition accepted by Registry and schema validation/publication endpoints.
-        Linked ingestion and persistence are implemented locally; funnel queries are not yet enabled.
+        Linked ingestion, persistence and reader/owner daily cohort queries are implemented locally.
         Two to ten distinct registered events, each bound to its registered source, define consecutive milestones.
         Dimensions must be required and have identical domains in every step. No visitor identity.
       properties:
@@ -1216,6 +1225,160 @@ components:
           type: string
           const: observed-only
           description: Counts of received events only. Does not prove delivery completeness or visitor authenticity.
+    FunnelQueryMeta:
+      type: object
+      additionalProperties: false
+      required:
+        - projectId
+        - schemaVersion
+        - from
+        - to
+        - timeZone
+        - generatedAt
+        - latestReceivedAt
+        - coverage
+      properties:
+        projectId:
+          type: string
+          pattern: ^[a-z][a-z0-9-]{0,47}$
+          maxLength: 48
+        schemaVersion:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+        from:
+          type: string
+          format: date
+        to:
+          type: string
+          format: date
+        timeZone:
+          type: string
+          minLength: 1
+          maxLength: 64
+        generatedAt:
+          type: string
+          format: date-time
+          pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+          maxLength: 30
+        latestReceivedAt:
+          description: Latest new receipt for the whole project, across sources, versions and query dates; not a
+            source-specific timestamp.
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$
+              maxLength: 30
+            - type: "null"
+        coverage:
+          type: string
+          const: observed-only
+          description: Counts of received events only. Does not prove delivery completeness or visitor authenticity.
+      description: Cross-source task cohorts. Each registered step declares its source; no single source filter or
+        visitor identity applies.
+    FunnelDay:
+      type: object
+      additionalProperties: false
+      required:
+        - date
+        - startedRuns
+        - completedRuns
+        - completionRate
+        - steps
+        - provisional
+      description: Consecutive reached-run counts in the start-day cohort; completedRuns never exceeds startedRuns.
+        Not reaching a next stage includes active and undelivered tasks and does not prove abandonment.
+      properties:
+        startedRuns:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        completedRuns:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        completionRate:
+          type:
+            - number
+            - "null"
+          minimum: 0
+          maximum: 100
+        steps:
+          type: array
+          minItems: 2
+          maxItems: 10
+          items:
+            type: object
+            additionalProperties: false
+            required:
+              - stepIndex
+              - reachedRuns
+              - reachRate
+              - conversionRate
+              - notReachedNext
+            properties:
+              stepIndex:
+                type: integer
+                minimum: 0
+                maximum: 9
+              reachedRuns:
+                type: integer
+                minimum: 0
+                maximum: 9007199254740991
+              reachRate:
+                type:
+                  - number
+                  - "null"
+                minimum: 0
+                maximum: 100
+              conversionRate:
+                type:
+                  - number
+                  - "null"
+                minimum: 0
+                maximum: 100
+              notReachedNext:
+                type:
+                  - integer
+                  - "null"
+                minimum: 0
+                maximum: 9007199254740991
+        date:
+          type: string
+          format: date
+        provisional:
+          type: boolean
+          description: True until the end of this project-local start day plus 48 hours.
+    FunnelResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - meta
+        - funnelId
+        - definition
+        - cohortBasis
+        - summary
+        - days
+      properties:
+        meta:
+          $ref: "#/components/schemas/FunnelQueryMeta"
+        funnelId:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        definition:
+          $ref: "#/components/schemas/FunnelDefinition"
+        cohortBasis:
+          type: string
+          const: startedAt
+        summary:
+          $ref: "#/components/schemas/FunnelCounts"
+        days:
+          type: array
+          minItems: 1
+          maxItems: 31
+          items:
+            $ref: "#/components/schemas/FunnelDay"
     BrowserQueryMeta:
       allOf:
         - $ref: "#/components/schemas/QueryMeta"
@@ -3156,6 +3319,75 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/funnels/{funnelId}/daily:
+    get:
+      tags:
+        - Administration
+      operationId: getFunnelDailyCohorts
+      summary: Read consecutive task funnel reach counts and conversion rates
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - $ref: "#/components/parameters/SchemaVersion"
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/FunnelId"
+      responses:
+        "200":
+          description: Bounded project-scoped query.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FunnelResponse"
+        "400":
+          description: Invalid date range, schema or grouping.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing or invalid administrator authentication.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Authenticated principal lacks this project grant.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Project, definition or schema does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported for administrator reads.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable; no fabricated zero response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Requires a current reader/owner grant. Definition, project access and counts share one database
+        snapshot. Counts span registered browser/server steps and all dimension combinations; source and groupBy
+        filters are rejected. Dates are project-local startedAt cohorts: inclusive 1 to 31 days within the most
+        recent 90 calendar days, never future dates. Results include zero-count days, unrounded rates and null
+        zero-denominator rates. Provisional until local day end plus 48 hours. Not reaching the next step
+        includes active or undelivered tasks and does not establish failure or abandonment. Retired schemas and
+        paused projects remain readable; versions and projects never merge. At most 310 grouped rows; overflow
+        or inconsistent counts return 503 without invented zero results. Responses are no-store and expose no
+        run identifiers."
 servers:
   - url: /
     description: Same-origin API mount; deployment host is configured separately.

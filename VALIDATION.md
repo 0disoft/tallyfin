@@ -1,5 +1,34 @@
 # 검증
 
+## 작업 퍼널 일별 조회 API — 2026-10-11
+
+`GET /v1/projects/{projectId}/funnels/{funnelId}/daily`와 코어 응답 타입, D1 조회·응답
+투영을 추가했다. 프로젝트·스키마·단계 건수를 같은 D1 batch에서 reader/owner grant로
+검사하며 모든 차원 조합과 등록 단계 출처를 함께 센다. 응답의 meta에는 단일 source를
+넣지 않고 등록 definition에 단계별 출처를 둔다. 시작일 기준 최대 31일을 채워 반환하고,
+기간 전환율은 합산한 건수로 계산한다. 0 분모는 null, 첫 단계 conversionRate와 마지막
+단계 notReachedNext도 null이다. 잠정값은 프로젝트-local 날짜 끝 + 48시간까지다.
+
+실행·통과:
+- `node --test --test-timeout=30000 apps/collector/test/funnel-query.test.ts`: 8/8.
+  실제 로컬 D1에 browser/server 역순 수집·새 eventId 단계 재시도, 시작일 귀속, 차원 합산,
+  빈 날짜, 서버 전용 정의, reader/owner와 publisher 권한 분리, 준비 후 권한 회수,
+  retired/paused·프로젝트/버전 격리, 정의 없는 버전, 31일·90일 경계, 잠정값 경계,
+  405와 불허 source/groupBy, 안전 정수 경계·합산 초과·저장 실패를 확인했다.
+  응답 투영은 중복/범위 밖 행과 날짜별 단계 순서 위반을 별도로 거부한다.
+- `node --test --test-timeout=30000 apps/collector/test/admin.test.ts apps/collector/test/server-query.test.ts apps/collector/test/funnels.test.ts packages/storage-d1/test/funnels.test.ts packages/core/test/funnel*.test.ts`: 39/39.
+  기존 관리자·서버 출처 조회와 실제 Worker/D1 수집·원자 저장·정리를 회귀 검증했다.
+- 루트 `npm run typecheck` 통과. 마지막 테스트 보완 후 `npx --no-install tsc --noEmit`와
+  `npx --no-install tsc -p apps/collector/tsconfig.runtime.json`도 통과했다.
+- `tools/contracts`의 `npm run lint`(OpenAPI) 오류·경고 없음, `npm run check` 53/53.
+  새 응답 예제·닫힌 형태·분모·날짜 개수·개인 식별자 제외 계약을 확인했다.
+- `git diff --check` 통과. 문서 링크 검사도 마지막 문서 변경 후 통과했다.
+
+API source of truth `api/openapi.yaml`과 예제·계약 검사를 변경했다. DBML·마이그레이션·
+SDK·의존성·CI 러너·저장소 위생 정책은 변경하지 않았다. 관련 범위만 검사했고 전체
+릴리스 검사·운영 OIDC/원격 D1·부하·관리자 브라우저 검증은 이번 로컬 API 변경 범위에서
+실행하지 않았다. 푸시·배포·Sembom 활성화도 없다. 관리자 퍼널 화면·CSV는 다음 작업이다.
+
 ## 관리자 퍼널 SDK 코드 생성 — 2026-10-11
 
 `sdkSetup`은 기존 세 인자 호출을 유지하고 선택 profile·funnelId를 받는다. 브라우저는

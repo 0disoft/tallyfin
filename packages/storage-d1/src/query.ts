@@ -2,6 +2,7 @@ import { addCounts, closed, CollectionError, count, dateEnd, DAY, dateMillis, in
 import type { AdminPrincipal, AdminQuery, AdminStore, GrantChange, ProjectSettingsUpdate, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
 import { readDimensions } from './dimensions.ts';
 import { workflowBreakdown, type WorkflowDimensionRow } from './workflow-breakdown.ts';
+import { funnelSeries, type FunnelCountRow } from './funnel-query.ts';
 import { listSchemas, publishSchema } from './schema.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
@@ -58,7 +59,8 @@ export class D1Queries implements AdminStore {
     const source = input.source ?? 'browser';
     if (input.source !== undefined && (!['browser', 'server'].includes(input.source) || !['summary', 'event'].includes(input.kind)))
       throw new CollectionError('invalid_request', 400);
-    if (!PROJECT_ID.test(input.projectId) || !integer(input.version, 1, 2147483647) || !['registry', 'summary', 'event', 'workflow', 'workflow-breakdown'].includes(input.kind))
+    if (!PROJECT_ID.test(input.projectId) || !integer(input.version, 1, 2147483647) || !['registry', 'summary', 'event', 'workflow', 'workflow-breakdown', 'funnel'].includes(input.kind) ||
+      input.kind === 'funnel' && (input.groupBy !== undefined || !input.name || !NAME.test(input.name)))
       throw new CollectionError('invalid_request', 400);
     if (input.kind !== 'registry') {
       const start = dateMillis(input.from ?? ''), end = dateMillis(input.to ?? '');
@@ -78,12 +80,15 @@ export class D1Queries implements AdminStore {
     else if (input.kind === 'workflow-breakdown') statements.push(this.db.prepare(`SELECT cohort_date, dimension_key, started_count, succeeded_count, failed_count FROM workflow_daily_counts
       WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND ${access}
       ORDER BY cohort_date, dimension_key LIMIT 7937`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
+    else if (input.kind === 'funnel') statements.push(this.db.prepare(`SELECT cohort_date, step_index, SUM(reached_count) AS reached_count FROM funnel_daily_counts
+      WHERE project_id = ? AND schema_version = ? AND funnel_id = ? AND cohort_date BETWEEN ? AND ? AND ${access}
+      GROUP BY cohort_date, step_index ORDER BY cohort_date, step_index LIMIT 311`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
     else if (input.kind === 'workflow') statements.push(this.db.prepare(`SELECT cohort_date, SUM(started_count) AS started_count,
       SUM(succeeded_count) AS succeeded_count, SUM(failed_count) AS failed_count FROM workflow_daily_counts
       WHERE project_id = ? AND schema_version = ? AND source = 'browser' AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND ${access}
       GROUP BY cohort_date LIMIT 32`).bind(input.projectId, input.version, input.name!, input.from!, input.to!, ...grant));
     // Every read carries the grant predicate; all definitions, permission and counts share one batch snapshot.
-    const result = await this.db.batch<ProjectState | SchemaRow | EventRow | WorkflowRow | WorkflowDimensionRow>(statements);
+    const result = await this.db.batch<ProjectState | SchemaRow | EventRow | WorkflowRow | WorkflowDimensionRow | FunnelCountRow>(statements);
     if (result.length !== statements.length || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
     const p = result[0]?.results[0] as ProjectState | undefined;
     if (!p) throw new CollectionError('forbidden', 403);
@@ -100,6 +105,10 @@ export class D1Queries implements AdminStore {
       timeZone: p.time_zone, generatedAt: new Date(now).toISOString(),
       latestReceivedAt: p.latest_received_at === null ? null : new Date(p.latest_received_at).toISOString(), coverage: 'observed-only' };
     const rows = result[2]?.results ?? [];
+    if (input.kind === 'funnel') {
+      const { source: _source, ...funnelMeta } = meta;
+      return funnelSeries(registry, input, funnelMeta, dates, rows as FunnelCountRow[], now);
+    }
     if (input.kind === 'summary') {
       const counts = new Map((rows as EventRow[]).map(row => [row.event_name, count(row.count)]));
       const definitions = registry.events.filter(e => e.source === source);

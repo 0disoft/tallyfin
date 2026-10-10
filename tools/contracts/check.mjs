@@ -25,7 +25,7 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
   'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage',
-  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry' })) {
+  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry', 'funnel-response':'FunnelResponse' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
 check('server batch is closed, source-specific and forbids browser attempt identities', () => {
@@ -72,6 +72,26 @@ check('core funnel counts conform to the declared response shape including null 
   for (const reached of [[10, 8, 4, 3], [0, 0], [1, 0]])
     assert.ok(validate('FunnelCounts', funnelCounts(reached)), JSON.stringify(ajv.errors));
   assert.equal(validate('FunnelCounts', { ...funnelCounts([1, 1]), completionRate: 101 }), false);
+});
+check('funnel query preserves cross-source cohorts, bounded dates and closed aggregate-only responses', () => {
+  const path = spec.paths['/v1/projects/{projectId}/funnels/{funnelId}/daily'];
+  assert.deepEqual(Object.keys(path), ['get']);
+  assert.equal(path.get.responses['200'].content['application/json'].schema.$ref, '#/components/schemas/FunnelResponse');
+  assert.deepEqual(path.get.parameters.map(p => p.$ref), ['ProjectId', 'SchemaVersion', 'From', 'To', 'FunnelId'].map(name => '#/components/parameters/' + name));
+  for (const status of ['400', '401', '403', '404', '405', '503']) assert.ok(path.get.responses[status]);
+  const result = example('funnel-response');
+  const totals = result.definition.steps.map((_, index) => result.days.reduce((sum, day) => sum + day.steps[index].reachedRuns, 0));
+  assert.deepEqual(result.summary, funnelCounts(totals));
+  assert.equal(result.funnelId, result.definition.id);
+  for (const day of result.days) assert.deepEqual(day.steps.map(step => step.stepIndex), [0, 1, 2, 3]);
+  for (const mutate of [v => v.meta.source = 'browser', v => v.runId = 'private', v => v.days = [],
+    v => v.days = Array(32).fill(v.days[0]), v => v.days[0].visitorId = 'private',
+    v => v.days[0].provisional = null, v => v.summary.steps[0].reachedRuns = 9007199254740992]) {
+    const value = structuredClone(result); mutate(value); assert.equal(validate('FunnelResponse', value), false);
+  }
+  const empty = structuredClone(result); empty.summary = funnelCounts([0, 0, 0, 0]);
+  empty.days = [{ date: empty.meta.from, ...empty.summary, provisional: true }];
+  assert.ok(validate('FunnelResponse', empty), JSON.stringify(ajv.errors));
 });
 check('event reads select one source, preserve browser defaults and never enable server workflow cohorts', () => {
   assert.deepEqual(spec.components.parameters.EventSource.schema, { type: 'string', enum: ['browser', 'server'], default: 'browser' });

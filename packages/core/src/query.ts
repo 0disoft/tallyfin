@@ -15,7 +15,7 @@ export interface ProjectGrant { issuer: string; subject: string; role: 'reader' 
 export interface ProjectGrantPage {
   projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null };
 }
-export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown';
+export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown' | 'funnel';
 export interface AdminQuery {
   projectId: string; version: number; kind: QueryKind;
   from?: string; to?: string; name?: string; groupBy?: string; source?: 'browser' | 'server';

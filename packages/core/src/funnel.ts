@@ -3,6 +3,15 @@ import type { BrowserEvent, EventSource, FunnelDefinition, FunnelLink, Registry 
 import { parseBatch, parseServerBatch, prepareBatch, prepareServerBatch } from './batch.ts';
 import { count } from './query.ts';
 import { closed, DAY, integer } from './value.ts';
+import type { QueryMeta } from './query.ts';
+
+/** A funnel spans its registered step sources, so no single source filter applies. */
+export type FunnelQueryMeta = Omit<QueryMeta, 'source'>;
+export type FunnelCounts = ReturnType<typeof funnelCounts>;
+export interface FunnelResponse {
+  meta: FunnelQueryMeta; funnelId: string; definition: FunnelDefinition; cohortBasis: 'startedAt';
+  summary: FunnelCounts; days: (FunnelCounts & { date: string; provisional: boolean })[];
+}
 
 export type { FunnelDefinition } from './types.ts';
 /** One random task identity, not a visitor identity, credential or proof of a browser event. */

@@ -1,0 +1,150 @@
+{
+  "meta": {
+    "projectId": "modufile",
+    "schemaVersion": 1,
+    "from": "2026-10-08",
+    "to": "2026-10-09",
+    "timeZone": "Asia/Seoul",
+    "generatedAt": "2026-10-11T03:00:00.000Z",
+    "latestReceivedAt": "2026-10-09T03:00:00.000Z",
+    "coverage": "observed-only"
+  },
+  "funnelId": "conversion",
+  "definition": {
+    "id": "conversion",
+    "label": "File conversion",
+    "steps": [
+      {
+        "eventName": "file_selected",
+        "source": "browser"
+      },
+      {
+        "eventName": "upload_finished",
+        "source": "browser"
+      },
+      {
+        "eventName": "job_started",
+        "source": "server"
+      },
+      {
+        "eventName": "job_finished",
+        "source": "server"
+      }
+    ],
+    "dimensions": [
+      "kind"
+    ]
+  },
+  "cohortBasis": "startedAt",
+  "summary": {
+    "startedRuns": 20,
+    "completedRuns": 6,
+    "completionRate": 30,
+    "steps": [
+      {
+        "stepIndex": 0,
+        "reachedRuns": 20,
+        "reachRate": 100,
+        "conversionRate": null,
+        "notReachedNext": 7
+      },
+      {
+        "stepIndex": 1,
+        "reachedRuns": 13,
+        "reachRate": 65,
+        "conversionRate": 65,
+        "notReachedNext": 3
+      },
+      {
+        "stepIndex": 2,
+        "reachedRuns": 10,
+        "reachRate": 50,
+        "conversionRate": 76.92307692307693,
+        "notReachedNext": 4
+      },
+      {
+        "stepIndex": 3,
+        "reachedRuns": 6,
+        "reachRate": 30,
+        "conversionRate": 60,
+        "notReachedNext": null
+      }
+    ]
+  },
+  "days": [
+    {
+      "date": "2026-10-08",
+      "startedRuns": 10,
+      "completedRuns": 5,
+      "completionRate": 50,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "reachedRuns": 10,
+          "reachRate": 100,
+          "conversionRate": null,
+          "notReachedNext": 2
+        },
+        {
+          "stepIndex": 1,
+          "reachedRuns": 8,
+          "reachRate": 80,
+          "conversionRate": 80,
+          "notReachedNext": 1
+        },
+        {
+          "stepIndex": 2,
+          "reachedRuns": 7,
+          "reachRate": 70,
+          "conversionRate": 87.5,
+          "notReachedNext": 2
+        },
+        {
+          "stepIndex": 3,
+          "reachedRuns": 5,
+          "reachRate": 50,
+          "conversionRate": 71.42857142857143,
+          "notReachedNext": null
+        }
+      ],
+      "provisional": false
+    },
+    {
+      "date": "2026-10-09",
+      "startedRuns": 10,
+      "completedRuns": 1,
+      "completionRate": 10,
+      "steps": [
+        {
+          "stepIndex": 0,
+          "reachedRuns": 10,
+          "reachRate": 100,
+          "conversionRate": null,
+          "notReachedNext": 5
+        },
+        {
+          "stepIndex": 1,
+          "reachedRuns": 5,
+          "reachRate": 50,
+          "conversionRate": 50,
+          "notReachedNext": 2
+        },
+        {
+          "stepIndex": 2,
+          "reachedRuns": 3,
+          "reachRate": 30,
+          "conversionRate": 60,
+          "notReachedNext": 2
+        },
+        {
+          "stepIndex": 3,
+          "reachedRuns": 1,
+          "reachRate": 10,
+          "conversionRate": 33.33333333333333,
+          "notReachedNext": null
+        }
+      ],
+      "provisional": true
+    }
+  ]
+}
