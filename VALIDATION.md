@@ -1,5 +1,20 @@
 # 검증
 
+## 브라우저 SDK 내부 전송 분리 — 2026-10-11
+
+기존 공개 타입을 types.ts, 공통 검증·전송·수명 주기 처리를 common.ts로 분리하고
+index.ts에는 workflow 검증과 track/start 진입점을 남겼다. 내부 enqueue의 연결 필드를
+공통화했으며 기존 workflow의 {attempt} 형식과 공개 BrowserClient API는 유지한다.
+빌드 tsconfig에 allowImportingTsExtensions를 추가하고 타입 전용 .js import로 선언 생성을
+유지했다. 브라우저 퍼널 모듈은 아직 후속이다.
+
+`npm run build:browser`·`npm run check:browser-size`·`npm run typecheck`와
+`node --test packages/browser/test/*.test.ts apps/collector/test/collector.test.ts` 37/37
+(SDK 19개·HTTP 18개)이 통과했다. 기본 SDK gzip 2774 bytes·SDK+Sembom 3053 bytes로
+이전 2667·2949 bytes보다 증가했지만 둘 다 3072 bytes 예산 안이다.
+공개 API·HTTP/DB 계약·CI 변경은 없다. 운영 인증·원격 DB·배포는 검증하지 않았고
+푸시·배포도 실행하지 않았다.
+
 ## 서버 SDK 퍼널 연결 전송 — 2026-10-11
 
 서버 SDK에 선택 funnel 링크·createFunnelRun과 서버 참여 퍼널의 스키마 투영을 연결했다.

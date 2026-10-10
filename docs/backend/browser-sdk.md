@@ -5,6 +5,9 @@
 ## 경계
 `createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
 
+내부 파일은 `types.ts`가 기존 공개 타입을, `common.ts`가 속성 검증·네이티브 어댑터·큐·재시도·숨김 전송·destroy 처리를, `index.ts`가 workflow 검증과 track/start 진입점을 맡는다.
+내부 enqueue는 연결 필드를 공통으로 받도록 분리했으며 기존 workflow의 `{ attempt }` 형식과 공개 BrowserClient API는 유지하고, 브라우저 퍼널 모듈은 후속으로 둔다.
+
 ## 비활성·SSR·잘못된 설정
 다음 경우 리스너 없이 무동작 클라이언트를 돌려준다. `enabled: false`, 커스텀 호스트 없이 브라우저 환경(`document`·`fetch`·`crypto`)을 사용할 수 없음, 잘못된 엔드포인트·스키마, 검사 중 예외다. 무동작 클라이언트는 `track`이 `false`, `start`가 `undefined`, `pending`이 0이다.
 
