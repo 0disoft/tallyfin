@@ -43,6 +43,7 @@
     "check:browser-size": "node tools/browser/check.mjs",
     "bench:browser": "node tools/browser-bench/run.mjs",
     "verify:admin-login": "node tools/browser-bench/admin-login.mjs",
+    "verify:admin-onboarding": "node tools/browser-bench/admin-onboarding.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",
     "bench:retained": "node tools/runtime/retained-bench.ts",
     "bench:cluster": "node tools/runtime/cluster-bench.ts",

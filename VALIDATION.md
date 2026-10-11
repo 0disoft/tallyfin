@@ -1,5 +1,33 @@
 # 검증
 
+## 새 프로젝트에서 첫 이벤트 조회까지
+
+실제 Chromium·로컬 서명 인증·새 D1로 빈 프로젝트 목록에서 시작해 UI로 프로젝트를 만들고,
+이벤트 정의 검증·개인정보 검토·v1 발행을 거친 뒤 UI가 만든 브라우저 SDK 연결 코드를 그대로
+컴파일해 실행했다. 첫 이벤트가 `event_daily_counts`에 정확히 1건 저장됐지만 상단 단계는
+`2 이벤트 스키마`로 남는 문제를 재현했다. 최초 발행 때 버전 입력이 이미 1이라 부모 스키마
+조회가 다시 실행되지 않았다. 발행 알림 `setupRefreshTick`도 조회 의존성에 넣어 수정했다.
+
+옵트인 `npm run verify:admin-onboarding -- --channel chromium`은 이 사용자 흐름을 재검증한다.
+먼저 `npm run build:browser`로 현재 SDK를 빌드한다. onboarding 프로필만 합성 계정의 생성
+권한과 로컬 HTTP를 허용하고, 기본 로그인 fixture의 GET 전용 동작은 유지한다. Vite 캐시는
+실행별 새 디렉터리에 두고 90초 제한·고정 실패 단계·브라우저/서버/D1 종료를 적용한다.
+검증 중 첫 SQL 테이블명 오류는 실제 `event_daily_counts`로 바로잡았다. 두 Vite 검증을 함께
+실행한 시도는 로그인 단계에서 실패해 성공으로 세지 않았고, 캐시 분리 후 순차 실행했다.
+
+최종 새 프로젝트 검증은 종료 코드 0·`verified:true`, Chromium 156.0.8078.4였다.
+상단 `3 SDK 연결`, 생성 SDK 실행, DB·관리자 이벤트 표 1건, API 쓰기 3(생성·정의 검증·발행),
+브라우저 배치 1, 로그인 교환 1, `routeError:false`, `pageErrors:0`을 확인했다. local/session
+storage와 쿠키는 비었다. 보고서는 `.tmp/admin-onboarding-*/report.json`에 있고 원문 토큰·
+URL·계정 식별자는 넣지 않는다. 실패 사진도 이 합성 환경의 로컬 디렉터리에만 남는다.
+
+기존 `npm run verify:admin-login -- --channel chromium`은 종료 코드 0·`verified:true`,
+서명 API 읽기 27·쓰기 0·배치 0·pageerror 0과 기존 PKCE/갱신/재로그인/정리 검사를 통과했다.
+`npm run typecheck:admin`, `npm run build:admin`, 번들 검사 2/2, 두 스크립트 구문 검사와
+`git diff --check`도 통과했다. API·DB·SDK 계약·의존성·CI 변경은 없다. 새 명령은 기본 검사나
+CI에 자동 추가하지 않았다. 변경 없는 전체 백엔드 검사는 반복하지 않았고 일반 소스 lint는
+명령이 없어 생략했다. 실제 운영 제공자·원격 배포·전체 저장소 점검 완료와 구분한다.
+
 ## 첫 실행 샘플 체험 경로
 
 로그인 제공자가 없는 관리자 화면에 `/demo` 샘플 체험 링크를 연결했다. 데모 상단은

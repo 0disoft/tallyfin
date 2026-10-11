@@ -8,10 +8,12 @@ import { createHash } from 'node:crypto';
 import { DEFAULT_SETTINGS } from '../../apps/collector/src/config.ts';
 import { initialize } from '../provision/local.ts';
 import { Provisioner } from '../provision/store.ts';
+import { CreatorProvisioner } from '../provision/creators.ts';
 import { readFile } from 'node:fs/promises';
 
 // Test-only provider. Keys, codes and tokens are ephemeral; no external identity service is contacted.
-export async function adminLoginFixture(directory) {
+export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
+  assert.ok(['login', 'onboarding'].includes(profile));
   const issuer = 'https://identity.example.invalid', clientId = 'tallyfin-smoke-public';
   const audience = 'tallyfin-smoke-api', resource = 'urn:tallyfin:smoke:api';
   const subject = 'synthetic-login-operator';
@@ -19,7 +21,7 @@ export async function adminLoginFixture(directory) {
   const kid = 'ephemeral-login-smoke';
   const jwks = { keys: [{ ...await exportJWK(publicKey), kid, alg: 'RS256' }] };
   const codes = new Map();
-  let access, refresh, origin, mode = 'normal', exchanges = 0, refreshes = 0, authorizations = 0, apiReads = 0;
+  let access, refresh, origin, mode = 'normal', exchanges = 0, refreshes = 0, authorizations = 0, apiReads = 0, apiWrites = 0, browserBatches = 0;
   const sign = (claims, target, typ) => new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid, typ })
     .setIssuer(issuer).setSubject(subject).setAudience(target).setIssuedAt().setExpirationTime('20m').sign(privateKey);
   const tokens = async nonce => {
@@ -30,31 +32,41 @@ export async function adminLoginFixture(directory) {
   };
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../', import.meta.url)),
     contents: `import worker from './apps/collector/src/runtime.ts';
-      console.log = () => {}; // Keep test-only sampled observations out of the CLI report stream.
+      console.log = console.info = console.warn = () => {}; // Keep test-only sampled observations out of the CLI report stream.
       globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
     bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-08-06',
     host: '127.0.0.1', port: 0, d1Databases: { DB: crypto.randomUUID() }, d1Persist: join(directory, 'state'),
-    bindings: { ...DEFAULT_SETTINGS, ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: issuer, OIDC_AUDIENCE: audience,
+    bindings: { ...DEFAULT_SETTINGS, ALLOW_LOCAL_HTTP: profile === 'onboarding' ? 'true' : 'false', ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: issuer, OIDC_AUDIENCE: audience,
       OIDC_JWKS_URI: `${issuer}/jwks` }, log: new Log(LogLevel.NONE) });
   try {
     await mf.ready;
     const db = await mf.getD1Database('DB'); await initialize(db, true);
-    const registry = JSON.parse(await readFile(new URL('../../api/examples/registry.json', import.meta.url), 'utf8'));
-    const provisioner = new Provisioner(db);
-    await provisioner.apply(await provisioner.plan('register', registry), Date.now());
-    await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer, subject, role: 'owner' }), Date.now());
+    if (profile === 'onboarding') {
+      const creators = new CreatorProvisioner(db);
+      await creators.apply(await creators.plan('creator-grant', { issuer, subject, maxProjects: 2 }));
+    } else {
+      const registry = JSON.parse(await readFile(new URL('../../api/examples/registry.json', import.meta.url), 'utf8'));
+      const provisioner = new Provisioner(db);
+      await provisioner.apply(await provisioner.plan('register', registry), Date.now());
+      await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer, subject, role: 'owner' }), Date.now());
+    }
     return { mf, db, issuer, clientId, resource,
       configure(value) { origin = value; },
       setMode(value) { assert.ok(['normal', 'bad-state', 'refresh-error'].includes(value)); mode = value; },
-      get counts() { return { authorizations, exchanges, refreshes, apiReads }; },
+      get counts() { return { authorizations, exchanges, refreshes, apiReads, apiWrites, browserBatches }; },
       async route(route) {
         const request = route.request(), url = new URL(request.url());
         if (url.origin === origin) {
           if (url.pathname.startsWith('/v1/')) {
-            assert.equal(request.method(), 'GET');
-            assert.ok(access && (await request.allHeaders()).authorization === `Bearer ${access}`);
-            apiReads++;
+            const headers = await request.allHeaders();
+            if (profile === 'onboarding' && url.pathname.endsWith('/batches')) {
+              assert.equal(request.method(), 'POST'); assert.equal(headers.authorization, undefined); browserBatches++;
+            } else {
+              if (profile === 'login') assert.equal(request.method(), 'GET');
+              assert.ok(access && headers.authorization === `Bearer ${access}`);
+              if (request.method() === 'GET') apiReads++; else apiWrites++;
+            }
           }
           return route.continue();
         }

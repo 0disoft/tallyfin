@@ -320,7 +320,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       .then(schema => { if (!controller.signal.aborted) setSettingsRegistry(schema); })
       .catch(() => { /* Settings remain independent of optional schema definitions. */ });
     return () => controller.abort();
-  }, [view, client, activeProjectId, version, validVersion, settingsRefreshTick]);
+  }, [view, client, activeProjectId, version, validVersion, settingsRefreshTick, setupRefreshTick]);
 
   async function loadMore() {
     if (!client || projects.status !== 'ready' || !nextCursor || more || moreControllerRef.current) return;

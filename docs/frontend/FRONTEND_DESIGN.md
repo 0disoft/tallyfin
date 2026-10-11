@@ -1,5 +1,25 @@
 # Tallyfin 프론트엔드 설계
 
+## 온보딩 3단계 전환과 설정 레지스트리 갱신 — 2026-10-12
+
+첫 프로젝트 온보딩 패널(`LiveSettingsWorkspace`)은 내려받은 설정 레지스트리(`registry`)가
+준비됐는지로 `2 이벤트 스키마`와 `3 SDK 연결` 단계를 가른다. 이 registry는 `LiveDashboard`가
+선택한 버전(`version`) 기준으로 조회해 자식에 내려준다. 첫 발행에서는 부모의 버전 입력이
+이미 `1`이라 `version`이 바뀌지 않아 조회 effect가 다시 돌지 않았고, `LiveSdkSetup`은 자체
+재확인으로 새 v1 스키마를 이미 읽어 연결 코드를 만들 수 있는데도 상단 온보딩은
+`2 이벤트 스키마`에 머물렀다.
+
+`LiveDashboard`의 설정 레지스트리 조회 effect 의존성에 `setupRefreshTick`을 추가했다. 발행과
+설정 재확인이 틱을 올릴 때 registry를 다시 조회하므로, 첫 v1 발행 뒤 온보딩이
+`3 SDK 연결`로 넘어간다. 이 단계는 첫 이벤트 수신을 뜻하지 않으며 수신 여부는 진단과
+이벤트 표에서 따로 확인한다.
+
+이 전환을 실제 브라우저에서 확인하는 opt-in 검증을 추가했다. 실행 전에 `npm run build:browser`로
+로컬 SDK를 빌드하고 `npm run verify:admin-onboarding -- --channel chromium`으로 돌린다. 명령·격리·
+출력 범위는 [온보딩 검증 안내](../../tools/browser-bench/ADMIN-ONBOARDING.md)에, 실행 결과는
+[검증 기록](../../VALIDATION.md)에 둔다. API·DB·SDK 계약과 의존성·CI·운영 인증 경계는 바꾸지
+않는다. 실제 인증 제공자 로그인·원격 DB·배포는 범위 밖이다.
+
 ## 다단계 퍼널의 직전 기간 비교 — 2026-10-11
 
 API 모드 목표 화면의 `LiveDashboard` 비교 스위치를 `LiveGoals`를 통해 `LiveFunnels`에

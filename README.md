@@ -73,6 +73,12 @@ npm run dev -- --local --state-dir .tmp/collector-db
 있다. 격리된 제공자 응답과 로컬 D1을 사용해 PKCE 리다이렉트·콜백·API 조회·토큰 갱신과
 재로그인을 확인한다. Playwright 준비와 출력 범위는 [로그인 검증 안내](tools/browser-bench/ADMIN-LOGIN.md)에 있다.
 
+브라우저 온보딩 흐름은 `npm run build:browser` 뒤
+`npm run verify:admin-onboarding -- --channel chromium`으로 따로 검증할 수 있다. 빈 프로젝트
+목록에서 실제 로그인·UI 프로젝트 생성·첫 스키마(v1) 발행·생성한 브라우저 SDK 코드의 실제
+전송·D1 집계 1건·관리자 이벤트 표 1건과 온보딩 3단계 전환을 격리된 로컬 D1에서 확인한다.
+원격 서비스는 쓰지 않는다. Playwright 준비와 출력 범위는 [온보딩 검증 안내](tools/browser-bench/ADMIN-ONBOARDING.md)에 있다.
+
 관리자 설정에는 `logs:summary` JSON 파일을 읽는 `운영 로그 보고서`도 있다. 브라우저
 Worker에서 8MiB 이하 보고서를 검증하고 오류·응답·정리 기록을 표로 표시한다. 파일 전송이나
 저장 없이 사용하며 보고서의 범위는 프로젝트·기간 필터와 구분한다. [사용 안내](docs/ops/local-report-viewer.md)를 따른다.
