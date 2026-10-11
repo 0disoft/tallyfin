@@ -3,7 +3,7 @@
 상태: 최소 브라우저 수집기와 서버 발행 endpoint를 구현했고 로컬 Miniflare HTTP 테스트로
 확인한다. 워커는 네이티브 fetch 경계이며 `packages/core`(검증·정규화·해시)와
 `packages/storage-d1`(D1 원자 저장)을 호출한다. 브라우저 SDK(`packages/browser`)는
-별도로 로컬 구현·검증했고 [브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 GET 조회와
+별도로 로컬 구현·검증했고 [브라우저 SDK](./browser-sdk.md)에 정리했다. 관리자 라우트와
 발행자 검증기 포트는 로컬에서 구현·검증했고, 실제 인증 제공자 설정·원격 DB 적용·운영
 배포는 아직 없다. 이 문서는 계약을 수집 경계에 어떻게 적용했는지와 구현/배포 상태만
 기록한다.
@@ -28,10 +28,23 @@
 - `POST /v1/projects/{projectId}/batches` — 공개 수집, 관리자 자격증명 없음.
 - `POST /v1/projects/{projectId}/server-batches` — 발행자 bearer 인증 필수, CORS 없음.
   계약은 [서버 발행 이벤트](./server-events.md)에 있다.
-- 관리자 GET 조회는 `/v1/projects`,
-  `/v1/projects/{projectId}/schemas/{schemaVersion}`, `.../summary`,
-  `.../events/{eventName}/daily`, `.../workflows/{workflowId}/daily`다. 검증기를
-  연결하지 않은 기본 export는 401로 닫고, GET이 아니면 405(Allow: GET)다.
+- 관리자 라우트는 [OpenAPI](../../api/openapi.yaml)의 경로·메서드와 같다. 검증기를 연결하지
+  않은 기본 export는 401로 닫고, 허용 밖 메서드는 405와 그 endpoint의 `Allow`를 보낸다.
+
+  - `GET`·`POST`: `/v1/projects`
+  - `GET`·`PATCH`: `/v1/projects/{projectId}`
+  - `GET`·`PUT`·`DELETE`: `/v1/projects/{projectId}/grants`,
+    `/v1/projects/{projectId}/publishers`
+  - `GET`·`PUT`: `/v1/projects/{projectId}/schemas/{schemaVersion}`
+  - `POST`: `/v1/projects/{projectId}/schemas/validate`
+  - `GET`: `/v1/health`, `/v1/identity`, `/v1/projects/{projectId}/changes`,
+    `/v1/projects/{projectId}/collection/rejections`, `/v1/projects/{projectId}/schemas`,
+    `/v1/projects/{projectId}/summary`, `/v1/projects/{projectId}/events/{eventName}/daily`,
+    `/v1/projects/{projectId}/workflows/{workflowId}/daily`,
+    `/v1/projects/{projectId}/workflows/{workflowId}/breakdown`,
+    `/v1/projects/{projectId}/funnels/{funnelId}/daily`,
+    `/v1/projects/{projectId}/funnels/{funnelId}/breakdown`
+
 - `GET /v1/health` — 검증된 관리자 bearer로 `projects`·`project_grants` 두 제어면 테이블
   읽기를 검사한다. 계약은 [OpenAPI](../../api/openapi.yaml)에 있다.
 - 그 밖의 경로는 `not_found`(404)이다.
@@ -100,7 +113,8 @@ SQL·토큰·IP·Origin·전체 URL·경로·조회 파라미터·메서드·헤
 - 429의 `Retry-After`는 최대 86400초(다음 UTC 자정)다. [OpenAPI](../../api/openapi.yaml)도
   같은 상한을 쓴다.
 - 관리자 라우트는 호스트가 검증기를 연결하지 않으면 401로 닫는다(기본 export 상태).
-  연결 뒤에도 GET 조회만 지원하고 그 밖의 메서드는 405다.
+  연결 뒤에는 endpoint별 허용 메서드만 지원하고, 그 밖의 메서드는 405와 그 endpoint의
+  `Allow`다.
 - 발행자 경로도 검증기가 없으면 401로 닫고, 401에는 `WWW-Authenticate: Bearer`를
   보낸다. 401 메시지는 관리자·발행자가 같은 문구를 쓴다.
 - server 경로 응답은 `Vary: Authorization`을 쓰고 `Access-Control-Allow-Origin`을
@@ -164,10 +178,10 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 
 - 구현·로컬 검증: `packages/core`(등록·배치·시간·해시), `packages/storage-d1`(D1 원자
   커밋·CAS·할당량·정리, grant 조건 조회, 발행 권한과 서버 배치 저장), `apps/collector`
-  (네이티브 fetch 최소 browser 수집, HTTP 경계, 관리자 GET 조회, 서버 발행 endpoint),
+  (네이티브 fetch 최소 browser 수집, HTTP 경계, 관리자 라우트, 서버 발행 endpoint),
   `packages/auth-oidc`(관리자·발행자 OIDC 검증), `packages/browser`(브라우저 SDK)와
   `examples/sembom` 예제, 초기 빈 DB용 SQL `0001_initial.sql`(로컬 Miniflare 전용).
-- 관리자 조회: 검증기 포트 `createWorker(verifyBearer)`와 `admin.ts`의 GET 조회를
+- 관리자 조회: 검증기 포트 `createWorker(verifyBearer)`와 `admin.ts`의 관리자 라우트를
   로컬 구현·검증했다. 테스트는 모킹한 trusted 검증기와 D1 grant 경계를 쓴다. 경로는
   [관리자 조회 경계](./administrator.md)에 있다.
 - 완료 관측 로그: 선택적 `observe`·`monotonicNow` 포트와 네이티브 Worker 배선을 로컬
