@@ -1,5 +1,27 @@
 # 검증
 
+## 장애 대응·운영 계약 (문서 전용) — 2026-10-11
+
+`docs/ops/incident-response.md`·`docs/ops/00-operational-contract.md`의 빈 scaffold를 채우고
+`README.md`에 링크를, `docs/product/01-roadmap.md`에 이 슬라이스를 기록했다. 문서 전용 변경이며
+코드·API·DB·SDK·의존성·CI 변경이 없다.
+
+실행·결과: 변경한 다섯 파일의 로컬 링크 122개가 모두 존재하며 `git diff --check`를 통과했다.
+파일 존재를 확인한 검사이며 모든 앵커나 외부 URL 응답을 검증한 것은 아니다.
+
+수집기 `handler.ts`·`cleanup.ts`·`index.ts`, 관리자 `worker/index.js`, 브라우저
+`common.ts`, 서버 SDK `index.ts`, OIDC 검증기 `index.ts`, 코어 `batch.ts`·`ingest.ts`와
+계약 문서를 대조했다. paused 상태에서도 관리자 쓰기·정리가 계속되는 점, 프록시
+`admin_api_unavailable` 응답의 requestId 부재, 캐시 키의 즉시 폐기 한계, SDK 재시도·원본 보존과
+수신 시각 창, 복구 뒤 회수 권한 재확인, 시작일 cohort·프로젝트 시간대·정리 카운터의 의미를
+확인했다. 문서는 실제 장애 연습이나 자동 모니터링 구현을 증명하지 않는다.
+
+문서 전용 변경이라 코드 테스트·타입 검사·빌드·SDK 크기·부하 검사는 생략했다. 실제 provider·
+원격 DB·배포·백업/복원·운영 로그인·알림은 실행하지 않았고 새 모니터링 기능·헬스 엔드포인트도
+추가하지 않았다. 실제 운영 대응 연습과 담당자·수신자·SLO·RTO·RPO 확정이 남았다. 계약 원본은
+장애 대응·운영 계약 문서이며 README·로드맵과 이 기록을 갱신했다. API·DB 계약·마이그레이션·
+SDK·의존성·CI 러너·저장소 위생 정책 변경·푸시·배포는 없다.
+
 ## 릴리스·롤백 런북 (문서 전용) — 2026-10-11
 
 `docs/ops/release.md`·`docs/ops/rollback.md`의 빈 scaffold를 현재 소스, 설치·백업·마이그레이션

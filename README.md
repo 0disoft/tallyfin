@@ -55,7 +55,7 @@ npm run dev -- --local --state-dir .tmp/collector-db
 - 설계: [아키텍처](ARCHITECTURE.md), [화면 설계](docs/frontend/FRONTEND_DESIGN.md), [ADR 0004](docs/adr/0004-general-product-analytics.md), [ADR 0007](docs/adr/0007-admin-application.md)
 - 계약·구현: [이벤트·집계](docs/backend/event-contract.md), [수집기](docs/backend/collector.md), [브라우저 SDK](docs/backend/browser-sdk.md), [서버 SDK](docs/backend/server-sdk.md), [서버 발행](docs/backend/server-events.md), [관리자 조회 경계](docs/backend/administrator.md), [OIDC](docs/backend/oidc.md)
 - 연동·검증: [Sembom 예시](docs/integrations/sembom.md), [성능 목표](docs/engineering/03-performance-budget.md), [검증 기록](VALIDATION.md)
-- 운영: [릴리스 런북](docs/ops/release.md), [롤백 런북](docs/ops/rollback.md), [백업·복구](docs/ops/backup-and-restore.md), [운영 관측](docs/ops/observability.md)
+- 운영: [릴리스 런북](docs/ops/release.md), [롤백 런북](docs/ops/rollback.md), [장애 대응](docs/ops/incident-response.md), [운영 계약](docs/ops/00-operational-contract.md), [백업·복구](docs/ops/backup-and-restore.md), [운영 관측](docs/ops/observability.md)
 - 앱: [관리자 앱](apps/admin/README.md), [통합 실행·배포](docs/backend/runtime.md)
 
 ## 범위 밖
