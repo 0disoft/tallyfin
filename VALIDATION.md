@@ -1,5 +1,32 @@
 # 검증
 
+## 관리자 서버 발행자 화면 — 2026-10-11
+
+설정의 LiveGrants와 LiveAdminChanges 사이에 owner 전용 LivePublishers를 연결했다.
+25건 목록·다음 페이지·첫 페이지 새로고침, issuer/subject 추가, 관측 생성 시각으로 회수,
+확인 후 쓰기와 변경 이력 갱신을 제공한다. 결과 불명은 같은 요청만 재확인하고 저장 중·
+결과 불명에는 설정 입력/저장/초기화와 관리자 grant 편집도 잠근다. 401/403·프로젝트 전환·
+폐기에서 신원을 지우고 늦은 응답을 폐기한다. UTF-8 BINARY 순서와 프로젝트/종류별 커서,
+닫힌 응답·createdAt/granted 쌍을 검증하며 640px 표는 포커스 가능한 영역 안에서 가로 스크롤한다.
+
+실행·결과: 부모의 publisher·기존 grant 목록/편집 테스트 19/19, 보조 에이전트의
+관리자 신규 publisher 테스트 6/6·typecheck·build,
+test:sites 9/9를 통과했다. 부모는 기존 cryptographic ephemeral OIDC collector harness·
+Miniflare D1·Vite same-origin proxy·실제 Chrome으로 부여/회수 확인 전 쓰기 없음, 목록·
+이력 자동 갱신, 대기 PUT 동안 설정/grant 필드 잠금, owner 권한 회수 후 목록·입력 삭제,
+320px 문서 가로 넘침 없음·pageerror 0을 확인했다. 단위 회수 기대 시각은 실제 API로
+보냈고 최초 2개 이력과 재부여까지 총 3개 publisher 이력을 확인했다. 첫 브라우저 시도는
+기존 Vite 프록시의 정규식 키를 잘못 덮어 5188에 연결 실패했고, 검증 fixture가 그 키를
+정확히 덮도록 고친 뒤 통과했다. UI 코드의 오류로 판정하지 않았다. 보조 코드 리뷰에서
+오름차순 비교 역방향과 opaque subject 앞 공백 거부 fixture를 수정하고 관련 회귀를 넣었다.
+
+화면 캡처는 .tmp/publishers-desktop.png·publishers-mobile.png이고 브라우저·Vite·Miniflare와
+이번 합성 D1 상태는 finally에서 정리했다. 브라우저 검증 후 모바일 표 최소 너비·안내
+보완을 다시 같은 시나리오로 확인했다. 이번 API/DB 원본 계약·마이그레이션·SDK·의존성·
+CI·위생 정책 변경은 없다. README·관리자/서버 발행 문서·로드맵을 갱신했다. 전체 스위트는
+관련 검사와 앞선 이력 검사 결과가 유효해 재실행하지 않았다. 실제 운영 OIDC·원격 D1·
+배포/Sembom 검증은 설정 미정으로 미실행이며 푸시·배포도 없다.
+
 ## 서버 발행자 등록·회수 API — 2026-10-11
 
 현재 owner의 PUT/DELETE /v1/projects/{projectId}/publishers를 로컬 구현했다. PUT은

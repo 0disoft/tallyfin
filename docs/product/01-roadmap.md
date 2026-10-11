@@ -4,16 +4,26 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 발행자 관리 UI: 설정의 `LiveGrants`와 `LiveAdminChanges` 사이에 owner 전용
+  `LivePublishers`를 로컬 연결했다. 25건 목록·다음 페이지·처음부터 새로고침, issuer/subject
+  부여·관찰한 createdAt 회수와 쓰기 전 명시적 확인, 충돌 시 최신 목록 복구·불확실한 결과의
+  원래 요청 재시도를 제공한다. 취소·늦은 응답 폐기·권한 거부/프로젝트 전환 시 식별자 삭제,
+  쓰기 진행/결과 불확실 시 설정·grant 잠금과 저장 뒤 변경 이력 갱신을 적용했다.
+  Chrome·임시 OIDC·로컬 D1을 사용한 로컬 브라우저 검증에서 확인 전 쓰기 없음·감사 행·잠금·owner 회수 후 화면
+  삭제·320px 문서 넘침 없음·콘솔 오류 0건을 확인했다. 표는 최소 640px의 포커스 가능한
+  스크롤 영역을 쓴다. 발행자·기존 grant 테스트 19/19, 신규 발행자 테스트 6/6, sites 검사
+  9/9와 관리자 타입 검사·빌드를 로컬에서 통과했다. 상세 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
+  스키마·API·마이그레이션 변경과 실제 제공자·원격·배포·Sembom 연동은 없다.
 - 서버 발행자 목록 `GET .../publishers`를 현재 owner 전용 조회 API로 로컬 구현했고,
   등록·회수도 `PUT`·`DELETE .../publishers`로 로컬 구현했다. 관리자 reader/owner grant
   목록과 분리하고, 25건 기본·100건 상한·프로젝트/목록 종류별 커서·페이지마다 owner
-  재확인을 적용한다. 다음은 발행자 관리 화면 연결이다.
+  재확인을 적용한다. 설정의 owner 전용 `LivePublishers`도 로컬에서 연결했다.
 - 발행자 권한 부여·회수 CLI가 `project_publishers` 쓰기와 `admin_changes`
   `publisher.granted`·`publisher.revoked` 감사 기록을 같은 D1 batch로 반영하고, 이력 저장이
   실패하면 같은 batch의 권한 변경도 롤백한다. 재시도·no-op는 새 이력을 남기지 않는다.
   `0008_publisher_history.sql`이 기존 행·인덱스·트리거를 유지한 채 이력 action을 넓혔고,
   변경 이력 조회 API와 관리자 화면이 그 action을 표시한다. 발행자 등록·회수 API도 로컬
-  구현했고 관리자 화면은 아직 없다.
+  구현했고 설정의 owner 전용 발행자 관리 화면도 로컬에서 연결했다.
 - 권한 조회·변경 화면과 관리자 변경 이력 저장·조회·화면 연결은 로컬 구현·검증 완료다.
 - 서버 발행 코어·저장·endpoint 슬라이스도 완료했다.
   `parseServerBatch`·`prepareServerBatch`, source별 payload hash, `planIngest`의 서버

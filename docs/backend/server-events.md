@@ -6,8 +6,8 @@ endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현�
 구현했다. 그 CLI는 발행 권한 쓰기와 같은 D1 batch에서 관리자 변경 이력(`admin_changes`)에
 `publisher.granted`·`publisher.revoked` 감사 기록을 남기고, `0008_publisher_history.sql`이
 이력 action을 넓혔다. 변경 이력 조회 API와 관리자 화면도 이 action을 표시한다. 발행 권한을
-바꾸는 관리자 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`)는 로컬 구현했고 관리자
-화면은 아직 없다. 출처별 조회 API(`source` 선택, 기본 browser)는
+바꾸는 관리자 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`)와 설정의 owner 전용
+`LivePublishers` 화면을 로컬에서 연결했다. 출처별 조회 API(`source` 선택, 기본 browser)는
 로컬에서 구현·검증 완료했고 실제 발행자 OIDC 제공자 설정은 아직 없고 서버 출처 조회 화면은
 로컬에서 연결했다. 이 문서는
 확정한 것과 아직 계획인 것을 나눠 적는다.
@@ -278,8 +278,16 @@ owner가 회수되면 쓰기 문장이 0행이 되어 아무것도 바뀌지 않
 - 상태 코드는 200·400·401·403·405·413·415·503이고 DELETE에만 409가 더해진다. 405 Allow는
   `GET, PUT, DELETE`다.
 
-발행자 화면 연결은 다음 슬라이스이며 CLI(`publisher-grant`·`publisher-revoke`)는 그대로 쓸 수
-있다. 이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다. 스키마·DB 마이그레이션
+설정의 owner 전용 `LivePublishers`를 `LiveGrants`와 `LiveAdminChanges` 사이에 로컬 연결했다.
+25건 목록·다음 페이지·처음부터 새로고침, issuer/subject 부여와 관찰한 createdAt으로 회수를
+제공하며 명시적 확인 뒤에만 쓴다. 충돌은 최신 목록을 다시 읽고, 결과가 불확실하면 원래
+요청 그대로 재시도한다. 진행 중이거나 결과가 불확실한 쓰기는 설정 폼과 grant 변경을 잠그며,
+저장 뒤 기존 관리자 변경 이력을 갱신한다. 취소·늦은 응답 폐기와 권한 거부·프로젝트 전환 시
+식별자 삭제를 적용했다. 화면 동작과 로컬 브라우저 확인은 [관리자 경계](./administrator.md#발행자-관리-화면)에 둔다.
+발행자·기존 grant 테스트 19/19, 신규 발행자 테스트 6/6, sites 검사 9/9와 관리자 타입 검사·
+빌드를 로컬에서 통과했다. 상세 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
+CLI(`publisher-grant`·`publisher-revoke`)도 그대로 쓸 수 있다.
+이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다. 스키마·DB 마이그레이션
 변경은 없고 0008 감사 action을 그대로 쓴다. 이 슬라이스에서 원격 DB 적용·푸시·배포는 하지
 않았다.
 

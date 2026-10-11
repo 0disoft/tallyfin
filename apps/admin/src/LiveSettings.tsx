@@ -11,6 +11,7 @@ import type { ApiClient } from './api/client.ts';
 import type { ProjectSettings, Registry } from './api/types.ts';
 import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState } from './api/settings-editor.ts';
 import LiveGrants from './LiveGrants.tsx';
+import LivePublishers from './LivePublishers.tsx';
 import LiveAdminChanges from './LiveAdminChanges.tsx';
 
 export type LiveSettingsProps = {
@@ -59,6 +60,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   activeScope.current = { client, projectId };
   const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;
   const [grantLoss, setGrantLoss] = useState<{ client: ApiClient; projectId: string; snapshot: ProjectSettings | null } | null>(null);
+  const [publisherBusy, setPublisherBusy] = useState<{ client: ApiClient; projectId: string } | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const settingsSaved = useCallback((settings: ProjectSettings) => {
     if (activeScope.current.client !== client || activeScope.current.projectId !== projectId) return;
@@ -67,6 +69,12 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   const grantsSaved = useCallback(() => {
     if (activeScope.current.client === client && activeScope.current.projectId === projectId) setHistoryRevision(value => value + 1);
   }, [client, projectId]);
+  const publishersSaved = useCallback(() => {
+    if (activeScope.current.client === client && activeScope.current.projectId === projectId) setHistoryRevision(value => value + 1);
+  }, [client, projectId]);
+  // A publisher write locks the settings form and the grant editor until it
+  // resolves; the publisher section itself keeps its own review confirmable.
+  const publisherBusyChange = useCallback((busy: boolean) => setPublisherBusy(busy ? { client, projectId } : null), [client, projectId]);
   const tickRef = useRef(refreshTick);
   const lastErrorRef = useRef<keyof SettingsDraft | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
@@ -121,6 +129,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   const loaded = Boolean(snapshot && draft);
   // Read/write follows the server grant; a reader stays read-only.
   const lost = grantLoss?.client === client && grantLoss.projectId === projectId;
+  const publishersBusy = publisherBusy?.client === client && publisherBusy.projectId === projectId;
   const freshOwner = phase === 'ready' && snapshot?.canEdit === true && snapshot !== grantLoss?.snapshot;
   const canEdit = snapshot?.canEdit === true && state?.latest?.canEdit !== false && (!lost || freshOwner);
   const accessLost = useCallback(() => {
@@ -131,8 +140,8 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   }, [client, projectId, snapshot]);
   useEffect(() => { if (lost && freshOwner) setGrantLoss(null); }, [lost, freshOwner]);
   // Inputs unlock only in the ready phase for an owner with no lock.
-  const inputsLocked = phase !== 'ready' || blocked || !canEdit;
-  const canSubmit = loaded && phase === 'ready' && canEdit && !blocked;
+  const inputsLocked = phase !== 'ready' || blocked || !canEdit || publishersBusy;
+  const canSubmit = loaded && phase === 'ready' && canEdit && !blocked && !publishersBusy;
   // The recovery panel covers a save conflict or a lost response. A pure reader
   // has nothing to recover, so it stays hidden for read-only grants.
   const showRecovery = reviewing || (blocked && canEdit);
@@ -236,7 +245,11 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
     </form>
 
     <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
-      canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} onSaved={grantsSaved} />
+      canView={canEdit && !blocked} locked={loading || saving || reviewing || publishersBusy} onAccessLost={accessLost} onSaved={grantsSaved} />
+
+    <LivePublishers client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
+      canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} onSaved={publishersSaved}
+      onBusyChange={publisherBusyChange} />
 
     <LiveAdminChanges client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone}
       refreshTick={`${refreshTick}:${historyRevision}`} canView={canEdit && !blocked}

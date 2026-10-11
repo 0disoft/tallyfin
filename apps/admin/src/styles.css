@@ -1195,23 +1195,24 @@ button {
 /* ==========================================================================
    Owner grant list (LiveGrants)
    ========================================================================== */
-.grants-section { min-width: 0; }
-.grants-section .settings-subheading { margin: 0; }
-.grants-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.grants-section, .publishers-section { min-width: 0; }
+.grants-section .settings-subheading, .publishers-section .settings-subheading { margin: 0; }
+.grants-actions, .publishers-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .grant-role { white-space: nowrap; }
-.grants-section .table-scroll { max-width: 100%; }
-.grants-table th, .grants-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
-.grants-table th:last-child, .grants-table td:last-child { white-space: normal; font-variant-numeric: normal; }
+.grants-section .table-scroll, .publishers-section .table-scroll { max-width: 100%; }
+.grants-table th, .grants-table td, .publishers-table th, .publishers-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+.grants-table th:last-child, .grants-table td:last-child, .publishers-table th:last-child, .publishers-table td:last-child { white-space: normal; font-variant-numeric: normal; }
 
 /* ==========================================================================
-   Grant change surface (GrantChangePanel, add form, row actions)
+   Principal change surface (GrantChangePanel, PublisherChangePanel, add form, row actions)
    ========================================================================== */
-.grant-add-disclosure { margin-top: 24px; padding: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; }
-.grant-add-disclosure > summary { cursor: pointer; color: #155eef; font-size: 16px; font-weight: 600; }
-.grant-add-disclosure[open] > summary { margin-bottom: 16px; }
-.grant-add-form { display: flex; flex-direction: column; gap: 16px; }
-.grant-add-form .text-input, .grant-add-form .settings-select { font-size: 18px; }
-.grant-add-disclosure button:disabled, .grant-add-disclosure .text-input:disabled, .grant-add-disclosure .settings-select:disabled { cursor: not-allowed; }
+.grant-add-disclosure, .publishers-add-disclosure { margin-top: 24px; padding: 16px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; }
+.grant-add-disclosure > summary, .publishers-add-disclosure > summary { cursor: pointer; color: #155eef; font-size: 16px; font-weight: 600; }
+.grant-add-disclosure[open] > summary, .publishers-add-disclosure[open] > summary { margin-bottom: 16px; }
+.grant-add-form, .publishers-add-form { display: flex; flex-direction: column; gap: 16px; }
+.grant-add-form .text-input, .grant-add-form .settings-select, .publishers-add-form .text-input, .publishers-add-form .settings-select { font-size: 18px; }
+.grant-add-disclosure button:disabled, .grant-add-disclosure .text-input:disabled, .grant-add-disclosure .settings-select:disabled,
+.publishers-add-disclosure button:disabled, .publishers-add-disclosure .text-input:disabled, .publishers-add-disclosure .settings-select:disabled { cursor: not-allowed; }
 
 .grant-change-panel { margin-top: 24px; padding: 16px; background: #f5f9ff; border: 1px solid #cfe0ff; border-radius: 6px; }
 .grant-change-heading { margin: 0 0 12px; color: #0f172a; font-size: 18px; font-weight: 700; }
@@ -1223,11 +1224,13 @@ button {
 .grant-change-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 
 .grants-table th:nth-child(4), .grants-table td:nth-child(4) { white-space: nowrap; font-variant-numeric: tabular-nums; }
-.grant-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.grant-row-actions .secondary-button { padding: 0 12px; }
+.publishers-table th:nth-child(3), .publishers-table td:nth-child(3) { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.publishers-table { min-width: 640px; }
+.grant-row-actions, .publishers-row-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.grant-row-actions .secondary-button, .publishers-row-actions .secondary-button { padding: 0 12px; }
 
 @media (max-width: 480px) {
-  .grant-add-disclosure, .grant-change-panel { padding: 12px; }
+  .grant-add-disclosure, .publishers-add-disclosure, .grant-change-panel { padding: 12px; }
   .grant-change-actions { flex-direction: column; align-items: stretch; }
   .grant-change-actions .primary-button, .grant-change-actions .secondary-button { width: 100%; }
 }

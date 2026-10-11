@@ -8,6 +8,7 @@ import type {
   EventSource,
   ProjectPage,
   ProjectGrantPage,
+  ProjectPublisherPage,
   ProjectSettings,
   ProjectSettingsUpdate,
   QueryMeta,
@@ -33,6 +34,8 @@ import type { CreatedProject, ProjectCreation } from './project-creation.ts';
 import { parseRejectionResponse, type RejectionResponse } from './rejection-diagnostics.ts';
 import { parseProjectGrantPage, parseGrantChangeInput, parseGrantMutationResult } from './grants-contract.ts';
 import type { GrantChange, GrantMutationResult } from './grants-contract.ts';
+import { parseProjectPublisherPage, parsePublisherMutationResult, parsePublisherRequest, publisherAfter, publisherCursor } from './publishers-contract.ts';
+import type { PublisherMutationResult, PublisherRequest } from './publishers-contract.ts';
 import { changeCursor, parseAdminChangePage, type AdminChangePage } from './admin-changes-contract.ts';
 import { parseFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
@@ -57,6 +60,7 @@ export type ApiErrorKind =
   | 'project_conflict'
   | 'project_limit_reached'
   | 'grant_conflict'
+  | 'publisher_conflict'
   | 'last_owner'
   | 'http'
   | 'network'
@@ -89,6 +93,7 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   project_conflict: '이미 사용 중이거나 다른 내용으로 생성된 프로젝트 ID예요. (HTTP 409)',
   project_limit_reached: '프로젝트 생성 개수 한도에 도달했어요. 운영자에게 한도를 확인해 주세요. (HTTP 409)',
   grant_conflict: '계정 권한이 바뀌었어요. 최신 목록을 확인한 뒤 다시 선택해 주세요. (HTTP 409)',
+  publisher_conflict: '발행 권한이 바뀌었어요. 최신 목록을 확인한 뒤 다시 회수해 주세요. (HTTP 409)',
   last_owner: '마지막 소유자의 권한은 낮추거나 회수할 수 없어요. 다른 소유자를 먼저 추가해 주세요. (HTTP 409)',
   http: '요청이 실패했어요.',
   network: 'API 서버에 연결하지 못했어요.',
@@ -247,6 +252,36 @@ export class ApiClient {
     if (result.projectId !== projectId || result.page.limit !== limit || cursor && result.page.nextCursor === cursor ||
       before && result.data.some(row => !(Date.parse(row.occurredAt) < before[0] || Date.parse(row.occurredAt) === before[0] && row.id < before[1])))
       throw new ApiError('contract', '변경 이력의 프로젝트나 페이지가 요청과 달라요.');
+    return result;
+  }
+
+  /** Owner-only publisher list. Publisher permission never grants administrator access. */
+  async listPublishers(projectId: string, options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPublisherPage> {
+    const limit = clampLimit(options.limit), cursor = options.cursor || undefined;
+    let after: [string, string] | null;
+    try {
+      if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId)) throw Error();
+      after = publisherCursor(projectId, cursor ?? null);
+    } catch { throw new ApiError('invalid_request', '프로젝트와 페이지 위치를 확인해 주세요.'); }
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/publishers`, { limit, cursor }, options.signal), parseProjectPublisherPage);
+    if (result.projectId !== projectId || result.page.limit !== limit || cursor && result.page.nextCursor === cursor ||
+      after && result.data.some(row => !publisherAfter(row, after)))
+      throw new ApiError('contract', '발행자 목록의 프로젝트나 페이지가 요청과 달라요.');
+    return result;
+  }
+
+  async changePublisher(projectId: string, input: PublisherRequest, options: { signal?: AbortSignal } = {}): Promise<PublisherMutationResult> {
+    let request: PublisherRequest;
+    try { request = parsePublisherRequest(input); }
+    catch { throw new ApiError('invalid_request', '발급자·계정 식별자와 발행 권한 상태를 확인해 주세요.'); }
+    if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId)) throw new ApiError('invalid_request', '프로젝트 ID를 확인해 주세요.');
+    const { issuer, subject } = request;
+    const body = JSON.stringify(request.granted ? { issuer, subject } : { issuer, subject, expectedCreatedAt: request.expectedCreatedAt });
+    if (new TextEncoder().encode(body).byteLength > 16384) throw new ApiError('invalid_request', '발행 권한 요청은 16KiB 이하여야 해요.');
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/publishers`, {}, options.signal,
+      body, request.granted ? 'PUT' : 'DELETE'), parsePublisherMutationResult);
+    if (result.projectId !== projectId || result.issuer !== issuer || result.subject !== subject || result.granted !== request.granted)
+      throw new ApiError('contract', '발행 권한 응답이 요청한 계정·프로젝트·상태와 달라요.');
     return result;
   }
 
@@ -504,7 +539,7 @@ export class ApiClient {
       // Body is not JSON; keep the fixed status-based message.
     }
     const kind = response.status === 503 && code === 'admin_api_unavailable' ? 'admin_api_unavailable'
-      : response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'last_owner'].includes(code)
+      : response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'publisher_conflict', 'last_owner'].includes(code)
       ? code as ApiErrorKind : STATUS_KIND[response.status] ?? 'http';
     const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
     return new ApiError(kind, message, { status: response.status, code, requestId });
