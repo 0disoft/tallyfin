@@ -31,12 +31,13 @@ async function mutate(method = 'PUT', body: unknown = target, at = now): Promise
 
 test('owner grant and guarded revoke are idempotent and atomically record only changed permissions', async () => {
   const granted = await mutate();
-  assert.deepEqual(granted, { projectId: 'sembom', ...target, granted: true, createdAt: new Date(now).toISOString(), changed: true });
+  assert.deepEqual(granted, { projectId: 'sembom', ...target, granted: true, createdAt: new Date(now).toISOString(), grantId: granted.grantId, changed: true });
+  assert.match(granted.grantId!, /^[0-9a-f]{32}$/);
   await f.store.publisherAccess('sembom', target);
   assert.deepEqual(await mutate('PUT', target, now + 1), { ...granted, changed: false });
-  const revoke = { ...target, expectedCreatedAt: granted.createdAt };
-  assert.deepEqual(await mutate('DELETE', revoke, now + 2), { ...granted, granted: false, createdAt: null, changed: true });
-  assert.deepEqual(await mutate('DELETE', revoke, now + 3), { ...granted, granted: false, createdAt: null, changed: false });
+  const revoke = { ...target, expectedGrantId: granted.grantId };
+  assert.deepEqual(await mutate('DELETE', revoke, now + 2), { ...granted, granted: false, createdAt: null, grantId: null, changed: true });
+  assert.deepEqual(await mutate('DELETE', revoke, now + 3), { ...granted, granted: false, createdAt: null, grantId: null, changed: false });
   await assert.rejects(f.store.publisherAccess('sembom', target), { code: 'forbidden' });
   const page = await new D1Queries(f.db).changes(owner, 'sembom', 25, '', now + 3);
   assert.deepEqual(page.data.map(row => row.change.action), ['publisher.revoked', 'publisher.granted']);
@@ -44,17 +45,22 @@ test('owner grant and guarded revoke are idempotent and atomically record only c
   assert.equal(await f.db.prepare('SELECT count(*) AS n FROM project_grants').first('n'), 1);
 });
 
-test('stale creation timestamp and absent expectation cannot revoke an existing permission or change its history', async () => {
+test('stale generation ID and absent expectation cannot revoke an existing permission or change its history', async () => {
   const old = await mutate();
-  await mutate('DELETE', { ...target, expectedCreatedAt: old.createdAt }, now + 1);
-  const fresh = await mutate('PUT', target, now + 2);
-  for (const expectedCreatedAt of [old.createdAt, null]) {
-    const response = await handler()(request('DELETE', { ...target, expectedCreatedAt }));
+  await mutate('DELETE', { ...target, expectedGrantId: old.grantId }, now);
+  const fresh = await mutate('PUT', target, now);
+  assert.equal(fresh.createdAt, old.createdAt);
+  assert.notEqual(fresh.grantId, old.grantId);
+  for (const expectedGrantId of [old.grantId, null]) {
+    const response = await handler()(request('DELETE', { ...target, expectedGrantId }));
     assert.equal(response.status, 409); const error = await response.json() as { error: { code: string } };
     assert.equal(error.error.code, 'publisher_conflict');
   }
   assert.equal(await f.db.prepare('SELECT created_at FROM project_publishers').first('created_at'), Date.parse(fresh.createdAt!));
+  assert.equal(await f.db.prepare('SELECT grant_id FROM project_publishers').first('grant_id'), fresh.grantId);
   assert.equal(await f.db.prepare('SELECT count(*) AS n FROM admin_changes').first('n'), 3);
+  await f.store.publisherAccess('sembom', target);
+  await mutate('DELETE', { ...target, expectedGrantId: fresh.grantId }, now);
 });
 
 test('reader and publisher-only identities cannot write, and owner revocation before transaction blocks all changes', async () => {
@@ -85,8 +91,9 @@ test('audit storage failure rolls back permission, and closed bounded request/au
   for (const body of [{ ...target, role: 'owner' }, { ...target, granted: true }, { ...target, issuer: 'http://unsafe.example.invalid' },
     { ...target, subject: '' }, { ...target, subject: 'a\nb' }])
     assert.equal((await handler()(request('PUT', body))).status, 400);
-  for (const body of [target, { ...target, expectedCreatedAt: 'invalid' }, { ...target, expectedCreatedAt: 1 },
-    { ...target, expectedCreatedAt: '2026-10-08T15:00:15Z' }, { ...target, expectedCreatedAt: null, role: 'owner' }])
+  for (const body of [target, { ...target, expectedGrantId: 'invalid' }, { ...target, expectedGrantId: 1 },
+    { ...target, expectedGrantId: 'a'.repeat(31) }, { ...target, expectedGrantId: 'A'.repeat(32) }, { ...target, expectedGrantId: 'a'.repeat(32) + '\n' },
+    { ...target, expectedCreatedAt: new Date(now).toISOString() }, { ...target, expectedGrantId: null, role: 'owner' }])
     assert.equal((await handler()(request('DELETE', body))).status, 400);
   assert.equal((await handler()(request('PUT', target, '/v1/projects/sembom/publishers?extra=1'))).status, 400);
   const unsupported = await handler()(request('POST')); assert.equal(unsupported.status, 405);

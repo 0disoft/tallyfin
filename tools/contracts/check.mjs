@@ -281,28 +281,32 @@ check('publisher list exposes only bounded identity metadata under administrator
   const page = example('project-publishers');
   for (const value of [{ ...page, accessToken: 'unexpected' }, { ...page, data: [{ ...page.data[0], role: 'owner' }] },
     { ...page, data: [{ ...page.data[0], email: 'unexpected' }] }, { ...page, page: { limit: 101, nextCursor: null } },
-    { ...page, data: [{ ...page.data[0], createdAt: 'invalid' }] }])
+    { ...page, data: [{ ...page.data[0], createdAt: 'invalid' }] },
+    { ...page, data: [{ ...page.data[0], grantId: undefined }] },
+    { ...page, data: [{ ...page.data[0], grantId: 'A'.repeat(32) }] }])
     assert.equal(validate('ProjectPublisherPage', value), false);
   const route = spec.paths['/v1/projects/{projectId}/publishers'].get;
   assert.ok(route.responses['401']); assert.ok(route.responses['403']);
   assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET, PUT, DELETE');
   assert.equal(route.requestBody, undefined);
 });
-check('publisher mutations use explicit identity and timestamp guard without administrator roles or credentials', () => {
+check('publisher mutations use explicit identity and generation guard without administrator roles or credentials', () => {
   const identity = { issuer: 'https://publisher.example.invalid', subject: 'test-service' };
   assert.ok(validate('PublisherGrantRequest', identity));
-  const revoke = { ...identity, expectedCreatedAt: '2026-10-11T00:00:00.000Z' };
+  const revoke = { ...identity, expectedGrantId: '0123456789abcdef0123456789abcdef' };
   assert.ok(validate('PublisherRevokeRequest', revoke));
-  assert.ok(validate('PublisherRevokeRequest', { ...revoke, expectedCreatedAt: null }));
+  assert.ok(validate('PublisherRevokeRequest', { ...revoke, expectedGrantId: null }));
   for (const value of [{ ...identity, role: 'owner' }, { ...identity, token: 'unexpected' }, revoke])
     assert.equal(validate('PublisherGrantRequest', value), false);
-  for (const value of [identity, { ...revoke, role: 'owner' }, { ...revoke, expectedCreatedAt: 1 },
-    { ...revoke, expectedCreatedAt: '2026-10-11T00:00:00Z' }]) assert.equal(validate('PublisherRevokeRequest', value), false);
-  const result = { projectId: 'sembom', ...identity, granted: true, createdAt: revoke.expectedCreatedAt, changed: true };
+  for (const value of [identity, { ...revoke, role: 'owner' }, { ...revoke, expectedGrantId: 1 },
+    { ...revoke, expectedGrantId: 'A'.repeat(32) }, { ...revoke, expectedGrantId: 'a'.repeat(31) },
+    { ...identity, expectedCreatedAt: '2026-10-11T00:00:00.000Z' }]) assert.equal(validate('PublisherRevokeRequest', value), false);
+  const result = { projectId: 'sembom', ...identity, granted: true, createdAt: '2026-10-11T00:00:00.000Z', grantId: revoke.expectedGrantId, changed: true };
   assert.ok(validate('PublisherMutationResult', result));
-  assert.ok(validate('PublisherMutationResult', { ...result, granted: false, createdAt: null, changed: false }));
+  assert.ok(validate('PublisherMutationResult', { ...result, granted: false, createdAt: null, grantId: null, changed: false }));
   for (const value of [{ ...result, role: 'owner' }, { ...result, granted: false }, { ...result, createdAt: null },
-    { ...result, changed: undefined }]) assert.equal(validate('PublisherMutationResult', value), false);
+    { ...result, grantId: null }, { ...result, grantId: undefined },
+    { ...result, grantId: 'A'.repeat(32) }, { ...result, granted: false, createdAt: null }, { ...result, changed: undefined }]) assert.equal(validate('PublisherMutationResult', value), false);
   for (const method of ['put', 'delete']) {
     const route = spec.paths['/v1/projects/{projectId}/publishers'][method];
     for (const code of ['200', '400', '401', '403', '405', '413', '415', '503']) assert.ok(route.responses[code]);

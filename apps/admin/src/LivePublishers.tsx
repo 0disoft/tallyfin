@@ -125,7 +125,7 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
         </form>
       </details>
       {write && <PublisherChangePanel state={write} saving={saving} uncertain={uncertain} listLoading={loading}
-        locked={locked || (state?.phase !== 'ready' && !uncertain)} confirmRef={confirmRef} cancelRef={cancelRef} formatStamp={stamp}
+        locked={locked || (state?.phase !== 'ready' && !uncertain)} confirmRef={confirmRef} cancelRef={cancelRef}
         onConfirm={() => { if (uncertain || (!locked && state?.phase === 'ready')) void editorRef.current?.confirm(); }}
         onCancel={() => { if (write.phase === 'error' && write.request) reload(); else editorRef.current?.cancel(); addSummaryRef.current?.focus(); }} onReload={reload} />}
     </>}
@@ -146,7 +146,7 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
               <td><time dateTime={publisher.createdAt}>{stamp(publisher.createdAt)}</time></td>
               <td><div className="publishers-row-actions">
                 <button className="secondary-button" type="button" disabled={actionsLocked} aria-label={`${publisher.subject} 발행 권한 회수`}
-                  onClick={() => prepare({ granted: false, issuer: publisher.issuer, subject: publisher.subject, expectedCreatedAt: publisher.createdAt })}>발행 권한 회수</button>
+                  onClick={() => prepare({ granted: false, issuer: publisher.issuer, subject: publisher.subject, expectedGrantId: publisher.grantId })}>발행 권한 회수</button>
               </div></td>
             </tr>)}</tbody>
           </table>

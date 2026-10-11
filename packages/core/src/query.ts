@@ -16,7 +16,7 @@ export interface ProjectGrant { issuer: string; subject: string; role: 'reader' 
 export interface ProjectGrantPage {
   projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null };
 }
-export interface ProjectPublisher { issuer: string; subject: string; createdAt: string }
+export interface ProjectPublisher { issuer: string; subject: string; createdAt: string; grantId: string }
 export interface ProjectPublisherPage {
   projectId: string; data: ProjectPublisher[]; page: { limit: number; nextCursor: string | null };
 }

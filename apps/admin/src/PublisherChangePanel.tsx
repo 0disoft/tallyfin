@@ -19,34 +19,35 @@ export type PublisherChangePanelProps = {
   onConfirm: () => void;
   onCancel: () => void;
   onReload: () => void;
-  /** Renders the creation stamp the revocation compares against. */
-  formatStamp: (value: string) => string;
   /** Locks the review confirmation while the surrounding settings editor is busy; an unresolved write stays retryable. */
   locked?: boolean;
 };
 
 export default function PublisherChangePanel({ state, saving, uncertain, listLoading, confirmRef, cancelRef,
-  onConfirm, onCancel, onReload, formatStamp, locked = false }: PublisherChangePanelProps) {
+  onConfirm, onCancel, onReload, locked = false }: PublisherChangePanelProps) {
   const { phase, request, message } = state;
   if (phase === 'idle') return null;
   const facts = request ? <dl id="publisher-change-facts" className="grant-change-facts">
     <div><dt>발급자</dt><dd>{request.issuer}</dd></div>
     <div><dt>계정 식별자</dt><dd>{request.subject}</dd></div>
     <div><dt>발행 권한</dt><dd>{request.granted ? '부여' : '회수'}</dd></div>
-    {!request.granted && <div><dt>회수 기준 등록 시각</dt><dd>{request.expectedCreatedAt === null
-      ? '등록된 권한 없음으로 확인' : formatStamp(request.expectedCreatedAt)}</dd></div>}
   </dl> : null;
+  // The revocation states its scope in plain words. The grant generation the
+  // request carries stays internal and is never rendered to the operator.
+  const scope = request && !request.granted ? '선택한 발행 권한을 회수해요. 다시 부여된 권한은 회수하지 않아요.' : null;
 
   // Review keeps one pending candidate; an unresolved write keeps only the same request.
   if (phase === 'review' || saving || uncertain) {
     return <section className="grant-change-panel" aria-labelledby="publisher-change-heading">
       <h4 id="publisher-change-heading" className="grant-change-heading">{uncertain ? '저장 결과 확인' : '발행 권한 변경 확인'}</h4>
       {facts}
+      {scope && <p className="context-note" id="publisher-revoke-scope">{scope}</p>}
       <p className="context-note">서버 발행 권한은 관리자 조회·소유자 권한과 별개예요. 부여해도 프로젝트 조회 권한은 생기지 않아요.</p>
       {saving && <p className="context-note" role="status">저장 중이에요. 끝날 때까지 다른 변경을 시작할 수 없어요.</p>}
       {uncertain && <p className="grant-change-impact" role="status">{message ?? '저장 결과를 확인하지 못했어요.'}</p>}
       <div className="grant-change-actions">
-        <button ref={confirmRef} className="primary-button" type="button" aria-describedby={request ? 'publisher-change-facts' : undefined}
+        <button ref={confirmRef} className="primary-button" type="button"
+          aria-describedby={request ? scope ? 'publisher-change-facts publisher-revoke-scope' : 'publisher-change-facts' : undefined}
           disabled={saving || (locked && phase === 'review')} onClick={onConfirm}>
           {saving ? '저장 중…' : uncertain ? '같은 요청으로 다시 확인' : request?.granted ? '권한 부여 저장' : '권한 회수 저장'}
         </button>
@@ -60,6 +61,7 @@ export default function PublisherChangePanel({ state, saving, uncertain, listLoa
     return <section className="grant-change-panel" aria-labelledby="publisher-change-heading">
       <h4 id="publisher-change-heading" className="grant-change-heading">발행 권한 변경</h4>
       {facts}
+      {scope && <p className="context-note">{scope}</p>}
       <p className="form-error" role="alert">{message ?? '발행 권한을 저장하지 못했어요.'}</p>
       <p className="context-note">최신 목록을 확인한 뒤에 새 변경을 시작할 수 있어요.</p>
       <div className="grant-change-actions">

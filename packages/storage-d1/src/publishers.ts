@@ -1,9 +1,9 @@
-import { CollectionError, integer, PROJECT_ID, validGrantIdentity } from '@tallyfin/core';
+import { CollectionError, integer, PROJECT_ID, validPublisherGrantId, validGrantIdentity } from '@tallyfin/core';
 import type { AdminPrincipal, ProjectPublisher, ProjectPublisherPage } from '@tallyfin/core';
 import type { SqlDatabase } from './sql.ts';
 
 const owner = "EXISTS (SELECT 1 FROM project_grants a WHERE a.project_id = p.id AND a.issuer = ? AND a.subject = ? AND a.role = 'owner')";
-interface PublisherRow { issuer: string; subject: string; created_at: number }
+interface PublisherRow { issuer: string; subject: string; created_at: number; grant_id: string }
 function encode(id: string, issuer: string, subject: string): string {
   const bytes = new TextEncoder().encode(JSON.stringify(['publishers', 1, id, issuer, subject]));
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -20,9 +20,10 @@ function decode(id: string, cursor: string): [string, string] | null {
   } catch { throw new CollectionError('invalid_request', 400); }
 }
 function metadata(row: PublisherRow): ProjectPublisher {
-  if (!validGrantIdentity(row.issuer, row.subject) || !integer(row.created_at, 0, 8640000000000000))
+  if (!validGrantIdentity(row.issuer, row.subject) || !integer(row.created_at, 0, 8640000000000000) ||
+    !validPublisherGrantId(row.grant_id))
     throw new CollectionError('storage_unavailable', 503);
-  return { issuer: row.issuer, subject: row.subject, createdAt: new Date(row.created_at).toISOString() };
+  return { issuer: row.issuer, subject: row.subject, createdAt: new Date(row.created_at).toISOString(), grantId: row.grant_id };
 }
 /** Publishing permission never grants access to this administrator control-plane list. */
 export async function listProjectPublishers(db: SqlDatabase, principal: AdminPrincipal, id: string, limit: number,
@@ -32,7 +33,7 @@ export async function listProjectPublishers(db: SqlDatabase, principal: AdminPri
   // Both statements share a transaction and enforce the current project owner independently.
   const result = await db.batch<{ id: string } | PublisherRow>([
     db.prepare(`SELECT p.id FROM projects p WHERE p.id = ? AND ${owner}`).bind(id, ...caller),
-    db.prepare(`SELECT g.issuer, g.subject, g.created_at FROM project_publishers g JOIN projects p ON p.id = g.project_id
+    db.prepare(`SELECT g.issuer, g.subject, g.created_at, g.grant_id FROM project_publishers g JOIN projects p ON p.id = g.project_id
       WHERE p.id = ? AND ${owner} ${after ? 'AND (g.issuer, g.subject) > (?, ?)' : ''}
       ORDER BY g.issuer, g.subject LIMIT ?`).bind(id, ...caller, ...(after ?? []), limit + 1),
   ]);

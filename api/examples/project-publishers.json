@@ -4,7 +4,8 @@
     {
       "issuer": "https://publisher.example.invalid",
       "subject": "test-machine",
-      "createdAt": "2026-10-11T00:00:00.000Z"
+      "createdAt": "2026-10-11T00:00:00.000Z",
+      "grantId": "0123456789abcdef0123456789abcdef"
     }
   ],
   "page": {

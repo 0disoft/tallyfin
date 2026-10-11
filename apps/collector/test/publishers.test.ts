@@ -36,7 +36,8 @@ test('owner reads live bounded publishing identities, independently of reader/ow
   await publisher('alpha'); await publisher('zeta'); await publisher('alpha', 'sembom', 'https://second.example.invalid');
   await publisher('private-other', 'other');
   const first = await read('/v1/projects/sembom/publishers?limit=2');
-  assert.deepEqual(first.data, ['alpha', 'zeta'].map(subject => ({ ...principal, subject, createdAt: new Date(now).toISOString() })));
+  assert.ok(first.data.every(row => /^[0-9a-f]{32}$/.test(row.grantId)));
+  assert.deepEqual(first.data.map(({ grantId, ...row }) => row), ['alpha', 'zeta'].map(subject => ({ ...principal, subject, createdAt: new Date(now).toISOString() })));
   assert.ok(first.page.nextCursor);
   const second = await read(`/v1/projects/sembom/publishers?limit=2&cursor=${first.page.nextCursor}`);
   assert.deepEqual(second.data.map(p => p.issuer), ['https://second.example.invalid']); assert.equal(second.page.nextCursor, null);

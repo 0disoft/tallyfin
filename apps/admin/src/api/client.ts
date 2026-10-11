@@ -276,7 +276,7 @@ export class ApiClient {
     catch { throw new ApiError('invalid_request', '발급자·계정 식별자와 발행 권한 상태를 확인해 주세요.'); }
     if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId)) throw new ApiError('invalid_request', '프로젝트 ID를 확인해 주세요.');
     const { issuer, subject } = request;
-    const body = JSON.stringify(request.granted ? { issuer, subject } : { issuer, subject, expectedCreatedAt: request.expectedCreatedAt });
+    const body = JSON.stringify(request.granted ? { issuer, subject } : { issuer, subject, expectedGrantId: request.expectedGrantId });
     if (new TextEncoder().encode(body).byteLength > 16384) throw new ApiError('invalid_request', '발행 권한 요청은 16KiB 이하여야 해요.');
     const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/publishers`, {}, options.signal,
       body, request.granted ? 'PUT' : 'DELETE'), parsePublisherMutationResult);

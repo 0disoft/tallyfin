@@ -1,24 +1,28 @@
 // Closed contract for the owner-only server publisher list and its permission
 // writes. Publisher authority is independent from administrator grants: an
-// entry carries only the verified issuer/subject and the creation stamp, and a
-// publisher principal never gains administrator access through it.
+// entry carries the verified issuer/subject, the immutable grant generation and
+// the creation stamp, and a publisher principal never gains administrator
+// access through it. The generation is non-secret concurrency metadata that
+// tells a regrant apart from the permission the operator read; it is never an
+// authority claim or a credential.
 
 import type { ProjectPublisher, ProjectPublisherPage } from './types.ts';
 import { ContractError } from './validate.ts';
 import { validGrantIdentity } from './grants-contract.ts';
 
 export type PublisherGrantRequest = { granted: true; issuer: string; subject: string };
-export type PublisherRevokeRequest = { granted: false; issuer: string; subject: string; expectedCreatedAt: string | null };
+export type PublisherRevokeRequest = { granted: false; issuer: string; subject: string; expectedGrantId: string | null };
 export type PublisherRequest = PublisherGrantRequest | PublisherRevokeRequest;
 export type PublisherMutationResult = {
   projectId: string; issuer: string; subject: string; granted: boolean;
-  createdAt: string | null; changed: boolean;
+  grantId: string | null; createdAt: string | null; changed: boolean;
 };
 
 const PROJECT = /^[a-z][a-z0-9-]{0,47}$/;
 const CURSOR = /^[A-Za-z0-9_-]+$/;
 const MAX_CURSOR = 12288;
 const TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const GRANT_ID = /^[0-9a-f]{32}$/;
 const encoder = new TextEncoder(), decoder = new TextDecoder('utf-8', { fatal: true });
 
 function fail(): never { throw new ContractError('Publisher response is invalid.'); }
@@ -32,6 +36,11 @@ function stamp(value: unknown): string {
   if (typeof value !== 'string' || !TIME.test(value)) return fail();
   const at = Date.parse(value);
   if (!Number.isSafeInteger(at) || at < 0 || new Date(at).toISOString() !== value) return fail();
+  return value;
+}
+/** Immutable lowercase 32-hex grant generation; concurrency metadata, not an authority. */
+function generation(value: unknown): string {
+  if (typeof value !== 'string' || value.length !== 32 || !GRANT_ID.test(value)) return fail();
   return value;
 }
 function identity(issuer: unknown, subject: unknown): { issuer: string; subject: string } {
@@ -81,8 +90,8 @@ export function parseProjectPublisherPage(value: unknown): ProjectPublisherPage 
     (page.nextCursor !== null && (typeof page.nextCursor !== 'string' || !page.nextCursor.length || row.data.length !== page.limit)))
     return fail();
   const data: ProjectPublisher[] = (row.data as unknown[]).map(entry => {
-    const item = object(entry, ['issuer', 'subject', 'createdAt']);
-    return { ...identity(item.issuer, item.subject), createdAt: stamp(item.createdAt) };
+    const item = object(entry, ['issuer', 'subject', 'grantId', 'createdAt']);
+    return { ...identity(item.issuer, item.subject), grantId: generation(item.grantId), createdAt: stamp(item.createdAt) };
   });
   for (const [index, item] of data.entries())
     if (index && !publisherAfter(item, [data[index - 1]!.issuer, data[index - 1]!.subject])) return fail();
@@ -96,10 +105,10 @@ export function parsePublisherGrantRequest(value: unknown): PublisherGrantReques
   return { granted: true, ...identity(row.issuer, row.subject) };
 }
 export function parsePublisherRevokeRequest(value: unknown): PublisherRevokeRequest {
-  const row = object(value, ['granted', 'issuer', 'subject', 'expectedCreatedAt']);
+  const row = object(value, ['granted', 'issuer', 'subject', 'expectedGrantId']);
   if (row.granted !== false) return fail();
   return { granted: false, ...identity(row.issuer, row.subject),
-    expectedCreatedAt: row.expectedCreatedAt === null ? null : stamp(row.expectedCreatedAt) };
+    expectedGrantId: row.expectedGrantId === null ? null : generation(row.expectedGrantId) };
 }
 export function parsePublisherRequest(value: unknown): PublisherRequest {
   const granted = (value as { granted?: unknown } | null | undefined)?.granted;
@@ -108,10 +117,14 @@ export function parsePublisherRequest(value: unknown): PublisherRequest {
   return fail();
 }
 export function parsePublisherMutationResult(value: unknown): PublisherMutationResult {
-  const row = object(value, ['projectId', 'issuer', 'subject', 'granted', 'createdAt', 'changed']);
+  const row = object(value, ['projectId', 'issuer', 'subject', 'granted', 'grantId', 'createdAt', 'changed']);
   if (typeof row.projectId !== 'string' || !PROJECT.test(row.projectId) || typeof row.granted !== 'boolean' ||
     typeof row.changed !== 'boolean') return fail();
-  const target = identity(row.issuer, row.subject), createdAt = row.createdAt === null ? null : stamp(row.createdAt);
-  if ((createdAt !== null) !== row.granted) return fail();
-  return { projectId: row.projectId, ...target, granted: row.granted, createdAt, changed: row.changed };
+  const target = identity(row.issuer, row.subject);
+  // A live permission carries both the generation and its creation stamp; a
+  // removed one carries neither, so a stale write cannot look like a success.
+  const grantId = row.grantId === null ? null : generation(row.grantId);
+  const createdAt = row.createdAt === null ? null : stamp(row.createdAt);
+  if ((grantId !== null) !== row.granted || (createdAt !== null) !== row.granted) return fail();
+  return { projectId: row.projectId, ...target, granted: row.granted, grantId, createdAt, changed: row.changed };
 }
