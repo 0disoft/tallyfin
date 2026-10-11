@@ -38,6 +38,7 @@ import { parseProjectPublisherPage, parsePublisherMutationResult, parsePublisher
 import type { PublisherMutationResult, PublisherRequest } from './publishers-contract.ts';
 import { changeCursor, parseAdminChangePage, type AdminChangePage } from './admin-changes-contract.ts';
 import { parseFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
+import { parseFunnelBreakdown, type FunnelBreakdown } from './funnel-breakdown.ts';
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
 import { parseAdminHealth, type AdminHealth } from './admin-health-contract.ts';
 
@@ -398,6 +399,17 @@ export class ApiClient {
     return response;
   }
 
+  async getFunnelBreakdown(projectId: string, funnelId: string,
+    options: { schemaVersion: number; from: string; to: string; groupBy: string; signal?: AbortSignal }): Promise<FunnelBreakdown> {
+    const version = this.#version(options.schemaVersion);
+    if (!/^[a-z][a-z0-9_]{0,47}$/.test(options.groupBy)) throw new ApiError('invalid_request', '등록된 퍼널 분류를 선택해 주세요.');
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/funnels/${encodeURIComponent(funnelId)}/breakdown`,
+      { schemaVersion: version, from: options.from, to: options.to, groupBy: options.groupBy }, options.signal), parseFunnelBreakdown);
+    if (result.meta.projectId !== projectId || result.meta.schemaVersion !== version || result.meta.from !== options.from ||
+      result.meta.to !== options.to || result.funnelId !== funnelId || result.groupBy !== options.groupBy)
+      throw new ApiError('contract', '퍼널 분류 응답이 요청한 프로젝트·버전·기간·분류와 달라요.');
+    return result;
+  }
   async getWorkflowDaily(
     projectId: string,
     workflowId: string,

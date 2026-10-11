@@ -1,5 +1,26 @@
 # 검증
 
+## 퍼널 속성별 관리자 화면·CSV — 2026-10-11
+
+등록 차원 선택 뒤에만 분류 API를 조회하며 값별 요약과 선택 값의 단계·일별 내역을 표시한다.
+응답을 닫힌 형태·자료형·등록 값·정의·날짜·단계/합계로 검증하고 취소·세대 가드를 적용한다.
+분류 실패 때 전체 결과를 유지하며 CSV만 잠그고 재시도·해제로 복구한다. CSV 분류 행은
+현재 기간으로 명시하고 group_by·property_type·property_value를 남긴다.
+
+- `npm.cmd run test:admin`: 189/189, 종료 코드 0. 분류 검사 6건이 새 계약·자료형·취소·
+  오류·빈 결과·CSV와 기존 전체 퍼널/기간 비교 회귀를 확인한다.
+- `npm.cmd run typecheck:admin`, `npm.cmd run build:admin`: 각각 종료 코드 0.
+- `npm.cmd run test:bundle --workspace @tallyfin/admin`: 2/2, 종료 코드 0.
+- `node .tmp/funnel-breakdown-smoke.mjs`: Chrome·Vite·실제 React와 합성 transport로 선택 전
+  추가 요청 없음·값별 단계·CSV·실패/재시도·분류 해제·늦은 응답 폐기·컨텍스트 전환·320px
+  문서 넘침 없음·pageerror 0을 확인했다. 서버·브라우저는 harness가 종료한다.
+- `git diff --check`: 종료 코드 0.
+
+제품 명세·프론트엔드 설계·로드맵을 갱신했다. API·DB·SDK·의존성·CI·위생 정책 변경은 없다.
+일반 소스 lint 명령은 없어 생략하고 백엔드·Sites 인계 검사는 변경 범위 밖이라 반복하지
+않았다. 브라우저 검사는 인증/D1 통합을 다시 검증한 것이 아니며 운영 제공자·원격 DB·
+푸시·배포·Sembom 연동은 미실행이다. 속성별 직전 기간 비교는 다음 슬라이스다.
+
 ## 다단계 퍼널의 속성별 읽기 API — 2026-10-11
 
 OpenAPI에 별도 GET `/v1/projects/{projectId}/funnels/{funnelId}/breakdown`, 필수 groupBy와

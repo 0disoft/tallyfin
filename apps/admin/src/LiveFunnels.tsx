@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { WarningCircle } from '@phosphor-icons/react';
 import { ApiClient } from './api/client';
 import type { DateRange } from './api/dates';
@@ -12,6 +12,8 @@ import { sourceLabel } from './SourceEventTable';
 import './funnels.css';
 import FunnelComparison from './FunnelComparison';
 import { compareFunnels } from './api/funnel-comparison';
+import FunnelBreakdown from './FunnelBreakdown';
+import type { FunnelBreakdownState } from './api/funnel-breakdown';
 
 type StepCounts = FunnelResponse['summary']['steps'][number];
 
@@ -36,6 +38,8 @@ export default function LiveFunnels({ client, registry, range, context, previous
   const comparisonRef = useRef<FunnelReport | null>(null);
   const [comparisonSnapshot, setComparisonSnapshot] = useState<{ client: ApiClient; current: FunnelResponse; state: FunnelReportState } | null>(null);
   const [comparisonRetry, setComparisonRetry] = useState(0);
+  const [grouping, setGrouping] = useState({ context: '', funnelId: '', value: '' });
+  const [breakdownSnapshot, setBreakdownSnapshot] = useState<{ client: ApiClient; current: FunnelResponse | null; state: FunnelBreakdownState } | null>(null);
 
   // One report per client. dispose() aborts in-flight reads, so a new client or
   // unmount never leaves a request running against the previous session.
@@ -74,6 +78,10 @@ export default function LiveFunnels({ client, registry, range, context, previous
   const view = snapshot && snapshot.client === client && snapshot.state.context === context
     && snapshot.state.funnelId === selectedId ? snapshot.state : null;
   const data = view?.phase === 'ready' ? view.data ?? null : null;
+  const groupBy = grouping.context === context && grouping.funnelId === selectedId && data?.definition.dimensions.includes(grouping.value) ? grouping.value : '';
+  const breakdownChanged = useCallback((state: FunnelBreakdownState) => setBreakdownSnapshot({ client, current: data, state }), [client, data]);
+  const breakdownData = groupBy && breakdownSnapshot?.client === client && breakdownSnapshot.current === data && breakdownSnapshot.state.groupBy === groupBy
+    && breakdownSnapshot.state.phase === 'ready' ? breakdownSnapshot.state.data : undefined;
   const comparisonKey = JSON.stringify([context, selectedId, previous?.from, previous?.to]);
   useEffect(() => {
     if (!compare || !previous || !data || comparisonError) { setComparisonSnapshot(null); return; }
@@ -97,7 +105,7 @@ export default function LiveFunnels({ client, registry, range, context, previous
   const previousData = comparisonView?.phase === 'ready' ? comparisonView.data : undefined;
   const loading = Boolean(selectedId) && (!view || view.phase === 'loading' || view.phase === 'idle');
   const csvReady = Boolean(data && data.funnelId === selectedId && data.meta.projectId === registry.project.id
-    && data.meta.schemaVersion === registry.schemaVersion && (!compare || (!comparisonError && previousData)));
+    && data.meta.schemaVersion === registry.schemaVersion && (!compare || (!comparisonError && previousData)) && (!groupBy || breakdownData));
   const activeDay = data && selectedDay ? data.days.find(day => day.date === selectedDay) ?? null : null;
 
   const declaredLabel = (step: { eventName: string; source: 'browser' | 'server' }) =>
@@ -144,7 +152,7 @@ export default function LiveFunnels({ client, registry, range, context, previous
     let url: string | undefined;
     let link: HTMLAnchorElement | undefined;
     try {
-      url = URL.createObjectURL(new Blob([funnelCsv(data, compare ? previousData : undefined)], { type: 'text/csv;charset=utf-8' }));
+      url = URL.createObjectURL(new Blob([funnelCsv(data, compare ? previousData : undefined, breakdownData)], { type: 'text/csv;charset=utf-8' }));
       link = document.createElement('a');
       link.href = url;
       link.download = funnelCsvFilename(data);
@@ -247,11 +255,14 @@ export default function LiveFunnels({ client, registry, range, context, previous
           </div>
         </>}
       </details>
+      <FunnelBreakdown client={client} registry={registry} current={data} context={context} groupBy={groupBy} onState={breakdownChanged}
+        onSelect={value => { setGrouping({ context, funnelId: selectedId, value }); setBreakdownSnapshot(null); setCsvMessage(null); }} />
     </>}
     {selectedId && <div className="csv-export funnel-csv">
       <button className="secondary-button" type="button" disabled={!csvReady} onClick={download} aria-describedby={`${id}-csv-status`}>퍼널 CSV 내려받기</button>
       <p id={`${id}-csv-status`} className={csvError ? 'form-error' : 'context-note'} role={csvError ? 'alert' : 'status'}>
         {csvReady ? csvMessage ?? (compare ? '현재·직전 기간 수치와 비교 지표를 CSV로 내려받아요.' : '현재 퍼널의 요약·단계·일별 수치를 CSV로 내려받아요.')
+          : groupBy && !breakdownData ? '분류 조회를 마치거나 분류를 해제하면 CSV를 내려받을 수 있어요.'
           : compare && data ? '퍼널 비교를 마치거나 비교를 끄면 CSV를 내려받을 수 있어요.' : '조회를 마치면 현재 퍼널 결과를 CSV로 내려받을 수 있어요.'}
       </p>
     </div>}

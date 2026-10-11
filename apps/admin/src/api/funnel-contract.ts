@@ -45,7 +45,7 @@ function definition(value: unknown): FunnelDefinition {
   if (new Set(steps.map(step => step.eventName)).size !== steps.length || new Set(dimensions).size !== dimensions.length) invalid();
   return { id: name(row.id), label: text(row.label, 80), steps, dimensions };
 }
-function counts(value: unknown, length: number, extra: string[] = []): FunnelCounts {
+export function parseFunnelCounts(value: unknown, length: number, extra: string[] = []): FunnelCounts {
   const row = object(value, [...countKeys, ...extra]), startedRuns = count(row.startedRuns), completedRuns = count(row.completedRuns);
   if (!Array.isArray(row.steps) || row.steps.length !== length) invalid();
   const steps = row.steps.map(value => object(value, ['stepIndex', 'reachedRuns', 'reachRate', 'conversionRate', 'notReachedNext']));
@@ -61,8 +61,7 @@ function counts(value: unknown, length: number, extra: string[] = []): FunnelCou
     }) };
 }
 /** Validate closed wire shape and all aggregate invariants before rendering or exporting. */
-export function parseFunnelResponse(value: unknown): FunnelResponse {
-  const row = object(value, ['meta', 'funnelId', 'definition', 'cohortBasis', 'summary', 'days']);
+export function parseFunnelHeader(row: Record<string, unknown>) {
   const rawMeta = object(row.meta, ['projectId', 'schemaVersion', 'from', 'to', 'timeZone', 'generatedAt', 'latestReceivedAt', 'coverage']);
   const projectId = text(rawMeta.projectId, 48), version = count(rawMeta.schemaVersion), zone = text(rawMeta.timeZone, 64);
   if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId) || !version || version > 2147483647 || rawMeta.coverage !== 'observed-only') invalid();
@@ -72,22 +71,29 @@ export function parseFunnelResponse(value: unknown): FunnelResponse {
   const meta: FunnelResponse['meta'] = { projectId, schemaVersion: version, from, to, timeZone: zone, generatedAt,
     latestReceivedAt: rawMeta.latestReceivedAt === null ? null : timestamp(rawMeta.latestReceivedAt), coverage: 'observed-only' };
   const def = definition(row.definition), funnelId = name(row.funnelId);
-  if (funnelId !== def.id || row.cohortBasis !== 'startedAt' || !Array.isArray(row.days)) invalid();
+  if (funnelId !== def.id || row.cohortBasis !== 'startedAt') invalid();
+  return { meta, funnelId, definition: def, cohortBasis: 'startedAt' as const };
+}
+export function parseFunnelResponse(value: unknown): FunnelResponse {
+  const row = object(value, ['meta', 'funnelId', 'definition', 'cohortBasis', 'summary', 'days']);
+  const { meta, funnelId, definition: def } = parseFunnelHeader(row);
+  const { from, to, timeZone: zone } = meta, generated = Date.parse(meta.generatedAt);
+  if (!Array.isArray(row.days)) invalid();
   const length = (Date.parse(to) - Date.parse(from)) / 86400000 + 1;
   if (row.days.length !== length) invalid();
-  const summary = counts(row.summary, def.steps.length), totals = Array<number>(def.steps.length).fill(0);
+  const summary = parseFunnelCounts(row.summary, def.steps.length), totals = Array<number>(def.steps.length).fill(0);
   const provisionalFrom = todayInZone(zone, new Date(generated - 2 * 86400000));
   const days = row.days.map((value, index) => {
     const day = object(value, [...countKeys, 'date', 'provisional']), date = shiftDate(from, index);
     if (day.date !== date || day.provisional !== (date >= provisionalFrom)) invalid();
-    const parsed = counts(day, def.steps.length, ['date', 'provisional']);
+    const parsed = parseFunnelCounts(day, def.steps.length, ['date', 'provisional']);
     parsed.steps.forEach((step, i) => { totals[i] = count(totals[i]! + step.reachedRuns); });
     return { date, ...parsed, provisional: day.provisional as boolean };
   });
   if (totals.some((n, index) => n !== summary.steps[index]!.reachedRuns)) invalid();
   return { meta, funnelId, definition: def, cohortBasis: 'startedAt', summary, days };
 }
-export function validateFunnelResponse(response: FunnelResponse, registry: Registry, range: DateRange, funnelId: string): void {
+export function validateFunnelResponse(response: Pick<FunnelResponse, 'meta' | 'funnelId' | 'definition'>, registry: Registry, range: DateRange, funnelId: string): void {
   const def = registry.funnels?.find(funnel => funnel.id === funnelId), meta = response.meta, actual = response.definition;
   if (!def || response.funnelId !== funnelId || meta.projectId !== registry.project.id || meta.schemaVersion !== registry.schemaVersion ||
     meta.timeZone !== registry.project.timeZone || meta.from !== range.from || meta.to !== range.to || def.label !== actual.label ||
