@@ -63,6 +63,10 @@ npm run dev -- --local --state-dir .tmp/collector-db
 있다. 요청은 5초 뒤 취소하며, 닫기·연결 교체에서는 이전 결과를 지운다. 자동 폴링 없이
 로컬 Chrome·D1로 검증했고, 실제 운영 인증·원격 상태 확인은 아직 없다.
 
+브라우저 로그인 흐름은 `npm run verify:admin-login -- --channel chrome`으로 따로 검증할 수
+있다. 격리된 제공자 응답과 로컬 D1을 사용해 PKCE 리다이렉트·콜백·API 조회·토큰 갱신과
+재로그인을 확인한다. Playwright 준비와 출력 범위는 [로그인 검증 안내](tools/browser-bench/ADMIN-LOGIN.md)에 있다.
+
 ## 문서
 
 - 제품: [개요](docs/product/00-product-brief.md), [명세](docs/product/02-spec.md), [로드맵](docs/product/01-roadmap.md)

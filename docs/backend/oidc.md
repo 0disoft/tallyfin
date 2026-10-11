@@ -142,3 +142,8 @@ refresh token이 없으면 access token 만료 후 다시 로그인한다. 요�
 테스트는 실행 중 생성한 키와 격리된 제공자 응답으로 서명·nonce/state·콜백 중복 처리·
 회전 갱신·취소를 검증한다. 실제 제공자의 CORS·JWT access token 발급·resource/audience
 매핑·회전 갱신과 운영 배포는 아직 검증하지 않았다.
+
+선택적 `verify:admin-login`은 실제 관리자 앱·Chrome·로컬 수집기/D1을 거쳐 로그인 버튼부터
+인가 리다이렉트·콜백·인증된 API 조회·공유 회전 갱신을 확인한다. 갱신 실패·잘못된 state·
+재로그인·새로고침도 확인하며 제공자 응답은 외부 통신 없이 브라우저에서 채운다. 실행과
+격리 범위는 [관리자 로그인 검증 안내](../../tools/browser-bench/ADMIN-LOGIN.md)에 있다.

@@ -118,6 +118,10 @@ npm run check:admin
 [OIDC 연결 문서](../../docs/backend/oidc.md#브라우저-관리자-로그인)를 따른다.
 실제 제공자와 API audience는 UNDECIDED이며 실제 제공자 로그인은 아직 검증하지 않았다.
 
+선택적 `npm run verify:admin-login -- --channel chrome`은 대역 제공자·실제 관리자 소스·로컬
+수집기/D1로 로그인 버튼부터 콜백·API 조회·토큰 갱신·재로그인을 검증한다. 준비와 격리 범위는
+[로그인 검증 안내](../../tools/browser-bench/ADMIN-LOGIN.md)에 있다.
+
 ## 프로젝트 설정 편집 (API 연결)
 
 설정 화면은 이름·상태·허용 출처·수집 한도를 서버 설정 그대로 불러와 편집한다.

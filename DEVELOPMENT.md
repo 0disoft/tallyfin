@@ -53,6 +53,8 @@ npm run check:browser-size
 ## 다음 구현
 브라우저 SDK와 관리자 조회 API의 로컬 구현은 끝났고, 남은 것은 운영 요소다. 만료 정리 예약 핸들러와 로컬 등록·권한 관리 CLI도 구현했다. 서버 발행 수집과 서버 발행 SDK도 로컬에서 구현했고 서버 SDK의 로컬 Node·Worker·D1 통합도 검증했다. 실제 인증 제공자 연결, 원격 D1 마이그레이션과 예약 등록은 후속이다. 초기 실행 비용과 실브라우저 지연·처리량·원격 배포는 아직 검증하지 않았다. 계약과 명령 상태는 [VALIDATION.md](./VALIDATION.md)에 기록한다.
 관리자 UI의 실행과 검증 명령은 [관리자 README](./apps/admin/README.md)에 있다.
+실제 브라우저 로그인 검증은 선택적 `verify:admin-login`으로 실행하며 별도 Playwright와
+브라우저 실행 파일이 필요하다. [로그인 검증 안내](./tools/browser-bench/ADMIN-LOGIN.md)를 따른다.
 API 연결은 같은 출처 `/v1`에서 조회·설정·권한·스키마 발행을 처리한다.
 운영 설정과 공개 로그인 빌드는 [설치 안내](./docs/backend/installation.md)를 따른다.
 

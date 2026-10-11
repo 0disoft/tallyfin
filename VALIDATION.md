@@ -1,5 +1,33 @@
 # 검증
 
+## 실제 관리자 브라우저 로그인 검증 명령 — 2026-10-11
+
+선택적 `verify:admin-login`과 `tools/browser-bench/admin-login.mjs`·대역 fixture를 추가했다.
+실제 Vite 관리자 UI와 Miniflare collector·D1을 사용하고 `.invalid` 제공자 URL은 브라우저에서
+가로채므로 외부 제공자에 요청하지 않는다. 서명 키와 code·토큰은 메모리에만 두고 공개 설정은
+명시 주입하며 `.env`·호출자의 로그인/수집기 대상 값을 사용하지 않는다. 수집기 샘플 로그는
+대역 안에서만 출력하지 않아 CLI 보고서에 requestId도 담지 않는다.
+
+- `npm.cmd run verify:admin-login -- --channel chrome`: 종료 코드 0, Chrome 154.0.8037.98.
+- `node tools/browser-bench/admin-login.mjs --help`: 종료 코드 0.
+- `node tools/browser-bench/admin-login.mjs --channel invalid`: 고정 arguments 오류·종료 코드 1.
+
+실제 UI의 로그인 버튼부터 S256 인가 리다이렉트·nonce가 있는 ID token 서명·일회 코드 교환·
+콜백 주소 정리·현재 access token으로 조회 성공·저장소 읽기 확인까지 통과했다. 브라우저
+벽시계만 271초 이동하고 getAccessToken 동시 호출 수만 계측해 여러 호출이 한 번의 회전
+갱신을 기다리는지 확인했다. 다음 갱신을 실패시키면 인증 필요 화면을 표시하고 제공자 오류
+원문은 숨겼다. 원래 시계로 돌려 잘못된 state를 code 교환 없이 거부하고, 재로그인과
+새로고침 후 재인증 요구도 확인했다. 인가 3회·code 교환 2회·갱신 2회(성공 1·실패 1)·
+관리자 GET 27회·pageerror 0건이며, 단계별 localStorage/sessionStorage·쿠키는 비어 있다.
+관리자 이력 snapshot 불변과 임시 DB 삭제를 확인했다. 스크립트 정리 중 변수 이름 중복으로
+한 번 syntax error가 발생했고 이름을 고친 후 브라우저 검증이 통과했다.
+
+README·개발 가이드·관리자 README·OIDC 안내·로드맵과 신규 로그인 검증 안내를 갱신했다.
+앱·수집기·SDK의 운영 코드, API·DB 계약·마이그레이션·의존성·CI는 바뀌지 않았다. 기존
+Playwright 개발 패키지를 사용하며 기본 검사에 브라우저 실행을 추가하지 않았다. 운영 코드가
+같아 전체 검사·앱 빌드·부하 실험은 반복하지 않았다. 실제 OIDC 제공자 등록·CORS·운영
+access token/resource/audience·원격 배포 검증은 아직 없으며 푸시·배포도 하지 않았다.
+
 ## 관리자 설정의 저장소 읽기 확인 — 2026-10-11
 
 `LiveHealth`와 `HealthReader`, 닫힌 health 응답 파서, `ApiClient.getHealth`를 추가하고 API 모드

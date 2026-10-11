@@ -41,6 +41,7 @@
     "build:server": "npm run build --workspace @tallyfin/server",
     "check:browser-size": "node tools/browser/check.mjs",
     "bench:browser": "node tools/browser-bench/run.mjs",
+    "verify:admin-login": "node tools/browser-bench/admin-login.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",
     "bench:retained": "node tools/runtime/retained-bench.ts",
     "check": "npm run typecheck && npm test && npm run check:browser-size"
