@@ -44,6 +44,7 @@
     "verify:admin-login": "node tools/browser-bench/admin-login.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",
     "bench:retained": "node tools/runtime/retained-bench.ts",
+    "bench:cluster": "node tools/runtime/cluster-bench.ts",
     "check": "npm run typecheck && npm test && npm run check:browser-size"
   },
   "devDependencies": {

@@ -1,5 +1,44 @@
 # 검증
 
+## 누적 데이터·수집 Worker 3개의 동시 부하 — 2026-10-11
+
+별도 opt-in `npm.cmd run bench:cluster`가 한 workerd 안의 수집 Worker 3개와 새 공유 D1을
+사용한다. 6개 프로젝트의 보존·만료 영수증/작업 상태·90일 집계에 별도 혼합 출처 퍼널을
+등록한다. 초기 6개 데이터 테이블은 합계 148,260행이며 직접 SQL 준비는 HTTP 측정에서
+제외한다. 60회 파동마다 같은 workflow 배치와 browser/server 퍼널 배치를 각각 세 Worker에
+동시에 보내고 인증된 조회를 섞는다. 실시간 120초·초당 7.5 HTTP 요청·동시 작업 상한 16,
+15초 요청/180초 CLI 예산이며 실제 scheduled 정리를 5초마다 Worker를 바꿔 호출한다.
+
+- `npm.cmd run bench:cluster`: 종료 코드 0, verified=true. 부하 창 120,013.031ms,
+  HTTP 900건·정리 24회·accepted 3,600·duplicates 7,200, 관측 최대 HTTP 동시 15건,
+  정리가 HTTP와 겹친 호출 12회다. 모든 HTTP는 200이고 클라이언트 재시도는 없다.
+  전체 유효 event/workflow 집계 행을 초기값+수락 변경분과 대조하고 보존 행 수·만료 제거·
+  정리 revision 24를 검사했다. 세 Worker의 최종 퍼널 API/DB 단계 값은 각각 600이다.
+  초기 실패는 실험용 requestsPerMinute=1200이 등록 상한 600을 넘어서였고 600으로
+  보완한 뒤 통과했다. 첫 실패 뒤 단계 이름을 세분화했다.
+- 종류별 p95(ms): workflow 360.163, browser-funnel 366.852, server-funnel 366.711,
+  summary 85.994, funnel 92.917, cleanup 347.736. 발행 지연 p95 15.006ms이다.
+  최대 지연은 각 종류 순서대로 584.140·581.403·580.375·315.694·315.613·546.801ms다.
+- 최종 행 수: receipts 63,600, workflow attempts 60,600, event daily 9,728, workflow
+  daily 1,620, funnel runs 600, funnel daily 8. 관측/DB는
+  `.tmp/cluster-bench/run-jZczec/report.json`과 같은 실행의 state에 남긴다.
+- `node .tmp/cluster-extra-verification.mjs`: 종료 코드 0. 실험 완료 뒤 추가한 두 최종
+  검사와 같은 SQL을 저장된 합성 DB에 readOnly로 실행해 600개 run의 네 시각이 모두 존재하고
+  출처별 네 이벤트가 각각 600(브라우저/서버 각 1,200)인 것을 확인했다. workerd의 별도
+  metadata.sqlite는 대상에서 제외했다. 새 최종 검사 추가 뒤 120초 부하는 반복하지 않았다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 최종 코드 종료 코드 0.
+- `npm.cmd run bench:cluster -- --help`: 종료 코드 0. `--remote`는 고정 안내와 종료 코드 1로
+  거부한다. 기존 기본 test/check/CI에 이 2분 실험을 추가하지 않았다.
+- `git diff --check`: 종료 코드 0.
+
+Node 24.18.0·Miniflare 4.20260730.0·Windows x64·Ryzen 5 7430U(논리 CPU 12개),
+실시간 Worker 시계·메모리 임시 JWKS/서명키를 사용했다. 실제 운영 인증·원격/기존 DB는
+접근하지 않았고 런타임은 finally에서 닫는다. 단일 호스트/workerd의 별도 수집 Worker
+실험이므로 다중 프로세스/지역·장기간·최대 처리량·운영 지연/비용의 증거는 아니다.
+운영 안내·수집기 경계·로드맵·검증 기록을 갱신했다. API·DB·SDK·의존성·CI 러너·위생 정책
+변경은 없다. 관리자/SDK 빌드·일반 소스 lint·운영 제공자/배포 검사는 범위 밖이거나 설정이
+없어 생략했다. 실제 서비스 연동·푸시·배포는 없다.
+
 ## 같은 D1의 로컬 수집 Worker 분리 — 2026-10-11
 
 `collectorHarness`의 기본 Worker 하나는 유지하고 선택 2~4개 프로필에 루프백 라우터와
