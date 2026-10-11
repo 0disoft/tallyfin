@@ -126,6 +126,11 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const moreControllerRef = useRef<AbortController | null>(null);
   const projectsControllerRef = useRef<AbortController | null>(null);
   clientRef.current = client;
+  const cancelMore = useCallback(() => {
+    moreControllerRef.current?.abort();
+    moreControllerRef.current = null;
+    setMore(false);
+  }, []);
 
   const versionText = versionInput.trim();
   const version = /^[0-9]+$/.test(versionText) ? Number(versionText) : Number.NaN;
@@ -152,21 +157,26 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const currentSeries = seriesKey && series.key === seriesKey ? series : null;
   const seriesData = currentSeries?.status === 'ready' ? currentSeries.data ?? null : null;
   const retry = useCallback(() => {
-    if (view === 'settings') setSettingsRefreshTick(tick => tick + 1);
-    else setRefreshTick(tick => tick + 1);
-  }, [view]);
+    if (view === 'settings' && projects.status === 'ready') setSettingsRefreshTick(tick => tick + 1);
+    else {
+      projectsControllerRef.current?.abort();
+      cancelMore();
+      setNextCursor(null);
+      setRefreshTick(tick => tick + 1);
+    }
+  }, [view, projects.status, cancelMore]);
   const settingsSaved = useCallback((settings: ProjectSettings) => {
     setProjects(previous => previous.data ? { ...previous, data: previous.data.map(project => project.id === settings.project.id ? settings.project : project) } : previous);
     setDiagnosticsRevision(tick => tick + 1);
   }, []);
   const projectCreated = useCallback((settings: ProjectSettings) => {
     sessionRef.current += 1;
-    projectsControllerRef.current?.abort(); moreControllerRef.current?.abort(); setMore(false);
+    projectsControllerRef.current?.abort(); cancelMore();
     setProjects(previous => ({ status: 'ready', data: [...(previous.data ?? []).filter(p => p.id !== settings.project.id), settings.project].sort((a, b) => a.id.localeCompare(b.id)) }));
     setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setGrouping(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setNewProjectId(settings.project.id); setShowCreate(false); setPageError(null);
     onNavigate?.('settings');
-  }, [onNavigate]);
+  }, [onNavigate, cancelMore]);
   const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, []);
   const connected = useCallback((login: BrowserLogin) => {
     sessionRef.current += 1;
@@ -223,6 +233,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
 
   useEffect(() => {
     if (!client) return;
+    cancelMore();
+    setNextCursor(null);
     const controller = new AbortController();
     setProjects({ status: 'loading' });
     projectsControllerRef.current = controller;
@@ -238,7 +250,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         setProjects({ status: 'error', error: toApiError(error) });
       });
     return () => controller.abort();
-  }, [client, refreshTick]);
+  }, [client, refreshTick, cancelMore]);
 
   useEffect(() => {
     if (projects.status !== 'ready' || !projects.data) return;
@@ -311,10 +323,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [view, client, activeProjectId, version, validVersion, settingsRefreshTick]);
 
   async function loadMore() {
-    if (!client || !nextCursor || more) return;
+    if (!client || projects.status !== 'ready' || !nextCursor || more || moreControllerRef.current) return;
     const generation = sessionRef.current;
     const controller = new AbortController();
-    moreControllerRef.current?.abort();
     moreControllerRef.current = controller;
     setMore(true);
     setPageError(null);
@@ -329,8 +340,10 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       if (generation !== sessionRef.current || controller.signal.aborted) return;
       setPageError(toApiError(error).message);
     } finally {
-      if (moreControllerRef.current === controller) moreControllerRef.current = null;
-      if (generation === sessionRef.current) setMore(false);
+      if (moreControllerRef.current === controller) {
+        moreControllerRef.current = null;
+        if (generation === sessionRef.current) setMore(false);
+      }
     }
   }
 

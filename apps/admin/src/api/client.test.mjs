@@ -449,6 +449,16 @@ test('stale pagination results are discarded after a reconnect', () => {
   assert.equal(next.nextCursor, 'b');
 });
 
+test('project page merging updates an overlapping project once and keeps stable ID order', () => {
+  const items = [{ id: 'alpha', name: 'Alpha' }, { id: 'zeta', name: 'Created locally' }];
+  const page = { data: [{ id: 'beta', name: 'Beta' }, { id: 'zeta', name: 'Latest name' }], page: { nextCursor: 'zeta' } };
+  const merged = appendPage(items, page);
+  assert.deepEqual(merged.items, [{ id: 'alpha', name: 'Alpha' }, { id: 'beta', name: 'Beta' }, { id: 'zeta', name: 'Latest name' }]);
+  assert.equal(merged.nextCursor, 'zeta');
+  assert.equal(items[1].name, 'Created locally');
+  assert.deepEqual(appendPage(merged.items, page), merged);
+});
+
 test('a summary that omits a registered browser event is reported, not zero-filled', () => {
   const registry = { events: [{ name: 'tool_view', source: 'browser' }, { name: 'start', source: 'browser' }, { name: 'server_ping', source: 'server' }] };
   assert.deepEqual(missingBrowserEvents(registry, { events: [{ name: 'tool_view', count: 3 }, { name: 'start', count: 1 }] }), []);
