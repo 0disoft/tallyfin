@@ -66,6 +66,12 @@ CPU 시간이나 실제 전체 지연이 아니고 SLO 판정 근거가 아니�
 
 ## 로그 요약 도구
 
+관리자 설정의 `운영 로그 보고서`는 이 도구의 v2 JSON 파일을 브라우저 안에서 읽어 표로
+표시한다. 관측 수·가중 요청 어림·진단·HTTP 응답/지연 구간·정리 실행/처리 횟수를 구분한다.
+파일은 전송·저장하지 않고, 8MiB 상한과 합계 검증·페이지 나누기·닫기/재연결 시 지우기를
+적용한다. 로그 확보·원격 모니터링은 별도이며 [로컬 보고서 안내](local-report-viewer.md)에
+사용법과 범위를 적었다.
+
 ```powershell
 Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdin
 ```

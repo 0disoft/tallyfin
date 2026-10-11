@@ -1,10 +1,39 @@
 # 검증
 
+## 관리자의 로컬 운영 로그 보고서 화면 — 2026-10-11
+
+`ObservationReportPanel`·`ObservationReportView`와 전용 CSS를 추가하고 API 연결 설정에서만
+지연 로드한다. 파일 선택으로 8MiB 이하 v2 JSON을 실제 Worker에 전달하고, 관측 수·가중
+요청 어림·진단·HTTP 상태/코드·지연 구간·정리 실행/처리 횟수를 표로 표시한다. HTTP 응답은
+25줄씩 넘기며 새 보고서에서 첫 페이지로 돌아간다. 정리 상세가 없으면 처리 횟수를 0 대신
+`—`로 표시한다. 프로젝트·기간 필터와 별개인 수집기 전체 로그 요약임을 안내한다.
+
+- `npm.cmd run typecheck:admin`: 종료 코드 0.
+- `npm.cmd run test:admin`: 179/179, 종료 코드 0.
+- `npm.cmd run build:admin`: 종료 코드 0. 보고서 패널은 JS gzip 4.05kB·CSS gzip 0.54kB,
+  별도 Worker는 7.75kB(비압축)다. 최초 화면 그래프에는 포함하지 않는다.
+- `npm.cmd run test:bundle --workspace @tallyfin/admin`: 2/2, 종료 코드 0. 새 패널의 최초/API
+  정적 그래프 제외도 기존 검사에 추가했다.
+
+별도 Chrome 스모크는 실제 CLI가 만든 합성 요약과 프로덕션 빌드 preview·임시 서명 OIDC·
+Miniflare collector/D1을 사용했다. 실제 배포 형태의 Worker에서 파일을 읽고 정상·식별자
+여분 필드·8MiB 초과·새 파일·지우기·닫기·연결 끊기·diagnostics 없는 이전 v2를 확인했다.
+75개 HTTP 응답을 25개씩 끝까지 넘기고 새 보고서에서 첫 페이지로 복귀했다. 실패 표시만
+있는 정리 보고서의 처리 값 세 개가 `—`인지 확인했다. 파일 읽기 동안 추가 `/v1` 요청 0건,
+localStorage/sessionStorage 기록 0건, 320px 문서 가로 넘침 없음, pageerror 0건이다.
+데스크톱·모바일 스크린샷도 확인했다. 소유한 서버·브라우저·임시 D1은 종료/삭제했다.
+
+제품 명세·운영 관측·새 사용 안내·README·관리자 README·문서 색인·로드맵을 갱신했다.
+API·DB·마이그레이션·SDK·의존성·CI·운영 설정은 바뀌지 않았다. backend 전체 검사·부하
+실험·Sites 인계는 변경 범위 밖이라 반복하지 않았고 실제 운영 로그·원격 모니터링·알림·
+푸시·배포는 미실행이다. 하위 에이전트가 남긴 `.tmp/observation-view-check`의 재귀 삭제는
+자동 승인 검토가 정책상 차단했으므로 그 ignored 검증 파일은 남아 있다.
+
 ## 운영 로그 보고서의 브라우저 읽기 기반 — 2026-10-11
 
 CLI 집계기의 크기·operation·code·지연 bucket 목록을 I/O 없는 `observation-values.ts`로
 분리하고 기존 집계기에서 같은 값을 사용한다. 관리자에 v2 보고서 파서·파일 Worker·유계
-`ReportReader`를 추가했다. 현재 화면 연결 전 단계다. 원문 NDJSON·여분/식별자 필드·가짜
+`ReportReader`를 추가했다. 이 슬라이스는 화면 연결 전 단계다. 원문 NDJSON·여분/식별자 필드·가짜
 coverage/health·중복 항목·안전 정수 범위 밖·응답/지연/전체 합계·표본 가중치·정리 합계·
 진단 불일치를 거부한다. additive diagnostics가 없는 이전 v2는 진단을 null로 남긴다.
 

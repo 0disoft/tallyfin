@@ -1,0 +1,118 @@
+/* 운영 관측 CLI 보고서 뷰 전용 스타일. `.observation-*` 안에서만 적용한다. */
+.observation-report {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.observation-report code {
+  color: #0f172a;
+  font-size: 16px;
+}
+
+.observation-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 32px;
+  margin: 16px 0 0;
+}
+
+.observation-facts div {
+  min-width: 0;
+}
+
+.observation-facts dt {
+  color: #64748b;
+  font-size: 16px;
+}
+
+.observation-facts dd {
+  margin: 4px 0 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.observation-operation {
+  min-width: 0;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.observation-operation:first-of-type {
+  margin-top: 16px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.observation-operation-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.observation-operation-head h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.observation-operation-code {
+  padding: 2px 10px;
+  background: #edf2f8;
+  border: 1px solid #dce4ef;
+  border-radius: 20px;
+  color: #475569;
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.observation-report .observation-severity-error {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.observation-report .observation-severity-review {
+  color: #b45309;
+  font-weight: 600;
+}
+
+/* `.table-section .event-table`의 첫 열 폭·정렬 규칙은 이 표에 맞지 않아 되돌린다. */
+.observation-report .observation-table thead th:first-child,
+.observation-report .observation-table tbody th:first-child {
+  width: auto;
+}
+
+.observation-report .observation-table th.number-cell,
+.observation-report .observation-table td.number-cell {
+  text-align: right;
+}
+
+.observation-pager {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.observation-page-status {
+  margin: 0;
+  color: #64748b;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 450px) {
+  .observation-facts {
+    gap: 12px 20px;
+  }
+
+  .observation-pager .secondary-button {
+    flex: 1 1 100%;
+  }
+}

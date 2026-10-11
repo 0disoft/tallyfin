@@ -17,6 +17,7 @@
 - [수집기 구현](./backend/collector.md)
 - [브라우저 SDK](./backend/browser-sdk.md)
 - [관리자 조회 경계](./backend/administrator.md)
+- [로컬 운영 로그 보고서 화면](./ops/local-report-viewer.md)
 - [OpenAPI](../api/openapi.yaml), [DBML](../db/schema.dbml)
 - [Sembom 연동 예시](./integrations/sembom.md)
 - [워크스페이스 경계](./monorepo/workspace-boundaries.md)

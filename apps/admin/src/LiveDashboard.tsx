@@ -31,6 +31,7 @@ const OidcLogin = lazy(() => import('./auth/OidcLogin'));
 const LiveSettingsWorkspace = lazy(() => import('./LiveSettingsWorkspace'));
 const LiveProjectCreate = lazy(() => import('./LiveProjectCreate'));
 const LiveGoals = lazy(() => import('./LiveGoals'));
+const ObservationReportPanel = lazy(() => import('./ObservationReportPanel'));
 
 const MAX_SCHEMA_VERSION = 2147483647;
 
@@ -409,6 +410,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     <p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p>
     <LiveIdentity client={client} />
     {view === 'settings' && <LiveHealth client={client} />}
+    {view === 'settings' && <DeferredPanel label="운영 로그 보고서"><ObservationReportPanel client={client} /></DeferredPanel>}
     {view !== 'settings' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 작업 흐름은 브라우저 기준이며, 퍼널은 등록된 단계의 출처를 함께 조회해요.'}</p>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
     {view !== 'settings' && (view !== 'goals' || !!data?.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}

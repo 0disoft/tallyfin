@@ -18,7 +18,7 @@ function bytes(key) { return readFileSync(new URL(manifest[key].file, root)); }
 
 test('initial emitted graph defers API management and its nested screens', () => {
   assert.ok(entryKey); const initial = graph(entryKey);
-  for (const key of ['src/LiveDashboard.tsx', 'src/LiveSettingsWorkspace.tsx', 'src/LiveGoals.tsx', 'src/LiveProjectCreate.tsx', 'src/auth/OidcLogin.tsx', 'src/TrendChart.tsx']) {
+  for (const key of ['src/LiveDashboard.tsx', 'src/LiveSettingsWorkspace.tsx', 'src/LiveGoals.tsx', 'src/LiveProjectCreate.tsx', 'src/auth/OidcLogin.tsx', 'src/TrendChart.tsx', 'src/ObservationReportPanel.tsx']) {
     assert.ok(manifest[key]?.isDynamicEntry, `${key} must have a deferred entry`);
     assert.equal(initial.has(key), false, `${key} must not be in the initial static graph`);
   }
@@ -27,7 +27,7 @@ test('initial emitted graph defers API management and its nested screens', () =>
 });
 test('opening API connection does not eagerly import settings, goals or project creation', () => {
   const api = graph('src/LiveDashboard.tsx');
-  for (const key of ['src/LiveSettingsWorkspace.tsx', 'src/LiveGoals.tsx', 'src/LiveProjectCreate.tsx'])
+  for (const key of ['src/LiveSettingsWorkspace.tsx', 'src/LiveGoals.tsx', 'src/LiveProjectCreate.tsx', 'src/ObservationReportPanel.tsx'])
     assert.equal(api.has(key), false, `${key} must load only when opened`);
   for (const [key, chunk] of Object.entries(manifest)) {
     if (!chunk.file.endsWith('.js')) continue;
