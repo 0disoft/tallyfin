@@ -15,7 +15,8 @@
   `0009`이다. 이벤트 스키마 버전(`schema_version`)은 마이그레이션 번호와 별개로 프로젝트 스키마
   발행 흐름에서 정한다.
 - 설치 묶음: `install:prepare`가 만드는 `collector.wrangler.json`·`admin.wrangler.json`·
-  `admin-login.json`·`oidc-registration.json`·`installation.json`.
+  `admin-login.json`·`oidc-registration.json`·`installation.json`. 대화형 터미널에서는
+  `install:setup`이 같은 writer로 같은 다섯 파일을 만든다.
 - 실제 provider·account·D1·domain·issuer·audience·client·resource 값은 아직 없다. 값을 지어내지
   않고 운영자가 확인한 실값만 쓴다. 문법 검사는 리소스 소유·존재를 증명하지 않는다.
 
@@ -35,6 +36,8 @@ npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 새 디렉터리를 만든다. dry-run 성공은 로컬 패키징 확인일 뿐 로그인·DNS·원격 바인딩·DB 검증이
 아니다.
 
+대화형 터미널에서는 `npm run install:setup -- --out <새-디렉터리>`가 같은 다섯 파일을 만든다.
+
 ## 읽기 검사 셋 (서로 분리)
 
 셋은 서로 다른 대상을 본다. 하나가 통과했다고 운영 준비 완료가 아니다.
@@ -43,7 +46,7 @@ npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 | --- | --- | --- | --- |
 | 공개 제공자 | `npm run install:check -- --dir .tmp/installation` | 준비 묶음 재검증, 공개 OIDC discovery·JWKS, token endpoint 진단 OPTIONS | 실제 로그인·코드 교환·토큰 발급·클라이언트 등록 |
 | 원격 DB 메타데이터 | `npm run install:database-check -- --remote --dir .tmp/installation` | 원격 `sqlite_master`와 `0001`~`0009` 기준 스키마 비교. `d1_migrations`는 비교에서 제외된다 | 데이터 무결성·정리 Cron·백업·런타임 |
-| 관리자 읽기 접근 | `npm run install:access-check -- --dir .tmp/installation --token-stdin` | 검토한 관리자 출처의 `GET /v1/identity`와 `GET /v1/projects?limit=1` | 토큰 발급·갱신·최초 owner/생성자 권한·수집 |
+| 관리자 읽기 접근 | `npm run install:access-check -- --dir .tmp/installation --token-stdin` | 검토한 관리자 출처의 `GET /v1/identity` → `GET /v1/health` → `GET /v1/projects?limit=1` 3단계 게이트. `/v1/health`는 `projects`·`project_grants` 읽기까지다 | 토큰 발급·갱신·최초 owner/생성자 권한·수집 쓰기·Cron·전체 저장 정상 |
 
 세 보고서 모두 `operationalReadinessVerified`가 false다. 필수 검사 통과만으로 준비 완료를
 선언하지 않는다. `install:access-check`는 이미 발급된 bearer 토큰을 비대화형 표준 입력에서만
