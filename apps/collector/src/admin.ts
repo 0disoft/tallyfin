@@ -31,6 +31,14 @@ export async function administrator(request: Request, access: AdministratorAcces
     return access.store.changes(principal, changes[1]!, positive(url.searchParams.get('limit') ?? '25', 100),
       url.searchParams.get('cursor') ?? '', now);
   }
+  const publishers = /^\/v1\/projects\/([^/]+)\/publishers$/.exec(url.pathname);
+  if (publishers) {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    if (!PROJECT_ID.test(publishers[1]!)) throw new CollectionError('invalid_request', 400);
+    parameters(url, ['limit', 'cursor'], 12352);
+    return access.store.publishers(principal, publishers[1]!, positive(url.searchParams.get('limit') ?? '25', 100),
+      url.searchParams.get('cursor') ?? '');
+  }
   const grants = /^\/v1\/projects\/([^/]+)\/grants$/.exec(url.pathname);
   if (grants) {
     if (!['GET', 'PUT', 'DELETE'].includes(request.method)) throw new CollectionError('invalid_request', 405);

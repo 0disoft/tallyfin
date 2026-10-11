@@ -4,6 +4,9 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 서버 발행자 목록 `GET .../publishers`를 현재 owner 전용 조회 API로 로컬 구현했다.
+  관리자 reader/owner grant 목록과 분리하고, 25건 기본·100건 상한·프로젝트/목록 종류별
+  커서·페이지마다 owner 재확인을 적용한다. 다음은 등록·회수 API와 관리자 화면 연결이다.
 - 권한 조회·변경 화면과 관리자 변경 이력 저장·조회·화면 연결은 로컬 구현·검증 완료다.
 - 서버 발행 코어·저장·endpoint 슬라이스도 완료했다.
   `parseServerBatch`·`prepareServerBatch`, source별 payload hash, `planIngest`의 서버

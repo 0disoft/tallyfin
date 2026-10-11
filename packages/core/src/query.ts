@@ -15,6 +15,10 @@ export interface ProjectGrant { issuer: string; subject: string; role: 'reader' 
 export interface ProjectGrantPage {
   projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null };
 }
+export interface ProjectPublisher { issuer: string; subject: string; createdAt: string }
+export interface ProjectPublisherPage {
+  projectId: string; data: ProjectPublisher[]; page: { limit: number; nextCursor: string | null };
+}
 export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown' | 'funnel';
 export interface AdminQuery {
   projectId: string; version: number; kind: QueryKind;
@@ -25,6 +29,7 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  publishers(principal: AdminPrincipal, projectId: string, limit: number, cursor: string): Promise<ProjectPublisherPage>;
   changes(principal: AdminPrincipal, projectId: string, limit: number, cursor: string, now: number): Promise<AdminChangePage>;
   changeGrant(principal: AdminPrincipal, projectId: string, change: GrantChange, now: number): Promise<GrantChangeResult>;
   grants(principal: AdminPrincipal, projectId: string, limit: number, cursor: string): Promise<ProjectGrantPage>;

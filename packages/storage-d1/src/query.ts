@@ -8,6 +8,7 @@ import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
 import { collectionRejections } from './rejections.ts';
 import { listProjectGrants } from './grants.ts';
+import { listProjectPublishers } from './publishers.ts';
 import { changeProjectGrant } from './grant-change.ts';
 import { listAdminChanges } from './admin-change-query.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
@@ -21,6 +22,9 @@ export class D1Queries implements AdminStore {
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = options; }
+  publishers(principal: AdminPrincipal, id: string, limit: number, cursor: string) {
+    return listProjectPublishers(this.db, principal, id, limit, cursor);
+  }
   changes(principal: AdminPrincipal, id: string, limit: number, cursor: string, now: number) {
     return listAdminChanges(this.db, principal, id, limit, cursor, now);
   }

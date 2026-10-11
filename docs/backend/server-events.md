@@ -210,6 +210,22 @@ eventId·UTC occurredAt·속성을 얼려 만들고, `send`가 1~20개·16KiB �
 재시도·취소·영수증·재전송 규칙은 [서버 SDK](./server-sdk.md)에 있고, 실제 발급자 선택과
 자격증명 발급은 호스트 책임이다.
 
+## 관리자 발행자 목록
+
+`GET /v1/projects/{projectId}/publishers`는 관리자 bearer와 현재 프로젝트 owner grant를
+요구한다. `project_publishers` 자체로는 읽을 수 없고 reader도 403이다. 프로젝트가 없거나
+owner 권한이 회수된 경우도 403이며 매 페이지 권한과 행을 같은 D1 batch에서 읽는다.
+일시 중지·스키마 없는 프로젝트도 제어 영역 조회를 허용한다.
+
+응답은 `{projectId,data,page}`이며 각 행은 issuer·subject·createdAt만 담는다. 토큰·프로필·
+이메일을 반환하지 않는다. limit은 기본 25·최대 100이고 issuer/subject의 SQLite BINARY
+순서다. base64url 커서는 프로젝트와 publishers 목록 종류에 묶인 위치로 최대 12288자,
+전체 쿼리 최대 12352자이며 다른 프로젝트·grant 커서·중복/추가 인자를 거부한다. 행 삭제
+후에도 위치를 유지하고 커서 앞에 새 행이 생기면 첫 페이지부터 새로고침해야 한다.
+Cache-Control은 no-store이고 CORS·쿠키·쓰기 없이 GET만 받는다. 인증 실패는 401,
+잘못된 입력은 400, 다른 메서드는 405(Allow: GET), 저장소 실패·손상 데이터는 503이다.
+등록·회수 API와 화면 연결은 다음 슬라이스이며 현재 CLI는 그대로 쓸 수 있다.
+
 ## 서버 출처 조회
 
 `GET .../summary`와 `GET .../events/{eventName}/daily`가 선택 `source`(기본 browser,

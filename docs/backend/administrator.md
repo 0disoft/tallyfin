@@ -54,6 +54,7 @@ export default createWorker(bearer => hostVerify(bearer));
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
+- `GET /v1/projects/{projectId}/publishers` — 현재 owner 전용 서버 발행자 목록. 관리자 grant와 별개인 발행 권한만 반환한다.
 - `GET /v1/projects/{projectId}/grants` — 현재 owner 전용 권한 목록. 아래 목록 규칙을 따른다.
 - `PUT /v1/projects/{projectId}/grants` — owner의 reader/owner grant 등록·역할 변경. 아래 변경 규칙을 따른다.
 - `DELETE /v1/projects/{projectId}/grants` — owner의 grant 회수. 아래 변경 규칙을 따른다.

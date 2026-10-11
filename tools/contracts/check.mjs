@@ -24,7 +24,7 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
-  'project-grants':'ProjectGrantPage', 'admin-changes':'AdminChangePage', 'admin-identity':'AdminIdentity',
+  'project-grants':'ProjectGrantPage', 'project-publishers':'ProjectPublisherPage', 'admin-changes':'AdminChangePage', 'admin-identity':'AdminIdentity',
   'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry', 'funnel-response':'FunnelResponse' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
@@ -268,6 +268,17 @@ check('admin history projects only bounded typed changes and excludes bodies, va
   const route = spec.paths['/v1/projects/{projectId}/changes'].get;
   for (const code of ['200', '400', '401', '403', '405', '503']) assert.ok(route.responses[code]);
   assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET');
+});
+check('publisher list exposes only bounded identity metadata under administrator authentication', () => {
+  const page = example('project-publishers');
+  for (const value of [{ ...page, accessToken: 'unexpected' }, { ...page, data: [{ ...page.data[0], role: 'owner' }] },
+    { ...page, data: [{ ...page.data[0], email: 'unexpected' }] }, { ...page, page: { limit: 101, nextCursor: null } },
+    { ...page, data: [{ ...page.data[0], createdAt: 'invalid' }] }])
+    assert.equal(validate('ProjectPublisherPage', value), false);
+  const route = spec.paths['/v1/projects/{projectId}/publishers'].get;
+  assert.ok(route.responses['401']); assert.ok(route.responses['403']);
+  assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET');
+  assert.equal(route.requestBody, undefined);
 });
 check('grant list is closed, paginated and owner-protected', () => {
   const page = example('project-grants');

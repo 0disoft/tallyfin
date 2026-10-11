@@ -1,5 +1,22 @@
 # 검증
 
+## 서버 발행자 목록 API — 2026-10-11
+
+현재 owner 전용 GET /v1/projects/{projectId}/publishers를 추가했다. 발행자 권한과 관리자
+권한을 분리하고 매 페이지 같은 D1 batch에서 owner와 행을 읽는다. 기본 25·최대 100,
+issuer/subject 순서, 프로젝트·목록 종류별 커서, 신원·생성 시각만 반환한다.
+
+실행·결과: node --test apps/collector/test/publishers.test.ts apps/collector/test/grants.test.ts
+10/10, npm exec -- tsc --noEmit, tools/contracts의 npm run lint와 npm run check 57/57 통과.
+실제 로컬 Miniflare D1에서 권한 회수 직후 페이지 조회 거부, publisher-only/reader/다른
+프로젝트 owner 거부, 최대 Unicode 식별자·삭제된 커서 위치·목록 종류/프로젝트 분리,
+손상 데이터·저장 실패의 고정 오류를 확인했다. 처음의 손상 fixture는 DB CHECK가 빈 subject
+저장을 거부해 잘못된 HTTP issuer로 고친 뒤 통과했다. 이번 endpoint는 쓰기가 없다.
+
+계약 원본 api/openapi.yaml과 관리자·서버 발행 문서, 로드맵을 갱신했다. DB·마이그레이션·
+SDK·의존성·CI·위생 정책은 바꾸지 않았다. 화면·등록/회수 API는 다음 슬라이스다.
+운영 인증·원격 D1·배포 검증은 실제 설정 미정으로 미실행이며 푸시·배포는 없다.
+
 ## 설치 설정 오류 안내 — 2026-10-11
 
 설치 설정 검증 실패가 어느 입력 항목인지 알려주도록 `installation()`이 고정 `field`를 가진

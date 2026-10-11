@@ -731,6 +731,37 @@ components:
                   maxLength: 512
                   pattern: ^[A-Za-z0-9_-]+$
                 - type: "null"
+    ProjectPublisher:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject, createdAt]
+      properties:
+        issuer: { $ref: "#/components/schemas/GrantIssuer" }
+        subject: { $ref: "#/components/schemas/GrantSubject" }
+        createdAt: { type: string, format: date-time }
+    ProjectPublisherPage:
+      type: object
+      additionalProperties: false
+      required: [projectId, data, page]
+      properties:
+        projectId: { $ref: "#/components/schemas/ProjectId" }
+        data:
+          type: array
+          maxItems: 100
+          items: { $ref: "#/components/schemas/ProjectPublisher" }
+        page:
+          type: object
+          additionalProperties: false
+          required: [limit, nextCursor]
+          properties:
+            limit: { type: integer, minimum: 1, maximum: 100 }
+            nextCursor:
+              anyOf:
+                - type: string
+                  minLength: 1
+                  maxLength: 12288
+                  pattern: ^[A-Za-z0-9_-]+$
+                - type: "null"
     GrantIssuer:
       type: string
       format: uri
@@ -2474,6 +2505,75 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
+  /v1/projects/{projectId}/publishers:
+    parameters:
+      - $ref: "#/components/parameters/ProjectId"
+    get:
+      tags: [Administration]
+      operationId: listProjectPublishers
+      summary: List server publishing identities as project owner
+      description: Requires a current owner grant, reapplied on every page. Rows and permission share one database snapshot.
+        Ordered by issuer then subject in SQLite BINARY order. Includes paused projects and projects without schemas.
+        Publisher permission never authorizes this list. Cursor is an opaque project- and list-kind-bound position, not an authorization claim; clients must reuse it unchanged.
+        Pages are live reads, so concurrent publishers inserted before the cursor require restarting the list.
+        Duplicate/extra query parameters and query strings longer than 12352 characters are rejected.
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 25
+        - name: cursor
+          in: query
+          schema:
+            type: string
+            maxLength: 12288
+            pattern: ^[A-Za-z0-9_-]*$
+          description: Previous nextCursor, omitted or empty for the first page. Malformed and cross-project cursors are rejected.
+      responses:
+        "200":
+          description: Project publishers and next page position; Cache-Control no-store. Only provisioned issuer/subject and creation time; no tokens or profiles.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectPublisherPage"
+        "400":
+          description: Invalid project ID, pagination or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: No current owner grant, including missing projects.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is supported.
+          headers:
+            Allow:
+              schema:
+                type: string
+                const: GET
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage unavailable or invalid stored publisher data.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/projects/{projectId}/grants:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
