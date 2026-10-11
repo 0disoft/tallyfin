@@ -75,3 +75,10 @@ API 정의는 [Resource Timing](https://developer.mozilla.org/en-US/docs/Web/API
 브라우저 실행 파일을 찾지 못하면 설치된 채널을 선택하거나 위 Chromium 설치를
 실행한다. 설치 오류·저장 불일치·계산 오류는 성공으로 처리하지 않으며 비정상 종료한다.
 이 도구는 필요할 때 로컬에서 실행하며 기본 `npm run check`에는 연결하지 않는다.
+
+`npm run verify:admin-analysis-access`는 별도 관리자 분석 권한 회귀 검사다. 합성
+서명 로그인과 새 로컬 D1에서 읽기 권한을 회수해 기존 요약·CSV가 잠기는지 검사한다.
+다른 프로젝트의 실제 CSV 내용, 명시적 복구, 프로젝트 전환 뒤 늦은 403 폐기와
+연결 해제도 검사한다. 서버·브라우저는 종료하며 원시 결과와 로컬 DB는 ignore된
+`.tmp/admin-analysis-access-*`에 남긴다. 실제 제공자·원격 DB·배포는 사용하지 않으며
+기본 CI에 포함하지 않는다.

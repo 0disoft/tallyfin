@@ -169,8 +169,10 @@ export class ApiClient {
   #getBearer: (() => Promise<string>) | undefined;
   #onDestroy: (() => void) | undefined;
   #requestTimeoutMs: number;
+  #onAnalyticsAccessDenied: ((projectId: string, error: ApiError) => void) | undefined;
 
-  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike; requestTimeoutMs?: number } = {}) {
+  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike; requestTimeoutMs?: number;
+    onAnalyticsAccessDenied?: (projectId: string, error: ApiError) => void } = {}) {
     const basePath = options.basePath ?? API_BASE_PATH;
     if (basePath !== API_BASE_PATH) {
       throw new ApiError('invalid_request', `같은 출처의 ${API_BASE_PATH} 경로만 사용할 수 있어요.`);
@@ -180,6 +182,7 @@ export class ApiClient {
       throw new ApiError('invalid_request', '요청 대기 시간은 10~120000밀리초의 정수여야 해요.');
     }
     this.#requestTimeoutMs = requestTimeoutMs;
+    this.#onAnalyticsAccessDenied = options.onAnalyticsAccessDenied;
     this.#token = options.token ?? '';
     this.#getBearer = options.getBearer;
     this.#onDestroy = options.onDestroy;
@@ -208,6 +211,7 @@ export class ApiClient {
     this.#getBearer = undefined;
     this.#onDestroy?.();
     this.#onDestroy = undefined;
+    this.#onAnalyticsAccessDenied = undefined;
   }
 
   async getIdentity(options: { signal?: AbortSignal } = {}): Promise<AdminIdentity> {
@@ -501,6 +505,14 @@ export class ApiClient {
     this.#controllers.add(controller);
     const timeout = setTimeout(() => controller.abort(new ApiError('timeout', KIND_MESSAGE.timeout)), this.#requestTimeoutMs);
     let observedStatus: number | undefined;
+    let notified = false;
+    const notifyDenial = (error: ApiError) => {
+      // Owner-only settings/grant failures do not revoke reader access to analytics.
+      const match = body === undefined && !method && path.match(/^\/projects\/([a-z][a-z0-9-]{0,47})\/(?:schemas\/[0-9]+|summary|(?:events|workflows|funnels)\/[^/]+\/(?:daily|breakdown))$/);
+      if (!match || notified || signal?.aborted || this.#destroyed) return;
+      notified = true;
+      this.#onAnalyticsAccessDenied?.(match[1]!, error);
+    };
     try {
       controller.signal.throwIfAborted();
       let bearer = this.#token;
@@ -537,6 +549,11 @@ export class ApiClient {
       }
       controller.signal.throwIfAborted();
       observedStatus = response.status;
+      // The status alone confirms denial; do not retain data while its body stalls.
+      if (observedStatus === 401 || observedStatus === 403) {
+        const kind = STATUS_KIND[observedStatus]!;
+        notifyDenial(new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus }));
+      }
       if (!response.ok) throw await awaitRequest(controller.signal, () => this.#toApiError(response));
       try {
         return await awaitRequest(controller.signal, () => response.json());
@@ -553,6 +570,7 @@ export class ApiClient {
         throw new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus });
       }
       controller.signal.throwIfAborted();
+      if (error instanceof ApiError && (error.status === 401 || error.status === 403)) notifyDenial(error);
       throw error;
     } finally {
       clearTimeout(timeout);

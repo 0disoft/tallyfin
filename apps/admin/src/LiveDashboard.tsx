@@ -116,11 +116,18 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, []);
   const [series, setSeries] = useState<Load<EventSeriesResponse> & { key?: string; analysis?: PropertyAnalysis | null }>({ status: 'idle' });
   const [customRange, setCustomRange] = useState<{ scope: string; range: DateRange } | null>(null);
+  const [readDenial, setReadDenial] = useState<{ client: ApiClient; projectId: string; error: ApiError; revision: number } | null>(null);
+  const readDenialHandler = useRef<(client: ApiClient, projectId: string, error: ApiError) => void>(() => {});
   useEffect(() => { if (!customPeriod) setCustomRange(null); }, [customPeriod]);
 
-  const client = useMemo(() => (session ? new ApiClient({ basePath: session.basePath,
-    ...(session.login ? { getBearer: () => session.login!.getAccessToken(), onDestroy: () => session.login!.destroy() } : { token: session.token ?? '' }),
-  }) : null), [session]);
+  const client = useMemo(() => {
+    if (!session) return null;
+    const next = new ApiClient({ basePath: session.basePath,
+      ...(session.login ? { getBearer: () => session.login!.getAccessToken(), onDestroy: () => session.login!.destroy() } : { token: session.token ?? '' }),
+      onAnalyticsAccessDenied: (projectId, error) => readDenialHandler.current(next, projectId, error),
+    });
+    return next;
+  }, [session]);
   const sessionRef = useRef(0);
   const clientRef = useRef<ApiClient | null>(null);
   const moreControllerRef = useRef<AbortController | null>(null);
@@ -138,13 +145,20 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
   const activeTimeZone = activeProject?.timeZone ?? null;
+  const deniedRead = readDenial?.client === client && readDenial.projectId === activeProjectId && readDenial.revision === refreshTick ? readDenial.error : null;
+  readDenialHandler.current = (requestClient, requestProject, error) => {
+    if (clientRef.current !== requestClient || requestProject !== activeProjectId) return;
+    setReadDenial({ client: requestClient, projectId: requestProject, error, revision: refreshTick });
+    setMain({ status: 'idle' }); setSeries({ status: 'idle' }); setComparison({ status: 'idle' });
+    setWorkflowDetails({});
+  };
   const projectToday = activeTimeZone ? todayInZone(activeTimeZone) : null;
   const dateScope = JSON.stringify([activeProjectId, activeTimeZone, period]);
   useEffect(() => { setCustomRange(previous => previous?.scope === dateScope ? previous : null); }, [dateScope]);
   const currentRange = projectToday ? customPeriod && customRange?.scope === dateScope ? customRange.range : periodRange(projectToday, period) : null;
   const dateError = currentRange && projectToday ? rangeError(currentRange, projectToday) : null;
   const mainKey = JSON.stringify([activeProjectId, activeTimeZone, versionText, currentRange?.from, currentRange?.to, refreshTick, view, source]);
-  const currentMain = main.key === mainKey ? main : null;
+  const currentMain = !deniedRead && main.key === mainKey ? main : null;
   workflowContext.current = mainKey;
   const analysisRegistry = currentMain?.status === 'ready' && main.data?.registry.project.id === activeProjectId &&
     main.data.registry.schemaVersion === version && main.data.range.from === currentRange?.from && main.data.range.to === currentRange?.to
@@ -263,7 +277,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [activeProject, onActiveProjectChange]);
 
   useEffect(() => {
-    if (view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion || !currentRange || dateError) { setMain({ status: 'idle' }); return; }
+    if (deniedRead || view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion || !currentRange || dateError) { setMain({ status: 'idle' }); return; }
     const controller = new AbortController();
     setMain({ status: 'loading', key: mainKey });
     const range = currentRange;
@@ -279,7 +293,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       }
     })();
     return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey, dateError]);
+  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey, dateError, deniedRead]);
 
   const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
   const comparisonAvailable = view !== 'goals' || !!mainData?.workflows.length || !!mainData?.registry.funnels?.length;
@@ -443,6 +457,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
+    {view !== 'settings' && deniedRead && <ErrorPanel error={deniedRead} onRetry={retry} />}
     {view !== 'settings' && validVersion && data && registry && <>
       {compare && comparisonAvailable && comparisonError && <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 CSV도 내려받을 수 있어요.</p>}
       {compare && aggregateComparisonAvailable && !comparisonError && <>

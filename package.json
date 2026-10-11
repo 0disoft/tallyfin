@@ -45,6 +45,7 @@
     "verify:admin-login": "node tools/browser-bench/admin-login.mjs",
     "verify:admin-onboarding": "node tools/browser-bench/admin-onboarding.mjs",
     "verify:admin-access": "node tools/browser-bench/admin-access.mjs",
+    "verify:admin-analysis-access": "node tools/browser-bench/admin-analysis-access.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",
     "bench:retained": "node tools/runtime/retained-bench.ts",
     "bench:cluster": "node tools/runtime/cluster-bench.ts",
