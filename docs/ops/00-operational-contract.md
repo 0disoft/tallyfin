@@ -36,7 +36,12 @@
 - 복구 연습 `verify:restore`는 로컬 합성 DB만 사용한다. 운영 RTO 근거가 아니다.
 - 설치·검사 도구(`install:prepare`·`install:check`·`install:database-check`·
   `install:access-check`)는 로컬·fixture 검증까지다. 실제 provider·원격 DB·원격 쓰기는 없다.
-- 운영 로그는 완료 관측 한 줄과 정리 로그다. 대시보드·알림 수신자·헬스 프로브는 없다.
+- 운영 로그는 완료 관측 한 줄과 정리 로그다. 대시보드·알림 수신자는 없다.
+- 관리자 전용 `GET /v1/health` read 프로브가 코드에 있다. 검증된 관리자 bearer만 통과하고
+  `projects`·`project_grants`를 각각 `SELECT 1 ... LIMIT 1`로 읽어 성공하면
+  `{status:'ok', scope:'administrator_storage_read'}`를 돌려준다. 이건 두 제어면 테이블을
+  읽을 수 있다는 뜻까지이고 수집 쓰기·집계·전체 테이블·Cron·로그 완전성·서비스 전체 정상의
+  근거가 아니다. 운영 probe 스케줄·실제 provider OIDC·알림 수신자·원격 배포는 없다.
 
 ## 릴리스 차단 조건
 

@@ -24,10 +24,21 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
-  'project-grants':'ProjectGrantPage', 'project-publishers':'ProjectPublisherPage', 'admin-changes':'AdminChangePage', 'admin-identity':'AdminIdentity',
+  'project-grants':'ProjectGrantPage', 'project-publishers':'ProjectPublisherPage', 'admin-changes':'AdminChangePage', 'admin-identity':'AdminIdentity', 'admin-health':'AdminHealth',
   'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry', 'funnel-response':'FunnelResponse' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
+check('administrator storage health is authenticated, closed and scoped to reads', () => {
+  const health = example('admin-health');
+  for (const changed of [{ ...health, issuer: 'not-returned' }, { ...health, projectId: 'not-returned' },
+    { ...health, status: 'ready' }, { ...health, scope: 'whole_service' }, { status: 'ok' }])
+    assert.equal(validate('AdminHealth', changed), false);
+  const operation = spec.paths['/v1/health'].get;
+  assert.deepEqual(operation.security, [{ adminBearer: [] }]);
+  assert.equal(operation.responses['405'].headers.Allow.schema.const, 'GET');
+  assert.equal(operation.responses['503'].headers['Retry-After'].schema.const, '1');
+  assert.equal(operation.parameters, undefined); assert.equal(operation.requestBody, undefined);
+});
 check('self identity is authenticated, bounded, closed and independent of project grants', () => {
   const identity = example('admin-identity');
   for (const changed of [{ ...identity, accessToken: 'not-a-token' }, { ...identity, role: 'owner' },

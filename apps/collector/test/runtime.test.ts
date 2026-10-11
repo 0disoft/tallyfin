@@ -40,9 +40,18 @@ test('configured runtime verifies OIDC bindings and runs scheduled cleanup again
     const wrongAudience = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'ephemeral', typ: 'at+jwt' })
       .setIssuer(issuer).setAudience('publisher-audience').setSubject(subject).setIssuedAt().setExpirationTime('5m').sign(privateKey);
     assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/identity', { headers: { Authorization: `Bearer ${wrongAudience}` } })).status, 401);
+    const health = await mf.dispatchFetch('https://runtime.example.invalid/v1/health', { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(health.status, 200); assert.deepEqual(await health.json(), { status: 'ok', scope: 'administrator_storage_read' });
+    assert.equal(health.headers.get('Cache-Control'), 'no-store'); assert.equal(health.headers.get('Vary'), 'Authorization');
+    assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/health')).status, 401);
+    assert.equal((await mf.dispatchFetch('https://runtime.example.invalid/v1/health', { headers: { Authorization: `Bearer ${wrongAudience}` } })).status, 401);
     const denied = await mf.dispatchFetch('https://runtime.example.invalid/v1/projects/sembom/schemas/1', { headers: { Authorization: `Bearer ${token}` } });
     assert.equal(denied.status, 403);
     assert.equal((await (await mf.getWorker()).scheduled({ scheduledTime: Date.now(), cron: '* * * * *' })).outcome, 'ok');
+    await db.prepare('DROP TABLE project_grants').run();
+    const unavailable = await mf.dispatchFetch('https://runtime.example.invalid/v1/health', { headers: { Authorization: `Bearer ${token}` } });
+    assert.equal(unavailable.status, 503); assert.equal(unavailable.headers.get('Retry-After'), '1');
+    assert.equal((await unavailable.json() as { error: { code: string } }).error.code, 'storage_unavailable');
   } finally { await mf.dispose(); }
 });
 

@@ -10,6 +10,7 @@ import type { AdministratorAccess } from './admin.ts';
 import type { PublisherAccess } from './publisher.ts';
 import { runCleanup } from './cleanup.ts';
 import { logRequestObservation } from './request-observation.ts';
+import { checkAdministratorStorageRead } from './readiness.ts';
 
 // Host supplies the D1 binding. No deployed resource ID or credential is committed.
 export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string }
@@ -18,7 +19,8 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
     const store = new D1Store(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' });
     return createCollector(store, { observe: logRequestObservation,
       ...(context ? { waitUntil: (task: Promise<void>) => context.waitUntil(task) } : {}),
-      ...(verifyBearer ? { admin: { store: new D1Queries(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' }), verifyBearer } } : {}),
+      ...(verifyBearer ? { admin: { store: new D1Queries(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' }), verifyBearer,
+        checkReadiness: () => checkAdministratorStorageRead(bindings.DB) } } : {}),
       ...(verifyPublisher ? { publisher: { store, verifyBearer: verifyPublisher } } : {}) })(request);
   },
   // Structural host port, matching Workers' ScheduledController. Await all work.

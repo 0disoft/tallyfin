@@ -1,5 +1,37 @@
 # 검증
 
+## 인증된 관리자 저장소 읽기 프로브 — 2026-10-11
+
+`GET /v1/health`와 선택적 `AdministratorAccess.checkReadiness` 포트, native Worker의 읽기
+포트 연결, `readiness.ts`의 단일 batch·두 `SELECT 1 ... LIMIT 1`을 추가했다. 성공 JSON은
+status·scope 고정 두 필드다. 새 OpenAPI 응답·예제와 계약 검사, 운영·제품 문서를 갱신했다.
+DB·마이그레이션·SDK·환경 변수·의존성·CI·위생 정책·package script 변경은 없다.
+
+실행·결과:
+
+- `node --test --test-timeout=30000 apps/collector/test/readiness.test.ts apps/collector/test/admin.test.ts apps/collector/test/runtime.test.ts apps/collector/test/request-observation.test.ts`: 28/28, 종료 코드 0.
+- `npm.cmd exec -- tsc --noEmit`와 `npm.cmd exec -- tsc -p apps/collector/tsconfig.runtime.json`: 각각 종료 코드 0.
+- `tools/contracts`의 `npm.cmd run check`: 61개 통과, 종료 코드 0.
+- 같은 폴더의 `npm.cmd run lint`: OpenAPI valid, 종료 코드 0.
+
+새 집중 검사 5개는 grant 없는 성공·원문 행과 identity 미출력·쓰기/수집 quota 불변, 인증과
+method/query 검증 전 DB 접근 차단, 몸체 미소비, 포트 미연결/예외의 고정 503·Retry-After,
+읽기 batch가 한 번이고 한 테이블당 상수 한 행만 읽는지, 빈 테이블 성공·테이블 누락 실패를
+확인한다. 기존 runtime 검사에는 임시 RS256 서명 JWT와 workerd·D1로 인증된 200·잘못된
+audience/무토큰 401·테이블 누락 503을 추가했다. 실제 운영 제공자·DB·반복 모니터링 검증은 아니다.
+
+기존 fetch 처리와 관리자 프록시의 서비스 바인딩 구조는 Cloudflare
+[fetch handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/fetch/)·
+[HTTP service binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/service-bindings/http/)
+문서와 로컬 소스로 확인했다. 새 bindings·config·호출 로그·traces는 추가하지 않았다.
+
+관리자 UI·SDK 코드가 바뀌지 않아 해당 전체 검사·빌드·부하 실험은 생략했다. 원격 호출·
+마이그레이션 적용·푸시·배포는 하지 않았다. 이 probe는 두 제어 테이블 읽기만 확인하므로
+수집 쓰기·모든 16개 테이블·Cron 동작·전체 서비스 가용성 증거로 사용할 수 없다.
+
+변경한 Markdown 8개 파일의 로컬 링크 171개가 모두 존재하며 `git diff --check`를 통과했다.
+링크 검사는 파일 존재만 확인했고 모든 앵커·외부 URL을 검증하지는 않았다.
+
 ## 로그 기반 진단 — 2026-10-11
 
 `tools/runtime/observation-diagnostics.ts`와 집중 검사 파일을 추가하고 기존 집계기·CLI 검사를

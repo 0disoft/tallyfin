@@ -98,6 +98,14 @@ components:
         pattern: ^[a-z][a-z0-9_]{0,47}$
         maxLength: 48
   schemas:
+    AdminHealth:
+      type: object
+      additionalProperties: false
+      required: [status, scope]
+      description: Authenticated, read-only probe of projects and project_grants. No row contents or identity.
+      properties:
+        status: { type: string, const: ok }
+        scope: { type: string, const: administrator_storage_read }
     AdminIdentity:
       type: object
       additionalProperties: false
@@ -1868,6 +1876,64 @@ components:
           items:
             $ref: "#/components/schemas/CollectionRejectionDay"
 paths:
+  /v1/health:
+    get:
+      tags: [Administration]
+      operationId: getAdministratorStorageHealth
+      summary: Check authenticated administrator control-plane storage reads
+      description: >
+        Requires a verified administrator bearer and a configured read probe; no project grant is required.
+        Executes one batch of two SELECT 1 queries, each LIMIT 1, against projects and project_grants.
+        Empty tables pass. Does not expose rows or identity, write data, use collection quotas, or check
+        collection writes, all application tables, aggregation correctness or scheduled cleanup.
+        No query parameters, body consumption, cookies or CORS permission. All responses use
+        Cache-Control no-store and Vary Authorization. The native authenticated Worker connects the probe;
+        custom hosts without the probe return 503. Probe scheduling, timeout and credentials are host responsibilities.
+      security:
+        - adminBearer: []
+      responses:
+        "200":
+          description: The two administrator storage reads succeeded; not whole-service readiness.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminHealth"
+              examples:
+                health:
+                  externalValue: ./examples/admin-health.json
+        "400":
+          description: Unsupported query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Missing, invalid or disabled administrator authentication.
+          headers:
+            WWW-Authenticate:
+              schema: { type: string, const: Bearer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: GET is the only allowed method.
+          headers:
+            Allow:
+              schema: { type: string, const: GET }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Storage read failed or host probe is not configured; no underlying DB error is disclosed.
+          headers:
+            Retry-After:
+              schema: { type: string, const: "1" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/identity:
     get:
       tags: [Administration]

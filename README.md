@@ -51,6 +51,12 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 운영 로그 요약은 표준 입력에 앱 NDJSON을 넣어 실행한다(`node tools/runtime/summarize-observations.ts --stdin`, Windows에서는 `npm.cmd run --silent logs:summary -- --stdin`). `http_request` 고정 7필드와 scheduled 정리 로그를 집계하고 `diagnostics`에서 관측된 오류·거부·정리 실패와 확인할 항목을 구분한다. `requestId`·프로젝트 ID·원문은 보고서에 넣지 않는다. 사용법과 한계는 [로그 요약 안내](tools/runtime/LOG-SUMMARY.md)에 있다.
 
+관리자 전용 `GET /v1/health`는 검증된 관리자 bearer로 두 제어 테이블의 읽기 상태를 확인한다.
+성공 응답은 `{status:"ok",scope:"administrator_storage_read"}`이며, 수집 쓰기나 정리 실행까지
+확인한 결과는 아니다. 조회는 읽기 전용이고 원문 행·계정·프로젝트 정보를 반환하지 않는다.
+범위와 오류는 [운영 관측](docs/ops/observability.md)에 적었다. 반복 실행과 운영 인증 설정은
+아직 연결하지 않았다.
+
 ## 문서
 
 - 제품: [개요](docs/product/00-product-brief.md), [명세](docs/product/02-spec.md), [로드맵](docs/product/01-roadmap.md)

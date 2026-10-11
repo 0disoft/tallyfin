@@ -32,6 +32,8 @@
   `/v1/projects/{projectId}/schemas/{schemaVersion}`, `.../summary`,
   `.../events/{eventName}/daily`, `.../workflows/{workflowId}/daily`다. 검증기를
   연결하지 않은 기본 export는 401로 닫고, GET이 아니면 405(Allow: GET)다.
+- `GET /v1/health` — 검증된 관리자 bearer로 `projects`·`project_grants` 두 제어면 테이블
+  읽기를 검사한다. 계약은 [OpenAPI](../../api/openapi.yaml)에 있다.
 - 그 밖의 경로는 `not_found`(404)이다.
 
 `projectId`는 정규식 `^[a-z][a-z0-9-]{0,47}$`를 통과해야 한다. 등록되지 않은

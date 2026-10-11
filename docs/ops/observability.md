@@ -1,8 +1,9 @@
 # 운영 관측
 
 상태: 수집기 완료 관측 로그를 로컬에서 구현·검증했다. 운영 로그 수집·대시보드·알림
-수신자·헬스 프로브·traces는 배포하지 않았다. 임계값·담당자·로그 보존 기간 같은 실제
-운영 설정값은 정하지 않았다(UNDECIDED).
+수신자·traces는 배포하지 않았고, 관리자 저장소 read 프로브는 코드에만 있고 원격 실행·
+스케줄이 없다. 임계값·담당자·로그 보존 기간 같은 실제 운영 설정값은 정하지 않았다
+(UNDECIDED).
 
 ## 지금 있는 관측
 
@@ -17,6 +18,32 @@
 Wrangler 관측 설정도 그대로다. `observability.logs`는 enabled·`invocation_logs` false·
 `head_sampling_rate` 1이고 `traces`는 disabled, `send_metrics`는 false다. 자동 traces와
 호출 로그에는 요청 URL이 들어가 제품 프라이버시 계약과 충돌하므로 켜지 않는다.
+
+## 관리자 저장소 read 프로브
+
+수집기에 관리자 전용 `GET /v1/health` 계약이 있다. 공개 헬스 체크가 아니고 검증된 관리자
+bearer가 있어야 한다. `/v1/identity`와 같은 `validGrantIdentity` 검사를 통과한 principal을
+요구하며 project grant나 creator 권한은 필요 없다. GET만 허용하고 쿼리 파라미터를 받지
+않고 요청 몸체를 읽지 않는다. 응답은 `Cache-Control: no-store`·`Vary: Authorization`을 쓰고
+CORS 허용 헤더를 붙이지 않는다.
+
+성공하면 `{status:'ok', scope:'administrator_storage_read'}` 두 필드만 돌려준다. 그때 D1에
+`projects`·`project_grants` 각각 `SELECT 1 AS available ... LIMIT 1`을 한 배치 두 읽기로
+실행한다. 빈 테이블도 성공이고 행 내용·project·identity는 노출하지 않는다. DB 쓰기·수집
+할당량·부하 백오프는 쓰지 않는다. `scope`의 뜻은 관리자 제어면 테이블 두 개를 그 시점에
+읽을 수 있었다는 것까지다.
+
+실패는 기존 오류 형식 그대로다. 인증 없음·무효·비활성은 401에 `WWW-Authenticate: Bearer`,
+허용하지 않는 쿼리 파라미터는 400, GET이 아니면 405에 `Allow: GET`, D1 읽기 실패나 호스트
+probe 미연결은 503에 `Retry-After: 1`을 붙이고 `{error:{code,message,requestId}}`를
+돌려준다(기존 상관 ID 그대로).
+
+이 성공은 수집 쓰기·집계 정확성·16개 테이블 전체·Cron·로그 완전성·서비스 전체 정상을
+증명하지 않는다. native `createWorker`는 verifier가 있을 때 `admin.checkReadiness` 포트를
+연결하고, 호스트가 `createCollector`에 `admin.checkReadiness`를 넘기지 않으면 항상 503
+`storage_unavailable`이다. 지금은 코드 로컬 구현뿐이라 운영 probe 스케줄·실제 provider
+OIDC·알림 수신자·원격 배포는 없다. 이 계약은 로컬 검증을 마쳤고 결과는
+[VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 지금 할 수 있는 증거
 
@@ -73,8 +100,9 @@ p95 같은 백분위가 아니다.
 요청·호스트가 관측 포트를 넘기지 않은 구성은 남지 않는다. 관측 콜백이 실패하면 그 줄만
 없어지고 응답은 그대로이며, 실패 자체를 알리는 경로는 없다.
 
-운영 알림 수신자·대시보드·헬스 프로브·로그 보존 기간은 배포하지 않았다. 임계값과 담당자는
-정하지 않았고 임의로 만들지 않는다(UNDECIDED).
+운영 알림 수신자·대시보드·로그 보존 기간은 배포하지 않았다. 관리자 read 프로브는 코드에만
+있고 원격 실행·스케줄이 없다. 임계값과 담당자는 정하지 않았고 임의로 만들지 않는다
+(UNDECIDED).
 
 ## 알림 설계 근거
 

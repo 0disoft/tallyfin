@@ -4,6 +4,15 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 인증된 읽기 프로브: `GET /v1/health`를 추가했다. 관리자 verifier가 검증한
+  principal만 두 제어 테이블(`projects`·`project_grants`)의 `SELECT 1 ... LIMIT 1`을 단일
+  batch로 읽고 고정 status·scope만 받는다. 별도 grant 없이 빈 테이블도 통과하며 수집 쓰기·
+  전체 스키마·정리 실행 확인은 아니다. custom host의 `admin.checkReadiness` 미연결은 503,
+  미인증은 DB 접근 전 401이다. native Worker가 읽기 포트를 연결하고 no-store·Vary
+  Authorization·기존 고정 오류를 유지한다. 집중 검사 28/28, 루트·runtime 타입 검사,
+  계약 검사 61개와 OpenAPI lint를 통과했다. 운영 인증·반복 프로브·알림·원격 배포는 후속이다.
+  OpenAPI와 예제를 추가했고 DB·SDK·의존성·CI 변경은 없다. 검증은
+  [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 로그 기반 진단: 기존 보고서 v2에 `diagnostics`(독립 스키마 v1)를 추가했다.
   operation별 HTTP 오류를 저장소·서버·수집 한도·설정·권한·그 외 거부로 한 번씩 분류하고,
   정리 실패는 실패 표시·프로젝트 실패·커서 미진행의 고유 실행 합집합으로 센다. 상세 없는

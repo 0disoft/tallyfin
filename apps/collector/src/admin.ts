@@ -6,6 +6,8 @@ import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 export interface AdministratorAccess {
   store: AdminStore;
   verifyBearer: (bearer: string) => Promise<AdminPrincipal | null>;
+  /** Optional host port for a bounded, read-only administrator storage probe. */
+  checkReadiness?: () => Promise<void>;
 }
 export async function administrator(request: Request, access: AdministratorAccess | undefined, now: number): Promise<unknown> {
   const header = request.headers.get('Authorization');
@@ -16,6 +18,14 @@ export async function administrator(request: Request, access: AdministratorAcces
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);
   const url = new URL(request.url);
+  if (url.pathname === '/v1/health') {
+    if (!validGrantIdentity(principal.issuer, principal.subject)) throw new CollectionError('unauthorized', 401);
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    parameters(url, []);
+    if (!access.checkReadiness) throw new CollectionError('storage_unavailable', 503);
+    try { await access.checkReadiness(); } catch { throw new CollectionError('storage_unavailable', 503); }
+    return { status: 'ok', scope: 'administrator_storage_read' };
+  }
   if (url.pathname === '/v1/identity') {
     if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
     parameters(url, []);

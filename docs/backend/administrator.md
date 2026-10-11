@@ -14,6 +14,16 @@ Vary: Authorization이고 쿠키나 CORS 허용을 추가하지 않는다. issue
 각각 최대 512자이며 검증한 grant identity 규칙을 따른다. 운영자가 최초 권한을
 등록하기 전에 해당 계정과 제공자가 일치하는지 확인하는 용도다.
 
+## 관리자 저장소 읽기 확인
+
+`GET /v1/health`는 검증된 관리자 bearer만 받는다. 공개 헬스 체크가 아니다. `/v1/identity`와
+같은 grant identity 검사를 통과하면 되고 프로젝트 grant·생성 권한은 필요 없다. 호스트가
+`checkReadiness` 포트를 연결하면 `projects`·`project_grants` 두 제어면 테이블을 각각
+`SELECT 1 ... LIMIT 1`로 읽고, 성공하면 `{status:'ok', scope:'administrator_storage_read'}`만
+반환한다. 행·계정·프로젝트 데이터는 공개하지 않는다. 포트가 없으면 503
+`storage_unavailable`이고 GET 외는 405(Allow: GET)다. 성공해도 수집 쓰기·집계·정리·로그
+완전성은 확인하지 않는다. 운영 관측은 [운영 관측](../ops/observability.md)을 따른다.
+
 상태: 관리자 조회(GET)·출처별 집계 조회(source)·퍼널 일별 조회(funnel)·프로젝트 설정
 조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수(PUT·DELETE)·프로젝트 변경 이력
 조회(GET)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증
@@ -44,7 +54,7 @@ export default createWorker(bearer => hostVerify(bearer));
 운영자가 issuer·API audience·HTTPS 공개키 주소를 지정한다. 지원 프로필과 캐시
 갱신 한계는 [OIDC 어댑터](./oidc.md)에 설명한다.
 
-검증된 issuer/subject로 매 조회마다 `project_grants`의 role(reader/owner)을 확인한다.
+검증된 issuer/subject로 프로젝트별 조회마다 `project_grants`의 role(reader/owner)을 확인한다.
 화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이
 없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
 
