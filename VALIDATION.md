@@ -1,5 +1,24 @@
 # 검증
 
+## 운영 로그 보고서의 브라우저 읽기 기반 — 2026-10-11
+
+CLI 집계기의 크기·operation·code·지연 bucket 목록을 I/O 없는 `observation-values.ts`로
+분리하고 기존 집계기에서 같은 값을 사용한다. 관리자에 v2 보고서 파서·파일 Worker·유계
+`ReportReader`를 추가했다. 현재 화면 연결 전 단계다. 원문 NDJSON·여분/식별자 필드·가짜
+coverage/health·중복 항목·안전 정수 범위 밖·응답/지연/전체 합계·표본 가중치·정리 합계·
+진단 불일치를 거부한다. additive diagnostics가 없는 이전 v2는 진단을 null로 남긴다.
+
+- 관리자의 `node --test src/api/observation-report.test.mjs`: 7/7, 종료 코드 0.
+- 루트의 `node --test tools/runtime/test/observation-summary.test.ts tools/runtime/test/observation-diagnostics.test.ts tools/runtime/test/summarize-observations.test.ts`: 20/20, 종료 코드 0.
+- `npm.cmd exec -- tsc --noEmit`, `npm.cmd run typecheck:admin`: 각각 종료 코드 0.
+
+실제 CLI 집계 결과와 파서를 대조했고, 중첩 정리 실패 표시·상세 없는 실행·HTTP 없는
+정리 보고서도 확인했다. Worker 포트 검사는 선택 전 무생성·8MiB 상한·새 파일/닫기/해제의
+종료·늦은 응답 폐기·10초 읽기 제한과 고정 오류를 확인한다. 실제 브라우저 Worker·화면은
+후속이다. 최초 집중 검사는 Node strip-only가 매개변수 프로퍼티를 지원하지 않아 실패했고,
+명시적 필드로 바꿨다. 관리자 타입 검사는 Node 집계기를 참조하는 테스트에만 node type
+reference를 추가한 뒤 통과했다. API·DB·SDK·의존성·CI·운영 설정·원격 변경은 없다.
+
 ## 실제 관리자 브라우저 로그인 검증 명령 — 2026-10-11
 
 선택적 `verify:admin-login`과 `tools/browser-bench/admin-login.mjs`·대역 fixture를 추가했다.

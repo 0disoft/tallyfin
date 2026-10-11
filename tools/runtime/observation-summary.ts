@@ -2,17 +2,8 @@ import type { ErrorCode } from '@tallyfin/core';
 import type { LatencyBucket, RequestOperation } from '../../apps/collector/src/request-observation.ts';
 import { CLEANUP_PROJECT_LIMIT, type CleanupReport } from '../../apps/collector/src/cleanup.ts';
 import { diagnoseObservations } from './observation-diagnostics.ts';
-
-export const SUMMARY_LIMITS = { bytes: 8 * 1024 * 1024, lines: 50000, lineBytes: 16384 } as const;
-const OPERATIONS = ['browser_collection', 'server_collection', 'administrator', 'other'] as const satisfies readonly RequestOperation[];
-const BUCKETS = ['lt_10ms', 'lt_50ms', 'lt_250ms', 'lt_1000ms', 'gte_1000ms', 'unknown'] as const satisfies readonly LatencyBucket[];
-const CODES: Record<ErrorCode | 'ok', true> = {
-  ok: true, invalid_request: true, invalid_event: true, unknown_schema: true, origin_denied: true,
-  project_unavailable: true, event_conflict: true, attempt_conflict: true, quota_exceeded: true,
-  unauthorized: true, forbidden: true, not_found: true, storage_unavailable: true, settings_conflict: true,
-  schema_conflict: true, project_conflict: true, project_limit_reached: true, grant_conflict: true,
-  last_owner: true, publisher_conflict: true,
-};
+import { SUMMARY_LIMITS, OPERATIONS, BUCKETS, CODES } from './observation-values.ts';
+export { SUMMARY_LIMITS } from './observation-values.ts';
 const KEYS = ['event', 'requestId', 'operation', 'status', 'code', 'latencyBucket', 'samplingDenominator'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 type Failure = 'invalid_log' | 'input_limit' | 'request_conflict' | 'run_conflict' | 'no_observations';
