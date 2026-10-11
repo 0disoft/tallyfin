@@ -1,9 +1,10 @@
-import { mkdir, writeFile, unlink, rmdir } from 'node:fs/promises';
+import { mkdir, open, unlink, rmdir, type FileHandle } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { installation } from './installation.ts';
 
 /** Shared by JSON and guided setup. Validate first; never overwrite an existing bundle. */
-export async function writeInstallation(input: unknown, root: string, directory: string, signal?: AbortSignal) {
+export async function writeInstallation(input: unknown, root: string, directory: string, signal?: AbortSignal,
+  createFile: (path: string) => Promise<Pick<FileHandle, 'writeFile' | 'close'>> = path => open(path, 'wx', 0o600)) {
   const output = resolve(directory), plan = installation(input, root, output);
   signal?.throwIfAborted();
   const artifacts = [
@@ -18,8 +19,15 @@ export async function writeInstallation(input: unknown, root: string, directory:
     for (const [name, value] of artifacts) {
       signal?.throwIfAborted();
       const path = join(output, name);
-      await writeFile(path, JSON.stringify(value, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+      const file = await createFile(path);
+      // Exclusive creation establishes ownership before a write can fail or be aborted.
       written.push(path);
+      try {
+        signal?.throwIfAborted();
+        await file.writeFile(JSON.stringify(value, null, 2) + '\n', { signal });
+      } finally {
+        await file.close();
+      }
     }
     signal?.throwIfAborted();
   } catch (error) {

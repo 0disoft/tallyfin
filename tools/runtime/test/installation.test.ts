@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { installation, InstallationConfigError } from '../installation.ts';
+import { writeInstallation } from '../write-installation.ts';
 import { fileURLToPath } from 'node:url';
-import { mkdtemp, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, open, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -18,6 +19,48 @@ function input() {
     login: { issuer: 'https://identity.example.invalid', clientId: 'public-test-client', scope: 'openid profile', resource: 'https://api.example.invalid' },
   };
 }
+
+test('installation removes both complete and partially written files after a write fails or is cancelled', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tallyfin-installation-rollback-'));
+  try {
+    for (const mode of ['failure', 'cancel'] as const) {
+      const output = join(directory, mode), controller = new AbortController();
+      let opened = 0, closed = 0;
+      await assert.rejects(writeInstallation(input(), process.cwd(), output, controller.signal, async path => {
+        const file = await open(path, 'wx', 0o600); opened++;
+        return {
+          writeFile: async (data, options) => {
+            if (path.endsWith('admin.wrangler.json')) {
+              await file.writeFile('{"partial":');
+              if (mode === 'failure') throw new Error('simulated write failure');
+              controller.abort(); controller.signal.throwIfAborted();
+            }
+            await file.writeFile(data, options);
+          },
+          close: async () => { await file.close(); closed++; },
+        };
+      }), mode === 'failure' ? /simulated write failure/ : { name: 'AbortError' });
+      assert.equal(opened, 2); assert.equal(closed, opened);
+      await assert.rejects(readdir(output), { code: 'ENOENT' });
+    }
+  } finally {
+    assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep)); await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('installation rollback preserves a conflicting file created by another writer', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'tallyfin-installation-conflict-')), output = join(directory, 'prepared');
+  try {
+    await assert.rejects(writeInstallation(input(), process.cwd(), output, undefined, async path => {
+      if (path.endsWith('admin.wrangler.json')) await writeFile(path, 'other writer', { flag: 'wx' });
+      return open(path, 'wx', 0o600);
+    }), { code: 'EEXIST' });
+    assert.deepEqual(await readdir(output), ['admin.wrangler.json']);
+    assert.equal(await readFile(join(output, 'admin.wrangler.json'), 'utf8'), 'other writer');
+  } finally {
+    assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep)); await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test('installation produces consistent Worker configs, public-only build settings and exact provider registration values', () => {
   const config = input(); const result = installation(config, process.cwd());
