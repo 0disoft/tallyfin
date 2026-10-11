@@ -1,5 +1,40 @@
 # 검증
 
+## 10분 지속 soak 부하 — 2026-10-11
+
+`bench:cluster`에 `--soak` 프로필을 추가해 한 workerd 안의 수집 Worker 3개와 새 공유
+로컬 D1에서 600초 실시간 부하를 돌렸다. 2초마다 HTTP 15건(쓰기 9건·조회 6건)을 같은
+배치로 세 Worker에 보내고 5초마다 scheduled 정리를 Worker를 바꿔 호출했다. 토큰은 메모리
+합성 JWKS로 만든 5분 수명 토큰을 만료 30초 전 다시 발급한다.
+
+- `npm.cmd run bench:cluster -- --soak`: 종료 코드 0, verified=true. 부하 창
+  600,017.199ms, HTTP 4,500건이 전부 200이고 accepted 18,000·duplicates 36,000,
+  클라이언트 재시도는 없다. 정리 120회 중 60회가 HTTP와 겹쳤고 관측 HTTP 동시 최대는
+  15건(상한 16)이다. soak 프로필에서 관리자·발행자 토큰을 각각 3회 발급했다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 종료 코드 0.
+- `node --test --test-timeout=30000 tools/runtime/test/cluster-profile.test.ts
+  tools/runtime/test/benchmark-tokens.test.ts`: 3/3, 종료 코드 0. soak 계획의 창·
+  accepted·duplicates·run·정리 횟수·scheduler 상한과 토큰 갱신·실패 캐시 차단을 확인했다.
+- 보고서 `.tmp/cluster-bench/run-qF0zBv/report.json`(로컬 무시 파일, 토큰·시크릿 없음)을
+  직접 확인했다. verified=true는 전체 event/workflow 집계 행을 초기값+수락 변경분과
+  대조하고, 3,000개 퍼널 run이 모두 4단계 시각을 채웠는지(빈 단계 없음) 확인한다. 세
+  Worker의 `funnel_daily_counts` 단계별 도달 합계도 각각 3,000이다. 만료 일별 행은 남지
+  않았고 `retention_cleanup_state` revision은 정리 횟수 120과 같다.
+- 종류별 p95(ms): workflow 310.971, browser-funnel 311.104, server-funnel 312.008,
+  summary 56.607, funnel 57.264, cleanup 303.135. 최대는 449.724·449.089·451.428·
+  160.519·160.745·380.005ms다. 작업 발행 지연(4,620표본) p50 6.747·p95 14.434·최대
+  31.297ms다.
+- 최종 행: 초기 event_receipts 67,200·workflow_attempts 67,200·event_daily_counts
+  11,880·workflow_daily_counts 1,980·funnel_runs 0에서 receipts 78,000·attempts
+  63,000·event daily 9,728·workflow daily 1,620·funnel runs 3,000·funnel daily 8이 됐다.
+
+Node v24.18.0·Miniflare 4.20260730.0·Windows x64·Ryzen 5 7430U(논리 CPU 12개)의 한 번
+관측이다. 단일 호스트/workerd의 수집 Worker 3개가 같은 새 합성 D1을 쓰는 실험이라 운영
+인증·원격·다중 지역·장기간·최대 용량의 증거가 아니다. 관리자/SDK 빌드와 전체 검사는
+변경 범위 밖이라 생략했고 일반 소스 lint 스크립트는 없다. API·DB·SDK·의존성·CI
+변경은 없고 소스 진실 문서(`api/openapi.yaml`·`db/schema.dbml`)는 바꾸지 않았다. 다음은
+서버 SDK 연결 손실 복구 검증과 실제 운영 준비다.
+
 ## 로컬 부하 인증의 만료 전 갱신 — 2026-10-11
 
 공용 실험 harness는 5분짜리 메모리 서명 토큰의 초기 문자열을 유지하며 선택 getter로

@@ -18,16 +18,25 @@ type Sample = { kind: Job['kind']; worker: number; ms: number; lagMs: number; st
 type EventRow = { project_id: string; event_date: string; event_name: string; dimension_key: string; count: number };
 type FlowRow = { project_id: string; cohort_date: string; dimension_key: string; started_count: number; succeeded_count: number; failed_count: number };
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const WINDOW_MS = 120000, WAVES = 60, WORKERS = 3;
+const WORKERS = 3;
+export type ClusterProfile = 'short' | 'soak';
+export function clusterProfile(profile: ClusterProfile) {
+  if (profile !== 'short' && profile !== 'soak') throw Error('invalid-cluster-profile');
+  const windowMs = profile === 'soak' ? 600000 : 120000;
+  return { profile, windowMs, waves: windowMs / 2000, cleanupInvocations: windowMs / 5000,
+    timeoutMs: windowMs + 60000, expectedAccepted: windowMs / 2000 * 60,
+    expectedDuplicates: windowMs / 2000 * 120, expectedRuns: windowMs / 2000 * 10 };
+}
 const TABLES = ['event_receipts', 'workflow_attempts', 'event_daily_counts', 'workflow_daily_counts', 'funnel_runs', 'funnel_daily_counts'] as const;
 
 /** Three independent collector isolates, one fresh D1, exact workload; no existing or remote target. */
-export async function runClusterBench(signal: AbortSignal) {
+export async function runClusterBench(signal: AbortSignal, profile: ClusterProfile = 'short') {
+  const plan = clusterProfile(profile);
   signal.throwIfAborted(); const now = Date.now(), today = localDate(now, 'Asia/Seoul');
-  if (localDate(now + 180000, 'Asia/Seoul') !== today) throw Error('Start outside the three-minute local-midnight guard.');
+  if (localDate(now + plan.timeoutMs, 'Asia/Seoul') !== today) throw Error('Start outside the profile timeout local-midnight guard.');
   const parent = join(root, '.tmp/cluster-bench'); await mkdir(parent, { recursive: true });
   const output = await mkdtemp(join(parent, 'run-'));
-  const { mf, principal, adminToken, publisherToken, collectorNames } = await collectorHarness(output, undefined, WORKERS);
+  const { mf, principal, tokens, collectorNames } = await collectorHarness(output, undefined, WORKERS);
   let phase = 'seed'; const observations: Sample[] = [];
   try {
     const db = await mf.getD1Database('DB');
@@ -50,7 +59,7 @@ export async function runClusterBench(signal: AbortSignal) {
     const added = new Map(RETAINED_PROJECTS.map(id => [id, 0]));
     const url = await mf.ready; assert.equal(url.hostname, '127.0.0.1');
     const occurredAt = new Date(now).toISOString(), jobs: { offsetMs: number; value: Job }[] = [];
-    for (let wave = 0; wave < WAVES; wave++) {
+    for (let wave = 0; wave < plan.waves; wave++) {
       const project = RETAINED_PROJECTS[wave % RETAINED_PROJECTS.length]!, tool = TOOLS[wave % TOOLS.length]!;
       const workflowBody = JSON.stringify({ schemaVersion: 1, source: 'browser', events: Array.from({ length: 10 }, () => {
         const attempt = { workflowId: 'calculation', attemptId: crypto.randomUUID(), startedAt: occurredAt };
@@ -68,7 +77,7 @@ export async function runClusterBench(signal: AbortSignal) {
         { offsetMs: wave * 2000 + 300, value: { kind: 'summary', worker, project } },
         { offsetMs: wave * 2000 + 300, value: { kind: 'funnel', worker, project: configured.project.id } });
     }
-    for (let i = 0; i < 24; i++) jobs.push({ offsetMs: i * 5000, value: { kind: 'cleanup', worker: i % WORKERS } });
+    for (let i = 0; i < plan.cleanupInvocations; i++) jobs.push({ offsetMs: i * 5000, value: { kind: 'cleanup', worker: i % WORKERS } });
     jobs.sort((a, b) => a.offsetMs - b.offsetMs);
     const scheduled = await Promise.all(collectorNames.map(async name => {
       const worker = await mf.getWorker(name);
@@ -78,17 +87,18 @@ export async function runClusterBench(signal: AbortSignal) {
     phase = 'warm-authenticated-workers';
     for (let worker = 0; worker < WORKERS; worker++) {
       const response = await fetch(new URL(`/worker/${worker}/v1/projects/${configured.project.id}/summary?schemaVersion=1&from=${today}&to=${today}`, url),
-        { headers: { Authorization: `Bearer ${adminToken}` }, signal });
+        { headers: { Authorization: `Bearer ${await tokens.getAdminToken()}` }, signal });
       assert.equal(response.status, 200); assert.equal(response.headers.get('X-Tallyfin-Bench-Worker'), collectorNames[worker]); await response.arrayBuffer();
     }
     let httpInFlight = 0, peakHttpInFlight = 0, cleanupOverlappedHttp = 0;
     phase = 'paced-http-and-cleanup'; const started = performance.now();
-    await pace(jobs, WINDOW_MS, 16, async (job, lagMs) => {
-      const at = performance.now(); let status = 200, accepted = 0, duplicates = 0;
+    await pace(jobs, plan.windowMs, 16, async (job, lagMs) => {
+      const at = performance.now(); let status = 0, accepted = 0, duplicates = 0;
       try {
         if (job.kind === 'cleanup') {
           if (httpInFlight > 0) cleanupOverlappedHttp++;
           assert.equal((await scheduled[job.worker]!({ scheduledTime: Date.now(), cron: '* * * * *' })).outcome, 'ok');
+          status = 200;
         } else {
           peakHttpInFlight = Math.max(peakHttpInFlight, ++httpInFlight);
           try {
@@ -97,9 +107,9 @@ export async function runClusterBench(signal: AbortSignal) {
               : job.kind === 'summary' ? `/v1/projects/${job.project}/summary?schemaVersion=1&from=${today}&to=${today}`
                 : `/v1/projects/${job.project}/funnels/conversion/daily?schemaVersion=1&from=${today}&to=${today}`;
             const response = await fetch(new URL(`/worker/${job.worker}${path}`, url), { method: write ? 'POST' : 'GET',
-              headers: write ? job.kind === 'server-funnel' ? { 'Content-Type': 'application/json', Authorization: `Bearer ${publisherToken}` }
+              headers: write ? job.kind === 'server-funnel' ? { 'Content-Type': 'application/json', Authorization: `Bearer ${await tokens.getPublisherToken()}` }
                 : { 'Content-Type': 'application/json', Origin: 'https://sembom.example.invalid', ...(job.kind === 'browser-funnel' ? { Origin: 'https://modufile.example.invalid' } : {}) }
-                : { Authorization: `Bearer ${adminToken}` }, ...(write ? { body: job.body } : {}), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
+                : { Authorization: `Bearer ${await tokens.getAdminToken()}` }, ...(write ? { body: job.body } : {}), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
             status = response.status; assert.equal(status, 200); assert.equal(response.headers.get('Cache-Control'), 'no-store');
             assert.equal(response.headers.get('X-Tallyfin-Bench-Worker'), collectorNames[job.worker]);
             const data = await response.json() as { accepted?: number; duplicates?: number; totalEvents?: number; summary?: { startedRuns: number; completedRuns: number } };
@@ -121,40 +131,43 @@ export async function runClusterBench(signal: AbortSignal) {
       } finally { observations.push({ kind: job.kind, worker: job.worker, ms: performance.now() - at, lagMs, status, accepted, duplicates }); }
     }, signal);
     const elapsedMs = performance.now() - started; phase = 'verify-db-and-all-instances';
-    assert.equal(localDate(Date.now(), 'Asia/Seoul'), today); assert.equal(observations.length, 924); assert.ok(cleanupOverlappedHttp > 0);
-    assert.equal(observations.reduce((sum, row) => sum + row.accepted, 0), 3600);
-    assert.equal(observations.reduce((sum, row) => sum + row.duplicates, 0), 7200);
+    assert.equal(localDate(Date.now(), 'Asia/Seoul'), today); assert.equal(observations.length, plan.waves * 15 + plan.cleanupInvocations); assert.ok(cleanupOverlappedHttp > 0);
+    assert.equal(observations.reduce((sum, row) => sum + row.accepted, 0), plan.expectedAccepted);
+    assert.equal(observations.reduce((sum, row) => sum + row.duplicates, 0), plan.expectedDuplicates);
     assert.deepEqual(await eventRows(), expectedEvents); assert.deepEqual(await flowRows(), expectedFlows);
     for (const project of RETAINED_PROJECTS) {
       assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM event_receipts WHERE project_id=?').bind(project).first('n'), 10000 + added.get(project)!);
       assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM workflow_attempts WHERE project_id=?').bind(project).first('n'), 10000 + added.get(project)! / 2);
     }
-    assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM event_receipts WHERE project_id=?').bind(configured.project.id).first('n'), 2400);
-    assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM funnel_runs').first('n'), 600);
-    assert.equal(await db.prepare("SELECT COUNT(*) AS n FROM funnel_runs WHERE json_array_length(step_times_json)=4 AND NOT EXISTS (SELECT 1 FROM json_each(step_times_json) WHERE type='null')").first('n'), 600);
+    assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM event_receipts WHERE project_id=?').bind(configured.project.id).first('n'), plan.expectedRuns * 4);
+    assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM funnel_runs').first('n'), plan.expectedRuns);
+    assert.equal(await db.prepare("SELECT COUNT(*) AS n FROM funnel_runs WHERE json_array_length(step_times_json)=4 AND NOT EXISTS (SELECT 1 FROM json_each(step_times_json) WHERE type='null')").first('n'), plan.expectedRuns);
     assert.deepEqual((await db.prepare('SELECT source,event_name,SUM(count) AS n FROM event_daily_counts WHERE project_id=? GROUP BY source,event_name ORDER BY source,event_name')
-      .bind(configured.project.id).all()).results, configured.events.map(event => ({ source: event.source, event_name: event.name, n: 600 }))
+      .bind(configured.project.id).all()).results, configured.events.map(event => ({ source: event.source, event_name: event.name, n: plan.expectedRuns }))
         .sort((a, b) => a.source.localeCompare(b.source) || a.event_name.localeCompare(b.event_name)));
     for (const [index, name] of collectorNames.entries()) {
       const shared = await mf.getD1Database('DB', name);
       assert.deepEqual((await shared.prepare('SELECT step_index,SUM(reached_count) AS n FROM funnel_daily_counts GROUP BY step_index ORDER BY step_index').all()).results,
-        [0, 1, 2, 3].map(step_index => ({ step_index, n: 600 })));
+        [0, 1, 2, 3].map(step_index => ({ step_index, n: plan.expectedRuns })));
       const response = await fetch(new URL(`/worker/${index}/v1/projects/${configured.project.id}/funnels/conversion/daily?schemaVersion=1&from=${today}&to=${today}`, url),
-        { headers: { Authorization: `Bearer ${adminToken}` }, signal });
+        { headers: { Authorization: `Bearer ${await tokens.getAdminToken()}` }, signal });
       assert.equal(response.status, 200);
       const result = await response.json() as { summary: { startedRuns: number; completedRuns: number; completionRate: number } };
-      assert.equal(result.summary.startedRuns, 600); assert.equal(result.summary.completedRuns, 600); assert.equal(result.summary.completionRate, 100);
+      assert.equal(result.summary.startedRuns, plan.expectedRuns); assert.equal(result.summary.completedRuns, plan.expectedRuns); assert.equal(result.summary.completionRate, 100);
     }
     assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM event_daily_counts WHERE event_date<?').bind(fixture.oldest).first('n'), 0);
     assert.equal(await db.prepare('SELECT COUNT(*) AS n FROM workflow_daily_counts WHERE cohort_date<?').bind(fixture.oldest).first('n'), 0);
-    assert.equal(await db.prepare('SELECT revision FROM retention_cleanup_state').first('revision'), 24);
+    assert.equal(await db.prepare('SELECT revision FROM retention_cleanup_state').first('revision'), plan.cleanupInvocations);
+    const tokenIssuances = tokens.issuanceCounts();
+    if (profile === 'soak') { assert.ok(tokenIssuances.admin >= 3); assert.ok(tokenIssuances.publisher >= 3); }
     const kinds = [...new Set(observations.map(row => row.kind))];
     const report = { schemaVersion: 'tallyfin.cluster-bench/v1', local: true, syntheticData: true, verified: true,
       topology: 'three-collector-isolates-one-workerd-one-local-d1', existingDatabasesAccessed: false, remoteChanges: false,
       workerClock: 'live', node: process.version, host: { platform: platform(), arch: arch(), cpu: cpus()[0]?.model ?? 'unknown', logicalCpus: cpus().length },
       miniflare: JSON.parse(await readFile(join(root, 'node_modules/miniflare/package.json'), 'utf8')).version,
-      windowMs: WINDOW_MS, elapsedMs, collectorWorkers: WORKERS, offeredHttpRequestsPerSecond: 7.5, maxInFlight: 16,
-      peakHttpInFlight, seeded, after: await size(), accepted: 3600, duplicates: 7200, cleanupInvocations: 24, cleanupOverlappedHttp,
+      profile, windowMs: plan.windowMs, elapsedMs, collectorWorkers: WORKERS, offeredHttpRequestsPerSecond: 7.5, maxInFlight: 16,
+      peakHttpInFlight, seeded, after: await size(), accepted: plan.expectedAccepted, duplicates: plan.expectedDuplicates,
+      cleanupInvocations: plan.cleanupInvocations, cleanupOverlappedHttp, tokenIssuances,
       latency: Object.fromEntries(kinds.map(kind => [kind, latency(observations.filter(row => row.kind === kind).map(row => row.ms))])),
       launchLag: latency(observations.map(row => row.lagMs)), observations };
     await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2), { flag: 'wx' }); return { ...report, output };
@@ -165,11 +178,12 @@ export async function runClusterBench(signal: AbortSignal) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const args = process.argv.slice(2);
-  if (args.length === 1 && args[0] === '--help') console.log('npm run bench:cluster\nThree local collector isolates share a new synthetic D1. 120 seconds, 7.5 HTTP requests/second plus scheduled cleanup. No existing DB, credentials or remote target options. Reports in .tmp/cluster-bench/. Not distributed production capacity proof.');
-  else if (args.length) { console.error('No options are accepted. Use --help.'); process.exitCode = 1; }
+  if (args.length === 1 && args[0] === '--help') console.log('npm run bench:cluster [-- --soak]\nThree local collector isolates share a new synthetic D1. Default 120 seconds; --soak 600 seconds with ephemeral token renewal. 7.5 HTTP requests/second plus scheduled cleanup. No existing DB, credentials or remote target options. Reports in .tmp/cluster-bench/. Not distributed production capacity proof.');
+  else if (args.length && !(args.length === 1 && args[0] === '--soak')) { console.error('Only --help or --soak is accepted.'); process.exitCode = 1; }
   else {
+    const profile = args[0] === '--soak' ? 'soak' : 'short';
     const controller = new AbortController(), stop = () => controller.abort(); process.once('SIGINT', stop); process.once('SIGTERM', stop);
-    runClusterBench(AbortSignal.any([controller.signal, AbortSignal.timeout(180000)]))
+    runClusterBench(AbortSignal.any([controller.signal, AbortSignal.timeout(clusterProfile(profile).timeoutMs)]), profile)
       .then(({ observations: _observations, ...report }) => console.log(JSON.stringify(report)))
       .catch(error => { console.error(error.message); process.exitCode = 1; })
       .finally(() => { process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop); });
