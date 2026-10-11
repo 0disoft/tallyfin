@@ -29,6 +29,22 @@ Wrangler 관측 설정도 그대로다. `observability.logs`는 enabled·`invoca
 CPU 시간이나 실제 전체 지연이 아니고 SLO 판정 근거가 아니다. 로컬 타이머는 배포 시계와
 다르다.
 
+## 로그 요약 도구
+
+```powershell
+Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdin
+```
+
+표준 입력의 앱 NDJSON에서 직접 낸 `http_request` 줄만 세어 `operation`·`status`·`code`·
+`latencyBucket`별 관측 수와 가중 어림을 JSON 한 건으로 낸다. `requestId`·원문은 출력에 넣지
+않고 조회·파일 쓰기·네트워크를 하지 않는다. Windows에서는 `npm.ps1` 파이프 대신 직접 node나
+`npm.cmd` 별칭을 쓴다. 계약과 한계는
+[로그 요약 안내](../../tools/runtime/LOG-SUMMARY.md)에 둔다.
+
+`coverage`는 받은 앱 로그 줄에 한정하고 `exactRequestCounts`·`latencyPercentilesAvailable`·
+`timeWindowAvailable`은 항상 false다. 관측 응답 수와 가중 어림은 다르며 실패율·p95·SLO 근거로
+쓰지 않는다.
+
 ## 지금 할 수 없는 증거
 
 로그 줄 수로 실패 비율을 바로 계산할 수 없다. 성공은 1/64, 실패는 전량이라 섞어 세면

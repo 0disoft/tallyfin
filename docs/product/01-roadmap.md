@@ -4,6 +4,16 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 앱 로그 요약 도구: `tools/runtime/LOG-SUMMARY.md`를 새로 쓰고
+  `docs/ops/observability.md`·`README.md`에 연결·설명을 더했다. CLI
+  `tools/runtime/summarize-observations.ts`는 옵션이 `--stdin`·`--help`뿐이고, 표준
+  입력 NDJSON의 `http_request` 고정 7필드만 집계하며 8MiB·5만 줄·16KiB·30초 상한, 같은 UUID
+  중복 무시와 필드 충돌 거부, 실패 코드(`invalid_arguments`·`stdin_required`·`invalid_log`·
+  `input_limit`·`request_conflict`·`no_observations`·`input_timeout`·
+  `input_unavailable`·`output_unavailable`)를 문서에 맞췄다. CLI 검사 6/6과 코어 검사 5/5는
+  서로 다른 커밋의 별도 실행이다. Windows에서는 `npm.ps1` 파이프 대신 직접 node나 `npm.cmd`
+  별칭을 쓰도록 적었다. 이 슬라이스는 CLI 도구와 package script를 더하고 수집기·API·DB·SDK·환경
+  변수·CI 워크플로·의존성은 바꾸지 않았다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 시크릿 계약(문서 전용): `docs/ops/secrets.md`의 빈 scaffold를 공개 설정 대 시크릿
   구분, 설치 묶음의 시크릿 키 거부(값 검토는 수동), 관리자 공개 클라이언트 Code+PKCE·JWKS
   공개키, 브라우저 토큰 보관(sessionStorage transaction 10분 TTL·예약 자동 삭제 아님),

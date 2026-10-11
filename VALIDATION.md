@@ -1,5 +1,46 @@
 # 검증
 
+## 앱 로그 요약 도구 — 2026-10-11
+
+`tools/runtime/LOG-SUMMARY.md`를 새로 쓰고 `docs/ops/observability.md`·`README.md`에 연결·설명을,
+`docs/product/01-roadmap.md`에 이 슬라이스를 기록했다. 이 슬라이스는 문서와 함께 CLI 도구·package
+script를 더하며, 수집기·API·DB·SDK·환경 변수·CI 워크플로·의존성은 바꾸지 않았다.
+
+실행·결과: 코어 요약 검사 `tools/runtime/test/observation-summary.test.ts`는 5/5이며 그
+구현을 `064643f`로 커밋했다. CLI 검사 `tools/runtime/test/summarize-observations.test.ts`는
+6/6, 루트 `npm exec -- tsc --noEmit`는 종료 코드 0이었다. 도움말에 직접 node 실행과
+PowerShell npm.cmd를 안내하도록 바꾼 뒤 CLI 6/6과 루트 타입 검사를 다시 통과했다. 코어 코드는
+그대로라 코어 5개의 앞선 결과를 재사용했으며 전체 검사를 한 명령으로 합쳐 돌리지는 않았다.
+
+코어 검사는 실제 앱 emitter 함수의 합성 로그로 표본 가중·중복 제거·충돌 거부·민감한 여분
+필드 거부·예산·출력 복사·빈 입력/래퍼 거부를 확인한다. CLI 검사는 UTF-8 청크·CRLF·마지막
+개행 없는 줄·손상 UTF-8·입력 상한·타임아웃·스트림 오류·조기 종료·TTY/인자·리스너 정리와 실제
+Node subprocess의 출력·실패 종료를 확인한다. 실제 배포된 Worker나 운영 로그 검증은 아니다.
+
+로컬 스모크: 첫 직접 실행은 실제 파일이 아니라 PowerShell here-string으로 만든 합성 NDJSON을
+`node tools/runtime/summarize-observations.ts --stdin`에 직접 파이프한 것이었고, 종료 코드 0으로
+`observedResponses=2`·`weightedRequestsEstimate=65`(성공 1×64 + storage 오류 1)를 냈으며
+`requestId`는 없었다. `| npm.cmd run --silent logs:summary -- --stdin`도 종료 코드 0으로
+`observedResponses=1`·`weightedRequestsEstimate=64`를 냈다. PowerShell 파이프를 설치된
+`npm.ps1` 래퍼로 넘긴 시도는 종료 코드 1로 CLI 보고서를 내지 않았다. 설치된 `npm.ps1` 래퍼
+소스만 읽었고 셸·툴체인은 바꾸지 않았다. 스모크 실패 경로를 통과로 적지 않는다.
+
+이어서 기존 최종 CLI 검사 파일에 실제 Node CLI 서브프로세스의 닫힌 stdout 파이프(`--help`) 케이스를
+더해 `node --test --test-timeout=30000 --test-name-pattern="actual Node CLI" tools/runtime/test/summarize-observations.test.ts`를
+1/1로 통과했다. 종료 코드 1, stderr 고정 `output_unavailable`, 원시 스택 없음이었다. 런타임 코드는
+바뀌지 않았고 나머지 CLI 검사 5개는 앞선 결과를 재사용한다. 이 케이스와 6/6을 한 번에 합쳐
+재실행하지 않았다.
+
+`npm run --silent logs:summary -- --help`도 도움말을 출력했다. 변경한 다섯 Markdown 파일의
+로컬 링크 117개가 모두 존재하고 `git diff --check`를 통과했다. 링크 검사는 파일 존재만
+확인했고 모든 앵커·외부 URL 검사는 아니다.
+
+수집기·SDK·관리자 빌드와 크기·부하 검사는 해당 코드가 바뀌지 않아 생략했다. 네트워크·DB·
+Cloudflare 호출·새 의존성·CI 워크플로·환경 변수·저장소 위생 정책 변경·푸시·배포는 없고,
+package script `logs:summary`만 더했다. 루트 테스트 명령의 기존 글롭은 새 검사 11개를 포함한다.
+계약 안내는 `tools/runtime/LOG-SUMMARY.md`·운영 관측 문서이며 README·로드맵과 이 기록을 갱신했다.
+운영 로그 확보·대시보드·알림·기간 비교·헬스 프로브는 이번 도구가 제공하지 않는다.
+
 ## 시크릿 계약 (문서 전용) — 2026-10-11
 
 `docs/ops/secrets.md`의 빈 scaffold를 채우고 `README.md`에 링크를, `docs/product/01-roadmap.md`에
