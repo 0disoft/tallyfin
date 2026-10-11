@@ -1,5 +1,27 @@
 # 검증
 
+## 시크릿 계약 (문서 전용) — 2026-10-11
+
+`docs/ops/secrets.md`의 빈 scaffold를 채우고 `README.md`에 링크를, `docs/product/01-roadmap.md`에
+이 슬라이스를 기록했다. 문서 전용 변경이며 코드·설정·의존성·CI 변경이 없다.
+
+실행·결과: 변경한 네 Markdown 파일의 로컬 링크 115개가 모두 존재하며 `git diff --check`를
+통과했다. 파일 존재 검사이고 모든 앵커·외부 URL 응답을 확인한 것은 아니다.
+
+관리자 `auth/client.ts`·`auth/bootstrap.ts`·`auth/OidcLogin.tsx`·`api/client.ts`,
+서버 SDK `index.ts`, OIDC 검증기, `installation.ts`·`prepared-installation.ts`·
+`prepare-installation.ts`·`target.ts`·`install-access-check.ts`, 관리자 설정 빌드 스크립트와
+`.gitignore`·추적된 `.github` 파일 목록을 대조했다. 토큰 메모리 보관과 PKCE 일시 거래 저장,
+access token 수명과 refresh token 회전 구분, 콜백 주소 정리의 범위, 허용 필드에 잘못 넣은
+비밀값은 탐지하지 못하는 한계, 빌드 환경 분리·표준 입력 경계·권한 회수와 캐시 키의 한계를
+문서에 반영했다. 현재 체크아웃에는 GitHub Actions 워크플로가 없다.
+
+문서 전용 변경이라 코드 테스트·타입 검사·빌드·SDK 크기·부하 검사는 생략했다. 시크릿 스캔은
+하지 않았고 토큰 평문 값이나 자격 증명·provider 명령은 열어 보거나 실행하지 않았다. 실제
+vault·회전·운영 값·원격 배포·원격 CI secret store는 확인하지 않았다. 계약 원본은
+`docs/ops/secrets.md`이며 README·로드맵과 이 기록을 갱신했다. API·DB 계약·마이그레이션·SDK·
+설정·의존성·CI 러너·저장소 위생 정책 변경·푸시·배포는 없다.
+
 ## 장애 대응·운영 계약 (문서 전용) — 2026-10-11
 
 `docs/ops/incident-response.md`·`docs/ops/00-operational-contract.md`의 빈 scaffold를 채우고

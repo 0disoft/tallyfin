@@ -4,6 +4,12 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 시크릿 계약(문서 전용): `docs/ops/secrets.md`의 빈 scaffold를 공개 설정 대 시크릿
+  구분, 설치 묶음의 시크릿 키 거부(값 검토는 수동), 관리자 공개 클라이언트 Code+PKCE·JWKS
+  공개키, 브라우저 토큰 보관(sessionStorage transaction 10분 TTL·예약 자동 삭제 아님),
+  `.gitignore`·빌드의 시크릿 차단, `install:access-check` 표준 입력, 수명주기·인벤토리, 노출
+  대응으로 채웠다. `README.md`에 링크를 더했다. 실제 vault·rotation·운영 value는 UNDECIDED이고
+  코드·설정·의존성·CI 변경은 없다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 장애 대응·운영 계약(문서 전용): `docs/ops/incident-response.md`·
   `docs/ops/00-operational-contract.md`의 빈 scaffold를 채웠다. 증거 우선 첫 10분 대응, 영향
   기준 심각도, 수집 / 관리자·프록시·인증 / 집계·정리 / 프라이버시 분기를 적었다. 비밀 아닌
