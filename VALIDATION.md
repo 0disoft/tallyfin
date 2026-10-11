@@ -3304,3 +3304,45 @@ receipts 8·completedRuns 2였고 결과는 `.tmp/server-recovery/run-2AgRt3`에
 CI 러너 변경은 없다. 관리자와 수집기 소스가 그대로라 전체 UI·백엔드 검사를 반복하지 않았고,
 일반 소스 lint는 명령이 없어 생략했다. 실제 OIDC·원격 D1·운영 부하는 환경 미정으로
 미검증이다. 기존 DB 접근·푸시·배포·Sembom 활성화는 없다.
+
+## 브라우저 SDK 본문 정리·리다이렉트 개선 — 2026-10-11
+
+네이티브 어댑터 회귀 검사 2개를 먼저 추가해 기존 코드에서 2/2 실패를 확인했다. 응답
+본문의 cancel이 멈추면 200 응답을 받았어도 pending이 1로 남았고, fetch의 redirect 설정도
+없어 기본 따라가기 정책을 사용했다. native 어댑터를 테스트용 document·fetch로 실행했으며
+초기 실패 검사는 실제 운영 네트워크 사고 재현이 아니다.
+
+본문 정리는 Promise 실패를 소비하고 완료를 기다리지 않는다. ReadableStream의
+underlying cancel이 throw/reject/stall하는 경우 모두 200·401·403·422 상태를 바로 처리하고
+재전송하지 않는다. 네이티브 fetch는 manual redirect를 사용하며 필터링된 리다이렉트의
+상태 0은 내부 비재시도 3xx 분기로 보낸다. 요청에는 이 내부 상태를 넣지 않는다. 실제 HTTP
+리다이렉트 코드가 드러나면 그대로 처리하고, 네트워크 예외/커스텀 포트의 상태 0은 기존대로
+재시도한다. 네이티브 기본 CORS·omit·no-referrer·keepalive 정책도 유지한다.
+
+스키마의 이벤트·규칙·퍼널 목록을 한 번만 순회하고, 배치 포장 때 queue.slice 복사와
+퍼널 링크의 두 번째 객체 복사를 없앴다. 숫자 속성은 공용 safe-integer 검사에서 확인하고,
+필수 속성은 기존 스냅샷에서 확인한다. 검증을 약하게 하거나 공개 키를 압축하지 않았다.
+초기 수정의 크기 초과와 관리자 생성 코드의 별도 3KiB 초과를 수정한 뒤 최종 검사로
+브라우저 32/32, 관리자 퍼널 SDK 생성 6/6, 루트 `npx --no-install tsc --noEmit`,
+`npm run build:browser`, `npm run check:browser-size`, `git diff --check`를 통과했다.
+최종 gzip은 기본 2746·Sembom 3023·퍼널 2918·퍼널 예제 3044 bytes이며 관리자 생성
+코드도 기존 3072 bytes 한도를 통과했다. 예산·의존성·검사 명령은 바꾸지 않았다.
+
+최종 소스로 `npm run bench:browser -- --samples 2`를 실행해 종료 코드 0을 확인했다.
+로컬 합성 페이지·새 브라우저 컨텍스트·실제 Chromium·루프백 수집기·새 D1을 사용했다.
+baseline은 계산 성공/시작 각 22·view/validation 각 2, 응답 유실 복구 후 workflow 시작/성공
+각 34와 receipts 74였다. 복구 중 계산 12회·응답 유실 이벤트 20개 중복 처리·수집기 중단 중
+계산 11회·쿠키/자격증명/referrer 없는 요청을 확인했다. 원시 기록은
+`.tmp/browser-bench/1791709452481.json`이다. 이 측정용 번들 gzip 3016 bytes는 Sembom
+예제의 3023 bytes와 다른 값이다. 소표본으로 운영 성능 개선을 주장하지 않는다.
+
+별도 ignore된 `.tmp/native-browser-redirect.mjs`로 SDK 소스를 번들해 Chromium
+156.0.8078.4와 두 로컬 HTTP 서버를 썼다. 수집기가 307로 다른 origin의 대상 서버를
+가리키도록 했다. 실제 응답 type=opaqueredirect/status=0/redirect=manual,
+수집 요청 1·대상 서버 요청 0·추가 재시도 없음·pageerror 없음·pending 0을 확인했다.
+결과는 `.tmp/native-browser-redirect-result.json`이며 검증 브라우저·서버는 종료했다.
+
+브라우저 SDK 안내·로드맵·검증 기록을 갱신했다. API·DB 계약·SDK 공개 타입·위생 정책·
+CI 러너·의존성 변경은 없다. 변경 없는 관리자 전체/백엔드 전체 검사는 반복하지 않았고,
+일반 소스 lint는 명령이 없어 생략했다. 실제 Sembom 연동·모바일/타 브라우저·원격 운영
+환경은 미검증이며 푸시·배포·활성화는 없다.

@@ -18,8 +18,9 @@ export type FunnelOptions = Omit<BrowserOptions, 'schema'> & { schema: FunnelSch
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 function valid(schema: FunnelSchema): boolean {
   if (Object.keys(schema).length !== 3 || !record(schema.funnels)) return false;
-  if (Object.keys(schema.funnels).length < 1 || Object.keys(schema.funnels).length > 10) return false;
-  for (const [id, funnel] of Object.entries(schema.funnels)) {
+  const funnels = Object.entries(schema.funnels);
+  if (funnels.length < 1 || funnels.length > 10) return false;
+  for (const [id, funnel] of funnels) {
     if (!namePattern.test(id) || !record(funnel) || Object.keys(funnel).length !== 2 ||
       !Array.isArray(funnel.steps) || funnel.steps.length < 2 || funnel.steps.length > 10 ||
       !Array.isArray(funnel.dimensions) || funnel.dimensions.length > 4 ||
@@ -49,7 +50,8 @@ function copyLink(input: FunnelLink, schema: FunnelSchema): FunnelLink {
   const value = { ...input };
   if (Object.keys(value).length !== 3 || typeof value.funnelId !== 'string' ||
     !own(schema.funnels, value.funnelId) || typeof value.runId !== 'string' || !uuidPattern.test(value.runId)) throw Error();
-  return Object.freeze({ ...value, startedAt: new Date(utc(value.startedAt)).toISOString() });
+  value.startedAt = new Date(utc(value.startedAt)).toISOString();
+  return Object.freeze(value);
 }
 
 /** Optional entry point; ordinary SDK bundles do not include this task profile. */

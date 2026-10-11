@@ -12,15 +12,17 @@ export const namePattern = /^[a-z][a-z0-9_]{0,47}$/;
 const enumPattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const own = Object.hasOwn;
-export const integer = (value: number, low: number, high: number) => Number.isSafeInteger(value) && value >= low && value <= high;
+export const integer = (value: unknown, low: number, high: number): value is number =>
+  Number.isSafeInteger(value) && (value as number) >= low && (value as number) <= high;
 
 function schemaValid(schema: EventSchema): boolean {
-  if (!integer(schema.version, 1, 2147483647) || Object.keys(schema.events).length < 1 ||
-    Object.keys(schema.events).length > 50) return false;
-  for (const [name, properties] of Object.entries(schema.events)) {
-    if (!namePattern.test(name) || Object.keys(properties).length > 4) return false;
+  const events = Object.entries(schema.events);
+  if (!integer(schema.version, 1, 2147483647) || events.length < 1 || events.length > 50) return false;
+  for (const [name, properties] of events) {
+    const rules = Object.entries(properties);
+    if (!namePattern.test(name) || rules.length > 4) return false;
     let count = 1;
-    for (const [key, rule] of Object.entries(properties)) {
+    for (const [key, rule] of rules) {
       if (!namePattern.test(key) || !Array.isArray(rule) || typeof rule[1] !== 'boolean') return false;
       let values: number;
       if (rule[0] === 'boolean' && rule.length === 2) values = 2;
@@ -40,13 +42,15 @@ function browserPlatform(): BrowserPlatform | undefined {
   return {
     now: () => Date.now(), uuid: () => crypto.randomUUID(),
     timer: (callback, milliseconds) => { const id = setTimeout(callback, milliseconds); return () => clearTimeout(id); },
-    async send(endpoint, body, signal) {
-      const response = await globalThis.fetch(endpoint, { method: 'POST', body, signal,
+    send(endpoint, body, signal) {
+      return globalThis.fetch(endpoint, { method: 'POST', body, signal,
         headers: { 'Content-Type': 'text/plain;charset=utf-8' }, credentials: 'omit',
-        keepalive: true, cache: 'no-store', referrerPolicy: 'no-referrer', mode: 'cors' });
-      // Responses are not stored or logged. Cancel the body instead of buffering unbounded data.
-      try { await response.body?.cancel(); } catch { /* status and retry policy still apply */ }
-      return { status: response.status, retryAfter: response.headers.get('Retry-After') };
+        keepalive: true, cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'manual' }).then(response => {
+        // Native fetch defaults to CORS; cleanup must not delay the HTTP status.
+        void response.body?.cancel().catch(() => {});
+        // A resolved CORS/manual fetch has status 0 only for a filtered redirect; network failures reject.
+        return { status: response.status || 300, retryAfter: response.headers.get('Retry-After') };
+      });
     },
     // Native sendBeacon forces credentials=include. Keepalive fetch preserves omit/no-referrer.
     onHidden(callback) {
@@ -99,10 +103,11 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       const rule = definitions[key]!;
       if (!(rule[0] === 'boolean' ? typeof value === 'boolean' : rule[0] === 'enum'
         ? typeof value === 'string' && rule[2].includes(value)
-        : typeof value === 'number' && integer(value, rule[2], rule[3]))) return undefined;
+        : integer(value, rule[2], rule[3]))) return undefined;
     }
     const copy = Object.fromEntries(entries);
-    return Object.entries(definitions).every(([key, rule]) => !rule[1] || own(copy, key)) ? copy : undefined;
+    for (const [key, rule] of Object.entries(definitions)) if (rule[1] && !own(copy, key)) return undefined;
+    return copy;
   };
   const schedule = (milliseconds: number) => {
     cancelTimer?.(); cancelTimer = platform.timer(() => { cancelTimer = undefined; pump(); }, milliseconds);
@@ -110,7 +115,8 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   const pack = (): Batch => {
     const prefix = `{"schemaVersion":${schema.version},"source":"browser","events":[`;
     let count = 0; let events = '';
-    for (const event of queue.slice(0, 20)) {
+    for (const event of queue) {
+      if (count === 20) break;
       const candidate = events + (count ? ',' : '') + event;
       if (encoder.encode(prefix + candidate + ']}').length > 16384) break;
       events = candidate; count++;

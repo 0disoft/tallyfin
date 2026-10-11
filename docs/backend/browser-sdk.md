@@ -51,13 +51,13 @@
 
 빌드는 SDK 내부 Batch의 `__tfBatch` 예약 필드 6개만 짧게 만든다. 공개 SDK·HTTP 키는
 이름을 유지한다. 고정 endpoint와 설정을 포함한 관리자 생성 코드의 로컬 번들은 gzip
-3072 B이며 현재 SDK 실측은 기본 2750 B·Sembom 3026 B·퍼널 2920 B·참조 예제 3047 B다.
+3KiB 예산 이내이며 현재 SDK 실측은 기본 2746 B·Sembom 3023 B·퍼널 2918 B·참조 예제 3044 B다.
 
 ## 버퍼·재시도·전송
 - 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
 - 네트워크·타임아웃 실패(상태 0)·408·429·모든 5xx만 최대 2회 재시도하고 401·403·409·422는 재시도하지 않는다. 대기는 Retry-After 정수 초를 우선하고 없으면 1·2초 백오프를 쓴다. 배치는 시작 시각부터 10분이 지나면 버린다. 재시도는 원래 ID·시각·바디를 유지한다.
-- 응답 본문은 저장·로그하지 않고 취소한다. 상태 코드만 사용한다.
-- 네이티브 `sendBeacon`은 credentials를 강제로 포함하므로 쓰지 않는다. keepalive fetch로 `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`, `mode: cors`를 쓴다.
+- 응답 본문은 저장·로그하지 않고 취소한다. 정리의 완료를 기다리지 않으며 정리가 실패하거나 멈춰도 받은 HTTP 상태를 처리한다. 200·401·403·422 응답의 정리 지연 때문에 시간 초과 재전송을 하지 않는다.
+- 네이티브 `sendBeacon`은 credentials를 강제로 포함하므로 쓰지 않는다. keepalive fetch로 `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`, `redirect: manual`을 쓰고 네이티브 기본값인 CORS 모드를 유지한다. 리다이렉트는 따라가지 않고 배치를 버린다. 필터링된 리다이렉트의 상태 0은 내부적으로 재시도하지 않는 3xx 분기로 보내며, 네트워크 예외와 커스텀 호스트의 상태 0은 기존대로 재시도한다. 수집 주소는 리다이렉트 없는 최종 endpoint여야 한다.
 - 숨김 콜백은 진행 중 배치를 다시 보내지 않고 Retry-After를 건너뛰지 않으며, 아직 안 보낸 keepalive 배치를 최대 2개까지 즉시 시작한다. `BrowserPlatform.beacon`은 명시적 커스텀 호스트용 선택 포트로 남아 있고 `false`이거나 예외면 keepalive fetch로 넘어간다. beacon `true`는 브라우저 큐 수락이며 서버 저장 완료가 아니다.
 
 원문 입력·결과, 금액, 이메일, 계정·주문·파일 ID, URL·리퍼러·DOM·영구 식별자·쿠키를 보내지 않고 `localStorage`/`sessionStorage`도 쓰지 않는다.
@@ -69,7 +69,7 @@ npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2750 B·Sembom 3026 B·퍼널 SDK 2920 B·퍼널+참조 예제 3047 B다. 이전 내부 필드 압축 때는 브라우저 SDK·빌드·수집기 관련 48개 테스트와 루트 타입 검사·SDK 빌드를 통과했다. 재시도 조건 확대와 배열 복사 정리 뒤에는 브라우저 검사 30개·관리자 SDK 코드 생성 검사 6개, 총 36/36과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 서버 SDK·관리자 생성 코드 검증을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2746 B·Sembom 3023 B·퍼널 SDK 2918 B·퍼널+참조 예제 3044 B다. 본문 정리·리다이렉트 개선 뒤 브라우저 검사 32개·관리자 퍼널 SDK 생성 검사 6개, 총 38/38과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 스키마 검증·배치 포장·퍼널 링크 복사의 중복 배열/객체 생성을 줄였고 숫자 검사는 같은 공용 safe-integer 검사로 모았다. 공개 SDK·HTTP 키와 검증 범위는 유지한다. 실브라우저 확인을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 남은 검증
 합성 화면의 실브라우저 초기 실행·동기 호출·전송, 수집기 종료 시 동작, 502·응답 유실
