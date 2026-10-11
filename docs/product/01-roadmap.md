@@ -4,15 +4,16 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
-- 서버 발행자 목록 `GET .../publishers`를 현재 owner 전용 조회 API로 로컬 구현했다.
-  관리자 reader/owner grant 목록과 분리하고, 25건 기본·100건 상한·프로젝트/목록 종류별
-  커서·페이지마다 owner 재확인을 적용한다. 다음은 등록·회수 API와 관리자 화면 연결이다.
+- 서버 발행자 목록 `GET .../publishers`를 현재 owner 전용 조회 API로 로컬 구현했고,
+  등록·회수도 `PUT`·`DELETE .../publishers`로 로컬 구현했다. 관리자 reader/owner grant
+  목록과 분리하고, 25건 기본·100건 상한·프로젝트/목록 종류별 커서·페이지마다 owner
+  재확인을 적용한다. 다음은 발행자 관리 화면 연결이다.
 - 발행자 권한 부여·회수 CLI가 `project_publishers` 쓰기와 `admin_changes`
   `publisher.granted`·`publisher.revoked` 감사 기록을 같은 D1 batch로 반영하고, 이력 저장이
   실패하면 같은 batch의 권한 변경도 롤백한다. 재시도·no-op는 새 이력을 남기지 않는다.
   `0008_publisher_history.sql`이 기존 행·인덱스·트리거를 유지한 채 이력 action을 넓혔고,
-  변경 이력 조회 API와 관리자 화면이 그 action을 표시한다. 발행자 등록·회수 API와 관리자
-  화면은 아직 없다.
+  변경 이력 조회 API와 관리자 화면이 그 action을 표시한다. 발행자 등록·회수 API도 로컬
+  구현했고 관리자 화면은 아직 없다.
 - 권한 조회·변경 화면과 관리자 변경 이력 저장·조회·화면 연결은 로컬 구현·검증 완료다.
 - 서버 발행 코어·저장·endpoint 슬라이스도 완료했다.
   `parseServerBatch`·`prepareServerBatch`, source별 payload hash, `planIngest`의 서버
@@ -611,3 +612,12 @@ reader/owner로 다시 검사하고 `project_publishers` 발행 권한으로는 
 연결했다. 생성된 TypeScript 팩토리는 실제 서버 SDK로 실행 검증했으며 토큰을 포함하거나
 전송하지 않는다. 다음은 다단계 퍼널과 브라우저/서버 작업 연결의 개인정보·보존 계약이다.
 운영 인증·원격 DB·푸시·배포는 아직 없다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
+2026-10-11 관리자 발행자 등록·회수 API: owner 전용
+`PUT`·`DELETE /v1/projects/{projectId}/publishers`를 로컬 구현했다. 관리자 bearer와 현재
+owner grant를 본문 읽기 전에 확인하고, 같은 D1 batch에서 owner 재확인·권한 쓰기·감사
+기록·결과 조회를 수행한다. PUT은 `{issuer,subject}`, DELETE는
+`{issuer,subject,expectedCreatedAt}`을 받고 `.mmmZ` 생성 시각 CAS로 회수하며 다르면
+publisher_conflict(409)다. 이 시각은 밀리초 단위라 같은 밀리초의 서로 다른 부여를 구분하지
+못한다. 응답은 `{projectId,issuer,subject,granted,createdAt,changed}`이고 자격증명·역할은
+넣지 않는다. 스키마·DB 마이그레이션 변경은 없고 0008 감사 action을 그대로 쓴다. 발행자
+관리 화면은 다음 슬라이스다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.

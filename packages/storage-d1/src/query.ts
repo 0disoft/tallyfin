@@ -1,5 +1,5 @@
 import { addCounts, closed, CollectionError, count, dateEnd, DAY, dateMillis, integer, NAME, PROJECT_ID, queryDates, validateRegistry, workflowCounts } from '@tallyfin/core';
-import type { AdminPrincipal, AdminQuery, AdminStore, GrantChange, ProjectSettingsUpdate, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
+import type { AdminPrincipal, AdminQuery, AdminStore, GrantChange, PublisherChange, ProjectSettingsUpdate, QueryMeta, Registry, SchemaPublication } from '@tallyfin/core';
 import { readDimensions } from './dimensions.ts';
 import { workflowBreakdown, type WorkflowDimensionRow } from './workflow-breakdown.ts';
 import { funnelSeries, type FunnelCountRow } from './funnel-query.ts';
@@ -9,6 +9,7 @@ import { createProject, projectCreationAccess } from './creation.ts';
 import { collectionRejections } from './rejections.ts';
 import { listProjectGrants } from './grants.ts';
 import { listProjectPublishers } from './publishers.ts';
+import { changeProjectPublisher } from './publisher-change.ts';
 import { changeProjectGrant } from './grant-change.ts';
 import { listAdminChanges } from './admin-change-query.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
@@ -24,6 +25,9 @@ export class D1Queries implements AdminStore {
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = options; }
   publishers(principal: AdminPrincipal, id: string, limit: number, cursor: string) {
     return listProjectPublishers(this.db, principal, id, limit, cursor);
+  }
+  changePublisher(principal: AdminPrincipal, id: string, change: PublisherChange, now: number) {
+    return changeProjectPublisher(this.db, principal, id, change, now);
   }
   changes(principal: AdminPrincipal, id: string, limit: number, cursor: string, now: number) {
     return listAdminChanges(this.db, principal, id, limit, cursor, now);

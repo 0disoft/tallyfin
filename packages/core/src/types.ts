@@ -60,7 +60,7 @@ export interface PreparedServerBatch {
 }
 export type ErrorCode = 'invalid_request' | 'invalid_event' | 'unknown_schema' |
   'origin_denied' | 'project_unavailable' | 'event_conflict' | 'attempt_conflict' |
-  'quota_exceeded' | 'unauthorized' | 'forbidden' | 'not_found' | 'storage_unavailable' | 'settings_conflict' | 'schema_conflict' | 'project_conflict' | 'project_limit_reached' | 'grant_conflict' | 'last_owner';
+  'quota_exceeded' | 'unauthorized' | 'forbidden' | 'not_found' | 'storage_unavailable' | 'settings_conflict' | 'schema_conflict' | 'project_conflict' | 'project_limit_reached' | 'grant_conflict' | 'last_owner' | 'publisher_conflict';
 export class CollectionError extends Error {
   readonly code: ErrorCode;
   readonly status: number;

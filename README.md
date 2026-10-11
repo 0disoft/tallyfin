@@ -8,18 +8,18 @@ Tallyfin은 Rodisoft의 여러 서비스가 공통으로 쓰는 가벼운 제품
 
 - `packages/core`: 등록 정의, browser/server 배치 검증, 시간 정규화, SHA-256 입력.
 - `packages/storage-d1`: D1 영수증·시도·할당량·집계와 서버 발행 권한을 원자적으로 반영하는 어댑터. 발행 권한 변경은 관리자 변경 이력 감사 기록과 같은 batch로 처리한다.
-- `apps/collector`: 네이티브 fetch 최소 브라우저 수집기, 관리자 GET 조회, 서버 발행 endpoint, 발행자 인증 배선.
+- `apps/collector`: 네이티브 fetch 최소 브라우저 수집기, 관리자 GET 조회, 서버 발행 endpoint, 발행자 권한 등록·회수 API, 발행자 인증 배선.
 - `packages/browser`: 의존성 없는 브라우저 SDK. 배치 전송·유계 재시도·숨김 전송.
 - `packages/server`: 의존성 없는 서버 발행 SDK. `createEvent`·재시도 배치 `send`.
 - `packages/auth-oidc`: 관리자·발행자 OIDC JWT 검증기.
 - `apps/admin`: 프로젝트 개요·이벤트 분석·설정·목표·퍼널 화면, browser/server 출처 선택 조회, 권한 조회·변경, 관리자 변경 이력, 자기 계정 조회, 공개 클라이언트 OIDC PKCE 로그인 코드. 퍼널 단계 편집 폼과 퍼널 CSV도 로컬에서 연결했다.
 - `db/migrations`: `0001_initial.sql`과 `0002`~`0008`. 0007은 다단계 퍼널(`funnel_runs`·`funnel_daily_counts`), 0008은 발행 권한 감사 action(`publisher.granted`·`publisher.revoked`)을 넣는 `admin_changes` 재생성이다.
 
-2~10단계 퍼널은 등록·검증·발행·정의 조회까지 로컬에서 구현했고, browser·server 수집 경로가 연결 이벤트를 영수증·할당량·집계와 같은 D1 batch에 저장한다. 연결 상태 72시간과 단계 집계 90일 정리도 로컬에서 확인했다. 서버 발행은 코어 검증부터 전용 `POST /v1/projects/{projectId}/server-batches` endpoint, 발행자 OIDC 검증 배선, `publisher-grant`·`publisher-revoke` CLI, 서버 출처 조회 화면까지 로컬에서 구현·검증했다. 발행 권한 부여·회수는 이 CLI가 관리자 변경 이력에 감사 행을 함께 남기고, 다시 실행해 이미 원하는 상태면 새 이력을 만들지 않는다.
+2~10단계 퍼널은 등록·검증·발행·정의 조회까지 로컬에서 구현했고, browser·server 수집 경로가 연결 이벤트를 영수증·할당량·집계와 같은 D1 batch에 저장한다. 연결 상태 72시간과 단계 집계 90일 정리도 로컬에서 확인했다. 서버 발행은 코어 검증부터 전용 `POST /v1/projects/{projectId}/server-batches` endpoint, 발행자 OIDC 검증 배선, 발행자 권한 등록·회수 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`), `publisher-grant`·`publisher-revoke` CLI, 서버 출처 조회 화면까지 로컬에서 구현·검증했다. 발행 권한 부여·회수는 API와 CLI 모두 관리자 변경 이력에 감사 행을 같은 D1 batch로 남기고, 다시 실행해 이미 원하는 상태면 새 이력을 만들지 않는다.
 
 ## 아직 확인하지 않은 것
 
-- 실제 운영 인증 제공자, 원격 D1, 도메인·배포, 서비스 파일럿, 라이선스는 미정이거나 미실행이다. 발행 권한을 바꾸는 관리자 API와 화면은 아직 없다.
+- 실제 운영 인증 제공자, 원격 D1, 도메인·배포, 서비스 파일럿, 라이선스는 미정이거나 미실행이다. 발행 권한을 바꾸는 관리자 API는 `PUT`·`DELETE /v1/projects/{projectId}/publishers`로 로컬 구현했고 화면은 아직 없다.
 - 발행자 OIDC 운영 설정값은 아직 없고, 실제 제공자 로그인은 검증하지 않았다.
 - 로컬 부하·정리·복구 실험은 검증했고, 실제 원격 마이그레이션·정리 Cron·백업/복구와 운영 SLO는 미검증이다. 운영 SLO는 UNDECIDED다.
 - 관리자 기본 설정의 API 401은 인증을 끈 실제 응답이다. 실제 로그인에는 별도 OIDC 설정이 필요하다.

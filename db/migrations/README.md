@@ -1,7 +1,7 @@
 # 저장 계약과 마이그레이션 상태
 
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0007`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
+마이그레이션 `0002`~`0008`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
@@ -33,7 +33,7 @@ admission·이벤트/목표 일별 집계 테이블을 만든다. 값 CHECK, 프
 이번 범위에서 실행하지 않았다. 만료 정리는 어댑터의 `cleanup`과 로컬 구현한 Worker
 스케줄러가 담당한다. 원격 활성화는 별도 작업이다.
 
-검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006·0007을 로드해 제약·트리거·CAS·
+검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006·0007·0008을 로드해 제약·트리거·CAS·
 할당량·정리를 확인한다.
 
 ## 0002_retention_cleanup.sql
@@ -198,3 +198,26 @@ backfill하지 않는다. 관리자 reader/owner 여부와 발행 권한은 서�
 롤백은 이전 코드로 되돌리고 추가 테이블은 남겨도 된다. 퍼널 수집을 끄면 새 연결·단계
 집계가 쌓이지 않는다. 정리가 이미 지운 만료 연결과 오래된 시작일 cohort는 마이그레이션
 롤백으로 복구되지 않는다.
+
+## 0008_publisher_history.sql
+
+`admin_changes`를 복사·재생성해 action CHECK에 `publisher.granted`·`publisher.revoked`를
+넓힌다. SQLite가 CHECK를 바꾸는 ALTER를 지원하지 않아 새 정의로 만든 뒤 기존 행을 옮기고
+이름을 바꾼다. 열은 13개로 그대로이고 기존 이력 행은 보존하며 backfill하지 않는다.
+발행자 action의 `target_issuer`·`target_subject`는 그 발행 권한 변경 대상을 담고, 관리자
+grant 변경과 달리 역할 열(`before_role`·`after_role`)은 쓰지 않는다.
+`admin_changes_project_time` 인덱스와 `validate_admin_change_fields`·
+`immutable_admin_change` 트리거도 새 정의에 다시 둔다. 0008 전체를 한 D1 batch로 적용한다.
+
+기존 `admin_changes`를 바꾸는 유일한 마이그레이션이라, 운영 적용 전에 관리자 API·CLI
+쓰기를 멈추고 백업한 뒤 적용 전후 행 수와 외래 키를 확인한다. 지금은 로컬 Miniflare에서만
+확인했고 원격 D1에는 적용하지 않았다.
+
+| 시점 | 확인 |
+| --- | --- |
+| 적용 전 | `0001`~`0007` 적용 상태, `admin_changes` 행 수·action별 분포, 백업 존재, 관리자 API·CLI 쓰기 중지 |
+| 적용 후 | 열 13개·기존 행 보존, action CHECK에 `publisher.granted`·`publisher.revoked` 포함, 인덱스·트리거 존재, `PRAGMA foreign_key_check` 결과 없음 |
+
+롤백은 이전 코드로 되돌리고 확장 스키마는 남겨도 된다. 다만 새 action을 해석하지 못하는
+예전 관리자 이력 리더를 새 행 위에 다시 올리면 안 된다. 예전 리더로 되돌리는 대신 action을
+인식하는 리더를 유지하고 앞으로 고치는 방식을 우선한다.

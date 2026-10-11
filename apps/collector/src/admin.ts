@@ -1,4 +1,4 @@
-import { closed, CollectionError, dateMillis, DAY, has, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseGrantChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft, validGrantIdentity } from '@tallyfin/core';
+import { closed, CollectionError, dateMillis, DAY, has, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, NAME, parseGrantChange, parsePublisherChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft, validGrantIdentity } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 
@@ -33,8 +33,17 @@ export async function administrator(request: Request, access: AdministratorAcces
   }
   const publishers = /^\/v1\/projects\/([^/]+)\/publishers$/.exec(url.pathname);
   if (publishers) {
-    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    if (!['GET', 'PUT', 'DELETE'].includes(request.method)) throw new CollectionError('invalid_request', 405);
     if (!PROJECT_ID.test(publishers[1]!)) throw new CollectionError('invalid_request', 400);
+    if (request.method === 'PUT' || request.method === 'DELETE') {
+      parameters(url, []);
+      const project = await access.store.settings(principal, publishers[1]!);
+      if (!project.canEdit) throw new CollectionError('forbidden', 403);
+      const body = await readBody(request);
+      let value: unknown;
+      try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
+      return access.store.changePublisher(principal, publishers[1]!, parsePublisherChange(value, request.method), now);
+    }
     parameters(url, ['limit', 'cursor'], 12352);
     return access.store.publishers(principal, publishers[1]!, positive(url.searchParams.get('limit') ?? '25', 100),
       url.searchParams.get('cursor') ?? '');

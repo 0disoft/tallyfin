@@ -374,6 +374,7 @@ components:
                 - project_limit_reached
                 - grant_conflict
                 - last_owner
+                - publisher_conflict
                 - quota_exceeded
                 - unauthorized
                 - forbidden
@@ -745,6 +746,52 @@ components:
                   maxLength: 512
                   pattern: ^[A-Za-z0-9_-]+$
                 - type: "null"
+    PublisherGrantRequest:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject]
+      properties:
+        issuer: { $ref: "#/components/schemas/GrantIssuer" }
+        subject: { $ref: "#/components/schemas/GrantSubject" }
+    PublisherRevokeRequest:
+      type: object
+      additionalProperties: false
+      required: [issuer, subject, expectedCreatedAt]
+      properties:
+        issuer: { $ref: "#/components/schemas/GrantIssuer" }
+        subject: { $ref: "#/components/schemas/GrantSubject" }
+        expectedCreatedAt:
+          anyOf:
+            - type: string
+              format: date-time
+              pattern: ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$
+            - type: "null"
+          description: Creation timestamp last read for the publishing permission, not a token or authority claim.
+            null means the caller observed no permission. An absent permission is an idempotent success;
+            an existing permission with a different timestamp returns publisher_conflict. Equal millisecond timestamps
+            do not distinguish separate grants; this is a timestamp guard, not a unique grant-generation identifier.
+    PublisherMutationResult:
+      type: object
+      additionalProperties: false
+      required: [projectId, issuer, subject, granted, createdAt, changed]
+      properties:
+        projectId: { $ref: "#/components/schemas/ProjectId" }
+        issuer: { $ref: "#/components/schemas/GrantIssuer" }
+        subject: { $ref: "#/components/schemas/GrantSubject" }
+        granted: { type: boolean }
+        createdAt:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+        changed: { type: boolean }
+      oneOf:
+        - properties:
+            granted: { const: true }
+            createdAt: { type: string, format: date-time }
+        - properties:
+            granted: { const: false }
+            createdAt: { type: "null" }
     ProjectPublisher:
       type: object
       additionalProperties: false
@@ -2572,12 +2619,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "405":
-          description: Only GET is supported.
+          description: Only GET, PUT and DELETE are supported.
           headers:
             Allow:
               schema:
                 type: string
-                const: GET
+                const: GET, PUT, DELETE
           content:
             application/json:
               schema:
@@ -2588,6 +2635,129 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Administration]
+      operationId: grantProjectPublisher
+      summary: Grant server publishing permission as project owner
+      description: Requires a verified administrator bearer and current owner permission before body consumption,
+        rechecked atomically with the permission write and publisher change-history record. Does not issue credentials
+        or alter administrator grants. No query parameters. An existing permission is a no-op and preserves createdAt.
+        Exact retries do not duplicate history. No Idempotency-Key is required because the requested state is idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublisherGrantRequest" }
+          text/plain:
+            schema: { $ref: "#/components/schemas/PublisherGrantRequest" }
+      responses:
+        "200":
+          description: Publishing permission state and changed flag. Existing grant creation time is preserved. No credentials returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublisherMutationResult" }
+        "400":
+          description: Invalid closed body, project ID, identity, timestamp or query parameters.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: No current project owner, including missing projects and a revoked caller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "405":
+          description: Only GET, PUT and DELETE are supported.
+          headers:
+            Allow:
+              schema: { type: string, const: 'GET, PUT, DELETE' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "413":
+          description: Body exceeds 16 KiB.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "415":
+          description: Unsupported content type or content encoding.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Storage unavailable or invalid stored state. Audit SQL failure rolls back permission writes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+    delete:
+      tags: [Administration]
+      operationId: revokeProjectPublisher
+      summary: Revoke server publishing permission as project owner
+      description: Requires a verified administrator bearer and current owner permission before body consumption,
+        rechecked atomically with the permission write and publisher change-history record. Does not issue credentials
+        or alter administrator grants. No query parameters. DELETE compares expectedCreatedAt to the stored timestamp; absent permission is a no-op.
+        Exact retries do not duplicate history. No Idempotency-Key is required because the requested state is idempotent.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublisherRevokeRequest" }
+          text/plain:
+            schema: { $ref: "#/components/schemas/PublisherRevokeRequest" }
+      responses:
+        "200":
+          description: Publishing permission state and changed flag. Existing grant creation time is preserved. No credentials returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublisherMutationResult" }
+        "400":
+          description: Invalid closed body, project ID, identity, timestamp or query parameters.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "401":
+          description: Administrator authentication required.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "403":
+          description: No current project owner, including missing projects and a revoked caller.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "405":
+          description: Only GET, PUT and DELETE are supported.
+          headers:
+            Allow:
+              schema: { type: string, const: 'GET, PUT, DELETE' }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Observed creation timestamp differs from current permission (publisher_conflict); reload before revoking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "413":
+          description: Body exceeds 16 KiB.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "415":
+          description: Unsupported content type or content encoding.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: Storage unavailable or invalid stored state. Audit SQL failure rolls back permission writes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /v1/projects/{projectId}/grants:
     parameters:
       - $ref: "#/components/parameters/ProjectId"

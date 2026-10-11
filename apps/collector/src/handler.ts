@@ -15,6 +15,7 @@ const messages: Record<ErrorCode, string> = {
   project_conflict: 'Project ID conflicts with an existing project.',
   project_limit_reached: 'Project creation limit reached.',
   grant_conflict: 'Project grant changed. Reload before saving.',
+  publisher_conflict: 'Publishing permission changed. Reload before revoking.',
   last_owner: 'The last project owner cannot be removed or demoted.',
   quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Authentication is required.',
   forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
@@ -105,7 +106,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
       if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow',
         new URL(request.url).pathname === '/v1/projects' ? 'GET, POST' :
-        /^\/v1\/projects\/[^/]+\/grants$/.test(new URL(request.url).pathname) ? 'GET, PUT, DELETE' :
+        /^\/v1\/projects\/[^/]+\/(grants|publishers)$/.test(new URL(request.url).pathname) ? 'GET, PUT, DELETE' :
         /^\/v1\/projects\/[^/]+\/schemas\/validate$/.test(new URL(request.url).pathname) ? 'POST' :
         /^\/v1\/projects\/[^/]+\/schemas\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PUT' :
         /^\/v1\/projects\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PATCH' : 'GET');

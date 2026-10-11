@@ -6,7 +6,8 @@ endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현�
 구현했다. 그 CLI는 발행 권한 쓰기와 같은 D1 batch에서 관리자 변경 이력(`admin_changes`)에
 `publisher.granted`·`publisher.revoked` 감사 기록을 남기고, `0008_publisher_history.sql`이
 이력 action을 넓혔다. 변경 이력 조회 API와 관리자 화면도 이 action을 표시한다. 발행 권한을
-바꾸는 관리자 API·화면은 아직 없고 CLI만 있다. 출처별 조회 API(`source` 선택, 기본 browser)는
+바꾸는 관리자 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`)는 로컬 구현했고 관리자
+화면은 아직 없다. 출처별 조회 API(`source` 선택, 기본 browser)는
 로컬에서 구현·검증 완료했고 실제 발행자 OIDC 제공자 설정은 아직 없고 서버 출처 조회 화면은
 로컬에서 연결했다. 이 문서는
 확정한 것과 아직 계획인 것을 나눠 적는다.
@@ -237,10 +238,50 @@ owner 권한이 회수된 경우도 403이며 매 페이지 권한과 행을 같
 전체 쿼리 최대 12352자이며 다른 프로젝트·grant 커서·중복/추가 인자를 거부한다. 행 삭제
 후에도 위치를 유지하고 커서 앞에 새 행이 생기면 첫 페이지부터 새로고침해야 한다.
 Cache-Control은 no-store이고 CORS·쿠키·쓰기 없이 GET만 받는다. 인증 실패는 401,
-잘못된 입력은 400, 다른 메서드는 405(Allow: GET), 저장소 실패·손상 데이터는 503이다.
-등록·회수 API와 화면 연결은 다음 슬라이스이며 현재 CLI는 그대로 쓸 수 있다.
+잘못된 입력은 400, 다른 메서드는 405(Allow: GET, PUT, DELETE), 저장소 실패·손상 데이터는
+503이다. PUT·DELETE는 아래 등록·회수 규칙을 따르며 GET 동작 자체는 바뀌지 않는다.
 CLI로 남긴 발행 권한 변경은 관리자 변경 이력에 `publisher.granted`·`publisher.revoked`로
 나타난다.
+
+## 관리자 발행자 등록·회수
+
+`PUT /v1/projects/{projectId}/publishers`는 발행 권한을 부여하고
+`DELETE /v1/projects/{projectId}/publishers`는 회수한다. 둘 다 관리자 bearer와 현재 프로젝트
+owner grant를 요구한다. reader·다른 프로젝트 owner·회수된 owner·없는 프로젝트는 403이고,
+`project_publishers` 발행 권한만 있는 주체도 403이다. 라우터는 본문을 읽기 전에 owner 여부를
+확인하고, 쓰기 직전 원자 D1 batch에서 owner 조회·권한 쓰기·감사 기록·결과 조회를 함께
+수행한다. batch의 각 쓰기 문장도 owner `EXISTS` 조건을 달고 있어, 본문 읽기와 batch 사이에
+owner가 회수되면 쓰기 문장이 0행이 되어 아무것도 바뀌지 않고 owner 조회가 빈 결과라 403이다.
+회수는 예외 롤백이 아니라 조건이 쓰기를 막는 방식이다.
+
+- PUT 본문은 `{issuer,subject}`뿐이고 DELETE 본문은 `{issuer,subject,expectedCreatedAt}`이다.
+  role·자격증명·추가 필드는 없다. issuer·subject는 코어 `validGrantIdentity`를 따르고
+  프로젝트 ID 형식도 검사한다.
+- `expectedCreatedAt`은 마지막으로 읽은 생성 시각을 `.mmmZ` UTC 문자열 또는 null로 넣는다.
+  null은 권한이 없다고 관찰한 경우다. granted가 true인 요청은 expectedCreatedAt을 받지 않는다.
+- 본문은 `application/json`과 `text/plain`을 받고 16KiB를 넘으면 413, 다른 미디어 타입이나
+  비-identity 인코딩은 415다. 조회 파라미터는 400이다.
+- 응답은 `{projectId,issuer,subject,granted,createdAt,changed}`다. granted와 createdAt은
+  짝을 이룬다. 부여는 true·생성 시각, 회수는 false·null이고 자격증명·역할은 넣지 않는다.
+- 이미 있는 발행 권한을 다시 부여하면 `changed=false`이고 기존 생성 시각을 바꾸지 않는다.
+  대상 권한 행이 없으면 `expectedCreatedAt` 값과 상관없이(직전에 읽은 시각이든 null이든)
+  no-op이며 `changed=false`다. 회수한 뒤 같은 `expectedCreatedAt`으로 다시 보내도 이미 행이
+  없어 no-op로 성공한다. 행이 남아 있고 저장 시각이 `expectedCreatedAt`과 같을 때만
+  `changed=true`다.
+- 회수 CAS는 `expectedCreatedAt`과 저장된 생성 시각을 비교하고 다르면
+  `publisher_conflict`(409)다. 다시 읽어야 한다. 이 시각은 밀리초 단위라 같은 밀리초에 생긴
+  서로 다른 부여를 구분하지 못한다. 고유한 부여 세대 식별자가 아니라 타임스탬프 가드일 뿐이다.
+- 감사 기록(`publisher.granted`·`publisher.revoked`)은 권한 쓰기와 같은 D1 batch이고 직전
+  쓰기가 1행을 바꿨을 때만 INSERT한다. no-op(부여 중복·대상 없음)이면 권한 쓰기도 이력
+  추가도 없다. 1행을 바꾼 뒤 감사 INSERT가 실패하면 같은 batch라 권한 변경도 함께
+  롤백된다. 같은 요청을 다시 보내도 새 이력이 남지 않는다.
+- 상태 코드는 200·400·401·403·405·413·415·503이고 DELETE에만 409가 더해진다. 405 Allow는
+  `GET, PUT, DELETE`다.
+
+발행자 화면 연결은 다음 슬라이스이며 CLI(`publisher-grant`·`publisher-revoke`)는 그대로 쓸 수
+있다. 이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다. 스키마·DB 마이그레이션
+변경은 없고 0008 감사 action을 그대로 쓴다. 이 슬라이스에서 원격 DB 적용·푸시·배포는 하지
+않았다.
 
 ## 서버 출처 조회
 

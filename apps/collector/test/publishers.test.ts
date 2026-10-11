@@ -85,7 +85,7 @@ test('invalid queries and unsupported methods fail; authentication and storage f
     assert.equal((await handler()(request(`/v1/projects/sembom/publishers${suffix}`))).status, 400);
   assert.equal((await handler()(request('/v1/projects/INVALID/publishers'))).status, 400);
   const method = await handler()(request(undefined, 'POST'));
-  assert.equal(method.status, 405); assert.equal(method.headers.get('Allow'), 'GET');
+  assert.equal(method.status, 405); assert.equal(method.headers.get('Allow'), 'GET, PUT, DELETE');
   assert.equal((await createCollector(fixture.store)(request())).status, 401);
   for (const batch of [async () => [], async () => { throw Error('private database error'); }]) {
     const response = await handler(principal, new D1Queries({ prepare: fixture.db.prepare.bind(fixture.db), batch }))(request());

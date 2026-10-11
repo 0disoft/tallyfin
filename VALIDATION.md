@@ -1,5 +1,26 @@
 # 검증
 
+## 서버 발행자 등록·회수 API — 2026-10-11
+
+현재 owner의 PUT/DELETE /v1/projects/{projectId}/publishers를 로컬 구현했다. PUT은
+issuer/subject만 받고 기존 생성 시각을 보존하는 no-op를 허용한다. DELETE는 관측한
+expectedCreatedAt을 비교하고, 이미 없는 권한에는 no-op, 다른 시각의 권한에는
+publisher_conflict(409)를 반환한다. 동일 밀리초에 재부여된 권한을 구분하는 고유 세대 ID는
+아니라는 한계를 계약에 명시했다. 권한 변경·publisher 감사 행·owner 재확인은 같은 D1
+batch이며 CLI와 별개로 검증된 administrator actor를 기록한다.
+
+실행·결과: 발행자 조회/변경·기존 관리자 grant 변경 테스트 16/16, 루트 npm exec --
+tsc --noEmit, tools/contracts lint·check 59/59 통과했다. 이후 입력 snapshot 복사 보완 뒤
+변경 API 4/4·타입 검사를 다시 통과했다. 실제 로컬 D1에서 회수 전 기대 시각과 현재 값
+불일치, 재요청 no-op·중복 이력 없음, owner 회수 경쟁, reader/publisher-only/없는 프로젝트
+거부, 이력 실패 시 권한 롤백, 닫힌 입력과 16KiB body·Content-Type 제한을 확인했다.
+새 ErrorCode를 추가한 첫 타입 검사에서는 고정 메시지 누락을 찾아 보완했다.
+
+계약 원본 api/openapi.yaml과 서버 발행·관리자 문서, 로드맵·README를 갱신했다.
+이번 슬라이스의 DB·마이그레이션·SDK·의존성·CI·위생 변경은 없고 기존 0008 이력을 쓴다.
+발행자 관리 화면은 별도 다음 슬라이스다. 운영 리소스·실제 로그인/원격 검증은 설정
+미정으로 미실행이며 푸시·배포도 없다.
+
 ## 서버 발행자 변경 이력 — 2026-10-11
 
 publisher.granted/revoked 이력을 target issuer/subject만 담는 별도 action으로 확장했다.

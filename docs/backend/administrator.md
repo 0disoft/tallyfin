@@ -49,14 +49,17 @@ export default createWorker(bearer => hostVerify(bearer));
 없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
 
 지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 생성 POST·설정 PATCH·버전별 스키마 PUT·
-프로젝트 권한 PUT·DELETE다. 초안 검증 POST는 저장하지 않는 읽기 작업이다.
-발행자 권한 부여·회수는 아직 관리자 API에 없고 provisioning CLI(`publisher-grant`·
-`publisher-revoke`)만 있다. 발행자 목록은 위 owner 전용 GET으로 읽는다.
+프로젝트 권한 PUT·DELETE·발행자 권한 PUT·DELETE다. 초안 검증 POST는 저장하지 않는 읽기
+작업이다. 발행자 권한 부여·회수는 아래 발행자 등록·회수 규칙을 따르고 provisioning
+CLI(`publisher-grant`·`publisher-revoke`)도 그대로 쓸 수 있다. 발행자 목록은 위 owner 전용
+GET으로 읽는다.
 
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
 - `GET /v1/projects/{projectId}/publishers` — 현재 owner 전용 서버 발행자 목록. 관리자 grant와 별개인 발행 권한만 반환한다.
+- `PUT /v1/projects/{projectId}/publishers` — owner의 발행 권한 부여. `{issuer,subject}`만 받는다.
+- `DELETE /v1/projects/{projectId}/publishers` — owner의 발행 권한 회수. `{issuer,subject,expectedCreatedAt}`을 받는다.
 - `GET /v1/projects/{projectId}/grants` — 현재 owner 전용 권한 목록. 아래 목록 규칙을 따른다.
 - `PUT /v1/projects/{projectId}/grants` — owner의 reader/owner grant 등록·역할 변경. 아래 변경 규칙을 따른다.
 - `DELETE /v1/projects/{projectId}/grants` — owner의 grant 회수. 아래 변경 규칙을 따른다.
@@ -279,6 +282,40 @@ createdAt도 null이다. 이 API와 관리자 화면의 권한 변경 패널을 
 보내고, 권한을 잃으면 목록과 편집을 잠근다. DB·마이그레이션 변경·배포·운영 identity
 자격 증명은 없다.
 
+## 발행자 등록·회수
+
+`PUT /v1/projects/{projectId}/publishers`와 `DELETE .../publishers`는 현재 프로젝트 owner만
+쓴다. reader·다른 프로젝트 owner·회수된 owner·없는 프로젝트는 403이고, 관리자 grant와 별개인
+`project_publishers` 발행 권한만 있는 주체도 403이다. 라우터는 본문을 읽기 전에 owner인지
+확인하고, 쓰기 직전 원자 D1 batch에서 owner 조회·권한 쓰기·감사 기록·결과 조회를 함께
+수행한다. batch의 각 쓰기 문장도 owner `EXISTS` 조건을 달고 있어, 본문 읽기와 batch 사이에
+owner가 회수되면 쓰기가 0행이 되어 아무것도 바뀌지 않고 owner 조회가 빈 결과라 403이다.
+회수는 예외 롤백이 아니라 조건이 쓰기를 막는 방식이다. 본문은 닫힌 JSON이며
+`application/json`과 `text/plain`만 UTF-8 16KiB 이하로 받고 조회 파라미터는 받지 않는다.
+넘치면 413, 다른 미디어 타입·비-identity 인코딩은 415다. issuer·subject는
+[provisioning CLI](./provisioning.md)와 같은 `validGrantIdentity` 제약을 쓴다.
+
+PUT 본문은 `{issuer,subject}`, DELETE 본문은 `{issuer,subject,expectedCreatedAt}`이다.
+`expectedCreatedAt`은 마지막으로 읽은 생성 시각을 `.mmmZ` UTC 문자열 또는 null로 넣는다.
+null은 권한이 없다고 본 경우다. granted가 true인 PUT은 expectedCreatedAt을 받지 않는다.
+
+이미 있는 발행 권한을 다시 부여하면 DB를 다시 쓰지 않고 200 `changed=false`로 성공하며
+기존 생성 시각을 바꾸지 않는다. 대상 권한 행이 없으면 `expectedCreatedAt` 값과 상관없이
+no-op이고 `changed=false`다(직전에 읽은 시각으로 회수한 뒤 같은 값으로 다시 보내도 이미 행이
+없어 no-op로 성공한다). DELETE의 CAS는 `expectedCreatedAt`과 저장된 생성 시각을 비교하고
+다르면 publisher_conflict(409)라 다시 읽어야 한다. 이 시각은 밀리초 단위라 같은 밀리초에 생긴
+서로 다른 부여를 구분하지 못한다. 고유한 부여 세대 식별자가 아니라 타임스탬프 가드일 뿐이다.
+
+성공 응답은 200 `{projectId,issuer,subject,granted,createdAt,changed}`이고 granted와
+createdAt은 짝을 이룬다(부여는 true·생성 시각, 회수는 false·null). 자격증명·역할은 넣지
+않는다. 변경 이력(`publisher.granted`·`publisher.revoked`) 감사 기록은 권한 쓰기와 같은
+D1 batch이고 직전 쓰기가 1행을 바꿨을 때만 INSERT한다. no-op이면 권한 쓰기도 이력 추가도
+없고, 1행을 바꾼 뒤 감사 INSERT가 실패하면 같은 batch라 권한 변경도 함께 롤백된다. 상태
+코드는 200·400·401·403·405(Allow: GET, PUT, DELETE)·413·415·503이고
+DELETE에만 409가 더해진다. 이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다.
+스키마·DB 마이그레이션 변경은 없고 0008 감사 action을 그대로 쓴다. 발행자 관리 화면은
+다음 슬라이스이며 CLI도 그대로 쓸 수 있다.
+
 ## 프로젝트 변경 이력 조회
 
 `GET /v1/projects/{projectId}/changes`는 현재 프로젝트 owner만 읽는다. reader·다른
@@ -296,10 +333,11 @@ batch에서 읽는다. 인증 실패는 401, 잘못된 프로젝트·페이지 �
 발행 권한 부여·회수(`publisher.granted`·`publisher.revoked`)는 대상 issuer/subject만 담고
 관리자 grant와 달리 역할은 넣지 않는다.
 
-기록 대상은 관리자 API의 프로젝트 생성·설정 변경·스키마 발행·grant 변경과 provisioning
-CLI의 register·grant·revoke·publisher-grant·publisher-revoke다. CLI 발행 권한 변경도 actor는
-식별자 없는 local_operator다. 직접 SQL 쓰기, creator 권한 관리, 시스템 정리, 방문자 활동은
-기록하지 않는다.
+기록 대상은 관리자 API의 프로젝트 생성·설정 변경·스키마 발행·grant 변경·발행자 권한
+부여·회수와 provisioning CLI의 register·grant·revoke·publisher-grant·publisher-revoke다.
+API 발행자 권한 변경은 actor가 검증한 issuer/subject이고, CLI 발행 권한 변경은 식별자 없는
+local_operator다. 직접 SQL 쓰기, creator 권한 관리, 시스템 정리, 방문자 활동은 기록하지
+않는다.
 
 limit은 기본 25·최대 100이고 occurredAt 내림차순, 같은 시각이면 기록 UUID
 내림차순이다. 커서는 프로젝트에 묶인 base64url 위치값(최대 512자)으로
