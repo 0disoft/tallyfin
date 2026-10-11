@@ -22,6 +22,17 @@
       "skipped": 0,
       "exitCode": 0,
       "localEvidence": ".tmp/backend-access-additional.log"
+    },
+    {
+      "command": "node --test --test-timeout=30000 --test-name-pattern='^real admin proxy|^real issuer/audience rejection|^real storage failure' tools/runtime/test/install-access-check.test.ts",
+      "passed": 3,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "localEvidence": ".tmp/backend-signed-access-audit.log",
+      "signedFixture": "Ephemeral RS256 keys and local JWKS; administrator and publisher audiences differ",
+      "expectedRuntimeFault": "The storage-failure case deliberately disposes local D1; workerd reports Windows socket errors and the proxy returns the expected 503 before project lookup"
     }
   ],
   "verifiedCases": [
@@ -34,12 +45,16 @@
     "Owner-only grant, publisher and administrator-history lists exclude other project identities",
     "Funnel and server-event reads preserve project and schema boundaries",
     "Project creation requires separately provisioned creator authority and rejects supplied ownership fields",
-    "Native Worker execution with real local D1 rechecks administrator grants"
+    "Native Worker execution with real local D1 rechecks administrator grants",
+    "A cryptographically verified local administrator token reaches identity, health and granted project reads",
+    "A local publisher-audience token, mismatched upstream identity and unavailable storage stop before project enumeration",
+    "Installation access reports omit tokens, issuer/subject, project values and browser origin while preserving database state"
   ],
   "verificationLimits": {
     "databaseRuntime": "Local Miniflare D1",
-    "principalVerification": "Test-controlled trusted verifier ports",
-    "jwtSignatureVerifiedByTheseRuns": false,
+    "principalVerification": "Trusted verifier doubles in 41 grant cases; real local RS256/OIDC verification in three installation access cases",
+    "jwtSignatureVerifiedByTheseRuns": true,
+    "allGrantCasesUsedSignedTokens": false,
     "productionIdentityProviderVerified": false,
     "remoteDatabaseVerified": false,
     "allEndpointsAndAllParameterCombinationsVerified": false,
