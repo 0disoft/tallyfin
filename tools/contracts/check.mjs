@@ -201,7 +201,7 @@ check('DBML parses with project-scoped storage and no raw visitor tables', () =>
     ['project_id','run_id','schema_version','funnel_id','started_at','cohort_date','dimension_key','step_times_json','expires_at'].sort());
   assert.deepEqual(tables.find(t=>t.name==='funnel_daily_counts').fields.map(f=>f.name).sort(),
     ['project_id','schema_version','cohort_date','funnel_id','dimension_key','step_index','reached_count','updated_at'].sort());
-  assert.deepEqual(tables.find(t=>t.name==='project_publishers').fields.map(f=>f.name).sort(), ['project_id','issuer','subject','created_at'].sort());
+  assert.deepEqual(tables.find(t=>t.name==='project_publishers').fields.map(f=>f.name).sort(), ['project_id','issuer','subject','created_at','grant_id'].sort());
   for (const table of tables.filter(t=>!['projects','project_creators','retention_cleanup_state'].includes(t.name))) assert.ok(table.fields.some(f=>f.name==='project_id'));
   assert.deepEqual(tables.find(t=>t.name==='retention_cleanup_state').fields.map(f=>f.name).sort(),['id','last_project_id','revision']);
   assert.deepEqual(tables.find(t=>t.name==='admin_changes').fields.map(f=>f.name).sort(),

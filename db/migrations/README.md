@@ -1,7 +1,7 @@
 # 저장 계약과 마이그레이션 상태
 
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0008`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
+마이그레이션 `0002`~`0009`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
@@ -33,7 +33,7 @@ admission·이벤트/목표 일별 집계 테이블을 만든다. 값 CHECK, 프
 이번 범위에서 실행하지 않았다. 만료 정리는 어댑터의 `cleanup`과 로컬 구현한 Worker
 스케줄러가 담당한다. 원격 활성화는 별도 작업이다.
 
-검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006·0007·0008을 로드해 제약·트리거·CAS·
+검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006·0007·0008·0009를 로드해 제약·트리거·CAS·
 할당량·정리를 확인한다.
 
 ## 0002_retention_cleanup.sql
@@ -141,6 +141,7 @@ register 한 번은 생성·설정·스키마 발행·상태 변경 행을 함�
 `project_publishers`는 `(project_id, issuer, subject, created_at)`만 보관하고 새 DB에서는
 빈 테이블로 시작한다. 기존 `project_grants`에서 발행 권한을 자동으로 만들지 않고
 backfill하지 않는다. 관리자 reader/owner 여부와 발행 권한은 서로 독립이다.
+0009가 이 테이블을 재생성해 `grant_id`를 더한다. 그 뒤 정의는 0009 절을 따른다.
 
 이 파일은 테이블 복사가 있어 0001~0005보다 비용이 크다. 운영 적용 전에 수집을 멈추고
 백업한 뒤 아래를 확인한다. 지금은 로컬 Miniflare에서만 확인했고 운영 백업·적용은
@@ -221,3 +222,43 @@ grant 변경과 달리 역할 열(`before_role`·`after_role`)은 쓰지 않는�
 롤백은 이전 코드로 되돌리고 확장 스키마는 남겨도 된다. 다만 새 action을 해석하지 못하는
 예전 관리자 이력 리더를 새 행 위에 다시 올리면 안 된다. 예전 리더로 되돌리는 대신 action을
 인식하는 리더를 유지하고 앞으로 고치는 방식을 우선한다.
+
+## 0009_publisher_generations.sql
+
+`project_publishers`를 복사·재생성해 발행 권한마다 불변 부여 ID `grant_id`를 더한다. SQLite가
+기존 표에 UNIQUE 열과 자동 기본값을 붙이는 ALTER를 지원하지 않아 새 정의로 만들고 행을 옮긴
+뒤 이름을 바꾼다. 옮기는 열은 `project_id`·`issuer`·`subject`·`created_at` 그대로이고 기존
+발행 행은 보존하며 backfill하지 않는다.
+
+- `grant_id`는 `lower(hex(randomblob(16)))` 기본값의 32자 소문자 hex다. CHECK가 길이 32와
+  `0-9a-f`만 허용하고 `UNIQUE`가 중복을 막는다. 자격증명·인증 토큰이 아니라 회수·재부여를
+  구분하는 비밀 아닌 동시성 표식이다.
+- `immutable_publisher_generation` BEFORE UPDATE 트리거가 기존 행 수정을 거부한다. 권한을
+  바꾸려면 지원 도구로 지웠다가 다시 넣는다. 삭제 후 재부여는 같은 밀리초여도 새 ID를 받는다.
+- `(project_id, issuer, subject)` 기본 키와 `projects(id)` 외래 키는 그대로 둔다.
+- 0009 전체를 한 D1 batch로 적용한다. 복사 대상은 발행 권한 표뿐이라 0006의 영수증·집계
+  복사보다 작다.
+
+CLI `publisher-grant`·`publisher-revoke`는 프로젝트 생성 시각과 함께 현재 행의 `grant_id`를
+CAS 기준으로 쓴다. 그래서 같은 밀리초에 재부여된 권한을 지우는 stale 회수를 0행 변경으로
+감지해 `apply_conflict`로 끝낸다. HTTP `DELETE /v1/projects/{projectId}/publishers`와 관리자
+발행 화면은 아직 생성 시각(`createdAt`) 기준이며, ID로 바꾸는 작업은 다음 슬라이스다.
+
+운영 적용 전에 발행자 CLI·HTTP 쓰기를 멈추고 백업한 뒤 적용 전후 발행 행 수와 ID를 확인한다.
+지금은 로컬 Miniflare에서만 확인했고 원격 D1에는 적용하지 않았다.
+
+| 시점 | 확인 |
+| --- | --- |
+| 적용 전 | `0001`~`0008` 적용 상태, `project_publishers` 행 수와 `(project_id, issuer, subject, created_at)` 값, 백업 존재, 발행자 CLI·HTTP 쓰기 중지 |
+| 적용 중 | batch가 롤백되면 이전 표와 행이 그대로 남는지 |
+| 적용 후 | 발행 행 수가 적용 전과 같은지, 각 행의 `project_id`·`issuer`·`subject`·`created_at`이 그대로인지, `grant_id`가 행마다 다른 32자 소문자 hex인지, UNIQUE·CHECK·트리거 존재, `PRAGMA foreign_key_check` 결과 없음 |
+
+로컬 초기화(`provision init`)는 `sqlite_master`에서 `project_publishers` 정의에 32자 hex
+`grant_id`·UNIQUE·CHECK와 `immutable_publisher_generation` BEFORE UPDATE 트리거가 있는지 본다.
+`project_publishers_next`가 남아 있거나 제약·트리거가 빠지면 불완전한 DB로 보고 중단한다.
+빈 DB에 `0001`~`0009`를 적용하는 fresh 경로와 `0001`~`0008`이 있는 DB에 0009만 추가하는
+upgraded 경로를 나눠 기존 행 보존과 ID 생성을 확인한다.
+
+롤백은 이전 코드로 되돌리고 새 열·트리거는 남겨도 된다. 다만 예전 CLI 코드는 다시 생성 시각
+CAS를 쓰므로 같은 밀리초 재부여에서 stale 회수가 다시 가능해진다. 되돌리는 대신 `grant_id`
+기준 코드를 유지하고 앞으로 고치는 편을 우선한다.

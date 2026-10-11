@@ -59,7 +59,7 @@ test('stale creation timestamp and absent expectation cannot revoke an existing 
 
 test('reader and publisher-only identities cannot write, and owner revocation before transaction blocks all changes', async () => {
   await f.db.prepare('INSERT INTO project_grants VALUES (?,?,?,?,?)').bind('sembom', owner.issuer, 'reader', 'reader', now).run();
-  await f.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('sembom', target.issuer, target.subject, now).run();
+  await f.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind('sembom', target.issuer, target.subject, now).run();
   for (const principal of [{ ...owner, subject: 'reader' }, target, { ...owner, subject: 'missing' }]) {
     for (const method of ['PUT', 'DELETE']) assert.equal((await handler(principal)(request(method, { broken: true }))).status, 403);
   }

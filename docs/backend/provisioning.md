@@ -28,7 +28,7 @@ npm run provision -- publisher-revoke --local --state-dir .tmp/provision-db --fi
 
 ## init
 
-`init --apply`가 저장소 마이그레이션 `0001_initial.sql`부터 `0006_server_collection.sql`까지 중 아직 적용되지 않은 것을 로컬 DB에 적용한다. 0006은 재생성 테이블 대신 `project_publishers` 존재로 적용 여부를 판단한다. 적용할 마이그레이션이 없으면 변경하지 않는다. 한 마이그레이션의 테이블이나 열이 일부만 있는 상태면 `partial_database`로 멈춘다.
+`init --apply`가 저장소 마이그레이션 `0001_initial.sql`부터 `0009_publisher_generations.sql`까지 중 아직 적용되지 않은 것을 로컬 DB에 적용한다. 0006은 재생성 테이블 대신 `project_publishers` 존재로, 0008은 확장 action, 0009는 32자 hex `grant_id`·UNIQUE·CHECK와 `immutable_publisher_generation` 트리거로 적용 여부를 판단한다. `project_publishers_next`가 남아 있거나 0009의 제약·트리거가 빠지면 `partial_database`로 멈춘다. 적용할 마이그레이션이 없으면 변경하지 않는다.
 
 ## register
 
@@ -60,9 +60,11 @@ issuer·subject 형식은 코어 `validGrantIdentity`로 검사한다. 프로젝
 
 - 이 명령은 `project_publishers` 행만 넣고 지운다. 관리자 `project_grants`는 건드리지
   않고 마지막 owner 검사도 하지 않는다. 자격증명·토큰 발급이나 관리자 역할 부여는 없다.
-- 적용 직전에 프로젝트 생성 시각(`created_at`)과 현재 발행 권한 상태를 CAS로 비교한다.
-  이미 원하는 상태면 no-op(변경 0)이고 기존 행의 생성 시각을 다시 쓰지 않는다. 프로젝트나
-  권한이 그 사이 바뀌면 `apply_conflict`이고 아무것도 쓰지 않는다.
+- 적용 직전에 프로젝트 생성 시각(`created_at`)과 현재 발행 행의 `grant_id`를 CAS로 비교한다.
+  `grant_id`는 자격증명이 아니라 회수·재부여를 구분하는 비밀 아닌 표식이고, 삭제 후 재부여는
+  같은 밀리초여도 새 값을 받는다. 이미 원하는 상태면 no-op(변경 0)이고 기존 행을 다시 쓰지
+  않는다. 스냅샷의 `grant_id`가 그 사이 바뀌어 회수 DELETE가 0행이면 `apply_conflict`이고
+  아무것도 쓰지 않는다.
 - 적용 SQL 자체가 실패하면 `database_unavailable`로 끝난다. 이때는 반영 여부가 확인되지
   않은 상태이므로 롤백됐다고 단정하지 말고 DB를 확인한 뒤 미리보기를 다시 뜬다.
 - `--local`·`--file`(64KiB)·미리보기·`--expect-plan`·`--apply` 방식은 기존 명령과 같다.
@@ -73,7 +75,8 @@ issuer·subject 형식은 코어 `validGrantIdentity`로 검사한다. 프로젝
   만든 계획만 적용된다.
 - 발행 권한 변경은 관리자 변경 이력(`admin_changes`)에 기록하지 않는다. 이 이력의 action
   형식은 프로젝트·설정·스키마·관리자 grant만 다룬다.
-- 0006 마이그레이션이 `project_publishers`를 이미 만들므로 스키마·마이그레이션 변경은 없다.
+- 0009 마이그레이션이 `project_publishers`를 재생성해 `grant_id`를 더한다. 표를 직접 UPDATE할
+  수 없으므로 회수는 지우기, 부여는 다시 넣기로만 한다.
 
 ### register / grant / revoke의 동시성
 

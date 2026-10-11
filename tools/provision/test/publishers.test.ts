@@ -64,10 +64,12 @@ test('stale grants, revoke/regrant changes and project replacement cannot be app
     await a.apply(first, now);
     await assert.rejects(b.apply(stale, now), { code: 'apply_conflict' });
     const revoke = await a.plan('publisher-revoke', input);
-    await b.apply(await b.plan('publisher-revoke', input), now + 1);
-    await b.apply(await b.plan('publisher-grant', input), now + 2);
+    const oldId = await f.db.prepare('SELECT grant_id FROM project_publishers').first('grant_id');
+    await b.apply(await b.plan('publisher-revoke', input), now);
+    await b.apply(await b.plan('publisher-grant', input), now);
+    assert.notEqual(await f.db.prepare('SELECT grant_id FROM project_publishers').first('grant_id'), oldId);
     await assert.rejects(a.apply(revoke, now + 3), { code: 'apply_conflict' });
-    assert.equal(await f.db.prepare('SELECT created_at FROM project_publishers').first('created_at'), now + 2);
+    assert.equal(await f.db.prepare('SELECT created_at FROM project_publishers').first('created_at'), now);
     const noop = await a.plan('publisher-grant', input);
     await b.apply(await b.plan('publisher-revoke', input), now + 4);
     await assert.rejects(a.apply(noop), { code: 'apply_conflict' });

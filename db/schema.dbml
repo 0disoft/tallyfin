@@ -67,6 +67,7 @@ Table project_publishers {
   issuer text [not null, note: 'Verified machine issuer; independent from administrator grants']
   subject text [not null, note: 'Opaque machine principal; never an event or visitor identifier']
   created_at bigint [not null, note: 'UTC epoch milliseconds; explicit provisioning only, no permission backfill']
+  grant_id text [not null, unique, default: `lower(hex(randomblob(16)))`, note: 'Immutable lowercase 32-hex grant generation; regrant creates a new ID even within one millisecond. Concurrency metadata, never a credential.']
   indexes { (project_id, issuer, subject) [pk] }
 }
 

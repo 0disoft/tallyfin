@@ -32,7 +32,7 @@ beforeEach(async () => {
   await f.db.prepare("INSERT INTO project_schemas VALUES ('sembom',1,'active',?,?,NULL)")
     .bind(JSON.stringify({ events: registry.events, workflows: registry.workflows }), now).run();
   await f.db.prepare("INSERT INTO project_grants VALUES ('sembom',?,?,'reader',?)").bind(reader.issuer, reader.subject, now).run();
-  await f.db.prepare("INSERT INTO project_publishers VALUES ('sembom',?,?,?)").bind(publisher.issuer, publisher.subject, now).run();
+  await f.db.prepare("INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES ('sembom',?,?,?)").bind(publisher.issuer, publisher.subject, now).run();
 });
 async function read(path: string, status = 200, principal = reader) {
   const handler = createCollector(f.store, { now: () => now, admin: {

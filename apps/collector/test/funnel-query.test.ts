@@ -64,7 +64,7 @@ test('funnel daily query combines dimensions, fills dates and derives rates from
 });
 
 test('observed browser and authenticated server stages use start-day cohorts despite reverse receipt order and retries', async () => {
-  await f.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('modufile', publisher.issuer, publisher.subject, now).run();
+  await f.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind('modufile', publisher.issuer, publisher.subject, now).run();
   const started = Date.parse('2026-10-10T14:59:59Z');
   const link = { funnelId: 'conversion', runId: crypto.randomUUID(), startedAt: new Date(started).toISOString() };
   const deliver = async (index: number) => {
@@ -95,7 +95,7 @@ test('empty cohorts keep null rates and cross-source/server-only definitions sta
 test('reader/owner queries reapply issuer/subject grants; revoked, publisher-only and unauthenticated principals cannot read', async () => {
   await rows('2026-10-08', [1, 1, 1, 1]);
   await read(); await f.db.prepare("UPDATE project_grants SET role='owner'").run(); await read();
-  await f.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('modufile', publisher.issuer, publisher.subject, now).run();
+  await f.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind('modufile', publisher.issuer, publisher.subject, now).run();
   await read(base + range, 403, now, { ...principal, issuer: 'https://different.example.invalid' });
   await read(base + range, 403, now, publisher);
   await read(base + range, 401, now, null);

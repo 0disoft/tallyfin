@@ -78,7 +78,7 @@ test('native Worker joins public browser milestones and authenticated server mil
     assert.equal((await send(bodies[3], { Origin: registry.allowedOrigins[0] })).status, 401);
     assert.equal((await send(bodies[3], { Authorization: 'Bearer ' + token })).status, 403);
     assert.equal(await count('event_receipts'), 0); assert.equal(await count('funnel_runs'), 0);
-    await db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind(registry.project.id, issuer, subject, started).run();
+    await db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind(registry.project.id, issuer, subject, started).run();
     let loseResponse = true, elapsed = 0;
     const sdk = createTallyfinServer({ endpoint: `https://collector.example.invalid/v1/projects/${registry.project.id}/server-batches`,
       schema: projectServerSchema(registry), getToken: () => token }, {

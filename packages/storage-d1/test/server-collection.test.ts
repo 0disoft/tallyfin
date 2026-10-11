@@ -18,7 +18,7 @@ const registry = validateRegistry({ ...structuredClone(browserRegistry), events:
 const server = (value = input(), at = now, r = registry) => prepareServerBatch(parseServerBatch(JSON.stringify(value)), r, at);
 const rows = (table: string) => f.db.prepare(`SELECT * FROM ${table}`).all();
 const scalar = (query: string) => f.db.prepare(query).first<number>('n');
-const permit = () => f.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('sembom', publisher.issuer, publisher.subject, now).run();
+const permit = () => f.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind('sembom', publisher.issuer, publisher.subject, now).run();
 
 before(async () => { f = await setup(); });
 after(async () => { await f?.mf.dispose(); });
@@ -141,8 +141,8 @@ test('0006 upgrades atomically without data/authority backfill, retains indexes 
       db.prepare("INSERT INTO event_daily_counts VALUES ('sembom',1,'server','2026-10-09','job_finished','[]',-1,0)")]));
     assert.deepEqual(await snapshot(), before);
     assert.equal(await db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name IN ('project_publishers','event_receipts_next','event_daily_counts_next')").first('n'), 0);
-    assert.deepEqual(await initialize(db, false), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql'], applied: true });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql'], applied: true });
     assert.deepEqual(await snapshot(), before);
     assert.deepEqual(await initialize(db, true), { migrations: [], applied: false });
     assert.equal(await db.prepare('SELECT count(*) AS n FROM project_publishers').first('n'), 0);

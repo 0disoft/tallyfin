@@ -21,7 +21,7 @@ async function register(registry: Registry) {
   await f.db.prepare(`INSERT INTO project_schemas VALUES (?,?,'active',?,?,NULL)`)
     .bind(registry.project.id, registry.schemaVersion, canonicalJson(schemaDefinitions(registry)), now).run();
 }
-const permit = () => f.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind(r.project.id, publisher.issuer, publisher.subject, now).run();
+const permit = () => f.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind(r.project.id, publisher.issuer, publisher.subject, now).run();
 function payload(indices: number[], runId = crypto.randomUUID(), registry = r, overrides: Record<string, unknown> = {}) {
   const source = registry.funnels![0]!.steps[indices[0]!]!.source;
   return { schemaVersion: registry.schemaVersion, source, events: indices.map(index => ({ eventId: crypto.randomUUID(),
@@ -143,8 +143,8 @@ test('0007 adds only empty funnel tables/guards and rejects missing guards on su
     const db = await mf.getD1Database('DB'), statements = migrationStatements(), boundary = statements.findIndex(sql => sql.startsWith('CREATE TABLE funnel_runs'));
     assert.ok(boundary > 0); for (const sql of statements.slice(0, boundary)) await db.prepare(sql).run(); await seed(db);
     const before = (await db.prepare('SELECT * FROM projects').all()).results;
-    assert.deepEqual(await initialize(db, false), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql'], applied: true });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql'], applied: true });
     assert.deepEqual((await db.prepare('SELECT * FROM projects').all()).results, before);
     assert.equal(await db.prepare('SELECT count(*) AS n FROM funnel_runs').first('n'), 0);
     assert.equal((await db.prepare('PRAGMA foreign_key_check').all()).results.length, 0);

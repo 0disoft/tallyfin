@@ -27,7 +27,7 @@ beforeEach(async () => {
   await f.db.prepare("INSERT INTO project_schemas VALUES ('sembom',1,'active',?,?,NULL)")
     .bind(JSON.stringify({ events: [...registry.events, definition], workflows: registry.workflows }), now).run();
 });
-const permit = () => f.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('sembom', principal.issuer, principal.subject, now).run();
+const permit = () => f.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind('sembom', principal.issuer, principal.subject, now).run();
 const count = (table: string) => f.db.prepare(`SELECT count(*) AS n FROM ${table}`).first<number>('n');
 // Deliberately non-credential bearer; HTTP unit tests supply a trusted mocked verifier.
 const request = (body: string | Uint8Array = JSON.stringify(input()), options: {
@@ -177,7 +177,7 @@ test('configured native Worker verifies machine JWTs, isolates audiences and rec
       assert.equal((await post(token)).status, 401);
     assert.equal(await db.prepare('SELECT count(*) AS n FROM ingest_minute_usage').first('n'), 0);
     assert.equal((await post(valid)).status, 403);
-    await db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('sembom', issuer, subject, Date.now()).run();
+    await db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind('sembom', issuer, subject, Date.now()).run();
     assert.deepEqual(await (await post(valid)).json(), { accepted: 1, duplicates: 0 });
     assert.deepEqual(await (await post(valid)).json(), { accepted: 0, duplicates: 1 });
     const adminPath = 'https://collector.example.invalid/v1/projects/sembom/schemas/1';

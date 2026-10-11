@@ -1,5 +1,38 @@
 # 검증
 
+## 발행 권한 부여 ID 세대 — 2026-10-11
+
+`project_publishers`에 비밀 아닌 동시성 표식 `grant_id`를 더해 같은 밀리초에 회수·재부여된
+권한을 구분한다. 0009가 표를 복사·재생성해 프로젝트·issuer·subject·created_at을 보존하고
+행마다 32자 소문자 hex ID를 UNIQUE·CHECK로 두며 BEFORE UPDATE 트리거로 기존 행 수정을 막는다.
+CLI `PublisherProvisioner`의 미리보기·적용 CAS는 프로젝트 생성 시각과 함께 현재 행의
+`grant_id`를 비교하고, 회수는 `grant_id=?` 조건 삭제로 바뀌어 stale DELETE가 새 권한을 지우지
+못한다.
+
+실행·결과: 발행 세대·발행자 CLI·발행 이력·server 수집·발행 목록·설치 DB 기준을 함께 보는
+집중 검사 `node --test` 22/22와 루트 `npm exec -- tsc --noEmit`이 통과했다. 이어 같은 순차
+실행에서 돌린 기존 Worker 서버·퍼널·source 조회와 저장소 검사는 총 40개 중 관리자 이력 6개를
+뺀 34개가 처음부터 통과했고, admin-changes 6개는 처음에 2개가 실패했다. `admin_changes`만
+재생성한 fixture에서 마이그레이션 0009까지 기대한 잘못된 단언이 원인이었고, 0009가 이미 적용된
+상태에 맞게 기대값을 `0005`+`0008`로 되돌린 뒤
+`node --test packages/storage-d1/test/admin-changes.test.ts` 6/6으로 통과했다. 40개 전체
+재실행이 아니라 34개 통과 + 수정한 6/6이다.
+
+변경 전 실제 로컬 D1에서 시계를 고정하고 같은 밀리초에 회수·재부여한 뒤, 관측한 생성 시각으로
+stale DELETE를 보내면 새로 부여한 권한이 status 200으로 삭제되는 것을 재현했다(문서화된
+재현). 새 DB와 CLI 경로에서는 같은 밀리초 재부여를 구분하는 검사가 통과한다. HTTP
+`DELETE /v1/projects/{projectId}/publishers`와 관리자 발행 화면은 이번 슬라이스에서 아직 생성
+시각(`createdAt`) 기준이고, ID로 전환하는 API·UI는 다음 슬라이스다.
+
+이번 DB 슬라이스에서 바뀐 계약 원본은 [db/schema.dbml](db/schema.dbml)의 `project_publishers`
+`grant_id` 하나이고, HTTP 회수 계약(`api/openapi.yaml`)과 관리자 화면 UI는 다음 슬라이스로
+넘긴다. 마이그레이션은 [마이그레이션 안내](db/migrations/README.md)와
+[0009 SQL](db/migrations/0009_publisher_generations.sql), 발행자 CLI·설치 안내에 기록했다.
+설치 메타데이터 기준 참조도 9개 마이그레이션·16개 테이블로 갱신했다. 의존성·CI 러너·저장소
+위생 정책 변경은
+없다. 실제 운영 OIDC·원격 D1 적용·권한 이관·푸시·배포는 미실행이며, 원격 D1에는 어느
+마이그레이션도 적용하지 않았다.
+
 ## 관리자 서버 발행자 화면 — 2026-10-11
 
 설정의 LiveGrants와 LiveAdminChanges 사이에 owner 전용 LivePublishers를 연결했다.

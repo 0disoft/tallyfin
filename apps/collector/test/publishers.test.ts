@@ -16,7 +16,7 @@ beforeEach(async () => {
   await fixture.db.prepare('INSERT INTO project_grants VALUES (?,?,?,?,?)').bind('sembom', principal.issuer, principal.subject, 'owner', now).run();
 });
 async function publisher(subject: string, project = 'sembom', issuer = principal.issuer) {
-  await fixture.db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind(project, issuer, subject, now).run();
+  await fixture.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)').bind(project, issuer, subject, now).run();
 }
 function request(path = '/v1/projects/sembom/publishers', method = 'GET') {
   return new Request(`https://collector.example.invalid${path}`, { method, headers: { Authorization: 'Bearer not-a-credential' } });
@@ -91,6 +91,7 @@ test('invalid queries and unsupported methods fail; authentication and storage f
     const response = await handler(principal, new D1Queries({ prepare: fixture.db.prepare.bind(fixture.db), batch }))(request());
     assert.equal(response.status, 503); assert.ok(!(await response.text()).includes('private database error'));
   }
-  await publisher('bad'); await fixture.db.prepare("UPDATE project_publishers SET issuer='http://invalid.example.invalid' WHERE subject='bad'").run();
+  await fixture.db.prepare('INSERT INTO project_publishers (project_id,issuer,subject,created_at) VALUES (?,?,?,?)')
+    .bind('sembom', 'http://invalid.example.invalid', 'bad', now).run();
   assert.equal((await handler()(request())).status, 503);
 });

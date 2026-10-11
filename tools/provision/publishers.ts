@@ -4,7 +4,7 @@ import { adminChangeStatement } from '@tallyfin/storage-d1';
 import { ProvisionError } from './input.ts';
 
 type Operation = { kind: 'publisher-grant' | 'publisher-revoke'; projectId: string; issuer: string; subject: string };
-type Snapshot = { projectCreatedAt: number; publisherCreatedAt: number | null };
+type Snapshot = { projectCreatedAt: number; publisherGrantId: string | null };
 export interface PublisherPlan {
   operation: Operation['kind']; projectId: string; principalHash: string;
   granted: boolean;
@@ -24,18 +24,18 @@ export class PublisherProvisioner {
   #plans = new WeakMap<PublisherPlan, { op: Operation; snapshot: Snapshot }>();
   constructor(db: SqlDatabase) { this.#db = db; }
   async #read(op: Operation): Promise<Snapshot> {
-    const rows = await this.#db.batch<{ created_at: number }>([
+    const rows = await this.#db.batch<{ created_at: number; grant_id?: string }>([
       this.#db.prepare('SELECT created_at FROM projects WHERE id=?').bind(op.projectId),
-      this.#db.prepare('SELECT created_at FROM project_publishers WHERE project_id=? AND issuer=? AND subject=?')
+      this.#db.prepare('SELECT grant_id FROM project_publishers WHERE project_id=? AND issuer=? AND subject=?')
         .bind(op.projectId, op.issuer, op.subject),
     ]);
     if (rows.length !== 2 || rows.some(r => !r.success || !Array.isArray(r.results) || r.results.length > 1)) throw Error();
     if (!rows[0]!.results.length) throw new ProvisionError('project_not_found', '먼저 프로젝트를 등록해 주세요.');
     const projectCreatedAt = rows[0]!.results[0]!.created_at;
-    const publisherCreatedAt = rows[1]!.results.length ? rows[1]!.results[0]!.created_at : null;
+    const publisherGrantId = rows[1]!.results.length ? rows[1]!.results[0]!.grant_id : null;
     if (!integer(projectCreatedAt, 0, 8640000000000000) ||
-      (publisherCreatedAt !== null && !integer(publisherCreatedAt, 0, 8640000000000000))) throw Error();
-    return { projectCreatedAt, publisherCreatedAt };
+      (publisherGrantId !== null && (typeof publisherGrantId !== 'string' || !/^[0-9a-f]{32}$/.test(publisherGrantId)))) throw Error();
+    return { projectCreatedAt, publisherGrantId: publisherGrantId as string | null };
   }
   async plan(kind: string, input: unknown): Promise<PublisherPlan> {
     const op = publisherOperation(kind, input);
@@ -45,7 +45,7 @@ export class PublisherProvisioner {
       if (error instanceof ProvisionError) throw error;
       throw new ProvisionError('database_unavailable', '발행 권한을 읽지 못했어요. init과 DB 경로를 확인해 주세요.');
     }
-    const granted = snapshot.publisherCreatedAt !== null; const after = op.kind === 'publisher-grant';
+    const granted = snapshot.publisherGrantId !== null; const after = op.kind === 'publisher-grant';
     const plan: PublisherPlan = { operation: op.kind, projectId: op.projectId,
       principalHash: await sha256(canonicalJson([op.issuer, op.subject])), granted,
       changes: granted === after ? [] : [{ target: 'publisher', field: 'granted', before: granted, after }],
@@ -61,7 +61,7 @@ export class PublisherProvisioner {
     const after = op.kind === 'publisher-grant';
     const conflict = () => new ProvisionError('apply_conflict', '프로젝트나 발행 권한이 달라졌어요. 새 미리보기를 확인해 주세요.');
     try {
-      if ((snapshot.publisherCreatedAt !== null) === after) {
+      if ((snapshot.publisherGrantId !== null) === after) {
         if (canonicalJson(await this.#read(op)) !== canonicalJson(snapshot)) throw conflict();
         return { applied: false, changes: 0 };
       }
@@ -71,8 +71,8 @@ export class PublisherProvisioner {
           SELECT ?,?,?,? WHERE ${project} AND NOT EXISTS
           (SELECT 1 FROM project_publishers WHERE project_id=? AND issuer=? AND subject=?)`)
           .bind(op.projectId, op.issuer, op.subject, now, op.projectId, snapshot.projectCreatedAt, op.projectId, op.issuer, op.subject)
-        : this.#db.prepare(`DELETE FROM project_publishers WHERE project_id=? AND issuer=? AND subject=? AND created_at=? AND ${project}`)
-          .bind(op.projectId, op.issuer, op.subject, snapshot.publisherCreatedAt, op.projectId, snapshot.projectCreatedAt);
+        : this.#db.prepare(`DELETE FROM project_publishers WHERE project_id=? AND issuer=? AND subject=? AND grant_id=? AND ${project}`)
+          .bind(op.projectId, op.issuer, op.subject, snapshot.publisherGrantId, op.projectId, snapshot.projectCreatedAt);
       const rows = await this.#db.batch([statement, adminChangeStatement(this.#db, op.projectId, null, {
         action: after ? 'publisher.granted' : 'publisher.revoked', target: { issuer: op.issuer, subject: op.subject },
       }, now)]);
