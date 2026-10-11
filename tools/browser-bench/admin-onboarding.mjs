@@ -11,9 +11,10 @@ import { adminLoginFixture } from './admin-login-fixture.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 let local, server, browser, page, watchdog, directory, stage = 'arguments', sdkBundle;
 try {
-  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' },
+    'lost-responses': { type: 'boolean', default: false }, help: { type: 'boolean' } } });
   assert.ok(['chromium', 'chrome', 'msedge'].includes(values.channel));
-  if (values.help) console.log('npm run verify:admin-onboarding -- [--channel chromium|chrome|msedge]\nLocal signed login, empty-project onboarding, generated browser SDK and real D1 count; no remote service.');
+  if (values.help) console.log('npm run verify:admin-onboarding -- [--channel chromium|chrome|msedge] [--lost-responses]\nLocal signed login, empty-project onboarding, generated browser SDK and real D1 count; no remote service.\n--lost-responses loses creation/publication responses after real commits and verifies explicit recovery.');
   else {
     watchdog = setTimeout(() => { void browser?.close(); }, 90000);
     await mkdir(resolve(root, '.tmp'), { recursive: true });
@@ -40,7 +41,17 @@ try {
     browser = await chromium.launch({ channel: values.channel, headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
     let routeError = false, pageErrors = 0;
-    await context.route('**/*', async route => { try { await local.route(route); } catch { routeError = true; await route.abort(); } });
+    const dropped = { creation: 0, publication: 0 };
+    await context.route('**/*', async route => { try {
+      const request = route.request(), url = new URL(request.url());
+      const kind = values['lost-responses'] && url.origin === origin
+        ? request.method() === 'POST' && url.pathname === '/v1/projects' ? 'creation'
+          : request.method() === 'PUT' && url.pathname === '/v1/projects/onboarding-test/schemas/1' ? 'publication' : null
+        : null;
+      const dropResponse = kind !== null && dropped[kind] === 0;
+      if (dropResponse) dropped[kind]++;
+      await local.route(route, { dropResponse });
+    } catch { routeError = true; await route.abort(); } });
     page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', () => pageErrors++);
     stage = 'login'; await page.goto(origin);
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
@@ -51,6 +62,17 @@ try {
     await page.locator('#create-timeZone').fill('Asia/Seoul');
     await page.locator('#create-origins').fill(origin);
     await page.getByRole('button', { name: '프로젝트 만들기', exact: true }).click();
+    if (values['lost-responses']) {
+      stage = 'creation-response-recovery';
+      const confirm = page.getByRole('button', { name: '같은 요청으로 생성 확인', exact: true });
+      await confirm.waitFor();
+      assert.equal(local.counts.apiWrites, 1);
+      assert.equal(await page.locator('#create-id').inputValue(), 'onboarding-test');
+      assert.equal(await page.locator('#create-name').inputValue(), 'Onboarding test');
+      assert.equal(await page.locator('#create-id').isDisabled(), true);
+      assert.equal((await local.db.prepare("SELECT count(*) AS n FROM projects WHERE id = ?").bind('onboarding-test').first()).n, 1);
+      await confirm.click();
+    }
     await page.getByRole('heading', { name: '프로젝트 생성을 확인했어요', exact: true }).waitFor();
     stage = 'schema'; await page.locator('#schema-event-add:not([disabled])').click();
     await page.locator('#schema-event-0-name').fill('action_complete');
@@ -58,6 +80,20 @@ try {
     await page.getByRole('button', { name: '정의 검증', exact: true }).click();
     await page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true }).check();
     await page.getByRole('button', { name: '새 버전 발행 (v1)', exact: true }).click();
+    if (values['lost-responses']) {
+      stage = 'publication-response-recovery';
+      const check = page.getByRole('button', { name: '서버 상태 확인', exact: true });
+      await check.waitFor();
+      assert.equal(local.counts.apiWrites, 4);
+      assert.equal(await page.locator('#schema-event-0-name').inputValue(), 'action_complete');
+      assert.equal(await page.locator('#schema-event-0-name').isEditable(), false);
+      await check.click();
+      await page.getByText('v1 발행을 서버에서 확인했어요. 입력한 정의는 그대로 뒀어요.', { exact: true }).waitFor();
+      assert.equal(local.counts.apiWrites, 4);
+      assert.equal(await page.locator('#schema-event-0-name').inputValue(), 'action_complete');
+      assert.equal(await page.locator('#schema-version').inputValue(), '2');
+      assert.equal(await page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true }).isChecked(), false);
+    }
     stage = 'sdk'; await page.locator('#sdk-origin').fill(origin);
     const snippet = await page.getByRole('textbox', { name: '브라우저 SDK 연결 코드', exact: true }).inputValue();
     // Compile exactly the UI-generated connection code against the freshly built local SDK.
@@ -88,8 +124,10 @@ try {
     assert.equal(local.counts.browserBatches, 1);
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     assert.equal((await context.cookies()).length, 0);
+    if (values['lost-responses']) assert.deepEqual(dropped, { creation: 1, publication: 1 });
     const report = { verified: true, browser: browser.version(), emptyProjectCreated: true, schemaPublished: true,
       generatedSdkExecuted: true, firstEventCount: await count(), correctOnboardingStep: true, eventVisible: true,
+      lostResponseRecovery: values['lost-responses'], droppedResponses: dropped,
       routeError, pageErrors, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report));

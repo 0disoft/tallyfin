@@ -16,6 +16,17 @@ npm run verify:admin-onboarding -- --channel chromium
 
 `--channel`은 `chromium`, `chrome`, `msedge`를 받는다. `--help`는 실행 없이 사용법을 출력한다.
 
+응답 유실 후 복구를 포함하려면 다음과 같이 실행한다.
+
+```powershell
+npm run verify:admin-onboarding -- --channel chromium --lost-responses
+```
+
+이 모드는 프로젝트 생성과 스키마 발행을 로컬 D1에 실제 반영한 뒤 성공 응답을 각각 한 번
+끊는다. 생성 화면에서는 동일 요청 확인을 직접 누르고, 발행 화면에서는 서버 상태 확인을
+직접 누른다. 초안을 보존하고 추가 발행 없이 다음 버전 번호와 SDK 연결로 복구되는지 검증한다.
+기본 모드는 응답을 끊지 않는다. 두 모드 모두 실제 운영 장애나 원격 제공자 검증과 구분한다.
+
 ## 검증 범위
 
 - 합성 서명 제공자로 로그인한 뒤 빈 프로젝트 목록에서 UI로 프로젝트를 만든다.

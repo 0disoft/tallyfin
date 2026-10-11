@@ -55,7 +55,7 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
       configure(value) { origin = value; },
       setMode(value) { assert.ok(['normal', 'bad-state', 'refresh-error'].includes(value)); mode = value; },
       get counts() { return { authorizations, exchanges, refreshes, apiReads, apiWrites, browserBatches }; },
-      async route(route) {
+      async route(route, { dropResponse = false } = {}) {
         const request = route.request(), url = new URL(request.url());
         if (url.origin === origin) {
           if (url.pathname.startsWith('/v1/')) {
@@ -67,6 +67,17 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
               assert.ok(access && headers.authorization === `Bearer ${access}`);
               if (request.method() === 'GET') apiReads++; else apiWrites++;
             }
+          }
+          if (dropResponse) {
+            // Test only: execute the authenticated write against real local D1,
+            // then lose its successful response before the page can observe it.
+            assert.equal(profile, 'onboarding');
+            assert.ok(url.pathname.startsWith('/v1/'));
+            assert.ok(['POST', 'PUT'].includes(request.method()));
+            const committed = await route.fetch({ maxRedirects: 0, timeout: 15000 });
+            assert.ok(committed.ok());
+            await committed.dispose();
+            return route.abort('failed');
           }
           return route.continue();
         }

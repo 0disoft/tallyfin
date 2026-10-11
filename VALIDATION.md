@@ -1,5 +1,31 @@
 # 검증
 
+## 생성·발행 응답 유실 뒤 실제 화면 복구 — 2026-10-12
+
+`verify:admin-onboarding`에 옵트인 `--lost-responses`를 추가했다. 합성 서명 로그인과 새 로컬
+D1을 사용하고, 프로젝트 생성·v1 발행을 실제 서버에서 완료한 다음 성공 응답만 브라우저에
+전달하지 않는다. 생성 확인은 사용자가 누른 동일 요청으로 수행하고, 발행 확인은 GET으로
+읽어 추가 PUT 없이 복구한다. 초안 잠금·보존, 검증/개인정보 검토 초기화, 다음 버전 번호,
+온보딩 3단계와 생성된 SDK의 첫 이벤트까지 이어서 확인한다. 기본 검사·CI에는 추가하지 않았다.
+
+최종 `npm run verify:admin-onboarding -- --channel chromium --lost-responses`는 exit 0,
+`verified:true`, Chromium 156.0.8078.4였다. 응답 유실은 생성/발행 각 1회, 관리자 쓰기는
+4회(생성·명시적 동일 생성 확인·정의 검증·발행), 읽기 29회였다. 프로젝트 행 1건,
+생성한 SDK의 배치 1회·DB/관리자 표 이벤트 1건, routeError=false·pageErrors=0,
+쿠키/local/session storage 비어 있음을 확인했다. 새 재발행은 없었다. 브라우저·Vite·로컬
+런타임을 종료했고 결과는 `.tmp/admin-onboarding-OUHKLZ/report.json`에 있다.
+
+처음 실행은 편집 불가 입력을 disabled로 잘못 검사해 실패했다. 실제 폼은 readOnly이므로
+isEditable=false로 고친 다음 통과했다. 초기 실패 사진·보고서는 원래 임시 폴더에 보존했다.
+`node --test --test-timeout=30000 apps/admin/src/api/project-creation.test.mjs
+apps/admin/src/api/schema.test.mjs` 32/32, 두 runner/fixture 구문 검사, git diff --check도
+통과했다. 제품 소스·SDK가 변경되지 않아 기존 빌드를 재사용하고 앱 타입/빌드·전체 백엔드
+검사를 반복하지 않았다. 일반 lint 명령은 없어 생략했다.
+
+README·온보딩 검증 안내와 이 기록을 갱신했다. API·DB·제품 UI·의존성·hygiene·CI 변경은
+없고 옵트인 검증 모드만 추가했다. 실제 운영 제공자·원격 DB·운영 장애는 미검증이다.
+푸시·배포·활성화 없음. 이번 경로 통과로 모든 역할/권한 경계가 검증됐다고 판단하지 않는다.
+
 ## 새 프로젝트에서 첫 이벤트 조회까지
 
 실제 Chromium·로컬 서명 인증·새 D1로 빈 프로젝트 목록에서 시작해 UI로 프로젝트를 만들고,
