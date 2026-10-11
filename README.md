@@ -13,11 +13,11 @@ Tallyfin은 Rodisoft의 여러 서비스가 공통으로 쓰는 가벼운 제품
 - `packages/server`: 의존성 없는 서버 발행 SDK. `createEvent`·재시도 배치 `send`.
 - `packages/auth-oidc`: 관리자·발행자 OIDC JWT 검증기.
 - `apps/admin`: 프로젝트 개요·이벤트 분석·설정·목표·퍼널 화면, browser/server 출처 선택 조회, 권한 조회·변경, 설정의 owner 전용 발행자 관리(`LivePublishers`), 관리자 변경 이력, 자기 계정 조회, 공개 클라이언트 OIDC PKCE 로그인 코드. 퍼널 단계 편집 폼과 퍼널 CSV도 로컬에서 연결했다.
-- `db/migrations`: `0001_initial.sql`과 `0002`~`0008`. 0007은 다단계 퍼널(`funnel_runs`·`funnel_daily_counts`), 0008은 발행 권한 감사 action(`publisher.granted`·`publisher.revoked`)을 넣는 `admin_changes` 재생성이다.
+- `db/migrations`: `0001_initial.sql`과 `0002`~`0009`. 0007은 다단계 퍼널(`funnel_runs`·`funnel_daily_counts`), 0008은 발행 권한 감사 action(`publisher.granted`·`publisher.revoked`)을 넣는 `admin_changes` 재생성, 0009는 발행 권한에 불변 부여 ID `grant_id`를 더하는 `project_publishers` 재생성이다. 지금까지 9개 마이그레이션·16개 테이블이다.
 
 2~10단계 퍼널은 등록·검증·발행·정의 조회까지 로컬에서 구현했고, browser·server 수집 경로가 연결 이벤트를 영수증·할당량·집계와 같은 D1 batch에 저장한다. 연결 상태 72시간과 단계 집계 90일 정리도 로컬에서 확인했다. 서버 발행은 코어 검증부터 전용 `POST /v1/projects/{projectId}/server-batches` endpoint, 발행자 OIDC 검증 배선, 발행자 권한 등록·회수 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`), `publisher-grant`·`publisher-revoke` CLI, 서버 출처 조회 화면까지 로컬에서 구현·검증했다. 발행 권한 부여·회수는 API와 CLI 모두 관리자 변경 이력에 감사 행을 같은 D1 batch로 남기고, 다시 실행해 이미 원하는 상태면 새 이력을 만들지 않는다.
 
-설정의 owner 전용 `LivePublishers`는 25건 목록·페이지 이동과 발행 권한 부여·회수를 제공한다. 쓰기는 명시적 확인 뒤에만 보내고 충돌 복구·원래 요청 재시도·설정/grant 잠금·변경 이력 갱신을 적용했다. 로컬 브라우저 검증과 발행자·기존 grant 테스트 19/19, 신규 발행자 테스트 6/6, sites 검사 9/9, 관리자 타입 검사·빌드를 통과했다. 상세 결과는 [검증 기록](VALIDATION.md)에 둔다.
+설정의 owner 전용 `LivePublishers`는 25건 목록·페이지 이동과 발행 권한 부여·회수를 제공한다. 쓰기는 명시적 확인 뒤에만 보내고, 회수는 목록에서 관측한 불변 부여 ID(`grantId`)를 CAS로 보내 같은 밀리초에 다시 부여된 권한을 지우지 않는다. 사람에게는 등록 시각 표를 그대로 보여주고 부여 ID는 화면에 쓰지 않는다. 충돌 복구·원래 요청 재시도·설정/grant 잠금·변경 이력 갱신을 적용했다. 실제 Chrome·임시 OIDC·로컬 D1 스모크(같은 밀리초 재부여 뒤 stale 회수 409)와 관리자 검사·타입 검사·빌드·번들 2/2·sites 9/9를 통과했다. 상세 결과는 [검증 기록](VALIDATION.md)에 둔다.
 
 ## 아직 확인하지 않은 것
 
@@ -57,6 +57,6 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 ## 범위 밖
 
-원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. SQL 마이그레이션은 로컬 Miniflare 테스트에서만 적용했고 원격 DB에는 적용하지 않았다. `0006_server_collection.sql`은 영수증·이벤트 집계 테이블을 복사·재생성하므로 운영 적용 전 수집 중지·백업·행 수 검증이 필요하다. `0008_publisher_history.sql`도 `admin_changes`를 복사·재생성하므로 관리자 API·CLI 쓰기를 멈춘 상태에서 한 batch로 적용하고, 적용 전후 행 수·스키마·외래 키를 확인해야 한다.
+원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. SQL 마이그레이션은 로컬 Miniflare 테스트에서만 적용했고 원격 DB에는 적용하지 않았다. `0006_server_collection.sql`은 영수증·이벤트 집계 테이블을 복사·재생성하므로 운영 적용 전 수집 중지·백업·행 수 검증이 필요하다. `0008_publisher_history.sql`도 `admin_changes`를 복사·재생성하므로 관리자 API·CLI 쓰기를 멈춘 상태에서 한 batch로 적용하고, 적용 전후 행 수·스키마·외래 키를 확인해야 한다. `0009_publisher_generations.sql`은 `project_publishers`를 복사·재생성하므로 발행자 CLI·HTTP 쓰기를 멈추고 백업한 뒤 한 batch로 적용하고 적용 전후 발행 행 수와 행별 부여 ID를 확인해야 한다.
 
 SDK와 한 서비스의 연동 코드·필수 설정 합계는 대표 예제 기준 gzip 3KiB 이하를 목표로 한다. 이 예산은 호스트 앱 전체나 모든 프로젝트 설정의 합계가 아니고, 로컬 측정값이며 운영 수치가 아니다.

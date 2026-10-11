@@ -1,5 +1,36 @@
 # 검증
 
+## 발행 권한 세대 ID API·화면 — 2026-10-11
+
+발행 권한 API와 관리자 화면을 생성 시각(`createdAt`) CAS에서 불변 부여 세대 `grantId`로
+옮겼다. 목록·변경 응답이 `grantId`를 함께 돌려주고 `DELETE`는 `expectedGrantId`(32자 소문자
+hex 또는 null)를 받는다. `PUT` 본문은 그대로다. 회수 화면은 관측한 `grantId`를 내부로만
+보내고 사람에게는 등록 시각 표를 그대로 보여주며, 확인 패널은 "선택한 발행 권한을 회수해요.
+다시 부여된 권한은 회수하지 않아요."로 범위를 말로 설명한다.
+
+실행·결과: 최신 API 검사 16/16(후행 개행 `grantId` 거부 추가 뒤), 루트 `npm exec -- tsc
+--noEmit`과 수집기 런타임 `tsc -p apps/collector/tsconfig.runtime.json` 종료 코드 0,
+contracts lint 통과와 `check` 59/59. 처음 `check`는 DBML 필드 기대값이
+아직 네 열이라 실패했고 `grant_id` 단언으로 고친 뒤 통과했다. 관리자 집중 `LiveGrants`·
+`LivePublishers` 검사 19/19(명시적 32자 길이 가드 뒤). 관리자 api·모델 153/153과 타입 검사·
+빌드·번들 2/2·sites 9/9는 길이 가드 전에 통과했고, 명시적 길이 32자와 후행 개행 거부 변경
+뒤 타입 검사·빌드·번들 2/2·sites 9/9를 다시 통과했다. 153/153을 길이 가드 뒤에 다시 돌린
+것은 아니다.
+
+실제 Chrome·임시 서명 OIDC 로컬 Worker·D1·고정 `Date.now`·같은 출처 Vite 스모크는
+종료 코드 0이었다. 확인 전 쓰기 없음, 보류 중인 PUT 동안 이웃 설정·grant 잠금 유지, 회수
+확인 패널을 연 뒤 별도 HTTP 요청이 DELETE+PUT으로 같은 밀리초에 권한을 교체, 화면의
+예전 DELETE가 `expectedCreatedAt` 없이 예전 `expectedGrantId`를 보내 409로 끝나 새 행이
+보존되고 감사 행이 늘지 않음(발행 3행), 최신 목록 재조회 뒤 새 `grantId`로 다시 보낸 DELETE
+성공과 이후 재부여까지 감사 5행, owner 회수 후 목록·폼 식별자 삭제, 320px 문서 가로 넘침
+없음과 pageerror 0건을 확인했다. 스크린샷 `.tmp/publisher-generations-desktop.png`(확인)과
+`.tmp/publisher-generations-mobile.png`를 남겼고 브라우저·Vite·Miniflare·임시 디렉터리는
+finally에서 정리했다.
+
+이 슬라이스는 0009 DB 커밋 `73efeaa` 뒤에 온다. 서버 목록·변경 응답이 `grantId`를 포함하고
+예전 `expectedCreatedAt` DELETE는 400으로 거부된다. DB 마이그레이션 추가·SDK·의존성·CI 러너·
+저장소 위생 변경은 없다. 원격 D1·실제 제공자·배포·푸시·Sembom 연동은 미실행이다.
+
 ## 발행 권한 부여 ID 세대 — 2026-10-11
 
 `project_publishers`에 비밀 아닌 동시성 표식 `grant_id`를 더해 같은 밀리초에 회수·재부여된

@@ -242,10 +242,14 @@ grant 변경과 달리 역할 열(`before_role`·`after_role`)은 쓰지 않는�
 CLI `publisher-grant`·`publisher-revoke`는 프로젝트 생성 시각과 함께 현재 행의 `grant_id`를
 CAS 기준으로 쓴다. 그래서 같은 밀리초에 재부여된 권한을 지우는 stale 회수를 0행 변경으로
 감지해 `apply_conflict`로 끝낸다. HTTP `DELETE /v1/projects/{projectId}/publishers`와 관리자
-발행 화면은 아직 생성 시각(`createdAt`) 기준이며, ID로 바꾸는 작업은 다음 슬라이스다.
+발행 화면도 `grantId` CAS로 전환했고 예전 `expectedCreatedAt` DELETE는 400으로 거부된다.
 
 운영 적용 전에 발행자 CLI·HTTP 쓰기를 멈추고 백업한 뒤 적용 전후 발행 행 수와 ID를 확인한다.
 지금은 로컬 Miniflare에서만 확인했고 원격 D1에는 적용하지 않았다.
+
+적용 순서는 쓰기 중지·백업 → 0009 적용 → 수집기 API와 관리자 화면 함께 갱신 → 목록·회수
+확인 후 쓰기 재개다. 이전 화면의 응답 검증기는 추가된 `grantId`와 맞지 않으므로 새 화면을
+새로고침해야 한다. 예전 `expectedCreatedAt` 요청으로 회수하는 호환 경로는 두지 않는다.
 
 | 시점 | 확인 |
 | --- | --- |

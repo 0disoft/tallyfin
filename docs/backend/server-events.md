@@ -31,13 +31,15 @@ endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현�
 
 ## 저장·발행 권한 슬라이스에 포함된 것
 
-- `project_publishers` 테이블. `(project_id, issuer, subject, created_at)`만 보관하고
-  새로 적용하는 DB에서는 빈 테이블로 시작한다. 기존 관리자 grant(`project_grants`)에서
+- `project_publishers` 테이블. 0006에서는 `(project_id, issuer, subject, created_at)`만 두었고,
+  현재 정의는 0009가 더한 불변 부여 ID `grant_id`까지 포함한다. 새로 적용하는 DB에서는 빈
+  테이블로 시작한다. 기존 관리자 grant(`project_grants`)에서
   발행 권한을 만들어 주지 않고 backfill도 하지 않는다. 관리자 reader/owner 여부와 발행
   권한은 서로 독립이며, owner도 발행 권한을 자동으로 얻지 않는다.
 - `0006_server_collection.sql`. `project_publishers`를 추가하고 `event_receipts`·
   `event_daily_counts`의 source 제약을 `browser`에서 `browser|server`로 넓힌다. SQLite는
-  CHECK를 직접 바꿀 수 없어 두 테이블을 복사·재생성한다.
+  CHECK를 직접 바꿀 수 없어 두 테이블을 복사·재생성한다. 발행 권한 표는 0009가 `grant_id`를
+  더하며 다시 재생성한다.
 - 저장 어댑터의 `publisherAccess`·`commitServer`. `D1Store`가 `ServerCollectionStore`를
   구현하고 서버 배치 저장 경로를 맡는다.
 - 코어의 `ServerPrincipal`(issuer·subject)과 `ServerCollectionStore`. 호스트가 검증해
@@ -118,8 +120,8 @@ server 전용 스키마는 workflows를 빈 배열로 둔다. allowedOrigins도 
 브라우저 저장 경로는 server 배치를 `invalid_request`(400)로, `commitServer`는 attempt나
 workflow가 섞인 배치를 `invalid_event`(422)로 거부한다. 권한 검사와 저장이 같은
 트랜잭션이므로 발행자 회수 경쟁에서 부분 저장이 남지 않는다.
-`project_publishers`에는 발행자 주체(issuer·subject)와 생성 시각만 둔다. 이벤트 입력·
-원문·발행자 토큰은 저장하지 않는다.
+`project_publishers`에는 발행자 주체(issuer·subject)와 생성 시각, 그리고 회수·재부여를
+구분하는 비밀 아닌 부여 ID(`grant_id`)를 둔다. 이벤트 입력·원문·발행자 토큰은 저장하지 않는다.
 
 호스트(수집 HTTP 경계)는 서명·issuer·audience·exp를 검증한 principal만 넘긴다. 전용
 endpoint와 발행자 검증기, `PUBLISHER_*` 런타임 배선을 구현했지만 기본값은 `disabled`다.
@@ -213,8 +215,8 @@ issuer·subject는 코어 `validGrantIdentity`로 검사한다. role이나 프�
 D1 batch로 처리한다. 이력 저장이 실패하면 같은 D1 batch의 권한 변경도 롤백된다. 다시 실행해
 이미 원하는 상태면 DB를 쓰지 않고 no-op로 끝나므로 새 이력이 남지 않는다. actor는 API가 아닌
 CLI 변경이라 식별자 없는
-`local_operator`다. `0008_publisher_history.sql`이 이 이력의 action을 넓히고, 0006이
-`project_publishers`를 이미 만들어 발행 권한 테이블 자체의 스키마 변경은 없다. 세부 형식은
+`local_operator`다. `0008_publisher_history.sql`이 이 이력의 action을 넓히고, 발행 권한 표는
+`0009_publisher_generations.sql`이 `grant_id`를 더해 다시 만든다. 세부 형식은
 [등록·권한 관리 CLI](./provisioning.md)에 있다.
 
 ## 서버 SDK
@@ -232,7 +234,8 @@ eventId·UTC occurredAt·속성을 얼려 만들고, `send`가 1~20개·16KiB �
 owner 권한이 회수된 경우도 403이며 매 페이지 권한과 행을 같은 D1 batch에서 읽는다.
 일시 중지·스키마 없는 프로젝트도 제어 영역 조회를 허용한다.
 
-응답은 `{projectId,data,page}`이며 각 행은 issuer·subject·createdAt만 담는다. 토큰·프로필·
+응답은 `{projectId,data,page}`이며 각 행은 issuer·subject·grantId·createdAt을 담는다.
+`grantId`는 자격증명이 아니라 회수·재부여를 구분하는 비밀 아닌 동시성 표식이다. 토큰·프로필·
 이메일을 반환하지 않는다. limit은 기본 25·최대 100이고 issuer/subject의 SQLite BINARY
 순서다. base64url 커서는 프로젝트와 publishers 목록 종류에 묶인 위치로 최대 12288자,
 전체 쿼리 최대 12352자이며 다른 프로젝트·grant 커서·중복/추가 인자를 거부한다. 행 삭제
@@ -254,23 +257,26 @@ owner grant를 요구한다. reader·다른 프로젝트 owner·회수된 owner�
 owner가 회수되면 쓰기 문장이 0행이 되어 아무것도 바뀌지 않고 owner 조회가 빈 결과라 403이다.
 회수는 예외 롤백이 아니라 조건이 쓰기를 막는 방식이다.
 
-- PUT 본문은 `{issuer,subject}`뿐이고 DELETE 본문은 `{issuer,subject,expectedCreatedAt}`이다.
+- PUT 본문은 `{issuer,subject}`뿐이고 DELETE 본문은 `{issuer,subject,expectedGrantId}`이다.
   role·자격증명·추가 필드는 없다. issuer·subject는 코어 `validGrantIdentity`를 따르고
   프로젝트 ID 형식도 검사한다.
-- `expectedCreatedAt`은 마지막으로 읽은 생성 시각을 `.mmmZ` UTC 문자열 또는 null로 넣는다.
-  null은 권한이 없다고 관찰한 경우다. granted가 true인 요청은 expectedCreatedAt을 받지 않는다.
+- `expectedGrantId`는 마지막으로 읽은 불변 부여 세대를 32자 소문자 hex 문자열 또는 null로 넣는다.
+  null은 권한이 없다고 관찰한 경우다. granted가 true인 요청은 expectedGrantId를 받지 않는다.
+  예전 `expectedCreatedAt` 필드는 보내면 400이다.
 - 본문은 `application/json`과 `text/plain`을 받고 16KiB를 넘으면 413, 다른 미디어 타입이나
   비-identity 인코딩은 415다. 조회 파라미터는 400이다.
-- 응답은 `{projectId,issuer,subject,granted,createdAt,changed}`다. granted와 createdAt은
-  짝을 이룬다. 부여는 true·생성 시각, 회수는 false·null이고 자격증명·역할은 넣지 않는다.
-- 이미 있는 발행 권한을 다시 부여하면 `changed=false`이고 기존 생성 시각을 바꾸지 않는다.
-  대상 권한 행이 없으면 `expectedCreatedAt` 값과 상관없이(직전에 읽은 시각이든 null이든)
-  no-op이며 `changed=false`다. 회수한 뒤 같은 `expectedCreatedAt`으로 다시 보내도 이미 행이
-  없어 no-op로 성공한다. 행이 남아 있고 저장 시각이 `expectedCreatedAt`과 같을 때만
+- 응답은 `{projectId,issuer,subject,granted,grantId,createdAt,changed}`다. granted·grantId·
+  createdAt이 짝을 이룬다. 부여는 true·부여 ID·생성 시각, 회수는 false·null·null이고
+  자격증명·역할은 넣지 않는다.
+- 이미 있는 발행 권한을 다시 부여하면 `changed=false`이고 기존 행과 `grantId`를 바꾸지 않는다.
+  대상 권한 행이 없으면 `expectedGrantId` 값과 상관없이(직전에 읽은 ID든 null이든)
+  no-op이며 `changed=false`다. 회수한 뒤 같은 유효 ID나 null로 다시 보내도 이미 행이
+  없어 no-op로 성공한다. 행이 남아 있고 저장된 `grant_id`가 `expectedGrantId`와 같을 때만
   `changed=true`다.
-- 회수 CAS는 `expectedCreatedAt`과 저장된 생성 시각을 비교하고 다르면
-  `publisher_conflict`(409)다. 다시 읽어야 한다. 이 시각은 밀리초 단위라 같은 밀리초에 생긴
-  서로 다른 부여를 구분하지 못한다. 고유한 부여 세대 식별자가 아니라 타임스탬프 가드일 뿐이다.
+- 회수 CAS는 `expectedGrantId`와 저장된 `grant_id`를 비교하고 다르면
+  `publisher_conflict`(409)다. 다시 읽어야 한다. `grant_id`는 재부여할 때마다 새로 생기므로
+  같은 밀리초에 다시 부여된 권한도 구분한다. `immutable_publisher_generation` 트리거가 행
+  UPDATE를 막아 회수는 삭제, 부여는 재삽입으로만 한다.
 - 감사 기록(`publisher.granted`·`publisher.revoked`)은 권한 쓰기와 같은 D1 batch이고 직전
   쓰기가 1행을 바꿨을 때만 INSERT한다. no-op(부여 중복·대상 없음)이면 권한 쓰기도 이력
   추가도 없다. 1행을 바꾼 뒤 감사 INSERT가 실패하면 같은 batch라 권한 변경도 함께
@@ -279,16 +285,17 @@ owner가 회수되면 쓰기 문장이 0행이 되어 아무것도 바뀌지 않
   `GET, PUT, DELETE`다.
 
 설정의 owner 전용 `LivePublishers`를 `LiveGrants`와 `LiveAdminChanges` 사이에 로컬 연결했다.
-25건 목록·다음 페이지·처음부터 새로고침, issuer/subject 부여와 관찰한 createdAt으로 회수를
+25건 목록·다음 페이지·처음부터 새로고침, issuer/subject 부여와 관측한 `grantId` 회수를
 제공하며 명시적 확인 뒤에만 쓴다. 충돌은 최신 목록을 다시 읽고, 결과가 불확실하면 원래
 요청 그대로 재시도한다. 진행 중이거나 결과가 불확실한 쓰기는 설정 폼과 grant 변경을 잠그며,
 저장 뒤 기존 관리자 변경 이력을 갱신한다. 취소·늦은 응답 폐기와 권한 거부·프로젝트 전환 시
 식별자 삭제를 적용했다. 화면 동작과 로컬 브라우저 확인은 [관리자 경계](./administrator.md#발행자-관리-화면)에 둔다.
-발행자·기존 grant 테스트 19/19, 신규 발행자 테스트 6/6, sites 검사 9/9와 관리자 타입 검사·
-빌드를 로컬에서 통과했다. 상세 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
+실제 Chrome·임시 OIDC·로컬 D1 스모크와 관리자 집중 19/19, api·모델 153/153,
+관리자 타입 검사·빌드·번들 2/2·sites 9/9를 로컬에서 통과했다. 상세 결과는
+[검증 기록](../../VALIDATION.md)에 둔다.
 CLI(`publisher-grant`·`publisher-revoke`)도 그대로 쓸 수 있다.
-이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다. 스키마·DB 마이그레이션
-변경은 없고 0008 감사 action을 그대로 쓴다. 이 슬라이스에서 원격 DB 적용·푸시·배포는 하지
+이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다. DB는 0009의 `grant_id`를
+쓰고 감사는 0008 action을 그대로 쓴다. 이 슬라이스에서 원격 DB 적용·푸시·배포는 하지
 않았다.
 
 ## 서버 출처 조회

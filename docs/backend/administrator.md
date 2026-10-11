@@ -59,7 +59,7 @@ GET으로 읽는다.
 - `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
 - `GET /v1/projects/{projectId}/publishers` — 현재 owner 전용 서버 발행자 목록. 관리자 grant와 별개인 발행 권한만 반환한다.
 - `PUT /v1/projects/{projectId}/publishers` — owner의 발행 권한 부여. `{issuer,subject}`만 받는다.
-- `DELETE /v1/projects/{projectId}/publishers` — owner의 발행 권한 회수. `{issuer,subject,expectedCreatedAt}`을 받는다.
+- `DELETE /v1/projects/{projectId}/publishers` — owner의 발행 권한 회수. `{issuer,subject,expectedGrantId}`를 받는다.
 - `GET /v1/projects/{projectId}/grants` — 현재 owner 전용 권한 목록. 아래 목록 규칙을 따른다.
 - `PUT /v1/projects/{projectId}/grants` — owner의 reader/owner grant 등록·역할 변경. 아래 변경 규칙을 따른다.
 - `DELETE /v1/projects/{projectId}/grants` — owner의 grant 회수. 아래 변경 규칙을 따른다.
@@ -135,7 +135,7 @@ GET 아닌 메서드는 405, 손상된 JSON/시각/원인/안전 정수·합계/
 추가 진단 기록은 best-effort이며 저장 실패·알 수 없는 프로젝트·관리자/API 인증 실패·
 admission DB 실패·마이그레이션 이전 이력은 포함하지 않는다. 진단이 응답 뒤 저장될 수
 있으므로 직후 조회에는 아직 반영되지 않을 수 있다. 조회는 최대 10080분과 7일/10원인
-출력으로 제한하며 프로토타입 진단 화면 연결은 후속이다. [응답 예제](../../api/examples/collection-rejections-response.json)를 따른다.
+출력으로 제한하며 설정의 수집 상태 진단 화면에 거부 요약·일별 내역을 로컬에서 연결했다. [응답 예제](../../api/examples/collection-rejections-response.json)를 따른다.
 
 ## 프로젝트 설정 조회·변경
 
@@ -202,7 +202,8 @@ identity 인코딩의 application/json 또는 text/plain을 받고 본문은 UTF
 선택 funnels도 같은 한도·검증을 공유한다. 퍼널은 최대 10개, 순서 단계는 2~10개이며
 각 단계의 등록 출처·이벤트와 동일 필수 분류 도메인을 확인한다. 생략한 기존 정의의
 해시는 유지하고, 명시한 funnels는 정의 해시·불변 버전·재요청 비교에 포함한다.
-단계 연결 수집과 퍼널 일별 조회 API는 로컬 구현·검증했고, 관리자 퍼널 화면은 후속이다.
+단계 연결 수집과 퍼널 일별 조회 API는 로컬 구현·검증했고, 관리자 퍼널 분석 화면·CSV와
+퍼널 전용 단계 편집 폼도 로컬에서 연결했다.
 privacyReviewed는 owner의 검토 확인이며 자동 개인정보 탐지가 아니다. 프로젝트·상태·
 허용 출처·수집 한도는 본문에 넣을 수 없다. 닫힌 입력·잘못된 정의는 400이다.
 
@@ -229,8 +230,8 @@ D1 batch의 rollback·실행 순서는 [공식 D1 문서](https://developers.clo
 
 프로젝트 생성은 별도 생성 권한 API 또는 provisioning CLI를 사용한다.
 스키마 상태 변경은 기존 provisioning CLI가 맡는다. grant 부여·역할 변경·회수는 새 owner
-API(PUT·DELETE)로 로컬 구현했고 provisioning CLI는 대안으로 유지한다. 관리자 화면의
-권한 변경 UI, 인증 제공자 설정, 원격 배포는 후속이다. 요청·응답 형태는
+API(PUT·DELETE)로 로컬 구현했고 provisioning CLI는 대안으로 유지한다. 관리자 화면의 권한
+변경 UI는 로컬에서 구현·검증했고, 인증 제공자 설정과 원격 배포는 후속이다. 요청·응답 형태는
 [OpenAPI](../../api/openapi.yaml)를 따르고, 동작 의미는
 [이벤트·집계 계약](./event-contract.md)을 따른다.
 
@@ -295,32 +296,37 @@ owner가 회수되면 쓰기가 0행이 되어 아무것도 바뀌지 않고 own
 넘치면 413, 다른 미디어 타입·비-identity 인코딩은 415다. issuer·subject는
 [provisioning CLI](./provisioning.md)와 같은 `validGrantIdentity` 제약을 쓴다.
 
-PUT 본문은 `{issuer,subject}`, DELETE 본문은 `{issuer,subject,expectedCreatedAt}`이다.
-`expectedCreatedAt`은 마지막으로 읽은 생성 시각을 `.mmmZ` UTC 문자열 또는 null로 넣는다.
-null은 권한이 없다고 본 경우다. granted가 true인 PUT은 expectedCreatedAt을 받지 않는다.
+PUT 본문은 `{issuer,subject}`, DELETE 본문은 `{issuer,subject,expectedGrantId}`이다.
+`expectedGrantId`는 마지막으로 읽은 불변 부여 세대를 32자 소문자 hex 문자열 또는 null로 넣는다.
+null은 권한이 없다고 본 경우다. granted가 true인 PUT은 expectedGrantId를 받지 않는다.
+예전 `expectedCreatedAt` 필드는 보내면 400이다.
 
 이미 있는 발행 권한을 다시 부여하면 DB를 다시 쓰지 않고 200 `changed=false`로 성공하며
-기존 생성 시각을 바꾸지 않는다. 대상 권한 행이 없으면 `expectedCreatedAt` 값과 상관없이
-no-op이고 `changed=false`다(직전에 읽은 시각으로 회수한 뒤 같은 값으로 다시 보내도 이미 행이
-없어 no-op로 성공한다). DELETE의 CAS는 `expectedCreatedAt`과 저장된 생성 시각을 비교하고
-다르면 publisher_conflict(409)라 다시 읽어야 한다. 이 시각은 밀리초 단위라 같은 밀리초에 생긴
-서로 다른 부여를 구분하지 못한다. 고유한 부여 세대 식별자가 아니라 타임스탬프 가드일 뿐이다.
+기존 행과 `grantId`를 바꾸지 않는다. 대상 권한 행이 없으면 `expectedGrantId` 값과 상관없이
+no-op이고 `changed=false`다(직전에 읽은 ID로 회수한 뒤 같은 유효 ID나 null로 다시 보내도 이미 행이
+없어 no-op로 성공한다). DELETE의 CAS는 `expectedGrantId`와 저장된 `grant_id`를 비교하고
+다르면 publisher_conflict(409)라 다시 읽어야 한다. `grant_id`는 재부여할 때마다 새로 생기므로
+같은 밀리초에 다시 부여된 권한도 구분한다. `immutable_publisher_generation` 트리거가 행 UPDATE를
+막아 회수는 삭제, 부여는 재삽입으로만 한다.
 
-성공 응답은 200 `{projectId,issuer,subject,granted,createdAt,changed}`이고 granted와
-createdAt은 짝을 이룬다(부여는 true·생성 시각, 회수는 false·null). 자격증명·역할은 넣지
+성공 응답은 200 `{projectId,issuer,subject,granted,grantId,createdAt,changed}`이고 granted·
+grantId·createdAt이 짝을 이룬다(부여는 true·부여 ID·생성 시각, 회수는 false·null·null).
+자격증명·역할은 넣지
 않는다. 변경 이력(`publisher.granted`·`publisher.revoked`) 감사 기록은 권한 쓰기와 같은
 D1 batch이고 직전 쓰기가 1행을 바꿨을 때만 INSERT한다. no-op이면 권한 쓰기도 이력 추가도
 없고, 1행을 바꾼 뒤 감사 INSERT가 실패하면 같은 batch라 권한 변경도 함께 롤백된다. 상태
 코드는 200·400·401·403·405(Allow: GET, PUT, DELETE)·413·415·503이고
 DELETE에만 409가 더해진다. 이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다.
-스키마·DB 마이그레이션 변경은 없고 0008 감사 action을 그대로 쓴다. 설정의 owner 전용
+DB는 0009로 `project_publishers`에 `grant_id`를 둔 상태를 쓰고 감사는 0008 action을 그대로
+쓴다. 설정의 owner 전용
 `LivePublishers`도 로컬에서 연결했으며 CLI도 그대로 쓸 수 있다.
 
 ## 발행자 관리 화면
 
 `apps/admin` 설정 화면에서 owner 전용 `LivePublishers`를 `LiveGrants`와 `LiveAdminChanges`
 사이에 연결했다. 목록은 25건씩 읽고 다음 페이지·처음부터 새로고침을 제공한다. issuer/subject로
-부여를 준비하고 목록에서 관찰한 createdAt을 `expectedCreatedAt`으로 보내 회수를 준비한다.
+부여를 준비하고 목록에서 관찰한 `grantId`를 `expectedGrantId`로 보내 회수를 준비한다.
+등록 시각 표는 그대로 보여주고 `grantId`는 화면에 쓰지 않는다.
 두 쓰기는 명시적 확인 뒤에만 전송한다. 충돌이면 최신 목록을 다시 읽어 복구하고, 결과가
 불확실하면 원래 요청을 그대로 재시도한다. 저장 뒤 기존 관리자 변경 이력을 갱신한다.
 
@@ -331,10 +337,11 @@ DELETE에만 409가 더해진다. 이 API는 자격증명을 발급하지 않고
 로컬 브라우저 검증은 실제 Chrome·임시 암호 검증 OIDC 테스트 수집기·로컬 D1을 사용해 확인 전 쓰기
 없음, 부여·회수 감사 2행과 후속 재부여의 세 번째 행, 응답을 보류한 PUT 중 설정·grant 잠금,
 owner 회수 후 새로고침 시 화면 식별자 삭제를 확인했다. 320px에서 문서 가로 넘침과 콘솔
-오류는 없었다. 발행자·기존 grant 테스트 19/19, 신규 발행자 테스트 6/6, sites 검사 9/9와
-관리자 타입 검사·빌드를 로컬에서 통과했다. 상세 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
-이 화면 슬라이스는 스키마·API·마이그레이션을
-바꾸지 않았다. 실제 제공자·원격 리소스·배포·Sembom 연동은 확인하지 않았다.
+오류는 없었다. 실제 Chrome·임시 OIDC·로컬 D1 스모크(같은 밀리초 재부여 뒤 stale 회수 409)와
+관리자 집중 19/19, api·모델 153/153, 타입 검사·빌드·번들 2/2·sites 9/9를 로컬에서 통과했다.
+상세 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
+이 슬라이스는 발행자 API 계약과 화면을 `grantId` 기준으로 바꿨고 DB는 0009의 `grant_id`를 쓴다.
+실제 제공자·원격 리소스·배포·Sembom 연동은 확인하지 않았다.
 
 ## 프로젝트 변경 이력 조회
 
