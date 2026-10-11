@@ -61,7 +61,10 @@ export default function OidcLogin({ onConnected }: { onConnected: (login: Browse
   return <section className="settings-section" aria-labelledby="oidc-login-heading">
     <h2 id="oidc-login-heading">관리자 로그인</h2>
     <p className="context-note">로그인 후 권한이 있는 프로젝트를 조회해요. 로그인 정보는 이 탭에서만 유지돼요.</p>
-    {!enabled && <p className="context-note">로그인 제공자가 아직 설정되지 않았어요. 운영자 설정 후 사용할 수 있어요.</p>}
+    {!enabled && <>
+      <p className="context-note">로그인 제공자가 아직 설정되지 않았어요. 운영자 설정 후 사용할 수 있어요. 설정 전에는 샘플 데이터로 분석 화면을 체험할 수 있어요.</p>
+      <p><a className="secondary-button" href="/demo">샘플 데모 둘러보기</a></p>
+    </>}
     <button className="primary-button" type="button" onClick={start} disabled={!enabled || busy}>{busy ? '로그인 확인 중…' : '관리자 로그인'}</button>
     {error && <p className="form-error" role="alert">{error}</p>}
     {busy && <p className="context-note" role="status" aria-live="polite">로그인을 처리하고 있어요.</p>}

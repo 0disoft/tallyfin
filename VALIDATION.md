@@ -1,5 +1,26 @@
 # 검증
 
+## 첫 실행 샘플 체험 경로
+
+로그인 제공자가 없는 관리자 화면에 `/demo` 샘플 체험 링크를 연결했다. 데모 상단은
+샘플 데이터와 화면 내 변경임을 알리고 `/` 관리자 로그인으로 돌아가는 링크를 제공한다.
+운영 인증·등록 데이터와 샘플을 섞거나 실제 API 접근을 열지 않는다.
+
+`npm run typecheck:admin`, `npm run build:admin`, 번들·Sites 검사 11/11,
+`git diff --check`를 통과했다. ignore된 `.tmp/admin-first-run-smoke.mjs`에서 실제 Vite와
+Chromium 156.0.8078.4로 키보드 Enter를 사용해 `/` → `/demo` → `/`를 이동하고 샘플
+이벤트 분석·목표 화면을 확인했다. 320px 페이지 가로 넘침 없음·API 요청 0·pageerror 0·
+local/session storage 0을 확인했다. 결과는 `.tmp/admin-first-run-smoke.json`에 있다.
+
+기존 인증 경로도 `npm run verify:admin-login -- --channel chromium`으로 확인했다.
+새 로컬 D1·합성 서명 제공자로 PKCE·콜백 제거·서명된 API 접근·공유 갱신·실패 뒤 로그인·
+연결 해제·새로고침 상태 제거를 통과했다(`verified:true`, `apiReads:27`, `pageErrors:0`).
+실제 운영 제공자를 연결한 검사가 아니며 브라우저·서버·로컬 런타임은 종료했다.
+
+변경 없는 전체 백엔드 검사는 반복하지 않았고 일반 소스 lint는 명령이 없어 생략했다.
+API·DB·SDK 계약·의존성·위생 정책·CI 변경은 없다. 실제 운영 환경은 미검증이며
+푸시·배포·활성화는 없다. 이 수정은 전체 저장소 점검 중 첫 사용 흐름의 한 개선이다.
+
 ## 프로젝트 페이지 병합·새로고침 복구 — 2026-10-11
 
 `LiveDashboard`의 목록 새로고침과 첫 페이지 조회 시작은 진행 중인 다음 페이지 요청을
