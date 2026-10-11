@@ -39,6 +39,7 @@
     "check:browser-size": "node tools/browser/check.mjs",
     "bench:browser": "node tools/browser-bench/run.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",
+    "bench:retained": "node tools/runtime/retained-bench.ts",
     "check": "npm run typecheck && npm test && npm run check:browser-size"
   },
   "devDependencies": {

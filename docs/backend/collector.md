@@ -167,6 +167,9 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 - 로컬 부하 실험: `npm run bench:collector`(opt-in, 기본 test/check/CI에 연결하지 않음)가
   새 합성 D1·loopback HTTP로 workflow 쓰기·인증 조회·중복 경쟁·혼합 퍼널·할당량 격리를
   확인한다. [로컬 수집기 부하 안내](../../tools/runtime/COLLECTOR-BENCH.md)를 따른다.
+- 누적 데이터 실험: `bench:retained`는 6개 프로젝트·네 테이블의 합성 67,860행에
+  2분 동안 HTTP 수집/조회를 보내며 실제 scheduled 정리를 함께 실행한다.
+  [누적 데이터 부하 안내](../../tools/runtime/RETAINED-BENCH.md)에 범위와 한계를 적었다.
 - 아직 없음: 발행자 OIDC 운영 설정값과 실제 제공자 연결·운영 토큰 발급,
   원격 D1 마이그레이션, 운영 Wrangler 바인딩·시크릿, 원격 정리 Cron Trigger 등록.
   정리 스케줄러와 커서는 로컬 구현·검증했다.
@@ -174,6 +177,6 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
   SDK 초기 실행·전송 비용은 합성 화면(2026-10-08), 수집 경로 쓰기·조회 지연은 로컬 합성
   D1 부하 실험(2026-10-11)에서 확인했다. 둘 다 실제 서비스는 미측정이며 조건은
   [성능 예산](../engineering/03-performance-budget.md)에 있다.
-- 미측정: 프로젝트 수·등록 속성 조합 규모별 비용, 지속·다중 Worker·큰 보존 데이터셋
-  부하, 운영 지연·비용.
+- 미측정: 프로젝트 수·등록 속성 조합 규모별 비용, 장기간·다중 Worker·원격/더 큰
+  데이터셋·네 테이블 밖 대량 데이터의 부하, 운영 지연·비용.
 - 배포·활성화: 원격 D1·운영 Worker·도메인·인증 제공자는 설정하지 않았다.

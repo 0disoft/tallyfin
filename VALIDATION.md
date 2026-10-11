@@ -1,5 +1,36 @@
 # 검증
 
+## 누적 데이터·정리 부하 실험 — 2026-10-11
+
+`bench:retained`(opt-in, 기본 test/check/CI 미포함)를 추가했다. 새 로컬 D1의 6개 프로젝트에
+네 테이블의 합성 이력 67,860행을 직접 SQL로 넣고, 실제 Worker 시계로 HTTP 8건/초를
+120초 제공했다. 데이터 생성과 인증 warmup은 측정에서 제외한다. 쓰기 480건·인증된 30일
+요약 조회 480건이 모두 200이었다. 실제 scheduled 정리 24회가 모두 ok였고 HTTP와 겹쳤다.
+운영 1분 대신 5초마다 정리를 호출했으며 커서 revision은 24다. 클라이언트 재시도 없이 새
+이벤트 8,800건·중복 800건·신규 workflow 시도 4,400건이 기대값과 일치했다.
+
+만료 영수증 7,200·만료 시도 7,200·오래된 이벤트 집계 2,160·workflow 집계 360행이
+삭제됐다. 최종 영수증 44,800·시도 8,000·이벤트 일별 9,720·workflow 일별 1,620행을
+확인했고, 보존 중인 집계의 모든 행은 초기값+새 수락분과 일치했다. API 요약도 별도
+검사했다. p95는 쓰기 48.95ms·조회 10.96ms·정리 123.60ms·작업 시작 지연 13.96ms였다.
+실제 부하 창은 120,011.575ms이고 설정 동시 작업 상한 16은 관측 최대치가 아니다.
+
+실행·통과: `npm run bench:retained`, 루트 `tsc --noEmit`,
+`node --test tools/runtime/test/retained-bench.test.ts tools/runtime/test/collector-bench.test.ts`
+4/4, 새 명령 help, `git diff --check`. 공용 harness 추출 뒤 `npm run bench:collector`도
+통과했다(`.tmp/collector-bench/run-hBJyX8/report.json`). 이 회귀 실행은 다른 검사와
+겹쳤으므로 측정 수치 비교에는 쓰지 않는다. 집중 검사는 과부하 때 발행 속도를 숨겨
+낮추지 않고 실패하는 것, 이미 시작한 작업 drain·취소·결과 순서, 작은 fixture의 6개
+프로젝트 정리/보존을 확인했다.
+
+최종 결과는 `.tmp/retained-bench/run-r2xPxi/report.json`이다. Node 24.18.0·Windows
+x64·Ryzen 5 7430U·Miniflare 4.20260730.0 환경이며 JWKS는 메모리 합성이다. 기존/원격 DB
+접근은 없었다. 실제 인증 제공자·운영 리소스·장기간·다중 Worker·장애 상황과 네 테이블 밖
+대량 데이터는 미검증이며 로컬 2분 결과를 운영 처리량/SLO로 일반화하지 않는다.
+
+부하 도구·공용 harness·설명과 성능 예산/수집기/로드맵을 갱신했다. API·DB 스키마·
+마이그레이션·SDK·의존성·CI 워크플로/러너·위생 정책 변경은 없고 푸시·배포도 없다.
+
 ## 설치 공개 제공자 검사 — 2026-10-11
 
 `install:check -- --dir <prepared-installation>`은 다섯 설치 파일을 재검증하고 공개 OIDC

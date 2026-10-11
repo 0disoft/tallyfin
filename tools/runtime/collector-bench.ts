@@ -4,11 +4,8 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { cpus, platform, release, arch } from 'node:os';
-import { build } from 'esbuild';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { Miniflare, Log, LogLevel } from 'miniflare';
 import { validateRegistry } from '@tallyfin/core';
-import { DEFAULT_SETTINGS } from '../../apps/collector/src/config.ts';
+import { collectorHarness } from './collector-harness.ts';
 import { initialize } from '../provision/local.ts';
 import { Provisioner } from '../provision/store.ts';
 import { PublisherProvisioner } from '../provision/publishers.ts';
@@ -53,26 +50,8 @@ export async function runCollectorBench(signal: AbortSignal = new AbortControlle
   const output = await mkdtemp(join(outputRoot, 'run-'));
   const now = Date.now(), occurredAt = new Date(now).toISOString();
   const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Seoul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
-  const principal = { issuer: 'https://identity.example.invalid', subject: 'synthetic-benchmark-operator' };
-  // Ephemeral test key/token, never written to the report or disk. No external identity provider calls.
-  const { privateKey, publicKey } = await generateKeyPair('RS256');
-  const jwks = { keys: [{ ...await exportJWK(publicKey), kid: 'ephemeral-benchmark', alg: 'RS256' }] };
-  const token = async (audience: string) => new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'ephemeral-benchmark', typ: 'at+jwt' })
-    .setIssuer(principal.issuer).setSubject(principal.subject).setAudience(audience).setIssuedAt(Math.floor(now / 1000)).setExpirationTime(Math.floor(now / 1000) + 300).sign(privateKey);
-  const adminToken = await token('benchmark-admin'), publisherToken = await token('benchmark-publisher');
-  // Freeze only the Worker's clock so quota windows and event dates cannot change mid-experiment.
-  // HTTP timings use the host's real monotonic clock. JWKS lookup uses an in-memory synthetic provider.
-  const bundle = await build({ stdin: { loader: 'ts', resolveDir: root,
-    contents: `import worker from './apps/collector/src/runtime.ts'; Date.now = () => ${now};
-      globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
-  const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
-    host: '127.0.0.1', port: 0, d1Databases: { DB: crypto.randomUUID() }, d1Persist: join(output, 'state'),
-    bindings: { ...DEFAULT_SETTINGS, ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: principal.issuer,
-      OIDC_AUDIENCE: 'benchmark-admin', OIDC_JWKS_URI: `${principal.issuer}/jwks`,
-      PUBLISHER_AUTH_MODE: 'oidc', PUBLISHER_OIDC_ISSUER: principal.issuer,
-      PUBLISHER_OIDC_AUDIENCE: 'benchmark-publisher', PUBLISHER_OIDC_JWKS_URI: `${principal.issuer}/jwks` },
-    log: new Log(LogLevel.NONE) });
+  // Frozen Worker clock for deterministic quota windows; HTTP timing remains monotonic/real.
+  const { mf, principal, adminToken, publisherToken } = await collectorHarness(output, now);
   let phase = 'initialize'; const phases: ReturnType<typeof stats>[] = [];
   const observations: { phase: string; samples: Sample[] }[] = [];
   try {
