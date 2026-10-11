@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "tallyfin.readiness.server-access-audit/v1",
+  "sourceCommit": "26574dd97ffb179a2c7549c77664d474ed9f42fa",
+  "observedDate": "2026-10-12",
+  "criteria": ["R09", "R12", "R38", "R56"],
+  "scope": "Existing administrator HTTP and D1 grant boundaries",
+  "runs": [
+    {
+      "command": "node --test --test-timeout=30000 --test-name-pattern='grant|revok|foreign|issuer|reader|owner|authentication|administrator factory' apps/collector/test/admin.test.ts apps/collector/test/settings.test.ts apps/collector/test/schema-publication.test.ts apps/collector/test/grants.test.ts apps/collector/test/grant-change.test.ts apps/collector/test/publishers.test.ts apps/collector/test/publisher-change.test.ts apps/collector/test/admin-changes.test.ts",
+      "passed": 31,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "localEvidence": ".tmp/backend-access-audit.log"
+    },
+    {
+      "command": "node --test --test-timeout=30000 --test-name-pattern='grant|revok|foreign|issuer|reader|owner|permission|project leakage|isolate|isolated|authentication' apps/collector/test/funnel-query.test.ts apps/collector/test/server-query.test.ts apps/collector/test/rejections.test.ts apps/collector/test/project-creation.test.ts",
+      "passed": 10,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "localEvidence": ".tmp/backend-access-additional.log"
+    }
+  ],
+  "verifiedCases": [
+    "Project list and pagination reapply caller issuer/subject grants",
+    "Foreign-project owners and the same subject from another issuer do not gain access",
+    "Grant revocation before the D1 read snapshot denies schemas and aggregates",
+    "Settings, schema publication, administrator grants and publisher changes recheck ownership inside atomic writes",
+    "Reader and publisher-only authorities do not imply owner or analytics authority",
+    "Concurrent self-demotions preserve a final owner",
+    "Owner-only grant, publisher and administrator-history lists exclude other project identities",
+    "Funnel and server-event reads preserve project and schema boundaries",
+    "Project creation requires separately provisioned creator authority and rejects supplied ownership fields",
+    "Native Worker execution with real local D1 rechecks administrator grants"
+  ],
+  "verificationLimits": {
+    "databaseRuntime": "Local Miniflare D1",
+    "principalVerification": "Test-controlled trusted verifier ports",
+    "jwtSignatureVerifiedByTheseRuns": false,
+    "productionIdentityProviderVerified": false,
+    "remoteDatabaseVerified": false,
+    "allEndpointsAndAllParameterCombinationsVerified": false,
+    "browserUiVerifiedByTheseRuns": false,
+    "repositoryReadinessComplete": false
+  },
+  "changes": {
+    "newProductFixRequiredByTheseCases": false,
+    "backendSource": false,
+    "apiContract": false,
+    "databaseContract": false,
+    "dependencies": false,
+    "ciRunners": false,
+    "pushOrDeployment": false
+  }
+}
