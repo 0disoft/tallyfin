@@ -87,13 +87,23 @@ function expectMax(value: number, maximum: number, path: string): number {
   return value;
 }
 
+function expectTimeZone(value: unknown, path: string): string {
+  const zone = expectString(value, path);
+  // Match the project's accepted zone contract, and verify that this browser
+  // can format it before React uses it to derive query dates.
+  if (zone.length < 1 || zone.length > 64 || !/^[A-Za-z][A-Za-z0-9_+./-]*$/.test(zone)) fail(path, 'invalid time zone');
+  try { new Intl.DateTimeFormat('en', { timeZone: zone }); }
+  catch { fail(path, 'unsupported time zone'); }
+  return zone;
+}
+
 function parseProject(value: unknown, path: string): Project {
   const record = expectRecord(value, path);
   return {
     id: expectString(record.id, `${path}.id`),
     name: expectString(record.name, `${path}.name`),
     status: expectEnum(record.status, ['active', 'paused'], `${path}.status`) as Project['status'],
-    timeZone: expectString(record.timeZone, `${path}.timeZone`),
+    timeZone: expectTimeZone(record.timeZone, `${path}.timeZone`),
   };
 }
 
@@ -268,7 +278,7 @@ function parseMeta(value: unknown, path: string): QueryMeta {
     source: expectEnum(record.source, ['browser', 'server'], `${path}.source`) as QueryMeta['source'],
     from: expectString(record.from, `${path}.from`),
     to: expectString(record.to, `${path}.to`),
-    timeZone: expectString(record.timeZone, `${path}.timeZone`),
+    timeZone: expectTimeZone(record.timeZone, `${path}.timeZone`),
     generatedAt: expectString(record.generatedAt, `${path}.generatedAt`),
     latestReceivedAt:
       record.latestReceivedAt === null ? null : expectString(record.latestReceivedAt, `${path}.latestReceivedAt`),

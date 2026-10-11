@@ -29,10 +29,19 @@ try {
   await server.listen(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`; local.configure(origin);
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
-  let routeError = false, pageErrors = 0, deniedReads = 0, heldReads = 0;
+  let routeError = false, pageErrors = 0, deniedReads = 0, heldReads = 0, invalidZoneReads = 0;
+  let invalidProjectZone = true;
   await context.route('**/*', async route => {
     const holding = held && !held.used && route.request().url().startsWith(`${origin}/v1/projects/sembom/events/tool_view/daily`) ? held : null;
     try {
+      if (invalidProjectZone && new URL(route.request().url()).origin === origin && new URL(route.request().url()).pathname === '/v1/projects') {
+        const response = await route.fetch({ maxRedirects: 0, timeout: 10000 });
+        try {
+          assert.equal(response.status(), 200);
+          const body = await response.json(); body.data[0].timeZone = 'Mars/Olympus'; invalidZoneReads++;
+          return await route.fulfill({ response, json: body });
+        } finally { await response.dispose(); }
+      }
       if (!holding) return await local.route(route);
       holding.used = true; heldReads++;
       const response = await route.fetch({ maxRedirects: 0, timeout: 10000 });
@@ -48,6 +57,12 @@ try {
   page = await context.newPage(); page.setDefaultTimeout(10000); page.on('pageerror', () => pageErrors++);
   page.on('response', response => { if (response.status() === 403 && new URL(response.url()).pathname.includes('/events/')) deniedReads++; });
   stage = 'login'; await page.goto(origin); await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
+  stage = 'invalid-time-zone';
+  await page.getByRole('heading', { name: '응답이 계약과 맞지 않아요', exact: true }).waitFor();
+  assert.equal(pageErrors, 0);
+  assert.equal(await page.locator('.event-table').count(), 0);
+  stage = 'time-zone-recovery'; invalidProjectZone = false;
+  await page.getByRole('button', { name: '다시 시도', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await page.getByRole('button', { name: '이벤트 분석', exact: true }).click();
@@ -89,7 +104,7 @@ try {
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   assert.equal(await csv.count(), 0); assert.equal(await page.locator('.event-table').count(), 0);
   assert.equal(routeError, false); assert.equal(pageErrors, 0);
-  const report = { verified: true, browser: browser.version(), deniedReads, deniedSummaryCleared: true, deniedCsvDisabled: true,
+  const report = { verified: true, browser: browser.version(), invalidZoneReads, invalidZoneRecovery: true, deniedReads, deniedSummaryCleared: true, deniedCsvDisabled: true,
     otherProjectExportIsolated: true, recovery: true, lateDeniedReadIgnored: true, heldReads, disconnectClears: true, routeError, pageErrors, ...local.counts };
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
 } catch {

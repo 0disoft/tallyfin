@@ -3582,3 +3582,32 @@ RS256 로그인·Miniflare D1에서 읽기 권한을 회수한 뒤 이벤트 상
 원격 DB 검사는 반복하지 않았다. 일반 소스 lint 명령은 없다. 프론트엔드 설계와 이
 검증 기록만 소유 문서로 갱신했다. API·DB·SDK·의존성·위생 정책·CI 러너 변경 및
 푸시·배포는 없다. 새 브라우저 명령은 옵트인이며 기본 CI에 연결하지 않았다.
+
+## 지원하지 않는 시간대 응답 차단 — 2026-10-12
+
+API가 프로젝트나 조회 메타에 지원하지 않는 시간대 이름을 돌려주면 관리자 클라이언트가
+그 값을 검증 없이 React로 넘겼다. 대시보드가 조회 날짜를 계산할 때 `Intl.DateTimeFormat`이
+던진 예외를 부모 `DeferredPanel`의 오류 경계가 잡아 "화면 새로고침"만 안내했고, 새로고침은
+메모리에만 둔 토큰을 지워 다시 로그인해야 했다.
+
+`apps/admin/src/api/validate.ts`는 프로젝트와 쿼리 메타의 시간대를 Core의
+`validateRegistry`와 같은 계약으로 확인한다(1~64자, `^[A-Za-z][A-Za-z0-9_+./-]*$`,
+`Intl.DateTimeFormat` 생성 성공). 위반 응답은 렌더 전에 `contract` 종류의 `ApiError`로
+거부되어 대시보드가 `응답이 계약과 맞지 않아요`와 `다시 시도`를 표시하고 연결과 로그인은
+남는다. 지원되는 이름과 별칭은 다시 쓰지 않고 그대로 전달하며 UTC로 대체하지 않는다.
+
+새 `apps/admin/src/api/time-zone.test.mjs` 3개 중 2개는 수정 전 실패했다. 최종
+client·dates·collection-diagnostics·schema·time-zone 검사 74/74, `typecheck:admin`·
+`build:admin`·runner `node --check`·`git diff --check`를 통과했고 번들/Sites 검사는
+11/11이었다.
+
+옵트인 `npm run verify:admin-analysis-access`는 실제 로컬 D1 프로젝트 목록 응답에만
+`Mars/Olympus`를 주입하며 DB는 바꾸지 않는다. 최종 Chromium 156.0.8078.4 실행은
+invalidZoneReads 1·복구 true·deniedReads 1·heldReads 1·로그인 1·API 읽기 25·쓰기 0·
+pageerror 0·routeError false로 verified=true였고, 기존 접근 회수·CSV 잠금·다른 프로젝트
+다운로드·늦은 403 폐기·연결 해제 검사도 함께 통과했다. 결과는
+`.tmp/admin-analysis-access-v0JmYQ/report.json`이다. 수정 전 소스로 같은 명령을 실행하면
+초기 `invalid-time-zone` 단계에서 실패하고 캡처에 오류 경계가 남는다.
+
+합성 로컬 RS256 로그인과 격리된 Miniflare D1/Vite를 쓴 검사이며 실제 운영 제공자는
+확인하지 않았다. API·DB·SDK·의존성·위생 정책·CI 러너 변경은 없고 푸시·배포도 없다.
