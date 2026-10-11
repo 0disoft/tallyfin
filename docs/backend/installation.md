@@ -4,6 +4,41 @@
 실제 제공자·계정·도메인·D1 값과 원격 설치 검증은 아직 없다. 아래 명령은 로컬 파일만
 준비한다. 등록·권한 부여·원격 DB 적용·배포를 자동 실행하지 않는다.
 
+## 대화형 설정 — `install:setup`
+
+```powershell
+npm run install:setup -- --out .tmp/installation
+```
+
+`stdin`·`stderr`가 TTY인 대화형 터미널에서만 실행하고 공개 설정값만 묻는다. 관리자 HTTPS
+origin을 입력하면 workers.dev 주소인지 custom domain인지 그 자리에서 판정하므로
+`workersDev`·`domain`을 따로 넣지 않는다. 관리자와 수집기는 같은 Cloudflare 계정 ID를 쓰고
+수집기의 workers.dev 노출만 따로 묻는다. D1 이름·ID와 issuer·JWKS·audience·알고리즘·
+token typ은 실제 리소스·제공자 값에 맞춰 입력한다. scope·알고리즘·token typ에는 현재
+구현의 기본값 후보를 표시하며 제공자 설정과 맞는지 확인해야 한다. 발행자 인증을 켜면
+issuer·JWKS·audience·알고리즘·token typ을 따로 받는다. audience는 관리자 API와 달라야
+하며 issuer·JWKS는 같은 제공자를 써도 된다.
+
+- 질문·안내·미리보기는 `stderr`, 결과 JSON은 `stdout`이다. 형식에 맞지 않는 값은 같은
+  질문을 세 번까지 다시 묻고, 세 번 실패하면 파일을 만들지 않고 끝낸다. 입력한 값은
+  형식 오류 메시지에는 입력값을 넣지 않는다. 마지막 미리보기에는 관리자 출처·콜백·Worker
+  이름·issuer·audience·출력 경로를 표시한다.
+- 토큰·비밀번호·client secret은 묻지 않는다. 계정·도메인·D1·제공자 값은 문법만 검사하며
+  실제 소유·존재를 확인하지 않는다.
+- 이미 있는 출력 디렉터리는 첫 질문 전에 거부한다. 쓰기는 `install:prepare`와 공유하는
+  writer가 기존 파일을 덮어쓰지 않는 `wx` 플래그로 처리한다.
+- 마지막 확인에서 `y`를 받아야 다섯 파일을 쓴다. 다른 답이면 파일 없이
+  `{prepared:false,cancelled:true,remoteChanges:false}`만 낸다.
+- 취소는 확인한 뒤에도 쓰기를 시작하기 전에 멈추고, 쓰는 중이면 이번 실행이 쓴 파일만
+  지운다. `--help` 단독 또는 `--out <new-directory>`만 받는다.
+- 질문 중 Ctrl+C와 표준 입력 종료는 질문을 중단하고 `installation_setup_cancelled`를 낸다.
+  이 단계에는 아직 파일을 쓰지 않았다.
+- 네트워크 요청·로그인·토큰·권한 조회·외부 등록·리소스 생성·배포를 하지 않는다. 반복
+  자동화에는 기존 `install:prepare --file`을 쓴다.
+
+값 검증은 기존 설치 검증기가 최종 권위이고, 실제 계정·도메인·D1·제공자 값은 운영자가
+정한다. 생성 뒤 검토·빌드·검사는 아래 절과 같다.
+
 ## 입력 준비
 
 실제 값으로 채운 `.tmp/installation-input.json`을 만든다. JSON 최상위 키는 다음 네 개다.

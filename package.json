@@ -14,6 +14,7 @@
     "dev:admin": "npm run dev --workspace @tallyfin/admin --",
     "admin:config": "node tools/runtime/prepare-admin.ts",
     "install:prepare": "node tools/runtime/prepare-installation.ts",
+    "install:setup": "node tools/runtime/setup-installation.ts",
     "install:check": "node tools/runtime/install-check.ts",
     "install:access-check": "node tools/runtime/install-access-check.ts",
     "install:database-check": "node tools/runtime/install-database-check.ts",

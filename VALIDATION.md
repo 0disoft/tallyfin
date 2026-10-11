@@ -1,5 +1,43 @@
 # 검증
 
+## 대화형 설치 설정 — 2026-10-11
+
+`install:setup`은 대화형 터미널에서 공개 설정값만 받아 기존 `install:prepare`와 같은 다섯
+파일을 새 디렉터리에 쓴다. 관리자 origin으로 workers.dev/custom domain을 판정하고, 두
+Worker에 같은 계정 ID와 서비스 바인딩을 쓰며 D1 이름·ID·issuer·JWKS·audience·알고리즘·
+token typ은 제공자 설정에 맞춰 입력한다. scope·알고리즘·token typ의 기본값 후보도 표시한다.
+선택 발행자 인증은 issuer·audience를 따로 받고 audience만 관리자 API와 달라야 한다.
+질문·안내·미리보기는 `stderr`, 결과 JSON은 `stdout`이고 형식 오류는 세 번까지 다시 묻고
+오류 메시지에 입력값을 넣지 않는다. 기존 출력 디렉터리와
+비대화형 실행은 첫 질문 전에 거부하고, 확인 `y` 전에는 아무것도 쓰지 않는다. `--help`
+단독 또는 `--out <new-directory>`만 받는다. 네트워크·로그인·토큰·권한 조회·외부 등록·
+리소스 생성·배포는 하지 않는다.
+
+실행·통과: `node --test --test-timeout=30000 tools/runtime/test/installation.test.ts
+tools/runtime/test/installation-setup.test.ts` 9/9 종료 코드 0(설치 JSON 4·대화형 5),
+`node node_modules/typescript/bin/tsc --noEmit` 종료 코드 0, `git diff --check` 종료 코드 0,
+`install:setup --help` 종료 코드 0. 신규 5건은 생성한 묶음을 `preparedInstallation`으로
+다시 검증한 뒤 관리자 라우트·계정·서비스 바인딩·발행자 분리와 공개 login 설정에
+발행자·계정 값이 섞이지 않는지 확인하고, workers.dev/명시 resource/발행자 미사용, 확인
+거절 시 파일 없음, 세 번 실패·기존 디렉터리 거부·잘못된 인자, 확인 직후 취소 시 쓰기
+미시작을 확인한다.
+
+취소 경로는 호스트 `AbortSignal`을 공유 writer까지 넘겨 각 파일 쓰기 전과 전체 쓰기 뒤에
+확인하고, 중단되면 이번 실행이 쓴 파일만 지운다. 실제 PTY 호스트의 합성 공개 값 실행으로
+`.tmp/installation-setup-smoke-01`에 다섯 파일이 생성됐고 결과 JSON은 `prepared:true`·
+`remoteChanges:false`, 종료 코드 0이었다. Ctrl+C는 `{code:'installation_setup_cancelled'}`
+를 내고 `.tmp/installation-setup-cancel-01` 디렉터리를 만들지 않았다. Windows PowerShell
+PTY 호스트가 돌려준 최종 종료 코드는 1(nonzero)로 관측됐으며, 코드가 취소 시 설정하는
+`process.exitCode 130`과 호스트 반환 값은 구분한다. 성공 PTY 확인은 signal 전달 전에
+실행했고 취소되지 않는 경로의 파일 내용은 같다. 입력은 `.invalid` 문법용 합성 값이며
+실제 계정·도메인·D1·제공자를 조회하지 않았다.
+
+package script `install:setup`을 추가하고 JSON 준비 CLI와 writer
+(`write-installation.ts`)를 공유하도록 추출했다. API·DB·SDK·의존성·CI·위생 정책과 기존
+`install:prepare` 동작은 바뀌지 않았다. 전체 CI·운영 빌드는 설치 도구 범위가 아니라
+반복하지 않았고, 실제 제공자·원격 계정/DB·로그인·배포는 값이 미정이라 미실행이다.
+설치 안내·README·로드맵을 갱신했다.
+
 ## 서버 SDK 실제 소켓 복구 — 2026-10-11
 
 `verify:server-recovery`는 `@tallyfin/server` SDK를 플랫폼 주입 없이 기본 `fetch`·타이머·

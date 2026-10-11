@@ -4,6 +4,16 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 대화형 설치 설정: `install:setup`으로 공개 설정값만 대화형으로 받아 기존
+  `install:prepare`와 같은 다섯 파일을 새 디렉터리에 쓴다. 관리자 origin에서 workers.dev/
+  custom domain을 판정하고 두 Worker는 같은 계정 ID·서비스 바인딩을 쓰며 D1·OIDC·resource
+  값은 추정하지 않는다. 선택 발행자 인증은 별도 issuer·audience를 받는다. 질문·미리보기는
+  `stderr`, 결과 JSON은 `stdout`이고 기존 출력·비대화형 실행은 질문 전에 거부한다. 확인
+  `y` 뒤 취소되면 쓰기를 시작하지 않고, 쓰는 중 취소되면 이번 실행이 쓴 파일만 정리한다.
+  설치 집중 검사 9/9·루트 타입 검사·`--help`를 통과했고 실제 PTY에서 취소 시 파일 없이
+  `installation_setup_cancelled`를 확인했다. 실제 계정·도메인·D1·제공자 값과 원격 로그인·
+  배포는 여전히 미실행이다. API·DB·SDK·의존성·CI 변경은 없다.
+  검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 서버 SDK 실제 소켓 복구: 옵트인 `verify:server-recovery`로 SDK 기본
   `fetch`가 루프백 소켓에서 실패 뒤 같은 본문을 재전송하는지 확인했다. 커밋 전 `503`
   재전송은 accepted 2·duplicates 0, 커밋 뒤 소켓 손실 재시도는 다른 수집기에서 accepted 0·

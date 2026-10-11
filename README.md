@@ -47,7 +47,7 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 ## 운영 설치와 검사
 
-운영 설정 준비와 검사는 [설치 설정 준비](docs/backend/installation.md)에 정리했다(`install:prepare`, `admin:build-configured`, `install:check`, `install:database-check`, `install:access-check`). 이 명령들은 설정 파일 생성, 관리자 빌드, 공개 제공자·원격 DB 메타데이터·관리자 읽기 접근 검사를 제공한다. 세 검사는 서로 다른 대상을 보며 어느 것도 운영 준비 완료를 뜻하지 않는다. 원격 쓰기·로그인·배포는 자동 실행하지 않는다. 검사 상세는 [설치 검사 안내](tools/runtime/INSTALL-CHECK.md)와 [접근 확인 안내](tools/runtime/INSTALL-ACCESS-CHECK.md)에 있다. 실제 리소스 값과 인증 설정은 운영자가 정한 뒤 별도로 실행한다.
+운영 설정 준비와 검사는 [설치 설정 준비](docs/backend/installation.md)에 정리했다(`install:setup`, `install:prepare`, `admin:build-configured`, `install:check`, `install:database-check`, `install:access-check`). `install:setup`은 대화형 터미널에서 공개 설정값만 묻고 `install:prepare`와 같은 다섯 파일을 새 디렉터리에 쓴다. 이 명령들은 설정 파일 생성, 관리자 빌드, 공개 제공자·원격 DB 메타데이터·관리자 읽기 접근 검사를 제공한다. 세 검사는 서로 다른 대상을 보며 어느 것도 운영 준비 완료를 뜻하지 않는다. 원격 쓰기·로그인·배포는 자동 실행하지 않는다. 검사 상세는 [설치 검사 안내](tools/runtime/INSTALL-CHECK.md)와 [접근 확인 안내](tools/runtime/INSTALL-ACCESS-CHECK.md)에 있다. 실제 리소스 값과 인증 설정은 운영자가 정한 뒤 별도로 실행한다.
 
 실제 첫 설치·업그레이드·배포·롤백 절차는 [릴리스 런북](docs/ops/release.md)과 [롤백 런북](docs/ops/rollback.md)에 정리했다. 원격 배포·마이그레이션·백업/복원은 승인 후 수동으로 실행하고 실제 환경에서는 아직 실행하지 않았다.
 
