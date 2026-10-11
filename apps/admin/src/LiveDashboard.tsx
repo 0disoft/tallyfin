@@ -57,6 +57,8 @@ function describeError(error: ApiError): { title: string; detail: string } {
       return { title: '응답이 계약과 맞지 않아요', detail: '값을 임의로 0으로 채우지 않고 그대로 멈췄어요. 응답을 확인해 주세요.' };
     case 'network':
       return { title: 'API 서버에 연결하지 못했어요', detail: `같은 출처 ${API_BASE_PATH} 경로가 열려 있는지 확인해 주세요.` };
+    case 'timeout':
+      return { title: '요청 대기 시간이 지났어요', detail: error.message };
     default:
       return { title: '요청이 실패했어요', detail: `HTTP ${error.status} 응답이에요.` };
   }

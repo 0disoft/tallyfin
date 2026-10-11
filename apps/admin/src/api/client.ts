@@ -41,6 +41,7 @@ import { parseFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
 import { parseFunnelBreakdown, type FunnelBreakdown } from './funnel-breakdown.ts';
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
 import { parseAdminHealth, type AdminHealth } from './admin-health-contract.ts';
+import { awaitRequest } from './request-lifecycle.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -66,6 +67,7 @@ export type ApiErrorKind =
   | 'last_owner'
   | 'http'
   | 'network'
+  | 'timeout'
   | 'contract';
 
 export class ApiError extends Error {
@@ -99,6 +101,7 @@ const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   last_owner: '마지막 소유자의 권한은 낮추거나 회수할 수 없어요. 다른 소유자를 먼저 추가해 주세요. (HTTP 409)',
   http: '요청이 실패했어요.',
   network: 'API 서버에 연결하지 못했어요.',
+  timeout: '요청 대기 시간이 지났어요. 다시 조회해 주세요. 저장 요청이었다면 최신 상태를 먼저 확인해 주세요.',
   contract: 'API 응답이 계약과 맞지 않아요.',
 };
 
@@ -164,12 +167,18 @@ export class ApiClient {
   #destroyed = false;
   #getBearer: (() => Promise<string>) | undefined;
   #onDestroy: (() => void) | undefined;
+  #requestTimeoutMs: number;
 
-  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike } = {}) {
+  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike; requestTimeoutMs?: number } = {}) {
     const basePath = options.basePath ?? API_BASE_PATH;
     if (basePath !== API_BASE_PATH) {
       throw new ApiError('invalid_request', `같은 출처의 ${API_BASE_PATH} 경로만 사용할 수 있어요.`);
     }
+    const requestTimeoutMs = options.requestTimeoutMs ?? 15000;
+    if (!Number.isInteger(requestTimeoutMs) || requestTimeoutMs < 10 || requestTimeoutMs > 120000) {
+      throw new ApiError('invalid_request', '요청 대기 시간은 10~120000밀리초의 정수여야 해요.');
+    }
+    this.#requestTimeoutMs = requestTimeoutMs;
     this.#token = options.token ?? '';
     this.#getBearer = options.getBearer;
     this.#onDestroy = options.onDestroy;
@@ -489,20 +498,16 @@ export class ApiClient {
       else signal.addEventListener('abort', forward, { once: true });
     }
     this.#controllers.add(controller);
+    const timeout = setTimeout(() => controller.abort(new ApiError('timeout', KIND_MESSAGE.timeout)), this.#requestTimeoutMs);
+    let observedStatus: number | undefined;
     try {
       controller.signal.throwIfAborted();
       let bearer = this.#token;
       if (this.#getBearer) {
         try {
           const getBearer = this.#getBearer;
-          bearer = await new Promise<string>((resolve, reject) => {
-            const aborted = () => reject(controller.signal.reason);
-            controller.signal.addEventListener('abort', aborted, { once: true });
-            // Cancelling this request must not cancel a refresh shared by others.
-            Promise.resolve().then(getBearer).then(resolve, reject).finally(() => {
-              controller.signal.removeEventListener('abort', aborted);
-            });
-          });
+          // Cancelling this request must not cancel a refresh shared by others.
+          bearer = await awaitRequest(controller.signal, () => Promise.resolve().then(getBearer));
           if (!bearer) throw new Error();
         }
         catch {
@@ -514,7 +519,7 @@ export class ApiClient {
       if (bearer) headers.Authorization = `Bearer ${bearer}`;
       let response: { ok: boolean; status: number; json: () => Promise<unknown> };
       try {
-        response = await this.#fetch(url, {
+        response = await awaitRequest(controller.signal, () => this.#fetch(url, {
           method: method ?? (body === undefined ? 'GET' : 'PATCH'),
           ...(body === undefined ? {} : { body }),
           headers,
@@ -522,19 +527,32 @@ export class ApiClient {
           credentials: 'omit',
           cache: 'no-store',
           referrerPolicy: 'no-referrer',
-        });
+        }));
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
         throw new ApiError('network', KIND_MESSAGE.network);
       }
-      if (!response.ok) throw await this.#toApiError(response);
+      controller.signal.throwIfAborted();
+      observedStatus = response.status;
+      if (!response.ok) throw await awaitRequest(controller.signal, () => this.#toApiError(response));
       try {
-        return await response.json();
+        return await awaitRequest(controller.signal, () => response.json());
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
         throw new ApiError('contract', 'API 응답을 JSON으로 읽지 못했어요.');
       }
+    } catch (error) {
+      // A stalled error body must not turn an observed access denial into a
+      // recoverable network error that leaves privileged data on screen.
+      if (controller.signal.reason instanceof ApiError && controller.signal.reason.kind === 'timeout' &&
+        (observedStatus === 401 || observedStatus === 403)) {
+        const kind = STATUS_KIND[observedStatus]!;
+        throw new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus });
+      }
+      controller.signal.throwIfAborted();
+      throw error;
     } finally {
+      clearTimeout(timeout);
       // Keep the controller registered until the body is read so destroy()
       // can abort an in-flight body stream too.
       this.#controllers.delete(controller);
