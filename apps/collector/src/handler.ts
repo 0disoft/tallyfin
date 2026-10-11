@@ -5,6 +5,8 @@ import { administrator } from './admin.ts';
 import type { AdministratorAccess } from './admin.ts';
 import { authenticatePublisher } from './publisher.ts';
 import type { PublisherAccess } from './publisher.ts';
+import { observationClock, latencyBucket } from './request-observation.ts';
+import type { RequestObservation, RequestOperation } from './request-observation.ts';
 
 const messages: Record<ErrorCode, string> = {
   invalid_request: 'Invalid request.', invalid_event: 'Invalid or unregistered event.', unknown_schema: 'Schema is unavailable.',
@@ -23,6 +25,8 @@ const messages: Record<ErrorCode, string> = {
 export interface CollectorOptions {
   now?: () => number;
   log?: (entry: { requestId: string; code: ErrorCode }) => void;
+  observe?: (entry: RequestObservation) => void;
+  monotonicNow?: () => number;
   admin?: AdministratorAccess;
   publisher?: PublisherAccess;
   waitUntil?: (task: Promise<void>) => void;
@@ -38,6 +42,16 @@ export function allowedOrigin(origin: string | null, allowed: string[]): origin 
 export function createCollector(store: CollectionStore, options: CollectorOptions = {}) {
   return async (request: Request): Promise<Response> => {
     const requestId = crypto.randomUUID();
+    const clock = options.monotonicNow ?? (() => performance.now());
+    const started = options.observe ? observationClock(clock) : null;
+    let operation: RequestOperation = 'other';
+    const finish = (response: Response, code: ErrorCode | 'ok' = 'ok') => {
+      if (options.observe) {
+        try { options.observe({ requestId, operation, status: response.status, code,
+          latencyBucket: latencyBucket(started, observationClock(clock)) }); } catch { /* best effort, no raw sink errors */ }
+      }
+      return response;
+    };
     const receivedAt = (options.now ?? Date.now)();
     const headers = new Headers({ 'Cache-Control': 'no-store', 'Vary': 'Origin' });
     let retryAfter: number | undefined;
@@ -49,13 +63,15 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       const route = /^\/v1\/projects\/([^/]+)\/(batches|server-batches)$/.exec(path);
       if (!route) {
         if (path === '/v1/identity' || path === '/v1/projects' || path.startsWith('/v1/projects/')) {
+          operation = 'administrator';
           if (path === '/v1/identity') headers.set('Vary', 'Authorization');
           const result = await administrator(request, options.admin, receivedAt);
-          return Response.json(result, { headers });
+          return finish(Response.json(result, { headers }));
         }
         throw new CollectionError('not_found', 404);
       }
       const isServer = route[2] === 'server-batches';
+      operation = isServer ? 'server_collection' : 'browser_collection';
       if (isServer) headers.set('Vary', 'Authorization');
       // Authenticate before reading any project, granting CORS, admission or consuming the body.
       const principal = isServer ? await authenticatePublisher(request, options.publisher) : null;
@@ -84,7 +100,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         const requested = requestedHeaders.split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
         if (method !== 'POST' || requested.some(name => name !== 'content-type')) throw new CollectionError('invalid_request', 400);
         headers.set('Access-Control-Allow-Methods', 'POST'); headers.set('Access-Control-Allow-Headers', 'Content-Type');
-        return new Response(null, { status: 204, headers });
+        return finish(new Response(null, { status: 204, headers }));
       }
       if (request.method !== 'POST') { headers.set('Allow', isServer ? 'POST' : 'POST, OPTIONS'); throw new CollectionError('invalid_request', 405); }
       if (isServer && new URL(request.url).search) throw new CollectionError('invalid_request', 400);
@@ -100,7 +116,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         ? await options.publisher!.store.commitServer(await prepareServerBatch(batch, registry, receivedAt), registry, principal!)
         : await activeStore.commit(await prepareBatch(batch, registry, receivedAt), registry);
       if (result.accepted + result.duplicates !== batch.events.length) throw new CollectionError('storage_unavailable', 503);
-      return Response.json(result, { status: 200, headers });
+      return finish(Response.json(result, { status: 200, headers }));
     } catch (error) {
       const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503);
       if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
@@ -128,7 +144,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
           } else await task;
         }
       }
-      return Response.json({ error: { code: failure.code, message: messages[failure.code], requestId } }, { status: failure.status, headers });
+      return finish(Response.json({ error: { code: failure.code, message: messages[failure.code], requestId } }, { status: failure.status, headers }), failure.code);
     }
   };
 }

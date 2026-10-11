@@ -18,8 +18,10 @@
 ## 경계와 라우트
 
 `apps/collector`는 네이티브 fetch 기반 Worker다. `index.ts`의 기본 `fetch`가 D1
-바인딩으로 `D1Store`를 만들고 `createCollector(store, { now, log })`가 요청을
-처리한다. `ALLOW_LOCAL_HTTP === 'true'`일 때만 로컬 HTTP 오리진을 허용한다.
+바인딩으로 `D1Store`를 만들고 `createCollector(store, { now, observe })`가 요청을
+처리한다. `observe`·`monotonicNow`는 선택 포트이고, 오류 전용 `log` 포트도 호스트가 넘길
+수 있게 남아 있다. 네이티브 Worker는 `log` 대신 `observe`를 넘긴다.
+`ALLOW_LOCAL_HTTP === 'true'`일 때만 로컬 HTTP 오리진을 허용한다.
 프로젝트·버전·정책 설정은 저장 어댑터가 D1에서 읽는다. 코어는 Cloudflare 런타임에
 의존하지 않는다.
 
@@ -54,8 +56,9 @@ paused 프로젝트는 두 경로 모두 `project_unavailable`(403)이다.
    `Content-Encoding`이 `identity`가 아니면 `invalid_request`(415)이다.
 6. `parseBatch` → `loadRegistry` → `prepareBatch` 순으로 검증한다. 레지스트리를 읽은
    뒤 오리진을 다시 확인한다.
-7. `commit`으로 영수증·시도·할당량·집계를 한 트랜잭션에 반영한다. 성공은
-   `accepted`/`duplicates`만 반환하고 성공 로그를 남기지 않는다.
+7. `commit`으로 영수증·시도·할당량·집계를 한 트랜잭션에 반영한다. 성공 응답은
+   `accepted`/`duplicates`만 반환한다. 응답 본문과 별개로, 응답이 준비되면 선택된 응답에
+   대해 완료 관측 로그 한 줄을 남긴다(성공은 UUID 앞 두 글자 기준 4/256 표본).
 8. `accepted + duplicates`가 배치 이벤트 수와 다르면 `storage_unavailable`(503)이다.
 
 검증 순서와 시간 경계는 [이벤트 계약](./event-contract.md)과 같다. `occurredAt`은
@@ -80,8 +83,14 @@ paused 프로젝트는 두 경로 모두 `project_unavailable`(403)이다.
 
 오류는 `{ error: { code, message, requestId } }` 형태다. `code`는 고정 enum, `message`는
 안전한 짧은 안내, `requestId`는 요청마다 만든 무작위 UUIDv4다. 요청 본문·속성 값·
-SQL·토큰·IP·Origin·전체 URL은 메시지나 로그에 남기지 않는다. 진단 로그는
-`{ requestId, code }`만 남기며 실패해도 응답을 바꾸지 않는다.
+SQL·토큰·IP·Origin·전체 URL·경로·조회 파라미터·메서드·헤더·대상 식별자는 메시지나
+로그에 남기지 않는다. 이 배제는 오류 메시지와 운영 로그 줄에 한정하고, 프로젝트 키로
+저장되는 제품·관리 데이터의 계약을 바꾸지 않는다.
+
+호스트가 넘기는 오류 전용 `log` 포트는 `{ requestId, code }`만 남기며 실패해도 응답을
+바꾸지 않는다. 네이티브 Worker는 이 포트 대신 완료 관측 포트(`observe`)를 넘겨 선택된
+응답 하나당 최대 한 줄(`event: http_request`)만 남긴다. 필드·표본·측정 구간과 한계는
+[로그 경계](./06-logging-and-observability.md)에 있다.
 
 - 분당 admission 429에는 다음 고정 분까지 남은 초(1~60)를 `Retry-After`로 보낸다.
 - 일일 할당량 429에는 다음 UTC 자정까지 남은 초를 `Retry-After`로 보낸다.
@@ -159,6 +168,9 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 - 관리자 조회: 검증기 포트 `createWorker(verifyBearer)`와 `admin.ts`의 GET 조회를
   로컬 구현·검증했다. 테스트는 모킹한 trusted 검증기와 D1 grant 경계를 쓴다. 경로는
   [관리자 조회 경계](./administrator.md)에 있다.
+- 완료 관측 로그: 선택적 `observe`·`monotonicNow` 포트와 네이티브 Worker 배선을 로컬
+  구현·검증했다. 성공 1/64 표본·실패 전량, 고정 필드 7개, 별도 DB·네트워크·의존성 없음.
+  필드·한계는 [로그 경계](./06-logging-and-observability.md)에 있다.
 - 서버 발행: `PublisherAccess` 검증기 포트와 `POST .../server-batches`를 로컬
   구현·검증했다. `createOidcWorker(adminOptions, publisherOptions?)`와
   `createPublisherOidcWorker(publisherOptions)`가 발행자 검증기를 붙인다. 경로·인증

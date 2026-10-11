@@ -9,13 +9,14 @@ export type { PublisherAccess } from './publisher.ts';
 import type { AdministratorAccess } from './admin.ts';
 import type { PublisherAccess } from './publisher.ts';
 import { runCleanup } from './cleanup.ts';
+import { logRequestObservation } from './request-observation.ts';
 
 // Host supplies the D1 binding. No deployed resource ID or credential is committed.
 export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string }
 export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'], verifyPublisher?: PublisherAccess['verifyBearer']) { return {
   async fetch(request: Request, bindings: CollectorBindings, context?: { waitUntil(task: Promise<void>): void }): Promise<Response> {
     const store = new D1Store(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' });
-    return createCollector(store, { log: entry => console.warn(JSON.stringify(entry)),
+    return createCollector(store, { observe: logRequestObservation,
       ...(context ? { waitUntil: (task: Promise<void>) => context.waitUntil(task) } : {}),
       ...(verifyBearer ? { admin: { store: new D1Queries(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' }), verifyBearer } } : {}),
       ...(verifyPublisher ? { publisher: { store, verifyBearer: verifyPublisher } } : {}) })(request);

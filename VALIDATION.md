@@ -1,5 +1,49 @@
 # 검증
 
+## 수집기 완료 관측 로그 — 2026-10-11
+
+`apps/collector/src/request-observation.ts`를 추가하고 `handler.ts`에 선택적 `observe`·
+`monotonicNow` 포트를, `index.ts` 네이티브 Worker에는 오류 전용 로그 대신 완료 관측 포트를
+연결했다. 응답이 준비된 지점에서만 고정 필드 일곱 개(`event`·`requestId`·`operation`·
+`status`·`code`·`latencyBucket`·`samplingDenominator`)를 투영하고, 성공(코드 `ok`·
+200/204)은 UUID 앞 두 글자 기준 4/256 표본에 `samplingDenominator=64`, 실패는 전량에 1을
+적는다. 5xx는 `console.error`, 4xx는 `console.warn`, 그 밖은 `console.log`다. 지연 버킷은
+핸들러 시작부터 응답 객체 준비까지이고 `waitUntil` 백그라운드 작업과 네트워크 전송은 뺀다.
+시계가 유한하지 않거나 음수면 시각을 쓰지 않고 끝이 시작보다 작으면 `unknown`이며, 관측
+콜백·시계 호출이 실패해도 응답은 바뀌지 않는다. 요청 본문·URL·경로·조회 파라미터·메서드·
+헤더·프로젝트 ID·대상 식별자는 로그에 넣지 않고 별도 DB 쓰기·네트워크 호출·의존성도 늘리지
+않았다.
+
+실행·결과: 관측 검사 파일을 포함한 다섯 파일 범위를 한 명령으로 돌린 첫 실행은 36개 중
+35개 통과·1개 실패였다. 실패는 네이티브 Worker 로그 검사 하나로, 합성 D1에서 `DROP TABLE
+projects`가 외래 키 제약에 막혀 결함 가드에 닿기 전에 끝난 것이 원인이었다. 검사 fixture를
+`DROP TABLE project_schemas`로 고친 뒤 집중 검사
+`node --test --test-timeout=30000 apps/collector/test/request-observation.test.ts`가 6/6
+통과했다. 나머지 30개는 첫 실행에서 이미 통과했고 이번 수정은 검사 파일만 바꿔 제품 코드가
+그대로라 다시 돌리지 않았다. 36개 전체를 재실행한 결과는 아니다. 루트 `npm exec -- tsc
+--noEmit`와 `tsc -p apps/collector/tsconfig.runtime.json`은 종료 코드 0, `git diff --check`도
+통과했다. 네이티브 로그 검사는 `createWorker`를 직접 불러 실제 로컬 Miniflare D1에 console
+가로채기를 씌워 확인했고, 수집기·런타임 검사는 실제 workerd에서 돈다.
+
+집중 검사는 256칸 UUID 접두사 전부에 대해 성공 표본 4개·실패 8종 전량·승인된 필드 투영만
+남는지, 시계 경계 버킷과 NaN·Infinity·음수·역행·예외 시계가 `unknown`이 되는지, 성공과
+preflight가 응답 하나당 관측 한 번을 남기고 본문을 소비하거나 바꾸지 않는지, 거부 응답의
+`requestId`·`code`가 본문과 같고 콜백·시계·백그라운드 작업이 응답을 바꾸지 않는지, 관리자·
+서버·모르는 경로가 고정 `operation`만 쓰는지, 네이티브 Worker가 SQL 오류·요청 자료를 남기지
+않고 응답당 한 줄만 남기는지 확인한다. 관측 콜백은 동기이고 프로미스를 돌려주는 비동기
+관측은 지원하지 않는다. 성공 1/64·실패 전량으로 표본 비율이 달라 원시 로그 줄 수로 실패
+비율을 계산할 수 없고, 로그 수치는 정확한 방문자·요청 수나 p95가 아니라 추정 규모라는 점을
+문서에 적었다. 배포 시계가 I/O 뒤에만 진행하는 성질은
+[Cloudflare 문서](https://developers.cloudflare.com/workers/runtime-apis/performance/)로
+확인했고 로컬 타이머와 다르다.
+
+계약 원본 [로그 경계](docs/backend/06-logging-and-observability.md)·[수집기
+구현](docs/backend/collector.md)·[운영 관측](docs/ops/observability.md)·[로드맵](docs/product/01-roadmap.md)과
+이 기록을 갱신했다. API·DB·마이그레이션·SDK·의존성·CI 러너·저장소 위생 정책 변경은 없고
+루트 `wrangler.jsonc`의 관측 설정도 그대로다. 빌드와 SDK 크기 검사는 대상 패키지가 바뀌지
+않아 돌리지 않았고 부하·비용·속도도 측정하지 않았다. 운영 로그 수집·대시보드·알림 수신자·
+헬스 프로브 배포와 원격 배포·푸시는 없다.
+
 ## 복구 연습 발행자 권한 확장 — 2026-10-11
 
 `verify:restore`가 전체 SQL export/restore를 대조한 뒤 합성 복원 DB에서만 발행 권한 회수·
