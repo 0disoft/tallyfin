@@ -268,20 +268,21 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey, dateError]);
 
   const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
-  const comparisonAvailable = view !== 'goals' || !!mainData?.workflows.length;
+  const comparisonAvailable = view !== 'goals' || !!mainData?.workflows.length || !!mainData?.registry.funnels?.length;
+  const aggregateComparisonAvailable = view !== 'goals' || !!mainData?.workflows.length;
   const comparisonError = mainData && projectToday ? comparisonRangeError(mainData.range, projectToday) : null;
   const propertyComparison = useEventPropertyComparison(client, analysisRegistry, seriesData,
     compare && view === 'events' && !!groupBy && !comparisonError && !!seriesData, seriesKey);
   const comparisonKey = JSON.stringify([mainKey, comparisonRetry]);
   useEffect(() => {
-    if (!compare || !comparisonAvailable || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
+    if (!compare || !aggregateComparisonAvailable || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
     const controller = new AbortController();
     setComparison({ status: 'loading', key: comparisonKey });
     loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal, source)
       .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
       .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
     return () => controller.abort();
-  }, [client, compare, mainData, comparisonKey, view, comparisonError, comparisonAvailable]);
+  }, [client, compare, mainData, comparisonKey, view, comparisonError, aggregateComparisonAvailable]);
 
   useEffect(() => {
     if (view !== 'events' || !client || !analysisEvent || !analysisRegistry || !currentRange || !seriesKey) { setSeries({ status: 'idle' }); return; }
@@ -398,7 +399,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           setSelectedSource(event.target.value === 'server' ? 'server' : 'browser'); setSelectedEvent(null); setGrouping(null);
         }}><option value="browser">브라우저</option><option value="server">서버</option></select></label>}
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
-      {view !== 'settings' && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름 기간 비교' : '직전 기간과 비교'}</label>}
+      {view !== 'settings' && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
@@ -429,10 +430,10 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
     {view !== 'settings' && validVersion && data && registry && <>
       {compare && comparisonAvailable && comparisonError && <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 CSV도 내려받을 수 있어요.</p>}
-      {compare && comparisonAvailable && !comparisonError && <>
+      {compare && aggregateComparisonAvailable && !comparisonError && <>
         {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">직전 기간을 조회하는 중이에요.</p>}
         {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
-        {currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
+        {currentComparison?.status === 'ready' && currentComparison.data && (view !== 'goals' || !!data.workflows.length) && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
       </>}
       {view === 'overview' && <>
         <SourceMetrics source={source} totalEvents={data.summary.totalEvents} primary={primary} startLabel={startLabel} successLabel={successLabel} />
@@ -470,7 +471,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         </section>}
       </>}
       {view === 'goals' && <DeferredPanel key={activeProjectId} label="목표"><LiveGoals client={client} registry={registry} workflows={data.workflows} range={data.range}
-        previous={compare && !comparisonError ? previousRange(data.range) : null} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
+        previous={compare && !comparisonError ? previousRange(data.range) : null} compare={compare} comparisonError={comparisonError} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
 
     </>}
   </>;

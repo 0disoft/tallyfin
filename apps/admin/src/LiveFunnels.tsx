@@ -10,6 +10,8 @@ import type { FunnelDefinition, Registry } from './api/types';
 import { formatCount, formatRate } from './data';
 import { sourceLabel } from './SourceEventTable';
 import './funnels.css';
+import FunnelComparison from './FunnelComparison';
+import { compareFunnels } from './api/funnel-comparison';
 
 type StepCounts = FunnelResponse['summary']['steps'][number];
 
@@ -17,8 +19,9 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-export default function LiveFunnels({ client, registry, range, context }: {
+export default function LiveFunnels({ client, registry, range, context, previous = null, compare = false, comparisonError = null }: {
   client: ApiClient; registry: Registry; range: DateRange; context: string;
+  previous?: DateRange | null; compare?: boolean; comparisonError?: string | null;
 }) {
   const id = useId();
   const funnels = registry.funnels ?? [];
@@ -30,6 +33,9 @@ export default function LiveFunnels({ client, registry, range, context }: {
   const [csvMessage, setCsvMessage] = useState<string | null>(null);
   const [csvError, setCsvError] = useState(false);
   const reportRef = useRef<FunnelReport | null>(null);
+  const comparisonRef = useRef<FunnelReport | null>(null);
+  const [comparisonSnapshot, setComparisonSnapshot] = useState<{ client: ApiClient; current: FunnelResponse; state: FunnelReportState } | null>(null);
+  const [comparisonRetry, setComparisonRetry] = useState(0);
 
   // One report per client. dispose() aborts in-flight reads, so a new client or
   // unmount never leaves a request running against the previous session.
@@ -64,15 +70,34 @@ export default function LiveFunnels({ client, registry, range, context }: {
     setCsvError(false);
   }, [selectedId]);
 
-  if (!funnels.length) return null;
-
   // Render guard: nothing owned by a previous client, context or selection shows.
   const view = snapshot && snapshot.client === client && snapshot.state.context === context
     && snapshot.state.funnelId === selectedId ? snapshot.state : null;
   const data = view?.phase === 'ready' ? view.data ?? null : null;
+  const comparisonKey = JSON.stringify([context, selectedId, previous?.from, previous?.to]);
+  useEffect(() => {
+    if (!compare || !previous || !data || comparisonError) { setComparisonSnapshot(null); return; }
+    const report = new FunnelReport(client, next => {
+      if (comparisonRef.current !== report) return;
+      if (next.phase === 'ready' && next.data) {
+        try { compareFunnels(data, next.data); }
+        catch { next = { phase: 'error', context: comparisonKey, funnelId: selectedId }; }
+      }
+      setComparisonSnapshot({ client, current: data, state: next });
+    });
+    comparisonRef.current = report;
+    void report.load(registry, previous, selectedId, comparisonKey);
+    return () => {
+      if (comparisonRef.current === report) comparisonRef.current = null;
+      report.dispose();
+    };
+  }, [client, registry, data, compare, previous?.from, previous?.to, comparisonError, selectedId, comparisonKey, comparisonRetry]);
+  const comparisonView = compare && data && comparisonSnapshot?.client === client && comparisonSnapshot.current === data
+    && comparisonSnapshot.state.context === comparisonKey ? comparisonSnapshot.state : null;
+  const previousData = comparisonView?.phase === 'ready' ? comparisonView.data : undefined;
   const loading = Boolean(selectedId) && (!view || view.phase === 'loading' || view.phase === 'idle');
   const csvReady = Boolean(data && data.funnelId === selectedId && data.meta.projectId === registry.project.id
-    && data.meta.schemaVersion === registry.schemaVersion);
+    && data.meta.schemaVersion === registry.schemaVersion && (!compare || (!comparisonError && previousData)));
   const activeDay = data && selectedDay ? data.days.find(day => day.date === selectedDay) ?? null : null;
 
   const declaredLabel = (step: { eventName: string; source: 'browser' | 'server' }) =>
@@ -119,7 +144,7 @@ export default function LiveFunnels({ client, registry, range, context }: {
     let url: string | undefined;
     let link: HTMLAnchorElement | undefined;
     try {
-      url = URL.createObjectURL(new Blob([funnelCsv(data)], { type: 'text/csv;charset=utf-8' }));
+      url = URL.createObjectURL(new Blob([funnelCsv(data, compare ? previousData : undefined)], { type: 'text/csv;charset=utf-8' }));
       link = document.createElement('a');
       link.href = url;
       link.download = funnelCsvFilename(data);
@@ -136,6 +161,7 @@ export default function LiveFunnels({ client, registry, range, context }: {
     }
   };
 
+  if (!funnels.length) return null;
   return <section className="funnel-section" aria-labelledby={`${id}-heading`}>
     <div className="section-header"><h2 id={`${id}-heading`}>퍼널 분석</h2></div>
     <p className="context-note">시작 이벤트가 발생한 실행만 시작일 기준 코호트로 세요. 각 단계 이벤트는 등록된 정의의 출처를 그대로 사용하고 한 출처로 거르지 않아요.</p>
@@ -170,6 +196,13 @@ export default function LiveFunnels({ client, registry, range, context }: {
         <div><dt>완료한 실행</dt><dd>{formatCount(data.summary.completedRuns)}건</dd></div>
         <div><dt>완료율</dt><dd>{formatRate(data.summary.completionRate)}<span className="funnel-fraction">{formatCount(data.summary.completedRuns)} / {formatCount(data.summary.startedRuns)}</span></dd></div>
       </dl>
+      {compare && <>
+        {comparisonError ? <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 퍼널 CSV를 내려받을 수 있어요.</p>
+          : comparisonView?.phase === 'error' ? <div role="alert"><p>직전 기간 퍼널을 불러오지 못했어요. 현재 결과는 유지돼요.</p>
+            <button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>퍼널 비교 다시 시도</button></div>
+          : previousData ? <FunnelComparison current={data} previous={previousData} />
+          : <p role="status" aria-busy="true">직전 기간 퍼널을 조회하는 중이에요.</p>}
+      </>}
       {data.days.some(day => day.provisional) && <p className="notice" role="status">집계 중인 시작일이 포함돼 있어 결과가 달라질 수 있어요.</p>}
       {data.summary.startedRuns === 0 && <p className="notice" role="status">선택한 기간에 관찰된 시작 실행이 없어요. 도달 수는 0으로, 비율은 알 수 없음(—)으로 표시해요. 등록된 퍼널이 없는 것과는 달라요.</p>}
       <p className="context-note">다음 단계 미도달 수에는 아직 진행 중이거나 아직 전달되지 않은 실행이 포함돼요. 실패로 확정된 실행이 아니에요.</p>
@@ -218,7 +251,8 @@ export default function LiveFunnels({ client, registry, range, context }: {
     {selectedId && <div className="csv-export funnel-csv">
       <button className="secondary-button" type="button" disabled={!csvReady} onClick={download} aria-describedby={`${id}-csv-status`}>퍼널 CSV 내려받기</button>
       <p id={`${id}-csv-status`} className={csvError ? 'form-error' : 'context-note'} role={csvError ? 'alert' : 'status'}>
-        {csvReady ? csvMessage ?? '현재 퍼널의 요약·단계·일별 수치를 CSV로 내려받아요.' : '조회를 마치면 현재 퍼널 결과를 CSV로 내려받을 수 있어요.'}
+        {csvReady ? csvMessage ?? (compare ? '현재·직전 기간 수치와 비교 지표를 CSV로 내려받아요.' : '현재 퍼널의 요약·단계·일별 수치를 CSV로 내려받아요.')
+          : compare && data ? '퍼널 비교를 마치거나 비교를 끄면 CSV를 내려받을 수 있어요.' : '조회를 마치면 현재 퍼널 결과를 CSV로 내려받을 수 있어요.'}
       </p>
     </div>}
   </section>;

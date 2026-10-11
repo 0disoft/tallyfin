@@ -6,9 +6,10 @@ import { formatCount, formatRate } from './data';
 import WorkflowPropertyBreakdown from './WorkflowPropertyBreakdown';
 import LiveFunnels from './LiveFunnels';
 
-export default function LiveGoals({ client, registry, workflows, range, previous, context, onState }: {
+export default function LiveGoals({ client, registry, workflows, range, previous, context, onState, compare, comparisonError }: {
   client: ApiClient; registry: Registry; workflows: WorkflowLoad[]; range: DateRange; previous: DateRange | null;
   context: string; onState: (id: string, state: WorkflowGroupingState) => void;
+  compare: boolean; comparisonError: string | null;
 }) {
   return <>
       {(workflows.length === 0 && !(registry.funnels?.length)
@@ -25,6 +26,6 @@ export default function LiveGoals({ client, registry, workflows, range, previous
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
           <WorkflowPropertyBreakdown key={`${context}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={range} previous={previous} context={context} onState={onState} />
         </section>))}
-    <LiveFunnels client={client} registry={registry} range={range} context={context} />
+    <LiveFunnels client={client} registry={registry} range={range} context={context} previous={previous} compare={compare} comparisonError={comparisonError} />
   </>;
 }
