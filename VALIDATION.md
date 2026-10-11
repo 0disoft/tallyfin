@@ -3274,3 +3274,33 @@ caller 취소·연결 끊기·늦은 성공/실패·공유 갱신·재조회 복
 CI 러너·위생 정책 변경은 없다. 백엔드를 바꾸지 않아 백엔드 전체 검사는 반복하지 않았고,
 일반 소스 lint는 등록 명령이 없어 생략했다. 이번에는 브라우저 화면·실 OIDC·원격 D1
 검증도 실행하지 않았다. 운영 제공자·도메인이 미정이며 원격 푸시·배포는 없다.
+
+## 서버 SDK 늦은 응답·본문 정리 개선 — 2026-10-11
+
+세 회귀 테스트를 먼저 추가해 기존 코드에서 3/3 실패를 확인했다. 오류 본문의 cancel이
+거부되면 401을 `transport_unavailable`로 오인해 두 번 보내고, 1KiB 초과 영수증의 cancel이
+멈추면 `invalid_response` 대신 전송 오류를 반환했다. 첫 시도가 시간 초과된 뒤 늦게 받은
+200 응답은 진행 중인 두 번째 시도의 `httpStatus`를 null에서 200으로 바꿨다. 합성
+transport·ReadableStream으로 재현했으며 실제 제공자/운영 네트워크 사고 재현은 아니다.
+
+`discardBody`는 정리를 시작하고 실패를 소비하되 완료를 기다리지 않는다. `receipt`는
+잘못된·초과·취소된 읽기를 정리하고 reader lock을 해제한다. fetch가 끝나면 시도별 signal을
+먼저 확인하므로 끝난 시도의 응답은 상태·헤더·영수증을 바꾸지 못한다. 이어 호출 취소 뒤
+늦은 응답의 정리가 거부되는 경우도 검사했다. 호스트가 취소를 무시하면 해당 전송 구현의
+완전한 종료는 SDK가 보장하지 않는다. 영수증/재시도·토큰 전달·배치 형식은 유지한다.
+
+`npm run test:server` 24/24, `npx --no-install tsc --noEmit`, `npm run build:server`,
+`git diff --check`가 통과했다. 서버 SDK 빌드는 8952 bytes/gzip 3671 bytes이며 런타임
+외부 의존성 0을 확인했다. 마지막 호출 취소 회귀 테스트 추가 뒤 서버 테스트만 재실행하고
+변경하지 않은 소스의 타입·빌드 결과를 재사용했다.
+
+`npm run verify:server-recovery`도 종료 코드 0과 `verified:true`로 통과했다. 새 합성 환경의
+세 Miniflare 수집 Worker·공유 로컬 D1·실제 루프백 소켓과 기본 SDK fetch를 썼다. 커밋 전
+503 재시도는 accepted 2/duplicates 0, 커밋 뒤 응답 손실 재시도는 accepted 0/duplicates 2,
+각 attempts 2·본문 동일 바이트였다. 발행자 회수 뒤 403/attempts 1·집계 불변을 확인했다.
+receipts 8·completedRuns 2였고 결과는 `.tmp/server-recovery/run-2AgRt3`에 있다.
+
+서버 SDK 안내·로드맵·검증 기록을 갱신했다. API·DB 계약·SDK 공개 타입·의존성·위생 정책·
+CI 러너 변경은 없다. 관리자와 수집기 소스가 그대로라 전체 UI·백엔드 검사를 반복하지 않았고,
+일반 소스 lint는 명령이 없어 생략했다. 실제 OIDC·원격 D1·운영 부하는 환경 미정으로
+미검증이다. 기존 DB 접근·푸시·배포·Sembom 활성화는 없다.

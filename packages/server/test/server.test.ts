@@ -223,3 +223,70 @@ test('bundled ESM exports work in Node and contain no core, storage, browser or 
   const e = client.createEvent('job_finished', { outcome: 'success' });
   assert.deepEqual(await client.send([e]), { status: 'delivered', accepted: 1, duplicates: 0, attempts: 1 });
 });
+
+test('response cleanup failures cannot retry a permanent denial or change an invalid receipt outcome', async () => {
+  for (const status of [401, 403, 422, 200]) {
+    for (const cleanup of ['reject', 'stall']) {
+      const f = fixture({ maxAttempts: 2, requestTimeoutMs: 20 }); let cancellations = 0;
+      f.h.reply = async () => new Response(new ReadableStream({ cancel() {
+        cancellations++;
+        return cleanup === 'reject' ? Promise.reject(Error('private cleanup detail')) : new Promise(() => {});
+      } }), { status, ...(status === 200 ? { headers: { 'Content-Type': 'text/plain' } } : {}) });
+      const result = await f.client.send([f.event()]);
+      assert.deepEqual(result, status === 200
+        ? { status: 'unavailable', reason: 'invalid_response', httpStatus: 200, retryable: true, attempts: 2 }
+        : { status: 'rejected', reason: 'http_error', httpStatus: status, retryable: false, attempts: 1 });
+      assert.equal(cancellations, result.attempts);
+      assert.ok(!JSON.stringify(result).includes('private cleanup detail'));
+    }
+  }
+});
+
+test('oversized receipt does not await a stalled stream cancellation', async () => {
+  const f = fixture({ maxAttempts: 1, requestTimeoutMs: 20 }); let cancelled = false;
+  f.h.reply = async () => new Response(new ReadableStream({
+    start(controller) { controller.enqueue(new Uint8Array(1025)); },
+    cancel() { cancelled = true; return new Promise(() => {}); },
+  }), { headers: { 'Content-Type': 'application/json' } });
+  assert.deepEqual(await f.client.send([f.event()]),
+    { status: 'unavailable', reason: 'invalid_response', httpStatus: 200, retryable: true, attempts: 1 });
+  assert.equal(cancelled, true);
+});
+
+test('late response from a timed-out attempt is cancelled and cannot overwrite the active attempt status', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const turn = () => new Promise<void>(resolve => setImmediate(resolve));
+  const f = fixture({ maxAttempts: 2, requestTimeoutMs: 20 });
+  let release!: (response: Response) => void, rejectSecond!: (error: Error) => void;
+  f.h.reply = index => new Promise((resolve, reject) => { if (!index) release = resolve; else rejectSecond = reject; });
+  const sending = f.client.send([f.event()]);
+  await turn(); t.mock.timers.tick(20); await turn();
+  assert.equal(f.h.calls.length, 2);
+  assert.equal(f.h.calls[0]!.init.signal!.aborted, true);
+  let cancelled = false;
+  const late = new Response(new ReadableStream({ cancel() { cancelled = true; } }),
+    { headers: { 'Content-Type': 'application/json' } });
+  release(late); await turn();
+  rejectSecond(Error('private transport detail'));
+  assert.deepEqual(await sending,
+    { status: 'unavailable', reason: 'transport_unavailable', httpStatus: null, retryable: true, attempts: 2 });
+  assert.equal(cancelled, true); assert.equal(late.body!.locked, false);
+  assert.equal(f.h.calls[0]!.body, f.h.calls[1]!.body);
+});
+
+test('a late response after caller cancellation is discarded even when stream cleanup rejects', async () => {
+  const f = fixture(); const parent = new AbortController();
+  let release!: (response: Response) => void;
+  f.h.reply = () => new Promise(resolve => { release = resolve; });
+  const sending = f.client.send([f.event()], { signal: parent.signal });
+  await tick(); parent.abort();
+  assert.deepEqual(await sending,
+    { status: 'aborted', reason: 'aborted', httpStatus: null, retryable: false, attempts: 1 });
+  let cancelled = false;
+  const late = new Response(new ReadableStream({ cancel() {
+    cancelled = true; return Promise.reject(Error('private cleanup detail'));
+  } }), { headers: { 'Content-Type': 'application/json' } });
+  release(late); await tick();
+  assert.equal(cancelled, true); assert.equal(late.body!.locked, false);
+  assert.equal(f.h.calls.length, 1); assert.deepEqual(f.h.waits, []);
+});

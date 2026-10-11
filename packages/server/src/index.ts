@@ -164,28 +164,38 @@ async function limited<T>(work: (signal: AbortSignal) => Promise<T>, millisecond
     });
   } finally { clearTimeout(timer!); parent?.removeEventListener('abort', stop); controller.abort(); }
 }
+/** Cleanup must not delay delivery results or replace their original failure classification. */
+function discardBody(body: ReadableStream<Uint8Array> | null): void {
+  try { void body?.cancel().catch(() => {}); } catch { /* A host-provided stream may throw during cleanup. */ }
+}
 async function receipt(response: Response, count: number, signal: AbortSignal): Promise<{ accepted: number; duplicates: number }> {
   const length = response.headers.get('Content-Length');
   if (!response.body || !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(response.headers.get('Content-Type') ?? '') ||
     (length !== null && (!/^\d+$/.test(length) || Number(length) > 1024))) {
-    await response.body?.cancel(); throw badResponse;
+    discardBody(response.body); throw badResponse;
   }
   const reader = response.body.getReader(); const buffer = new Uint8Array(1024); let size = 0;
-  const cancel = () => { void reader.cancel().catch(() => {}); };
+  let complete = false, cancelled = false;
+  const cancel = () => {
+    if (cancelled) return;
+    cancelled = true;
+    try { void reader.cancel().catch(() => {}); } catch { /* Cleanup cannot change the result. */ }
+  };
   signal.addEventListener('abort', cancel, { once: true });
   try {
     if (signal.aborted) throw aborted;
     while (true) {
       const chunk = await reader.read(); if (chunk.done) break;
-      if (size + chunk.value.byteLength > buffer.length) { await reader.cancel(); throw badResponse; }
+      if (size + chunk.value.byteLength > buffer.length) throw badResponse;
       buffer.set(chunk.value, size); size += chunk.value.byteLength;
     }
     const result: unknown = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, size)));
     if (!record(result) || Object.keys(result).sort().join(',') !== 'accepted,duplicates' ||
       !integer(result.accepted, 0, count) || !integer(result.duplicates, 0, count) || result.accepted + result.duplicates !== count) throw badResponse;
+    complete = true;
     return { accepted: result.accepted, duplicates: result.duplicates };
   } catch (error) { throw error === aborted ? aborted : badResponse; }
-  finally { signal.removeEventListener('abort', cancel); reader.releaseLock(); }
+  finally { signal.removeEventListener('abort', cancel); if (!complete) cancel(); reader.releaseLock(); }
 }
 function retryDelay(header: string | null, attempt: number, now: number): number {
   if (header !== null && header.length <= 128) {
@@ -263,9 +273,10 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
             const response = await host.fetch(endpoint, { method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body,
               signal: requestSignal, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+            if (requestSignal.aborted) { discardBody(response.body); throw aborted; }
             httpStatus = response.status; header = response.headers.get('Retry-After');
             if (response.status === 200) return await receipt(response, count, requestSignal);
-            await response.body?.cancel();
+            discardBody(response.body);
             return null;
           }, Math.min(timeout, remaining), signal);
           if (outcome) return { status: 'delivered', ...outcome, attempts: sent };
