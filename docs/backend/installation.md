@@ -49,6 +49,12 @@ npm run install:prepare -- --file .tmp/installation-input.json --out .tmp/instal
 자산 디렉터리에 넣지 않는다. 파일 쓰기 실패 시 이번 실행이 쓴 파일만 정리하고,
 디렉터리에 다른 파일이 있으면 제거하지 않는다. 입력·예외 원문은 로그에 출력하지 않는다.
 
+검증에서 걸리면 `installation_config_failed` 오류와 함께 어느 입력 항목인지 가리키는 `field`를
+하나 돌려준다. 값은 `input`, `admin`, `collector`, `admin.accountId`, `admin.collectorWorkerName`,
+`adminOrigin`, `login`, `login.issuer` 중 하나이고 그 밖의 입력값·URL·ID·내부 예외는 출력하지
+않는다. 파일 읽기·인자·쓰기 오류처럼 검증 밖에서 난 실패는 기존 고정 오류 그대로이고 `field`를
+붙이지 않는다.
+
 ## 관리자 빌드와 업로드 없는 검사
 
 ```powershell

@@ -48,12 +48,25 @@
   `install:database-check`를 로컬 구현·검증했다. 설치 파일 재검증, 기준 마이그레이션의
   별도 인메모리 D1 적용, 원격 `sqlite_master` 한 번 조회·비교 순서다. 실제 운영 설치 묶음이
   없어 원격 실행은 하지 않았고, 통과는 운영 리소스를 제공한 뒤 확인한다.
+- 설치 설정 검증 실패가 어느 입력 항목인지 알려주도록 오류에 고정 `field`를 붙였다.
+  `install:prepare`가 `input`·`admin`·`collector`·`admin.accountId`·`admin.collectorWorkerName`·
+  `adminOrigin`·`login`·`login.issuer` 중 하나만 반환하고 입력값·URL·ID·내부 예외는 출력하지 않는다.
+  파일·인자·쓰기 오류는 `field` 없는 기존 고정 오류다. [설치 설정 준비](../backend/installation.md).
 - Sembom과 다른 종류의 서비스 한 곳에서 범용성을 확인하고 라이선스·독립 설치·공개
   패키지·기여 절차를 준비한다. 푸시·배포·외부 활성화는 별도 승인 범위다.
 
 아래 날짜별 기록의 “다음 단계”는 해당 작업 시점의 기록이며, 현재 순서는 위 목록을 따른다.
 
 작은 순차 슬라이스로 진행합니다.
+
+2026-10-11 설치 설정 오류 안내: `installation()`이 검증 실패 항목을 고정 `field`로 표시하는
+`InstallationConfigError`(기존 `TypeError` 호환)를 던지고 `install:prepare`가 오류에 그 `field`를
+붙여 출력한다. 값은 `input`·`admin`·`collector`·`admin.accountId`·`admin.collectorWorkerName`·
+`adminOrigin`·`login`·`login.issuer` 중 하나이고 입력값·URL·ID·내부 예외는 출력하지 않는다.
+파일·인자·쓰기 오류는 `field` 없는 기존 고정 오류다. 검사 6/6·루트 타입 검사를 통과했고 실제
+관리자 빌드·기존 빌드 보존·ambient `VITE_` 분리 회귀도 함께 확인했다. API·DB·마이그레이션·
+의존성·CI·위생 정책 변경은 없고 실제 운영 인증·원격 리소스·배포는 미실행, 푸시·배포도 없다.
+검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 
 2026-10-11 설치 메타데이터 검사: `install:database-check -- --remote --dir <설치 묶음>`은
 설치 파일을 재검증하고 기준 마이그레이션을 새 인메모리 D1에 적용한 뒤 원격 `sqlite_master`를

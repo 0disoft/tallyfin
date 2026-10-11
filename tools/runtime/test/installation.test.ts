@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { installation } from '../installation.ts';
+import { installation, InstallationConfigError } from '../installation.ts';
 import { fileURLToPath } from 'node:url';
 import { mkdtemp, writeFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -51,6 +51,28 @@ test('installation rejects cross-account/service/issuer/origin mismatches and pr
   ]) { const config = input(); edit(config); assert.throws(() => installation(config, process.cwd()), /Invalid installation configuration/); }
 });
 
+test('installation errors identify a fixed input field without carrying submitted values or underlying exceptions', () => {
+  const cases: [string, (c: any) => void][] = [
+    ['input', c => { c.private_token = 'sensitive-input'; }],
+    ['admin', c => { c.admin.workerName = 'sensitive-input.invalid'; }],
+    ['collector', c => { c.collector.settings.OIDC_JWKS_URI = 'http://sensitive-input.invalid'; }],
+    ['admin.accountId', c => { c.admin.accountId = crypto.randomUUID().replaceAll('-', ''); }],
+    ['admin.collectorWorkerName', c => { c.admin.collectorWorkerName = 'other-worker'; }],
+    ['adminOrigin', c => { c.adminOrigin = 'https://sensitive-input.invalid'; }],
+    ['login', c => { c.login.scope = 'profile'; }],
+    ['login.issuer', c => { c.login.issuer += '/different'; }],
+  ];
+  for (const [field, change] of cases) {
+    const config = input(); change(config);
+    assert.throws(() => installation(config, process.cwd()), error => {
+      assert.ok(error instanceof InstallationConfigError); assert.ok(error instanceof TypeError);
+      assert.equal(error.field, field); assert.equal(error.message, 'Invalid installation configuration');
+      assert.equal(error.cause, undefined);
+      assert.ok(!JSON.stringify(error).includes('sensitive-input')); return true;
+    });
+  }
+});
+
 test('installation CLI creates a complete new directory, never overwrites existing artifacts and rejects invalid input before writing', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tallyfin-installation-')); const file = join(directory, 'input.json');
   const output = join(directory, 'prepared'); const cli = fileURLToPath(new URL('../prepare-installation.ts', import.meta.url));
@@ -66,12 +88,19 @@ test('installation CLI creates a complete new directory, never overwrites existi
     assert.equal(JSON.parse(original).env.VITE_OIDC_CLIENT_ID, 'public-test-client');
     await assert.rejects(exec(process.execPath, args)); assert.equal(await readFile(join(output, 'admin-login.json'), 'utf8'), original);
     const bad = input(); bad.login.issuer += '/wrong'; await writeFile(file, JSON.stringify(bad));
-    const failedOutput = join(directory, 'failed'); await assert.rejects(exec(process.execPath, [cli, '--file', file, '--out', failedOutput]));
+    const failedOutput = join(directory, 'failed');
+    await assert.rejects(exec(process.execPath, [cli, '--file', file, '--out', failedOutput]), error => {
+      const result = error as Error & { stdout: string; stderr: string };
+      const failure = JSON.parse(result.stderr);
+      assert.equal(failure.field, 'login.issuer'); assert.equal(result.stdout, '');
+      assert.ok(!result.stderr.includes(bad.login.issuer)); return true;
+    });
     await assert.rejects(readdir(failedOutput), { code: 'ENOENT' });
     await writeFile(file, ' '.repeat(32769));
     await assert.rejects(exec(process.execPath, [cli, '--file', file, '--out', failedOutput]));
     await assert.rejects(exec(process.execPath, [cli, '--remote']), error => {
-      const result = error as Error & { stderr: string }; assert.equal(JSON.parse(result.stderr).code, 'installation_config_failed'); return true;
+      const result = error as Error & { stderr: string }; const failure = JSON.parse(result.stderr);
+      assert.equal(failure.code, 'installation_config_failed'); assert.equal(failure.field, undefined); return true;
     });
   } finally {
     assert.ok(resolve(directory).startsWith(resolve(tmpdir()) + sep)); await rm(directory, { recursive: true, force: true });

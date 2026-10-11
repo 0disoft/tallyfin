@@ -1,5 +1,25 @@
 # 검증
 
+## 설치 설정 오류 안내 — 2026-10-11
+
+설치 설정 검증 실패가 어느 입력 항목인지 알려주도록 `installation()`이 고정 `field`를 가진
+`InstallationConfigError`(기존 `TypeError` 호환)를 던지고, `install:prepare` CLI가
+`installation_config_failed` 오류에 그 `field`를 붙여 출력한다. 값은 `input`, `admin`,
+`collector`, `admin.accountId`, `admin.collectorWorkerName`, `adminOrigin`, `login`,
+`login.issuer` 중 하나이고 입력값·URL·ID·내부 예외 원문은 담지 않으며 `cause`도 두지 않는다.
+파일·인자·쓰기 오류처럼 검증 밖에서 난 실패는 기존 고정 오류 그대로이고 `field`를 붙이지 않는다.
+
+실행·결과: `node --test tools/runtime/test/installation.test.ts
+tools/runtime/test/configured-build.test.ts` 6/6, 루트 `npm exec -- tsc --noEmit`. 새 필드 형태
+검사는 8개 field 각각에서 `InstallationConfigError`·`TypeError` 호환, 제출 값 미포함, `cause`
+없음을 확인했고, CLI issuer 불일치는 `field=login.issuer`·stdout 빈 값·출력 폴더 미생성을, 일반
+인자 오류는 `field` 없음을 확인했다. 실제 관리자 빌드와 기존 빌드 보존·ambient `VITE_` 분리
+회귀도 함께 통과했다.
+
+[설치 설정 준비](docs/backend/installation.md)에 `field` 안내를, [README](README.md)에 현재
+구현·미확인 상태를 반영했다. API·DB 스키마·마이그레이션·SDK·의존성·CI 러너·저장소 위생 정책
+변경은 없다. 실제 운영 인증·원격 리소스·배포 검증은 미실행이다(실제 설정 미정). 푸시·배포는 없다.
+
 ## 설치 메타데이터 검사 — 2026-10-11
 
 `npm run install:database-check -- --remote --dir <설치 묶음>`을 로컬 구현·검증했다. 설치

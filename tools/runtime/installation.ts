@@ -4,18 +4,34 @@ import { adminDeploymentTarget } from './admin-target.ts';
 import { deploymentTarget } from './target.ts';
 import { resolve } from 'node:path';
 
+export type InstallationField = 'input' | 'admin' | 'collector' | 'admin.accountId' |
+  'admin.collectorWorkerName' | 'adminOrigin' | 'login' | 'login.issuer';
+export class InstallationConfigError extends TypeError {
+  readonly field: InstallationField;
+  constructor(field: InstallationField) {
+    super('Invalid installation configuration'); this.name = 'InstallationConfigError'; this.field = field;
+  }
+}
+
 /** Checks the complete topology locally; never discovers identities, grants or credentials. */
 export function installation(input: unknown, root: string, outputDirectory?: string) {
+  let field: InstallationField = 'input';
   try {
-    if (!closed(input, ['adminOrigin', 'admin', 'collector', 'login']) || typeof input.adminOrigin !== 'string' ||
-      !closed(input.login, ['issuer', 'clientId', 'scope'], ['resource', 'idTokenAlgorithm'])) throw Error();
+    if (!closed(input, ['adminOrigin', 'admin', 'collector', 'login'])) throw Error();
+    field = 'adminOrigin'; if (typeof input.adminOrigin !== 'string') throw Error();
+    field = 'login'; if (!closed(input.login, ['issuer', 'clientId', 'scope'], ['resource', 'idTokenAlgorithm'])) throw Error();
+    field = 'admin';
     const admin = adminDeploymentTarget(input.admin, root);
+    field = 'collector';
     const collector = deploymentTarget(input.collector, root);
-    if (admin.account_id !== collector.account_id || admin.services[0]!.service !== collector.name) throw Error();
+    field = 'admin.accountId'; if (admin.account_id !== collector.account_id) throw Error();
+    field = 'admin.collectorWorkerName'; if (admin.services[0]!.service !== collector.name) throw Error();
+    field = 'adminOrigin';
     const origin = new URL(input.adminOrigin);
     if (origin.protocol !== 'https:' || origin.origin !== input.adminOrigin || origin.port || origin.username || origin.password ||
       !(admin.routes?.some(route => route.pattern === origin.hostname) ||
         (admin.workers_dev && new RegExp(`^${admin.name}\\.[a-z0-9-]+\\.workers\\.dev$`).test(origin.hostname)))) throw Error();
+    field = 'login';
     const env = {
       VITE_OIDC_ISSUER: input.login.issuer,
       VITE_OIDC_CLIENT_ID: input.login.clientId,
@@ -24,7 +40,9 @@ export function installation(input: unknown, root: string, outputDirectory?: str
       ...(input.login.resource === undefined ? {} : { VITE_OIDC_RESOURCE: input.login.resource }),
     };
     const login = loginConfig(env, input.adminOrigin);
-    if (!login || login.issuer !== collector.vars.OIDC_ISSUER) throw Error();
+    if (!login) throw Error();
+    field = 'login.issuer'; if (login.issuer !== collector.vars.OIDC_ISSUER) throw Error();
+    field = 'input';
     if (outputDirectory !== undefined) admin.assets.directory = resolve(outputDirectory, 'admin-assets');
     // Public build settings are copied from validated fields only, never from the Worker settings.
     const loginSettings = { schemaVersion: 'tallyfin.admin-login/v1', origin: origin.origin, env: {
@@ -40,5 +58,5 @@ export function installation(input: unknown, root: string, outputDirectory?: str
       accessToken: { issuer: collector.vars.OIDC_ISSUER, audience: collector.vars.OIDC_AUDIENCE,
         algorithms: collector.vars.OIDC_ALGORITHMS, tokenType: collector.vars.OIDC_TOKEN_TYPE },
     } };
-  } catch { throw new TypeError('Invalid installation configuration'); }
+  } catch { throw new InstallationConfigError(field); }
 }

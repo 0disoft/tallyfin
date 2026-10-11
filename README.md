@@ -1,17 +1,60 @@
 # Tallyfin
 
-Tallyfin은 Rodisoft의 여러 서비스에서 공통으로 사용하는 가벼운 제품 이벤트 분석 플랫폼이다. 프로젝트별 설정으로 회원가입·파일 변환·구매·계산 등 서로 다른 행동을 분석하며, 개인정보 수집을 최소화한다. Sembom은 첫 적용 사례다.
+Tallyfin은 Rodisoft의 여러 서비스가 공통으로 쓰는 가벼운 제품 이벤트 분석 플랫폼이다. 프로젝트별 설정으로 회원가입·파일 변환·구매·계산 같은 서로 다른 행동을 세고, 개인정보 수집은 최소화한다. Sembom이 첫 연동 예시다.
 
-현재 저장소에는 설계 문서, v0.1 이벤트/API/논리 DB 계약, [관리자 앱](apps/admin/README.md)와 로컬로 구현한 코어·저장·수집기·브라우저 SDK 패키지가 있다. `packages/core`는 등록 정의·browser/server 배치 검증·시간 정규화·SHA-256 입력을, `packages/storage-d1`는 D1 영수증·시도·할당량·집계와 서버 발행 권한을 원자적으로 반영하는 어댑터를, `apps/collector`는 네이티브 fetch 최소 브라우저 수집기·관리자 GET 조회·서버 발행 endpoint를, `packages/browser`는 의존성 없는 브라우저 SDK(배치 전송·유계 재시도·숨김 전송)를, `packages/server`는 의존성 없는 서버 발행 SDK(`createEvent`·재시도 배치 `send`)를 구현했고 `examples/sembom`에 연동 예제를 두었다. 저장소 루트 npm 검사(`npm run check`)로 확인하며, Sembom 예제는 실제 Sembom 저장소에 설치·활성화하지 않았다. 관리자 조회 API와 검증기 포트는 로컬에서 구현·검증했고, 서버 이벤트는 코어 검증부터 전용 `POST /v1/projects/{projectId}/server-batches` endpoint와 발행자 OIDC 검증 배선까지 구현했다. 발행자 인증을 켜지 않은 배포에서는 이 경로가 401로 닫히며, 발행자 권한 부여·회수는 `publisher-grant`·`publisher-revoke` CLI로 로컬 구현했고, 발행자 OIDC 운영 설정값·서버 출처 조회 화면은 아직 없으며 실제 운영 인증·원격 DB 적용도 아직 없다.
+이 문서는 처음 내려받아 로컬에서 실행해 보려는 사람을 위한 안내다. 운영 인증 제공자·원격 DB·도메인·라이선스는 아직 정해지지 않았고, 실제 운영 배포와 서비스 파일럿은 진행하지 않았다.
 
-서버용 OIDC JWT 검증은 `packages/auth-oidc`에 구현했고 `createOidcWorker(adminOptions, publisherOptions?)`와 `createPublisherOidcWorker(publisherOptions)`로 연결한다. 발행자 audience는 관리자 audience와 달라야 하고, 발행자 검증기는 audience 하나만 통과시킨다. 실제 로그인 제공자 설정과 브라우저 로그인, 배포 값 확정은 후속이다. 정책은 [OIDC 어댑터](docs/backend/oidc.md)에 있다.
+## 지금 로컬에서 되는 것
 
-MVP는 프로젝트별로 등록한 이벤트의 건수·추이·허용 속성별 집계와 작업 흐름의 완료/오류를 다룬다. 서비스별 이벤트 연결은 각 서비스가 담당하고, 공통 SDK에는 특정 서비스 이벤트명을 내장하지 않는다. 브라우저 수집을 먼저 구현했고, 서버 발행은 검증·저장·발행 권한과 전용 endpoint, 권한 관리 CLI까지 왔다. 서버 출처 조회 화면은 후속이며, 브라우저 공개 ID나 허용 오리진을 서버 인증 수단으로 재사용하지 않고 발행 권한을 관리자 grant로 추론하지 않는다.
+- `packages/core`: 등록 정의, browser/server 배치 검증, 시간 정규화, SHA-256 입력.
+- `packages/storage-d1`: D1 영수증·시도·할당량·집계와 서버 발행 권한을 원자적으로 반영하는 어댑터.
+- `apps/collector`: 네이티브 fetch 최소 브라우저 수집기, 관리자 GET 조회, 서버 발행 endpoint, 발행자 인증 배선.
+- `packages/browser`: 의존성 없는 브라우저 SDK. 배치 전송·유계 재시도·숨김 전송.
+- `packages/server`: 의존성 없는 서버 발행 SDK. `createEvent`·재시도 배치 `send`.
+- `packages/auth-oidc`: 관리자·발행자 OIDC JWT 검증기.
+- `apps/admin`: 프로젝트 개요·이벤트 분석·설정·목표·퍼널 화면, browser/server 출처 선택 조회, 권한 조회·변경, 관리자 변경 이력, 자기 계정 조회, 공개 클라이언트 OIDC PKCE 로그인 코드. 퍼널 단계 편집 폼과 퍼널 CSV도 로컬에서 연결했다.
+- `db/migrations`: `0001_initial.sql`과 `0002`~`0007`. 0007은 다단계 퍼널(`funnel_runs`·`funnel_daily_counts`)이다.
 
-초기 기술 방향은 TypeScript, 외부 런타임 의존성 없는 브라우저 SDK, 네이티브 fetch Cloudflare Worker와 별도 D1 저장 어댑터다. 코어/SDK는 비공개 ZDP 패키지나 Cloudflare에 의존하지 않는다. SDK와 한 서비스의 연동 코드·필수 설정 합계는 gzip 3KiB 이하를 목표로 하며 측정도 예산 안이다. SDK는 네이티브 `sendBeacon` 대신 keepalive fetch로 credentials/referrer를 생략한다. 수집 실패가 서비스 화면이나 업무 처리를 막지 않도록 설계한다.
+2~10단계 퍼널은 등록·검증·발행·정의 조회까지 로컬에서 구현했고, browser·server 수집 경로가 연결 이벤트를 영수증·할당량·집계와 같은 D1 batch에 저장한다. 연결 상태 72시간과 단계 집계 90일 정리도 로컬에서 확인했다. 서버 발행은 코어 검증부터 전용 `POST /v1/projects/{projectId}/server-batches` endpoint, 발행자 OIDC 검증 배선, `publisher-grant`·`publisher-revoke` CLI, 서버 출처 조회 화면까지 로컬에서 구현·검증했다.
 
-구성: `packages/core`, `packages/browser`, `packages/server`, `packages/storage-d1`, `apps/collector`, `apps/admin`, `examples/sembom`. npm workspaces를 초기화했고 core·storage-d1·collector·browser·server·admin을 생성했으며 `examples/sembom`에 연동 예제를 두었다.
+## 아직 확인하지 않은 것
 
-문서: [제품 개요](docs/product/00-product-brief.md), [제품 명세](docs/product/02-spec.md), [화면 설계](docs/frontend/FRONTEND_DESIGN.md), [아키텍처](ARCHITECTURE.md), [ADR 0004](docs/adr/0004-general-product-analytics.md), [Sembom 연동 예시](docs/integrations/sembom.md), [성능 목표](docs/engineering/03-performance-budget.md), [로드맵](docs/product/01-roadmap.md), [전송·집계 계약](docs/backend/event-contract.md), [수집기 구현](docs/backend/collector.md), [브라우저 SDK](docs/backend/browser-sdk.md), [서버 SDK](docs/backend/server-sdk.md), [서버 발행 이벤트](docs/backend/server-events.md), [관리자 조회 경계](docs/backend/administrator.md), [검증](VALIDATION.md).
+- 실제 운영 인증 제공자, 원격 D1, 도메인·배포, 서비스 파일럿, 라이선스는 미정이거나 미실행이다.
+- 발행자 OIDC 운영 설정값은 아직 없고, 실제 제공자 로그인은 검증하지 않았다.
+- 로컬 부하·정리·복구 실험은 검증했고, 실제 원격 마이그레이션·정리 Cron·백업/복구와 운영 SLO는 미검증이다. 운영 SLO는 UNDECIDED다.
+- 관리자 기본 설정의 API 401은 인증을 끈 실제 응답이다. 실제 로그인에는 별도 OIDC 설정이 필요하다.
 
-원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. [이벤트·집계 계약](docs/backend/event-contract.md)에 따라 OpenAPI와 DBML 예제를 v0.1 계약으로 교체했다. SQL 마이그레이션은 초기 빈 DB용 `0001_initial.sql`과 추가·확장 `0002`~`0006`이며 모두 로컬 Miniflare 테스트에서만 적용하고 원격 DB에는 적용하지 않았다. `0006_server_collection.sql`은 영수증·이벤트 집계 테이블을 복사·재생성하므로 운영 적용 전 수집 중지·백업·행 수 검증이 필요하다. 운영 인증 제공자·IP 보호 정책·도메인·라이선스는 미정이다.
+## 로컬 실행
+
+Node 24 이상이 필요하고 의존성은 저장소 루트 lockfile로 설치한다. 아래 명령은 저장소 루트에서 실행한다.
+
+```sh
+npm ci --ignore-scripts
+npm run provision -- init --local --state-dir .tmp/collector-db --apply
+npm run provision -- register --local --state-dir .tmp/collector-db --file api/examples/registry.json --apply
+npm run dev -- --local --state-dir .tmp/collector-db
+```
+
+관리자는 `http://127.0.0.1:5180`, 수집기는 `http://127.0.0.1:5188`에서 실행된다. 두 포트는 서로 달라야 하고 사용 중이면 오류로 끝낸다. 포트·설정·종료 절차는 [통합 실행 안내](docs/backend/runtime.md#통합-개발-실행)를 따른다.
+
+기본 설정은 관리자·발행자 인증이 꺼져 있어 관리자 API와 `POST /v1/projects/{projectId}/server-batches`가 둘 다 401을 돌려준다. 화면만 보려면 관리자의 `/demo`에 접속해 샘플 모드를 볼 수 있다. 실제 로그인과 실제 데이터 조회에는 별도 OIDC 설정이 필요하고, 등록·권한 부여·마이그레이션은 자동으로 일어나지 않는다.
+
+저장소 검사는 루트 `npm run check`로 실행한다(타입 검사·테스트·브라우저 SDK 크기 예산).
+
+## 운영 설치와 검사
+
+운영 설정 준비와 검사는 [설치 설정 준비](docs/backend/installation.md)에 정리했다(`install:prepare`, `admin:build-configured`, `install:check`, `install:database-check`). 이 명령들은 설정 파일 생성, 관리자 빌드, 공개 제공자와 원격 DB 조회 검사를 제공한다. 원격 쓰기·로그인·배포는 자동 실행하지 않는다. 설치 검사 상세는 [설치 검사 안내](tools/runtime/INSTALL-CHECK.md)에 있다. 실제 리소스 값과 인증 설정은 운영자가 정한 뒤 별도로 실행한다.
+
+## 문서
+
+- 제품: [개요](docs/product/00-product-brief.md), [명세](docs/product/02-spec.md), [로드맵](docs/product/01-roadmap.md)
+- 설계: [아키텍처](ARCHITECTURE.md), [화면 설계](docs/frontend/FRONTEND_DESIGN.md), [ADR 0004](docs/adr/0004-general-product-analytics.md), [ADR 0007](docs/adr/0007-admin-application.md)
+- 계약·구현: [이벤트·집계](docs/backend/event-contract.md), [수집기](docs/backend/collector.md), [브라우저 SDK](docs/backend/browser-sdk.md), [서버 SDK](docs/backend/server-sdk.md), [서버 발행](docs/backend/server-events.md), [관리자 조회 경계](docs/backend/administrator.md), [OIDC](docs/backend/oidc.md)
+- 연동·검증: [Sembom 예시](docs/integrations/sembom.md), [성능 목표](docs/engineering/03-performance-budget.md), [검증 기록](VALIDATION.md)
+- 앱: [관리자 앱](apps/admin/README.md), [통합 실행·배포](docs/backend/runtime.md)
+
+## 범위 밖
+
+원문·영구 방문자 식별자·암묵적 DOM 수집, 인프라 텔레메트리·세션 리플레이·광고 어트리뷰션은 초기 범위 밖이다. SQL 마이그레이션은 로컬 Miniflare 테스트에서만 적용했고 원격 DB에는 적용하지 않았다. `0006_server_collection.sql`은 영수증·이벤트 집계 테이블을 복사·재생성하므로 운영 적용 전 수집 중지·백업·행 수 검증이 필요하다.
+
+SDK와 한 서비스의 연동 코드·필수 설정 합계는 대표 예제 기준 gzip 3KiB 이하를 목표로 한다. 이 예산은 호스트 앱 전체나 모든 프로젝트 설정의 합계가 아니고, 로컬 측정값이며 운영 수치가 아니다.

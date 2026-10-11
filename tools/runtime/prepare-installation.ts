@@ -1,7 +1,7 @@
 import { open, mkdir, writeFile, unlink, rmdir } from 'node:fs/promises';
 import { dirname, resolve, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { installation } from './installation.ts';
+import { installation, InstallationConfigError } from './installation.ts';
 
 const args = process.argv.slice(2);
 try {
@@ -44,7 +44,9 @@ try {
     }
     console.log(JSON.stringify({ prepared: true, remoteChanges: false, output, files: artifacts.map(([name]) => name) }));
   }
-} catch {
-  console.error(JSON.stringify({ code: 'installation_config_failed', message: 'Check matching targets, HTTPS origin, public OIDC settings and a new output directory. Use --help.' }));
+} catch (error) {
+  console.error(JSON.stringify({ code: 'installation_config_failed',
+    message: 'Check matching targets, HTTPS origin, public OIDC settings and a new output directory. Use --help.',
+    ...(error instanceof InstallationConfigError ? { field: error.field } : {}) }));
   process.exitCode = 1;
 }
