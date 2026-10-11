@@ -45,6 +45,7 @@
     "bench:collector": "node tools/runtime/collector-bench.ts",
     "bench:retained": "node tools/runtime/retained-bench.ts",
     "bench:cluster": "node tools/runtime/cluster-bench.ts",
+    "verify:server-recovery": "node tools/runtime/server-recovery.ts",
     "check": "npm run typecheck && npm test && npm run check:browser-size"
   },
   "devDependencies": {

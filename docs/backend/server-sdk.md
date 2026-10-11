@@ -154,6 +154,14 @@ await client.send([completed]);
   속성을 그대로 넘겨 같은 이벤트로 보낸다.
 - 실제 제공자 연결·운영 배포와 원격 D1 적용은 범위 밖이다.
 
+로컬 Miniflare 루프백에서의 재전송 실험은 [서버 SDK 복구 확인](../../tools/runtime/SERVER-RECOVERY.md)에
+있다. `npm run verify:server-recovery`가 SDK 기본 `fetch`로 보낸 같은 본문이 재시도되고
+수집기가 중복을 정리하는지(before-commit accepted 2·dup 0, after-commit accepted 0·dup 2),
+발행자 회수 뒤 `403`이 나는지를 종료 코드 0과 `verified: true`로 확인했다. 원격 D1·실제
+OIDC·프로세스 재시작은 이 실험의 범위 밖이다. 최종 검사는 `event_daily_counts`의 이벤트별
+`SUM(count)` 2, `funnel_runs` 2건과 두 run의 4단계 `step_times_json`까지 D1 SQL로 직접
+확인한다.
+
 ## 보안
 
 요청은 `Authorization: Bearer` 헤더와 `credentials: 'omit'`, `referrerPolicy: 'no-referrer'`,

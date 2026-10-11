@@ -43,6 +43,8 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 저장소 검사는 루트 `npm run check`로 실행한다(타입 검사·테스트·브라우저 SDK 크기 예산).
 
+서버 SDK의 실패 후 재전송·중복 제거·발행자 회수는 `npm run verify:server-recovery`로 로컬에서 확인할 수 있다. 실제 `fetch`로 보낸 같은 본문이 재시도되고 수집기가 중복을 정리하는지, 발행자 회수 뒤 `403`이 나는지까지 Miniflare 루프백에서 종료 코드 0과 `verified: true`로 통과했다. 최종 검사는 이벤트별 `SUM(count)` 2와 `funnel_runs` 2건·두 run의 4단계 `step_times_json`까지 D1 SQL로 직접 확인한다. 원격 D1·실제 발행자 로그인은 범위 밖이다. 안내는 [서버 SDK 복구 확인](tools/runtime/SERVER-RECOVERY.md)에 있다.
+
 ## 운영 설치와 검사
 
 운영 설정 준비와 검사는 [설치 설정 준비](docs/backend/installation.md)에 정리했다(`install:prepare`, `admin:build-configured`, `install:check`, `install:database-check`, `install:access-check`). 이 명령들은 설정 파일 생성, 관리자 빌드, 공개 제공자·원격 DB 메타데이터·관리자 읽기 접근 검사를 제공한다. 세 검사는 서로 다른 대상을 보며 어느 것도 운영 준비 완료를 뜻하지 않는다. 원격 쓰기·로그인·배포는 자동 실행하지 않는다. 검사 상세는 [설치 검사 안내](tools/runtime/INSTALL-CHECK.md)와 [접근 확인 안내](tools/runtime/INSTALL-ACCESS-CHECK.md)에 있다. 실제 리소스 값과 인증 설정은 운영자가 정한 뒤 별도로 실행한다.

@@ -4,6 +4,14 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 서버 SDK 실제 소켓 복구: 옵트인 `verify:server-recovery`로 SDK 기본
+  `fetch`가 루프백 소켓에서 실패 뒤 같은 본문을 재전송하는지 확인했다. 커밋 전 `503`
+  재전송은 accepted 2·duplicates 0, 커밋 뒤 소켓 손실 재시도는 다른 수집기에서 accepted 0·
+  duplicates 2였고 두 본문 SHA-256이 같았다. `event_receipts` 8·네 이벤트 `SUM(count)`
+  각 2·4단계 퍼널 run 2건(단계 시각 4개)·`step_index` 0..3 `reached_count` 2를 확인했고,
+  발행자 회수 뒤 `403`·attempts 1·retryable false·집계 불변과 세 수집기 owner 읽기 200을
+  봤다. 다음은 운영 인증·원격 환경 준비와 남은 장애·운영 검증이다. API·DB·SDK 계약·의존성·
+  CI 변경은 없다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 10분 지속 soak 부하: opt-in `bench:cluster -- --soak`로 새 공유 로컬 D1과
   수집 Worker 3개에 600초 동안 HTTP 4,500건·정리 120회를 실행했다. accepted 18,000·
   duplicates 36,000, 4단계 퍼널 run 3,000개가 전부 단계 시각을 채우고 세 Worker의 단계

@@ -1,5 +1,43 @@
 # 검증
 
+## 서버 SDK 실제 소켓 복구 — 2026-10-11
+
+`verify:server-recovery`는 `@tallyfin/server` SDK를 플랫폼 주입 없이 기본 `fetch`·타이머·
+`crypto`로만 돌려 실제 루프백 소켓에서 실패 뒤 재시도를 확인한다. 매 실행이 `127.0.0.1`
+relay·새 합성 D1·수집기 3개(`collectorHarness(dir, undefined, 3)`)를 만들고, 브라우저
+시드는 relay를 거치지 않고 `collector-0`에 직접 넣는다. relay는 본문 SHA-256만 메모리에
+남기고 요청 본문·토큰·자격 증명은 보고서에 넣지 않는다. 서버 4단계 퍼널은 브라우저 시드
+`file_selected`·`upload_finished` 위에 `job_started`·`job_finished`가 얹혀 완성된다.
+
+- `npm.cmd run verify:server-recovery`: 종료 코드 0, `verified: true`. before-commit은 첫
+  요청이 `503`+`Retry-After: 1`로 끝나고 재전송이 accepted 2·duplicates 0·attempts 2로
+  통과했다. after-commit은 한 수집기가 저장을 마치고 `200` ack까지 준 뒤 클라이언트 소켓만
+  끊겼고, 같은 본문의 재시도가 다른 수집기로 가 accepted 0·duplicates 2·attempts 2로
+  정리됐다.
+- 두 단계에서 relay가 받은 SDK 본문의 SHA-256이 서로 같다(`byteIdenticalRetries` true).
+  재시도가 같은 바이트를 다시 보냈고 중복 제거는 수집기에서 일어났다는 뜻이다.
+- D1 최종 검사: `event_receipts` 8건, `event_daily_counts`를 `source`·`event_name`으로
+  묶은 `SUM(count)`가 등록 이벤트 네 개(`file_selected`·`upload_finished`·`job_started`·
+  `job_finished`) 모두 2다. `funnel_runs` 2건은 둘 다 `step_times_json`에 4단계 시각이
+  null 없이 들어 있고, `funnel_daily_counts`는 `step_index` 0..3의 `reached_count`가
+  모두 2다.
+- 발행자 grant 회수 뒤 `send()`는 403·attempts 1·retryable false로 끝나고, relay가 받은
+  본문 1건과 함께 집계·`event_receipts` 8건은 회수 전과 같다(`unchangedAfterDenial` true).
+  회수 뒤에도 owner 읽기는 수집기 세 곳 모두 200이고 `startedRuns` 2·`completedRuns` 2·
+  `completionRate` 100이다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 종료 코드 0.
+- `npm.cmd run verify:server-recovery -- --help`: 종료 코드 0. `-- --target
+  https://example.invalid`는 거부되어 종료 코드 1이고 원격 연결은 일어나지 않았다.
+
+이 슬라이스는 옵트인 `verify:server-recovery` 명령·도구 코드·`tools/server/schema.d.mts`·
+README·서버 SDK 문서·[복구 확인 안내](tools/runtime/SERVER-RECOVERY.md)를 더했다.
+최종 보고서는 `.tmp/server-recovery/run-yHHyGG/report.json`에 있다. 제품 소스가 바뀌지
+않아 기존 SDK 회귀·전체 테스트·관리자 빌드는 반복하지 않았다.
+API·DB·SDK 계약·의존성·CI 변경은 없고 이 명령은 기본 `test`·`check`·CI에 넣지 않았다.
+한 호스트의 Miniflare 루프백·새 합성 D1 검증이라 실제 OIDC 발행자·원격 D1·다중 프로세스/
+지역·절전/강제 종료·프로세스 재시작을 넘는 중복 제거·지속 outbox·exactly-once 전달의 증거가
+아니다. 다음은 운영 인증·원격 환경 준비와 남은 장애·운영 검증이다.
+
 ## 10분 지속 soak 부하 — 2026-10-11
 
 `bench:cluster`에 `--soak` 프로필을 추가해 한 workerd 안의 수집 Worker 3개와 새 공유
