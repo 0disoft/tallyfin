@@ -3,7 +3,7 @@ import type { SqlDatabase } from '@tallyfin/storage-d1';
 
 type SchemaRow = { name: string; type: string; tbl_name: string; sql: string | null };
 export interface RestoreFingerprint { schemaHash: string; tables: { name: string; rows: number; hash: string }[]; fingerprint: string }
-function normalizeSql(sql: string) {
+export function normalizeSql(sql: string) {
   // Collapse formatting only outside SQL string/identifier quotes; quoted whitespace changes meaning.
   return sql.trim().replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|\s+/g, token => token.trim() ? token : ' ');
 }

@@ -1,5 +1,35 @@
 # 검증
 
+## 설치 메타데이터 검사 — 2026-10-11
+
+`npm run install:database-check -- --remote --dir <설치 묶음>`을 로컬 구현·검증했다. 설치
+디렉터리의 다섯 파일을 다시 검증하고 기준 마이그레이션을 이번 실행의 새 인메모리 D1에 적용한
+뒤 원격 D1의 `sqlite_master`를 한 번 조회해 테이블·인덱스·트리거 메타데이터를 비교한다. 기존
+원격 생성 권한 도구의 설치 Wrangler 전송을 그대로 쓴다. 기준은 16개 테이블·7개 마이그레이션이고
+SQL 입력·환경 변수·추가 config 옵션은 받지 않는다.
+
+실행·결과: `node --test tools/runtime/test/install-database-check.test.ts
+tools/runtime/test/restore-fingerprint.test.ts` 4/4(신규 2·기존 복구 2), 루트 `npm exec --
+tsc --noEmit`, 새 `--help`가 통과했다. 설치된 Wrangler를 테스트 포트에서만 `--remote`→`--local`로
+바꾼 실제 로컬 D1에서 호출 두 번과 임시 scratch 삭제를 확인해 현재 스키마는 통과하고
+`funnel_run_update`를 DROP한 DB는 누락 트리거로 불일치했으며 `retention_cleanup_state`
+revision 37은 조회 전후로 유지됐다. 데이터 행 읽기는 검사가 아니라 검증 fixture의 sentinel
+확인에서만 일어났고, 설정 파일 변조와 잘못된 인자는 원격 호출 수를 늘리지 않고 거부했다.
+초기 두 번의 테스트 실패는 fixture의 옛 테이블 이름 `cleanup_cursor` 오류와 `dispose` 중복
+호출이었고 수정 뒤 통과했으며 실행 동작은 그대로다.
+
+보고서는 기준·관측 객체 수, 누락·변경(기준 객체 이름만), 추가 객체 개수, 스키마 SHA-256,
+대상 해시, 기준 마이그레이션 목록을 담고 SQL·주소·계정·DB ID·issuer·subject는 출력하지
+않는다. `databaseSchemaMatches`가 true여도 `operationalReadinessVerified`는 false이고 예상과
+다르면 종료 코드 1이며, 원격 쓰기·상품 행 조회·토큰 발급·grant·원격 마이그레이션·배포는 하지
+않는다. 실제 Tallyfin 운영 설치 묶음이 없어 원격 실행은 하지 않았고 Workbench 등록 Tallyfin
+대상도 없다. Cloudflare vault `no-visible-accounts`(부분 커버리지)는 계정 부재의 증거가 아니며
+관측 metadata timestamp는 오늘 00:51 UTC다.
+
+API·DB 스키마·마이그레이션·SDK·의존성·CI 러너·저장소 위생 정책 변경은 없다. package 명령 1개를
+추가했고 기존 `normalizeSql`을 내보내 재사용한다. 실제 운영 인증·원격 리소스·데이터 무결성·
+Cron·백업·로그인 검증은 미실행이다(운영 환경 미설정). 푸시·배포는 없다.
+
 ## 브라우저 SDK 재시도·응답 유실 복구 실험 — 2026-10-11
 
 실패 정책을 상태 0(네트워크·타임아웃)·408·429·모든 5xx 재시도와 401·403·409·422

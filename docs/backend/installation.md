@@ -125,3 +125,24 @@ callback·scope·audience·token type 설정과 실제 로그인을 별도로 �
 기준은 [OIDC Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html),
 [RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html),
 [CORS 안내](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)를 참고한다.
+
+## 원격 스키마 메타데이터 확인 — `install:database-check`
+
+```powershell
+npm run install:database-check -- --remote --dir .tmp/installation
+```
+
+준비한 설치 디렉터리의 다섯 파일을 다시 검증하고, 기준 마이그레이션을 이번 실행이 만든 새
+인메모리 D1에 적용한 뒤 원격 D1의 `sqlite_master`를 한 번 조회해 테이블·인덱스·트리거의
+이름과 정의를 비교한다. 기존 원격 생성 권한 도구의 설치 Wrangler 전송을 그대로 쓰고 SQL
+입력·환경 변수·추가 config 옵션은 받지 않는다.
+
+보고서는 기준·관측 객체 수, 누락·변경 객체 이름(기준 객체만), 예상 밖 객체 개수, 스키마
+SHA-256, 대상 해시, 기준 마이그레이션 목록을 담는다. SQL·주소·계정·DB ID·issuer·subject는
+출력하지 않는다. `databaseSchemaMatches`가 true여도 `operationalReadinessVerified`는 false이고,
+예상과 다르거나 확인하지 못하면 종료 코드 1이다.
+
+원격 쓰기·상품 행 조회·로그인 토큰 발급·grant 부여·원격 마이그레이션·배포는 하지 않는다.
+스키마 일치는 데이터 무결성·정리 Cron·백업·로그인을 확인한 결과가 아니다.
+운영 설치 묶음이 아직 없어 실제 운영 DB 접속은 확인하지 않았고, 통과 여부는 원격 실행 뒤에 판단한다.
+조회 명령은 [D1 Wrangler 안내](https://developers.cloudflare.com/d1/wrangler-commands/#d1-execute)를 따른다.
