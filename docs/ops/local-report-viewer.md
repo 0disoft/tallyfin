@@ -17,6 +17,11 @@ Get-Content -LiteralPath app-log.ndjson -Encoding utf8 |
 CLI가 성공 종료한 JSON만 사용한다. `npm.cmd` 별칭은 `--silent`를 넣어 배너가 섞이지 않도록
 한다. 로그 형식·수집 범위·실패 코드는 [로그 요약 안내](../../tools/runtime/LOG-SUMMARY.md)에 있다.
 
+확보한 Wrangler tail JSON에는 `--stdin --wrangler-tail`을 쓴다. 여러 줄 객체에서 console의
+앱 기록만 추리며 기존 v2 보고서를 만든다. 보고서의 입력 줄 수는 console 기록 수다.
+원본의 URL·헤더·예외는 화면에 넣지 않고, 추가 샘플링·누락은 있을 수 있다.
+유한한 로그 파일을 사용하며 계속 열린 스트림은 30초 후 실패한다.
+
 ## 화면에서 읽는 값
 
 - 관측 응답은 중복을 뺀 로그 줄 수다. 가중 요청 어림은 성공 표본에 64를 곱한 값이며 정확한

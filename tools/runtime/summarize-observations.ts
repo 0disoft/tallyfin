@@ -1,13 +1,17 @@
 import type { Readable } from 'node:stream';
 import { pathToFileURL } from 'node:url';
 import { ObservationSummary, ObservationSummaryError, SUMMARY_LIMITS } from './observation-summary.ts';
+import { WranglerTailInput } from './wrangler-tail-input.ts';
 
 export const SUMMARY_HELP = `node tools/runtime/summarize-observations.ts --stdin
 Package alias: npm run --silent logs:summary -- --stdin (PowerShell: npm.cmd).
 Read UTF-8 app JSON lines from non-interactive stdin and print a private, bounded aggregate.
 No network, credentials, files, mutations or automatic Cloudflare export.
-Limits: 8 MiB, 50000 lines, 16 KiB per line, 30 seconds. Platform envelopes are not unpacked.
+Default NDJSON limits: 8 MiB, 50000 lines, 16 KiB per line, 30 seconds. Envelopes require the explicit option below.
 Observed responses and sampling-weighted request estimates are separate; not exact counts, p95 or SLO.
+Optional: --stdin --wrangler-tail reads whitespace-separated Wrangler tail JSON envelopes.
+Tail limits: 256 KiB per envelope/physical line, 64 nesting levels, 50000 envelopes/lines.
+Only logs[].message app JSON strings are summarized; metadata is discarded. Input must end within 30s.
 Use --help for this offline usage text.`;
 type CliCode = 'invalid_arguments' | 'stdin_required' | 'input_unavailable' | 'input_timeout' | 'output_unavailable';
 export class ObservationCliError extends Error {
@@ -17,10 +21,17 @@ export class ObservationCliError extends Error {
 
 /** Consume a single bounded stream; release listeners/timer and stop reading after any failure. */
 export function readObservationSummary(input: Readable, timeoutMs = 30000): Promise<ReturnType<ObservationSummary['report']>> {
+  return readSummary(input, timeoutMs, false);
+}
+export function readWranglerTailSummary(input: Readable, timeoutMs = 30000): Promise<ReturnType<ObservationSummary['report']>> {
+  return readSummary(input, timeoutMs, true);
+}
+function readSummary(input: Readable, timeoutMs: number, tailMode: boolean): Promise<ReturnType<ObservationSummary['report']>> {
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000)
     return Promise.reject(new ObservationCliError('invalid_arguments'));
   return new Promise((resolve, reject) => {
-    const summary = new ObservationSummary(), decoder = new TextDecoder('utf-8', { fatal: true });
+    const summary = new ObservationSummary(), tail = tailMode ? new WranglerTailInput() : null;
+    const decoder = new TextDecoder('utf-8', { fatal: true });
     let pending = '', bytes = 0, settled = false;
     const cleanup = () => {
       clearTimeout(timer); input.off('data', data); input.off('end', end);
@@ -32,6 +43,7 @@ export function readObservationSummary(input: Readable, timeoutMs = 30000): Prom
         ? reason : new ObservationCliError('input_unavailable'));
     };
     const accept = (text: string) => {
+      if (tail) { tail.addText(text); return; }
       pending += text;
       let start = 0, newline: number;
       while ((newline = pending.indexOf('\n', start)) !== -1) {
@@ -58,7 +70,7 @@ export function readObservationSummary(input: Readable, timeoutMs = 30000): Prom
         try { remaining = decoder.decode(); } catch { throw new ObservationSummaryError('invalid_log'); }
         accept(remaining);
         if (pending) summary.addLine(pending);
-        const report = summary.report(); settled = true; cleanup(); resolve(report);
+        const report = tail ? tail.report() : summary.report(); settled = true; cleanup(); resolve(report);
       } catch (reason) { fail(reason); }
     };
     const error = () => fail(new ObservationCliError('input_unavailable'));
@@ -72,9 +84,10 @@ export function readObservationSummary(input: Readable, timeoutMs = 30000): Prom
 
 export async function runObservationSummary(args: string[], input: Readable & { isTTY?: boolean } = process.stdin) {
   if (args.length === 1 && args[0] === '--help') return SUMMARY_HELP;
-  if (args.length !== 1 || args[0] !== '--stdin') throw new ObservationCliError('invalid_arguments');
+  const tailMode = args.length === 2 && args[0] === '--stdin' && args[1] === '--wrangler-tail';
+  if (!tailMode && (args.length !== 1 || args[0] !== '--stdin')) throw new ObservationCliError('invalid_arguments');
   if (input.isTTY) throw new ObservationCliError('stdin_required');
-  return JSON.stringify(await readObservationSummary(input));
+  return JSON.stringify(await (tailMode ? readWranglerTailSummary(input) : readObservationSummary(input)));
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // A closed output pipe must not turn into an unhandled stack trace.

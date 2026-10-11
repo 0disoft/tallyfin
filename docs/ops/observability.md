@@ -82,6 +82,11 @@ Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdi
 `npm.cmd` 별칭을 쓴다. 계약과 한계는
 [로그 요약 안내](../../tools/runtime/LOG-SUMMARY.md)에 둔다.
 
+확보한 Wrangler tail JSON은 `--stdin --wrangler-tail`로 읽는다. 여러 줄 객체에서 단일
+console JSON 문자열만 검증·집계하고 URL·헤더·예외는 버린다. 플랫폼의 추가 샘플링과 누락은
+보정하지 않으며, 앱 관측이 없으면 `no_observations`로 거부한다. 이 경로도 로컬 입력만 읽고
+원격 세션을 열지 않는다. 상한과 보고서 입력 수의 의미는 위 안내에 적었다.
+
 `coverage`는 받은 앱 로그 줄에 한정하고 `exactRequestCounts`·`latencyPercentilesAvailable`·
 `timeWindowAvailable`은 항상 false다. 관측 응답 수와 가중 어림은 다르며 실패율·p95·SLO 근거로
 쓰지 않는다.

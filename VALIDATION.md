@@ -1,5 +1,31 @@
 # 검증
 
+## Wrangler tail JSON의 로컬 보고서 변환 — 2026-10-11
+
+`logs:summary`에 `--stdin --wrangler-tail`을 추가하고 기본 NDJSON 경로는 유지했다.
+`WranglerTailInput`은 공백으로 구분된 여러 줄/한 줄 JSON 객체를 문자열·이스케이프·중첩에
+맞춰 구분한다. `logs[].message`의 단일 앱 JSON 문자열을 기존 집계기로 보내고, 감싼 객체의
+요청 URL·헤더·예외·시각·스크립트 이름은 출력하지 않는다. 관련 없는 console 기록은 내용
+대신 무시 카운터만 센다. 앱 기록을 객체나 여러 인자로 보내면 거부한다. 출력 v2는 그대로다.
+
+- 설치된 Wrangler 4.148.0의 `tail --help`, `src/tail/printing.ts` 출력 코드와 Cloudflare
+  실시간 로그 문서를 확인했다. `wrangler tail` 원격 실행은 하지 않았다.
+- `node --test --test-timeout=30000 tools/runtime/test/wrangler-tail-input.test.ts
+  tools/runtime/test/summarize-observations.test.ts tools/runtime/test/observation-summary.test.ts
+  tools/runtime/test/observation-diagnostics.test.ts`: 30/30, 종료 코드 0.
+  실제 Node CLI stdout/stderr, 관리자 보고서 파서 호환, NDJSON 회귀, CRLF·byte-split UTF-8·
+  이스케이프, 원문 제외, 중복/충돌, 잘못된 형식·사적 필드·불완전 입력·배너, 빈 관측,
+  전체 바이트/객체/줄/깊이/console 기록 수 제한과 시간 초과·스트림 실패·리스너 해제를 확인했다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 종료 코드 0.
+- `git diff --check`: 종료 코드 0.
+
+첫 검사에서 테스트가 보고서 파서에 문자열을 넘겨 2건 실패했다. 파서의 실제 객체 계약에
+맞게 테스트를 수정한 뒤 위 검사가 모두 통과했다. 사용법·운영 관측·로컬 뷰어 안내·README·
+로드맵을 갱신했다. API·DB·마이그레이션·SDK·관리자 UI·운영 설정·의존성·CI 러너·위생 정책은
+바뀌지 않았다. UI 빌드/브라우저 재검증과 전체 backend 검사는 변경 범위 밖이라 반복하지
+않았다. 실제 운영 입력·로그 세션·추가 플랫폼 샘플링·원격 인증·배포는 미검증이며, tail의
+누락을 보정하거나 전체 요청 수/서비스 정상 상태를 주장하지 않는다. 푸시·배포는 없다.
+
 ## 관리자의 로컬 운영 로그 보고서 화면 — 2026-10-11
 
 `ObservationReportPanel`·`ObservationReportView`와 전용 CSS를 추가하고 API 연결 설정에서만

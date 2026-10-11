@@ -8,8 +8,9 @@ Get-Content -LiteralPath app-log.ndjson -Encoding utf8 | node tools/runtime/summ
 Get-Content -LiteralPath app-log.ndjson -Encoding utf8 | npm.cmd run --silent logs:summary -- --stdin
 ```
 
-표준 입력의 앱 로그(NDJSON)를 집계해 JSON 한 건을 표준 출력에 쓴다. 옵션은 `--stdin`과 `--help`
-둘뿐이고 그 밖은 `invalid_arguments`다. `--help`는 입력을 읽지 않고 사용법만 출력한다. 파일 인자·
+표준 입력의 앱 로그(NDJSON)를 집계해 JSON 한 건을 표준 출력에 쓴다. 기본 호출은 `--stdin`이고,
+Wrangler 입력에는 `--stdin --wrangler-tail`을 쓴다. 그 밖은 `invalid_arguments`다.
+`--help`는 입력을 읽지 않고 사용법만 출력한다. 파일 인자·
 URL·대상 설정·자격 증명을 받지 않고 네트워크·Cloudflare export·파일 쓰기를 하지 않는다.
 
 PowerShell의 `npm.ps1` 래퍼로 파이프한 경로는 로컬 스모크에서 실패했다(종료 코드 1, CLI 보고서
@@ -28,8 +29,39 @@ non-silent일 때 배너를 섞으므로 정확한 JSON stdout에는 `--silent`�
   `invalid_log`다.
 - 아래 정리 로그와 `http_request`에 해당하지 않는 JSON 객체는 무시하고 `ignoredOtherLogLines`로 센다. 문자열·수·
   `null`·배열처럼 객체가 아닌 JSON은 `invalid_log`다. 플랫폼 래퍼(`{logs:[...]}` 등)는
-  풀지 않는다.
+  기본 모드에서는 풀지 않는다.
 - 빈 줄은 `blankLines`로 센다.
+
+## Wrangler tail JSON 입력
+
+이미 확보한 유한한 JSON 로그를 로컬에서 읽는다. 명령은 원격 로그 세션을 열지 않는다.
+
+```powershell
+Get-Content -LiteralPath tail-log.json -Encoding utf8 |
+  node tools/runtime/summarize-observations.ts --stdin --wrangler-tail
+```
+
+- 설치된 Wrangler 4.148.0의 `tail --format json` 출력 구조를 기준으로 한다. 객체들이 공백이나
+  개행으로 구분되는 형식이며, 여러 줄 JSON·CRLF·단일 줄 객체와 청크 사이 UTF-8을 지원한다.
+  JSON 배열, 사람이 읽는 pretty 로그, 배너·오류 문구가 섞인 입력은 거부한다.
+- 각 객체는 `logs` 배열, 각 로그는 `message` 배열을 가져야 한다. 앱은 단일 JSON 문자열을
+  console에 기록한다. 그 문자열의 `http_request`·정리 기록만 기존 검증·중복 제거에 넣는다.
+  알려진 앱 기록을 객체나 여러 인자로 보내면 거부하며, `{`로 시작하는 잘못된 JSON도 거부한다.
+- 관련 없는 console 기록은 내용 대신 빈 객체 하나로 무시 횟수만 센다. 보고서의 `input.lines`
+  는 처리한 console 기록 수이며 물리 줄이나 Worker 실행 수가 아니다. 감싼 객체의 URL·헤더·
+  예외·스크립트 이름·시각은 보고서나 오류에 포함하지 않는다. 원본 파일에는 이 정보가 있을 수
+  있으므로 저장소 밖에서 보관하고 원문을 관리자 화면에 넣지 않는다.
+- 전체 8MiB·30초 상한에 더해 객체/물리 줄당 256KiB, 중첩 64단계, 객체·물리 줄 5만 개를
+  제한한다. 앱 기록은 기존 16KiB·5만 개·8MiB 예산도 적용한다. 제한·형식·충돌 실패에서는
+  부분 보고서를 출력하지 않는다. 표준 입력이 끝나야 보고서를 내므로 계속 열린 tail 파이프는
+  30초 후 `input_timeout`으로 끝난다.
+- 보고서는 기존 v2이며 관리자 설정의 로컬 보고서 화면에서 그대로 읽는다. tail의 추가
+  샘플링·누락 가능성 때문에 가중 요청 어림도 전체 트래픽의 보장된 추정치로 쓰지 않는다.
+  플랫폼의 예외만 있고 앱 기록이 없으면 `no_observations`다. 정상 상태로 간주하지 않는다.
+
+형식 근거: [Cloudflare 실시간 로그](https://developers.cloudflare.com/workers/observability/logs/real-time-logs/),
+설치된 Wrangler `src/tail/printing.ts`의 `jsonPrintLogs`와 `logs[].message` 출력 코드.
+실제 운영 로그 확보·원격 세션은 아직 실행하지 않았다.
 
 ## 중복과 거부
 

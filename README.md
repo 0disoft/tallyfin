@@ -51,6 +51,10 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 운영 로그 요약은 표준 입력에 앱 NDJSON을 넣어 실행한다(`node tools/runtime/summarize-observations.ts --stdin`, Windows에서는 `npm.cmd run --silent logs:summary -- --stdin`). `http_request` 고정 7필드와 scheduled 정리 로그를 집계하고 `diagnostics`에서 관측된 오류·거부·정리 실패와 확인할 항목을 구분한다. `requestId`·프로젝트 ID·원문은 보고서에 넣지 않는다. 사용법과 한계는 [로그 요약 안내](tools/runtime/LOG-SUMMARY.md)에 있다.
 
+확보한 Wrangler tail JSON에는 같은 CLI의 `--stdin --wrangler-tail`을 쓴다. 여러 줄 객체에서
+앱 console 기록을 추려 같은 보고서를 만들고 URL·헤더·예외는 버린다. 입력은 30초 내 끝나는
+유한한 로그여야 하며 원격 로그 세션은 자동으로 열지 않는다.
+
 관리자 전용 `GET /v1/health`는 검증된 관리자 bearer로 두 제어 테이블의 읽기 상태를 확인한다.
 성공 응답은 `{status:"ok",scope:"administrator_storage_read"}`이며, 수집 쓰기나 정리 실행까지
 확인한 결과는 아니다. 조회는 읽기 전용이고 원문 행·계정·프로젝트 정보를 반환하지 않는다.
