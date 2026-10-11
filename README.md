@@ -59,6 +59,10 @@ npm run dev -- --local --state-dir .tmp/collector-db
 `install:access-check`도 계정 확인 → 이 읽기 프로브 → 프로젝트 조회 순서로 검사하며,
 앞 단계가 실패하면 뒤 단계는 요청하지 않는다.
 
+관리자 설정의 `저장소 읽기 확인`에서도 버튼으로 같은 읽기 검사를 실행하고 확인 시각을 볼 수
+있다. 요청은 5초 뒤 취소하며, 닫기·연결 교체에서는 이전 결과를 지운다. 자동 폴링 없이
+로컬 Chrome·D1로 검증했고, 실제 운영 인증·원격 상태 확인은 아직 없다.
+
 ## 문서
 
 - 제품: [개요](docs/product/00-product-brief.md), [명세](docs/product/02-spec.md), [로드맵](docs/product/01-roadmap.md)

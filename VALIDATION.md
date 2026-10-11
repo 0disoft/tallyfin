@@ -1,5 +1,31 @@
 # 검증
 
+## 관리자 설정의 저장소 읽기 확인 — 2026-10-11
+
+`LiveHealth`와 `HealthReader`, 닫힌 health 응답 파서, `ApiClient.getHealth`를 추가하고 API 모드
+설정 화면에 연결했다. 버튼으로만 조회하며 5초 시간 제한·중복 클릭 차단·실패 시 성공 결과
+삭제·닫기/연결 교체/언마운트 시 취소와 늦은 응답 폐기를 적용했다. 성공 시각은 수동 확인
+시각이고 지표 갱신 시각과 구분한다. 기존 `/v1/health` 계약을 소비하며 API·DB·마이그레이션·
+Worker·SDK·의존성·환경 변수·CI·위생 정책·package script 변경은 없다.
+
+- `npm.cmd run typecheck:admin`: 종료 코드 0.
+- `npm.cmd run test:admin`: 172/172, 종료 코드 0. 신규 health 집중 검사 5개를 포함한다.
+- `npm.cmd run build:admin`: 종료 코드 0.
+- `npm.cmd run test:bundle --workspace @tallyfin/admin`: 2/2, 종료 코드 0.
+
+별도 로컬 Chrome 스모크는 임시 서명 OIDC와 실제 Vite 프록시·Miniflare collector·빈 D1을
+거쳤다. grant 없는 관리자 연결에서 펼침 시 요청 0건, 버튼 성공, 잘못된 scope 응답의 오류,
+테이블 일시 이름 변경의 저장소 503(마지막에 복원), 요청 지연의 5초 시간 초과와 재시도,
+닫기·연결 끊기·재연결의 결과 초기화를 확인했다. 명시적 health 요청은 총 5건,
+프로젝트 테이블 불변, 320px 문서 가로 넘침 없음, pageerror 0건이며 데스크톱·모바일
+스크린샷을 확인했다. 첫 스모크는 마지막 단계의 버튼 선택자가 실제 `연결 끊기`와 달라
+실패했고 선택자를 고친 두 번째 실행이 종료 코드 0이었다. 저장소 장애 주입 시 고정
+`storage_unavailable` 로그 한 건이 발생했으며 운영 장애 관측은 아니다.
+
+README·관리자 README·로드맵·운영 관측 문서를 갱신했다. collector·저장 어댑터는 바뀌지
+않아 해당 전체 검사·부하 실험은 반복하지 않았다. 실제 OIDC 제공자·원격 상태 확인·
+Sites 인계·푸시·배포는 미실행이다.
+
 ## 설치 접근 검사에 저장소 읽기 프로브 연결 — 2026-10-11
 
 `tools/runtime/install-access-check.ts`와 집중 검사를 변경했다. 관리자 identity의 issuer를

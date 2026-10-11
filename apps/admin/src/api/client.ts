@@ -39,6 +39,7 @@ import type { PublisherMutationResult, PublisherRequest } from './publishers-con
 import { changeCursor, parseAdminChangePage, type AdminChangePage } from './admin-changes-contract.ts';
 import { parseFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
+import { parseAdminHealth, type AdminHealth } from './admin-health-contract.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -200,6 +201,10 @@ export class ApiClient {
 
   async getIdentity(options: { signal?: AbortSignal } = {}): Promise<AdminIdentity> {
     return this.#parse(await this.#request('/identity', {}, options.signal), parseAdminIdentity);
+  }
+
+  async getHealth(options: { signal?: AbortSignal } = {}): Promise<AdminHealth> {
+    return this.#parse(await this.#request('/health', {}, options.signal), parseAdminHealth);
   }
 
   async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {
