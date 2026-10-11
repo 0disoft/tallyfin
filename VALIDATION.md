@@ -3628,3 +3628,25 @@ invalidZoneReads 1·deniedReads 1·heldReads 1이었다.
 
 CSV 열이 하나 늘어 소비자는 고정 열 개수 대신 헤더를 읽어야 한다. API·DB·SDK·의존성·
 위생 정책·CI 러너 변경은 없고 푸시·배포도 없다.
+
+## 스키마 버전 불러오기 초안 교체 확인 — 2026-10-12
+
+설정의 스키마 버전 불러오기가 작성 중인 초안을 확인 없이 덮어쓰던 문제를 고쳤다.
+`SchemaEditor`가 마지막으로 확인한 정의를 기준선으로 기억하고, 기준선과 다른 초안일 때만
+교체 확인을 요구한다. 기준선은 로드(`#accept`), 서버에서 확인한 발행(`#read`), 버전
+불러오기와 발행 성공, 초안 유지(`keepDraft`)에서 갱신된다.
+
+새 회귀 검사 3개는 수정 전 3/3 실패했다. 수정 후 `schema.test.mjs`는 추가 4개를 포함해
+31/31을 통과했다. 네 번째 검사는 `keepDraft`로 서버 최신과 다른 이전 정의를 명시적으로
+유지할 때도 교체 확인이 유지되는지 확인한다. `typecheck:admin`·`build:admin`,
+bundle-split 2·sites-worker 9(합계 11/11), runner `node --check`, `git diff --check`를
+통과했다.
+
+`npm run verify:admin-onboarding`은 Chromium 156.0.8078.4, 합성 로컬 RS256 로그인 1회,
+실제 Miniflare D1로 통과했다. replacementDialogs 3(취소 1, 503 실패 후 재시도 동의 2)·
+pageErrors 0·routeError false·apiReads 27·apiWrites 4·browserBatches 1·firstEventCount
+1이었고 기록은 `.tmp/admin-onboarding-VlLaeP/report.json`이다.
+
+원격 OIDC 제공자와 운영 DB는 검증하지 않았다. 변경 없는 백엔드 전체와 SDK 전체 검사는
+반복하지 않았고 일반 소스 lint 명령은 없다. API·DB 계약·의존성·위생 정책·CI 러너 변경은
+없고, 기존 옵트인 browser runner만 확장해 기본 CI에는 추가하지 않았다. 푸시·배포도 없다.

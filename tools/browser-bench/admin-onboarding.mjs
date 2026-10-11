@@ -41,9 +41,15 @@ try {
     browser = await chromium.launch({ channel: values.channel, headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
     let routeError = false, pageErrors = 0;
+    let failSchemaReplacement = false;
     const dropped = { creation: 0, publication: 0 };
     await context.route('**/*', async route => { try {
       const request = route.request(), url = new URL(request.url());
+      if (failSchemaReplacement && url.origin === origin && request.method() === 'GET' && url.pathname === '/v1/projects/onboarding-test/schemas/1') {
+        failSchemaReplacement = false;
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'storage_unavailable' } }) });
+        return;
+      }
       const kind = values['lost-responses'] && url.origin === origin
         ? request.method() === 'POST' && url.pathname === '/v1/projects' ? 'creation'
           : request.method() === 'PUT' && url.pathname === '/v1/projects/onboarding-test/schemas/1' ? 'publication' : null
@@ -94,6 +100,42 @@ try {
       assert.equal(await page.locator('#schema-version').inputValue(), '2');
       assert.equal(await page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true }).isChecked(), false);
     }
+    stage = 'schema-draft-replacement';
+    await page.locator('#schema-event-0-label').fill('Unpublished draft');
+    await page.getByRole('button', { name: '정의 검증', exact: true }).click();
+    const privacy = page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true });
+    await privacy.check();
+    const loadVersion = page.getByRole('button', { name: 'v1 불러오기', exact: true });
+    const originalDraft = await page.locator('#schema-draft').inputValue();
+    let replacementDialogs = 0;
+    const chooseReplacement = accept => page.once('dialog', async dialog => {
+      replacementDialogs++; assert.equal(dialog.type(), 'confirm'); assert.match(dialog.message(), /초안.*v1/);
+      await (accept ? dialog.accept() : dialog.dismiss());
+    });
+    chooseReplacement(false); await loadVersion.click();
+    assert.equal(replacementDialogs, 1);
+    assert.equal(await page.locator('#schema-draft').inputValue(), originalDraft);
+    assert.equal(await privacy.isChecked(), true);
+    assert.equal(await page.getByRole('button', { name: '새 버전 발행 (v2)', exact: true }).isEnabled(), true);
+    failSchemaReplacement = true;
+    chooseReplacement(true); await loadVersion.click();
+    await page.locator('.schema-section .settings-message').filter({ hasText: '저장소를 사용할 수 없어요' }).waitFor();
+    assert.equal(await page.locator('#schema-draft').inputValue(), originalDraft);
+    assert.equal(await privacy.isChecked(), true);
+    assert.equal(await page.getByRole('button', { name: '새 버전 발행 (v2)', exact: true }).isEnabled(), true);
+    chooseReplacement(true); await loadVersion.click();
+    await page.getByText('v1 정의를 불러왔어요. 변경 후 새 버전으로 발행할 수 있어요.', { exact: true }).waitFor();
+    assert.equal(await page.locator('#schema-event-0-label').inputValue(), 'Action complete');
+    assert.equal(await privacy.isChecked(), false);
+    assert.equal(await page.getByRole('button', { name: '새 버전 발행 (v2)', exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('#schema-version').inputValue(), '2');
+    assert.equal(replacementDialogs, 3);
+    const unexpectedDialog = async dialog => { replacementDialogs++; await dialog.dismiss(); };
+    page.on('dialog', unexpectedDialog);
+    await loadVersion.click();
+    await page.waitForFunction(() => document.querySelector('#schema-event-0-label')?.disabled === false);
+    assert.equal(replacementDialogs, 3);
+    page.off('dialog', unexpectedDialog);
     stage = 'sdk'; await page.locator('#sdk-origin').fill(origin);
     const snippet = await page.getByRole('textbox', { name: '브라우저 SDK 연결 코드', exact: true }).inputValue();
     // Compile exactly the UI-generated connection code against the freshly built local SDK.
@@ -128,6 +170,7 @@ try {
     const report = { verified: true, browser: browser.version(), emptyProjectCreated: true, schemaPublished: true,
       generatedSdkExecuted: true, firstEventCount: await count(), correctOnboardingStep: true, eventVisible: true,
       lostResponseRecovery: values['lost-responses'], droppedResponses: dropped,
+      schemaDraftReplacement: true, replacementDialogs,
       routeError, pageErrors, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report));

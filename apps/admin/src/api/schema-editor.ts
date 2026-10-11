@@ -23,6 +23,7 @@ export class SchemaEditor {
   #listeners = new Set<(s: SchemaState) => void>();
   #controller: AbortController | null = null;
   #generation = 0; #destroyed = false;
+  #draftBaseline = '';
   #client: ApiClient; #projectId: string;
   #knownOwner = false;
   #onAccessLost?: () => void;
@@ -45,6 +46,7 @@ export class SchemaEditor {
   #start() { this.#controller?.abort(); const controller = new AbortController(); this.#controller = controller; return { controller, generation: ++this.#generation }; }
   #current(g: number) { return !this.#destroyed && g === this.#generation && !this.#controller?.signal.aborted; }
   get canEdit() { return !this.state.blocked && (this.state.latest ?? this.state.snapshot)?.settings.canEdit === true; }
+  get hasDraftChanges() { return this.state.draft !== this.#draftBaseline; }
   #key() { return this.state.target + '\n' + this.state.draft; }
   #input(): { draft: SchemaDraft; version: number } | null {
     try {
@@ -54,6 +56,7 @@ export class SchemaEditor {
     } catch { this.#set({ formError: '최신 버전보다 큰 번호와 events·workflows 배열이 있는 JSON을 입력해 주세요. 정의는 32KiB 이하여야 해요.' }); return null; }
   }
   #accept(snapshot: Snapshot, notice: string | null) {
+    this.#draftBaseline = pretty(snapshot.definitions);
     this.#set({ phase: 'ready', snapshot, latest: null, draft: pretty(snapshot.definitions), target: nextVersion(snapshot.page.latestVersion),
       report: null, validatedKey: null, privacyReviewed: false, pending: null, message: notice, formError: null, more: false, blocked: false }, snapshot.settings.canEdit);
   }
@@ -81,6 +84,7 @@ export class SchemaEditor {
           catch (error) { if (!(error instanceof ApiError && error.kind === 'not_found')) throw error; }
           if (!this.#current(generation)) return;
           if (target && canonicalDefinitions(target) === canonicalDefinitions(previous.pending.definitions)) {
+            this.#draftBaseline = previous.draft;
             this.#set({ ...previous, phase: 'ready', snapshot, latest: null, pending: null, report: null, validatedKey: null, privacyReviewed: false, blocked: false,
               target: nextVersion(page.latestVersion), message: `v${previous.pending.version} 발행을 서버에서 확인했어요. 입력한 정의는 그대로 뒀어요.` }, settings.canEdit); return;
           }
@@ -98,13 +102,19 @@ export class SchemaEditor {
     this.#set({ [field]: value, report: null, validatedKey: null, privacyReviewed: false, message: null, formError: null });
   }
   setPrivacy(value: boolean) { if (this.state.phase === 'ready' && this.canEdit) this.#set({ privacyReviewed: value }); }
-  async selectVersion(version: number) {
+  async selectVersion(version: number, options: { discardDraft?: boolean } = {}) {
     if (this.#destroyed || this.state.phase !== 'ready' || this.state.more) return;
+    if (this.hasDraftChanges && options.discardDraft !== true) {
+      this.#set({ message: '작성 중인 초안이 있어요. 버전을 불러오려면 초안 교체를 확인해 주세요.' }); return;
+    }
     const { controller, generation } = this.#start(); this.#set({ phase: 'loading', message: null });
     try {
       const registry = await this.#client.getSchema(this.#projectId, version, { signal: controller.signal });
-      if (this.#current(generation)) this.#set({ phase: 'ready', draft: pretty(definitions(registry)), report: null, validatedKey: null, privacyReviewed: false,
-        message: `v${version} 정의를 불러왔어요${this.canEdit ? '. 변경 후 새 버전으로 발행할 수 있어요.' : '.'}` });
+      if (this.#current(generation)) {
+        this.#draftBaseline = pretty(definitions(registry));
+        this.#set({ phase: 'ready', draft: this.#draftBaseline, report: null, validatedKey: null, privacyReviewed: false,
+          message: `v${version} 정의를 불러왔어요${this.canEdit ? '. 변경 후 새 버전으로 발행할 수 있어요.' : '.'}` });
+      }
     } catch (error) { if (this.#current(generation)) this.#set({ phase: denied(error) ? 'review' : 'ready', message: message(error),
       ...(denied(error) ? { blocked: true, latest: null, report: null, validatedKey: null, privacyReviewed: false } : {}) }); }
   }
@@ -143,6 +153,7 @@ export class SchemaEditor {
         expectedLatestVersion: this.state.snapshot.page.latestVersion }, { signal: controller.signal });
       if (!this.#current(generation)) return;
       const snapshot = this.state.snapshot!;
+      this.#draftBaseline = this.state.draft;
       this.#set({ phase: 'ready', pending: null, snapshot: { ...snapshot, definitions: input.draft,
         page: { ...snapshot.page, latestVersion: Math.max(saved.schemaVersion, snapshot.page.latestVersion ?? 0),
           data: [saved, ...snapshot.page.data.filter(r => r.schemaVersion !== saved.schemaVersion)] } },
@@ -161,6 +172,7 @@ export class SchemaEditor {
   useServer() { if (this.state.phase === 'review' && this.state.latest) this.#accept(this.state.latest, '서버의 최신 정의를 사용해요.'); }
   keepDraft() {
     if (this.state.phase !== 'review' || !this.state.latest?.settings.canEdit) return;
+    this.#draftBaseline = pretty(this.state.latest.definitions);
     this.#set({ phase: 'ready', snapshot: this.state.latest, latest: null, pending: null, target: nextVersion(this.state.latest.page.latestVersion),
       report: null, validatedKey: null, privacyReviewed: false, blocked: false, message: '초안을 유지했어요. 새 버전 번호와 정의를 다시 검증한 뒤 발행해 주세요.' });
   }

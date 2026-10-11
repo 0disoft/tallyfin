@@ -43,6 +43,70 @@ function fixture(onAccessLost) {
 }
 const ready = async editor => { await editor.load(); await editor.validate(); editor.setPrivacy(true); };
 
+test('loading another version requires explicit consent to replace an edited draft', async () => {
+  const f = fixture(); await f.editor.load();
+  const mine = definitions(); mine.events[0].label = 'My unpublished changes';
+  f.editor.edit('draft', JSON.stringify(mine));
+  await f.editor.validate(); f.editor.setPrivacy(true);
+  const before = f.editor.state, reads = f.calls.length;
+  await f.editor.selectVersion(1);
+  assert.equal(f.calls.length, reads);
+  assert.equal(f.editor.state.draft, before.draft);
+  assert.equal(f.editor.state.validatedKey, before.validatedKey);
+  assert.equal(f.editor.state.privacyReviewed, true);
+  await f.editor.selectVersion(1, { discardDraft: true });
+  assert.equal(JSON.parse(f.editor.state.draft).events[0].label, '작업 완료');
+  assert.equal(f.editor.state.validatedKey, null);
+  assert.equal(f.editor.state.privacyReviewed, false);
+  f.editor.destroy(); f.client.destroy();
+});
+
+test('a failed replacement keeps invalid JSON and the replacement guard', async () => {
+  const f = fixture(); await f.editor.load();
+  f.editor.edit('draft', '{invalid JSON');
+  f.config.read = async () => { throw new TypeError('offline'); };
+  await f.editor.selectVersion(1, { discardDraft: true });
+  assert.equal(f.editor.state.draft, '{invalid JSON');
+  assert.equal(f.editor.state.phase, 'ready');
+  const reads = f.calls.length;
+  await f.editor.selectVersion(1);
+  assert.equal(f.calls.length, reads);
+  assert.equal(f.editor.state.draft, '{invalid JSON');
+  f.editor.destroy(); f.client.destroy();
+});
+
+test('explicitly retaining older definitions against a changed server keeps the discard guard', async () => {
+  const f = fixture(); await f.editor.load();
+  const original = f.editor.state.draft;
+  const second = definitions(); second.events[0].label = 'New server definition'; f.schemas.set(2, second);
+  f.editor.edit('target', '3');
+  await f.editor.refresh();
+  f.editor.keepDraft();
+  assert.equal(f.editor.state.draft, original);
+  assert.equal(f.editor.hasDraftChanges, true);
+  const reads = f.calls.length;
+  await f.editor.selectVersion(2);
+  assert.equal(f.calls.length, reads);
+  assert.equal(f.editor.state.draft, original);
+  f.editor.destroy(); f.client.destroy();
+});
+
+test('unchanged loaded versions and confirmed publications do not become dirty drafts', async () => {
+  const f = fixture(), second = definitions(); second.events[0].label = 'Second version'; f.schemas.set(2, second);
+  await f.editor.load();
+  await f.editor.selectVersion(1);
+  assert.equal(f.editor.hasDraftChanges, false);
+  await f.editor.selectVersion(2);
+  assert.equal(JSON.parse(f.editor.state.draft).events[0].label, 'Second version');
+  f.editor.edit('draft', JSON.stringify(second));
+  assert.equal(f.editor.hasDraftChanges, true);
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish();
+  assert.equal(f.editor.hasDraftChanges, false);
+  await f.editor.selectVersion(1);
+  assert.equal(JSON.parse(f.editor.state.draft).events[0].label, '작업 완료');
+  f.editor.destroy(); f.client.destroy();
+});
+
 test('schema permission changes notify siblings once and re-arm only on confirmed owner reads', async () => {
   let losses = 0;
   const f = fixture(() => { losses++; });
@@ -145,6 +209,7 @@ test('read-back confirms a committed write after a lost response without retrans
   f.config.write = async (_url, init) => { const v = JSON.parse(init.body); f.schemas.set(2, { events: v.events, workflows: v.workflows }); throw new TypeError('response dropped'); };
   const draft = f.editor.state.draft; await f.editor.publish(); await f.editor.checkLatest();
   assert.equal(f.editor.state.phase, 'ready'); assert.equal(f.editor.state.pending, null); assert.equal(f.editor.state.draft, draft);
+  assert.equal(f.editor.hasDraftChanges, false);
   assert.match(f.editor.state.message, /서버에서 확인/); assert.equal(f.calls.filter(c => c.init.method === 'PUT').length, 1); f.editor.destroy();
 });
 test('reader and revoked owner cannot edit/publish, and refresh does not silently overwrite drafts', async () => {

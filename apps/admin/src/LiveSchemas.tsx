@@ -57,6 +57,12 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   const { snapshot } = state, busy = ['loading', 'validating', 'publishing'].includes(state.phase), owner = !state.blocked && (state.latest?.settings.canEdit ?? snapshot.settings.canEdit);
   const unlocked = state.phase === 'ready' && !state.more, editable = unlocked && owner;
   const publishable = editable && state.validatedKey === `${state.target}\n${state.draft}` && state.privacyReviewed;
+  const loadVersion = (version: number) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (editor.hasDraftChanges && !window.confirm(`작성 중인 초안을 v${version} 정의로 바꿀까요? 현재 초안은 사라져요.`)) return;
+    void editor.selectVersion(version, { discardDraft: true });
+  };
   let preview: { events: unknown[]; workflows: unknown[]; funnels?: unknown[] } | null = null;
   try { preview = readDraft(state.draft); } catch { /* Invalid JSON remains in the editor until explicitly validated. */ }
   return <section className="settings-section schema-section" aria-labelledby="schema-heading" aria-busy={busy || undefined}>
@@ -73,7 +79,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
       <tbody>{snapshot.page.data.length ? snapshot.page.data.map(row => <tr key={row.schemaVersion}>
         <th scope="row">v{row.schemaVersion}</th><td>{row.schemaStatus === 'active' ? '사용 중' : '사용 중지'}</td>
         <td><time dateTime={row.publishedAt}>{new Date(row.publishedAt).toLocaleDateString('ko-KR', { timeZone: snapshot.settings.project.timeZone })}</time></td>
-        <td><button className="secondary-button" disabled={!unlocked} onClick={() => { void editorRef.current?.selectVersion(row.schemaVersion); }}>v{row.schemaVersion} 불러오기</button></td>
+        <td><button className="secondary-button" disabled={!unlocked} onClick={() => loadVersion(row.schemaVersion)}>v{row.schemaVersion} 불러오기</button></td>
       </tr>) : <tr><td colSpan={4}>발행된 스키마가 없어요. 첫 정의를 작성해 주세요.</td></tr>}</tbody>
     </table></div>
     {snapshot.page.page.beforeVersion !== null && <button className="secondary-button" disabled={!unlocked} onClick={() => { void editorRef.current?.loadMore(); }}>{state.more ? '불러오는 중…' : '이전 버전 더 보기'}</button>}
