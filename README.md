@@ -56,6 +56,8 @@ npm run dev -- --local --state-dir .tmp/collector-db
 확인한 결과는 아니다. 조회는 읽기 전용이고 원문 행·계정·프로젝트 정보를 반환하지 않는다.
 범위와 오류는 [운영 관측](docs/ops/observability.md)에 적었다. 반복 실행과 운영 인증 설정은
 아직 연결하지 않았다.
+`install:access-check`도 계정 확인 → 이 읽기 프로브 → 프로젝트 조회 순서로 검사하며,
+앞 단계가 실패하면 뒤 단계는 요청하지 않는다.
 
 ## 문서
 

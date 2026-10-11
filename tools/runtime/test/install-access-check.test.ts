@@ -49,11 +49,14 @@ function proxy(plan: ReturnType<typeof installation>) {
   return { calls, fetchImpl };
 }
 
-test('real admin proxy, signed OIDC and local D1 verify two bounded reads without exposing or changing identity/project data', async () => {
+test('real admin proxy, signed OIDC and local D1 verify three gated reads without exposing or changing identity/project data', async () => {
   const plan = installation(input(), root), transport = proxy(plan), db = await local.mf.getD1Database('DB');
   const empty = await checkInstallationAccess(plan, local.adminToken, transport.fetchImpl);
   assert.equal(empty.accessChecksPassed, true); assert.equal(empty.visibleProjectObserved, false);
-  assert.deepEqual(transport.calls, ['/v1/identity', '/v1/projects?limit=1']);
+  assert.deepEqual(transport.calls, ['/v1/identity', '/v1/health', '/v1/projects?limit=1']);
+  assert.equal(empty.schemaVersion, 'tallyfin.install-access-check/v2');
+  assert.deepEqual(empty.checks.map(check => [check.id, check.status]),
+    [['admin-identity', 'pass'], ['admin-storage-read', 'pass'], ['project-list', 'pass']]);
   const registry = JSON.parse(await readFile(new URL('../../../api/examples/registry.json', import.meta.url), 'utf8'));
   const provisioner = new Provisioner(db);
   for (const id of ['sembom', 'second']) {
@@ -68,7 +71,7 @@ test('real admin proxy, signed OIDC and local D1 verify two bounded reads withou
   for (const privateValue of [local.adminToken, local.principal.issuer, local.principal.subject, plan.registration.browserOrigin, 'Sembom', 'sembom'])
     assert.ok(!JSON.stringify(visible).includes(privateValue));
   assert.deepEqual(await snapshot(), beforeRead);
-  assert.equal(transport.calls.length, 4);
+  assert.equal(transport.calls.length, 6);
 });
 
 test('real issuer/audience rejection, mismatched identity and unknown responses stop before project enumeration', async () => {
@@ -90,6 +93,7 @@ test('real issuer/audience rejection, mismatched identity and unknown responses 
     const report = await checkInstallationAccess(plan, local.adminToken, async () => { calls++; return response; });
     assert.equal(report.accessChecksPassed, false); assert.equal(report.visibleProjectObserved, null); assert.equal(calls, 1);
     assert.equal(report.checks[1]?.code, 'identity-check-required');
+    assert.equal(report.checks[2]?.code, 'identity-check-required');
     assert.ok(!JSON.stringify(report).includes('unexpected-private-identity')); assert.ok(!JSON.stringify(report).includes(local.adminToken));
   }
 });
@@ -107,8 +111,9 @@ test('bounded JSON, closed single-row page and cancellation cannot yield a fabri
     { data: [{ ...valid, token: local.adminToken }], page: { limit: 1, nextCursor: null } },
   ]) {
     let calls = 0;
-    const report = await checkInstallationAccess(plan, local.adminToken, async () => Response.json(++calls === 1 ? local.principal : page));
-    assert.equal(report.accessChecksPassed, false); assert.equal(report.visibleProjectObserved, null); assert.equal(calls, 2);
+    const report = await checkInstallationAccess(plan, local.adminToken, async () => Response.json(++calls === 1 ? local.principal :
+      calls === 2 ? { status: 'ok', scope: 'administrator_storage_read' } : page));
+    assert.equal(report.accessChecksPassed, false); assert.equal(report.visibleProjectObserved, null); assert.equal(calls, 3);
   }
   const pre = new AbortController(); pre.abort(); let requests = 0;
   await assert.rejects(checkInstallationAccess(plan, local.adminToken, async () => { requests++; throw Error(); }, pre.signal));
@@ -118,6 +123,45 @@ test('bounded JSON, closed single-row page and cancellation cannot yield a fabri
     { headers: { 'Content-Type': 'application/json' } }), abort.signal);
   const timer = setTimeout(() => abort.abort(), 10);
   try { await assert.rejects(stalled); assert.equal(canceled, true); } finally { clearTimeout(timer); }
+});
+
+test('invalid or unavailable storage probes stop before project enumeration and preserve only fixed diagnostics', async () => {
+  const plan = installation(input(), root);
+  for (const health of [
+    Response.json({ status: 'ok', scope: 'whole_service' }),
+    Response.json({ status: 'ok', scope: 'administrator_storage_read', token: local.adminToken }),
+    Response.json({ status: 'ready', scope: 'administrator_storage_read' }), Response.json({ status: 'ok' }),
+    new Response('private-upstream-marker', { status: 503 }),
+    new Response('private-upstream-marker', { status: 401 }), new Response(null, { status: 404 }),
+  ]) {
+    const calls: string[] = [];
+    const report = await checkInstallationAccess(plan, local.adminToken, async url => {
+      calls.push(new URL(String(url)).pathname);
+      return calls.length === 1 ? Response.json(local.principal) : health;
+    });
+    assert.deepEqual(calls, ['/v1/identity', '/v1/health']);
+    assert.equal(report.accessChecksPassed, false); assert.equal(report.visibleProjectObserved, null);
+    assert.equal(report.checks[0]!.status, 'pass'); assert.notEqual(report.checks[1]!.status, 'pass');
+    assert.deepEqual(report.checks[2], { id: 'project-list', status: 'unknown', code: 'storage-check-required' });
+    const encoded = JSON.stringify(report);
+    for (const sensitive of [local.adminToken, local.principal.subject, 'private-upstream-marker']) assert.ok(!encoded.includes(sensitive));
+  }
+});
+
+test('real storage failure after successful authentication prevents project lookup through the admin proxy', async () => {
+  const plan = installation(input(), root), transport = proxy(plan), db = await local.mf.getD1Database('DB');
+  await db.prepare('ALTER TABLE project_grants RENAME TO unavailable_probe_grants').run();
+  try {
+    const report = await checkInstallationAccess(plan, local.adminToken, transport.fetchImpl);
+    assert.deepEqual(transport.calls, ['/v1/identity', '/v1/health']);
+    assert.equal(report.accessChecksPassed, false); assert.equal(report.visibleProjectObserved, null);
+    assert.deepEqual(report.checks, [
+      { id: 'admin-identity', status: 'pass', code: 'authenticated-read-verified' },
+      { id: 'admin-storage-read', status: 'unknown', code: 'api-http-response-unverified' },
+      { id: 'project-list', status: 'unknown', code: 'storage-check-required' },
+    ]);
+    assert.ok(!JSON.stringify(report).includes('unavailable_probe_grants'));
+  } finally { await db.prepare('ALTER TABLE unavailable_probe_grants RENAME TO project_grants').run(); }
 });
 
 test('non-interactive bounded stdin rejects unsafe credentials and closes canceled or oversized reads', async () => {
@@ -151,7 +195,7 @@ test('CLI validates the unchanged installation before reading stdin and emits on
       await assert.rejects(runInstallAccessCheckCli(args, () => {}, options));
     await writeFile(join(output, 'admin-login.json'), '{}');
     await assert.rejects(runInstallAccessCheckCli(['--dir', output, '--token-stdin'], () => {}, options));
-    assert.equal(tokens, 1); assert.equal(transport.calls.length, 2);
+    assert.equal(tokens, 1); assert.equal(transport.calls.length, 3);
     assert.equal(await runInstallAccessCheckCli(['--help'], () => {}, options), true); assert.equal(tokens, 1);
   } finally { for (const [name] of artifacts) await unlink(join(output, name)); await rmdir(output); }
 });

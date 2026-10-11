@@ -1,5 +1,35 @@
 # 검증
 
+## 설치 접근 검사에 저장소 읽기 프로브 연결 — 2026-10-11
+
+`tools/runtime/install-access-check.ts`와 집중 검사를 변경했다. 관리자 identity의 issuer를
+확인한 뒤 닫힌 `{status:'ok',scope:'administrator_storage_read'}`를 받아야 프로젝트 조회로
+넘어간다. 보고서 v2는 `admin-identity`·`admin-storage-read`·`project-list`를 차례로 담고,
+건너뛴 단계는 identity-check-required 또는 storage-check-required unknown으로 구분한다.
+README·로드맵·설치 안내·접근 확인 안내를 갱신했다. API·DB·마이그레이션·Worker·SDK·
+의존성·환경 변수·CI·위생 정책·package script 변경은 없다.
+
+- `node --test --test-timeout=30000 tools/runtime/test/install-access-check.test.ts`: 7/7, 종료 코드 0.
+- `npm.cmd exec -- tsc --noEmit`: 종료 코드 0.
+- `node tools/runtime/install-access-check.ts --help`: 종료 코드 0, 세 단계 검사·종속 조회 중지 도움말 출력.
+
+실제 관리자 Worker 프록시·임시 서명 OIDC·로컬 Miniflare D1을 거쳐 빈 프로젝트와 접근 가능한
+프로젝트를 확인하고, DB snapshot과 준비 파일 불변·토큰/identity/원문 미출력·기존 입력과
+본문 상한·취소 검사를 통과했다. 새 검사는 잘못된/여분 health 필드와 401/404/503에서 프로젝트
+조회를 차단하는지, 실제 DB 테이블을 일시 이름 변경했을 때 identity는 통과하고 health는
+unknown·프로젝트는 storage-check-required가 되는지를 확인했다. 테스트의 테이블은 finally에서
+복원했다. 요청당 5초·CLI 전체 15초·표준 입력 30초·본문 16KiB 상한은 유지한다.
+
+실행 중 로컬 workerd가 Win32 `WSARecv #64` 진단 두 건을 stderr에 냈다. 원인을 확정하지
+않았다. 이후 실제 health 실패 검사와 CLI 성공 검사까지 수행했고 Node 검사 종료는 0이었다.
+이 진단을 숨기거나 무경고 실행으로 기록하지 않는다.
+
+실제 운영 제공자·원격 접근·푸시·배포는 하지 않았다. 기존 Worker·API·DB·UI·SDK 코드가
+바뀌지 않아 해당 전체 검사·빌드·부하 실험은 생략했다.
+
+변경한 Markdown 다섯 파일의 로컬 링크 124개가 모두 존재하며 `git diff --check`를 통과했다.
+링크 검사는 파일 존재 검사이고 모든 앵커·외부 URL 검증은 아니다.
+
 ## 인증된 관리자 저장소 읽기 프로브 — 2026-10-11
 
 `GET /v1/health`와 선택적 `AdministratorAccess.checkReadiness` 포트, native Worker의 읽기

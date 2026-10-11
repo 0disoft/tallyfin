@@ -4,6 +4,14 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 설치 접근 검사에 읽기 프로브 연결: `install:access-check`를 identity →
+  `/v1/health` → `projects?limit=1` 세 단계로 확장했다. identity 실패는 뒤 두 단계,
+  저장소 읽기 실패는 프로젝트 조회를 unknown으로 남기고 요청하지 않는다. health 응답은
+  고정 status·scope와 닫힌 형태를 검증한다. 보고서는 `tallyfin.install-access-check/v2`이며
+  `admin-storage-read`를 추가했고 모든 단계가 pass여야 성공한다. 서명 OIDC·실제 관리자
+  프록시·로컬 D1의 집중 검사 7/7과 루트 타입 검사·도움말을 확인했다. 기존 토큰 입력·
+  본문·요청·전체 시간 상한과 무재시도 정책은 유지했다. 실제 운영 인증·원격 실행은 아직
+  없고 API·DB·SDK·의존성·CI 변경은 없다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 인증된 읽기 프로브: `GET /v1/health`를 추가했다. 관리자 verifier가 검증한
   principal만 두 제어 테이블(`projects`·`project_grants`)의 `SELECT 1 ... LIMIT 1`을 단일
   batch로 읽고 고정 status·scope만 받는다. 별도 grant 없이 빈 테이블도 통과하며 수집 쓰기·

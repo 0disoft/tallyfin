@@ -57,7 +57,7 @@ async function json(response: Response, signal: AbortSignal): Promise<unknown> {
   } finally { signal.removeEventListener('abort', abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
-/** Sends an existing administrator access token only to the reviewed admin origin. Two bounded reads, no writes or retries. */
+/** Sends an existing administrator access token only to the reviewed admin origin. Three gated reads, no writes or retries. */
 export async function checkInstallationAccess(plan: Plan, bearer: string, fetchImpl: typeof fetch = fetch,
   signal: AbortSignal = new AbortController().signal) {
   signal.throwIfAborted();
@@ -68,7 +68,7 @@ export async function checkInstallationAccess(plan: Plan, bearer: string, fetchI
     plan.registration.issuer !== plan.collector.vars.OIDC_ISSUER) throw Error('invalid-installation-target');
   const checks: Check[] = [];
   let visibleProjectObserved: boolean | null = null;
-  const probe = async (id: string, path: '/v1/identity' | '/v1/projects?limit=1', validate: (value: unknown) => void) => {
+  const probe = async (id: string, path: '/v1/identity' | '/v1/health' | '/v1/projects?limit=1', validate: (value: unknown) => void) => {
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
     try {
       deadline.throwIfAborted();
@@ -97,10 +97,16 @@ export async function checkInstallationAccess(plan: Plan, bearer: string, fetchI
       if (parseAdminIdentity(value).issuer !== plan.registration.issuer)
         throw new AccessResponseError('fail', 'identity-issuer-mismatch');
     });
-    if (identity) await probe('project-list', '/v1/projects?limit=1', value => { visibleProjectObserved = projectObserved(value); });
-    else checks.push({ id: 'project-list', status: 'unknown', code: 'identity-check-required' });
+    let storageRead = false;
+    if (identity) storageRead = await probe('admin-storage-read', '/v1/health', value => {
+      if (!closed(value, ['status', 'scope']) || value.status !== 'ok' || value.scope !== 'administrator_storage_read')
+        throw new AccessResponseError('fail', 'api-response-invalid');
+    });
+    else checks.push({ id: 'admin-storage-read', status: 'unknown', code: 'identity-check-required' });
+    if (storageRead) await probe('project-list', '/v1/projects?limit=1', value => { visibleProjectObserved = projectObserved(value); });
+    else checks.push({ id: 'project-list', status: 'unknown', code: identity ? 'storage-check-required' : 'identity-check-required' });
     signal.throwIfAborted();
-    return { schemaVersion: 'tallyfin.install-access-check/v1', checkedAt: new Date().toISOString(),
+    return { schemaVersion: 'tallyfin.install-access-check/v2', checkedAt: new Date().toISOString(),
       accessChecksPassed: checks.every(check => check.status === 'pass'), visibleProjectObserved,
       operationalReadinessVerified: false, remoteChanges: false, tokensRequested: false, checks,
       manualRequired: ['actual-browser-login-and-token-renewal', 'initial-owner-or-creator-permissions', 'collection-and-cron', 'backup-and-restore'] };
@@ -131,7 +137,7 @@ export async function readAccessToken(stream: Readable & { isTTY?: boolean } = p
 export async function runInstallAccessCheckCli(argv: string[], write = (line: string) => process.stdout.write(`${line}\n`),
   options: { readToken?: () => Promise<string>; fetchImpl?: typeof fetch } = {}) {
   if (argv.length === 1 && argv[0] === '--help') {
-    write('npm run install:access-check -- --dir <prepared-installation> --token-stdin\nRevalidates installation files before reading one existing access token from non-interactive stdin. Reads identity and one project from the reviewed HTTPS admin origin. No token issuance, writes, redirect, retry or credential output.'); return true;
+    write('npm run install:access-check -- --dir <prepared-installation> --token-stdin\nRevalidates installation files before reading one existing access token from non-interactive stdin. Checks identity, administrator storage reads and one project from the reviewed HTTPS admin origin. Stops dependent reads after a failed check. No token issuance, writes, redirect, retry or credential output.'); return true;
   }
   if (argv.length !== 3 || argv[0] !== '--dir' || !argv[1] || argv[1].startsWith('--') || argv[2] !== '--token-stdin')
     throw Error('invalid-install-access-check-arguments');
