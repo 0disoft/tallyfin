@@ -1,5 +1,32 @@
 # 검증
 
+## 관리자 API 리다이렉트 거부 — 2026-10-11
+
+관리자 `ApiClient`의 모든 native fetch 요청에 `redirect: 'error'`를 적용하고 `FetchOption`에
+`redirect?: 'error'`를 추가했다. 먼저 회귀 검사를 추가해 수정 전 로컬 Node native fetch +
+HTTP 서버에서 307 GET·PATCH가 모두 목적지로 자동 추적되는 것을 확인했고, 신규 회귀 검사와
+상위 검사가 실패하며 목적지 요청이 2건(`targetRequests=2`)이었다.
+
+수정 후 `node --test --test-timeout=30000 apps/admin/src/api/request-lifecycle.test.mjs
+apps/admin/src/api/client.test.mjs` 48/48과 `npm run typecheck:admin`, `git diff --check`를
+통과했다. 조회·저장 모두 리다이렉트 목적지 요청 0, 자동 재시도 없음, 같은 클라이언트로 이후
+정상 조회 복구를 확인했다. 실패는 기존 고정 network 오류로 처리되고 설정 편집기의 최신 상태
+재조회 흐름을 유지한다.
+
+브라우저 smoke는 별도 범위다. ignore된 `.tmp/admin-redirect-smoke.mjs`로 실제 Vite 로컬
+미리보기와 Chromium 156.0.8078.4에서 앱 프로젝트 개요를 열고 소스 `ApiClient`·`SettingsEditor`를
+브라우저에서 import해 확인했다. GET/PATCH 307 실패는 고정 network·status 0, 목적지 요청 0회,
+같은 클라이언트 정상 재조회 복구였다. 설정 저장 redirect 실패 뒤 phase=review와 초안
+`Changed` 보존, 중복 save의 추가 PATCH 없음, `checkLatest`+`keepChanges` 뒤 phase=ready·초안
+`Changed`, `pageerror=0`을 확인했고 결과는 `.tmp/admin-redirect-smoke.json`이다. 개발 서버·
+브라우저를 종료하고 스크립트 exit 0을 확인했다. 첫 실행은 루트에 Playwright가 없어 import가
+실패했고 `tools/browser-bench/node_modules/playwright/index.mjs` 참조로 고친 뒤 성공했으며
+의존성 설치·변경은 없었다.
+
+전체 백엔드 검사는 변경 범위 밖이라 생략했고 일반 소스 lint 명령이 없어 생략했다. 실제 운영
+제공자·원격 배포는 미검증이며 푸시·배포·활성화는 없다. API·DB·SDK 계약, 의존성, 위생 정책,
+CI 러너 변경은 없다.
+
 ## 설치 파일 쓰기 실패·취소 정리 — 2026-10-11
 
 공유 설치 writer는 `wx`로 파일을 생성한 직후 정리 목록에 넣고, 열린 파일에 내용을 쓴다.

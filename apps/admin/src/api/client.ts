@@ -144,6 +144,7 @@ export type FetchOption = {
   credentials?: 'omit';
   cache?: 'no-store';
   referrerPolicy?: 'no-referrer';
+  redirect?: 'error';
   body?: string;
 };
 
@@ -527,6 +528,8 @@ export class ApiClient {
           credentials: 'omit',
           cache: 'no-store',
           referrerPolicy: 'no-referrer',
+          // An API redirect must not replay credentials or a mutation at another route.
+          redirect: 'error',
         }));
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;

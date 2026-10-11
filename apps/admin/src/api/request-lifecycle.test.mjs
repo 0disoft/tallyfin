@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { ApiClient, ApiError } from './client.ts';
 import { SettingsEditor } from './settings-editor.ts';
 import { GrantList } from './grant-list.ts';
@@ -12,6 +14,40 @@ const deferred = () => {
   const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
   return { promise, resolve, reject };
 };
+
+test('native administration requests reject redirects without replaying reads or writes and can recover', async t => {
+  const initial = { project: { id: 'sample', name: 'Sample', status: 'active', timeZone: 'Asia/Seoul' },
+    allowedOrigins: [], limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: true };
+  let redirect = true, targetRequests = 0;
+  const methods = [];
+  const server = createServer((request, reply) => {
+    request.resume();
+    if (request.url.startsWith('/redirect-target')) targetRequests++;
+    else {
+      methods.push(request.method);
+      if (redirect) { reply.writeHead(307, { Location: '/redirect-target' }); reply.end(); return; }
+    }
+    reply.writeHead(200, { 'Content-Type': 'application/json' });
+    reply.end(JSON.stringify(request.method === 'PATCH' ? initial : page));
+  });
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = `http://127.0.0.1:${server.address().port}`, nativeFetch = globalThis.fetch;
+  // Resolve browser-relative URLs while keeping the real native fetch transport.
+  t.mock.method(globalThis, 'fetch', (url, init) => nativeFetch(new URL(url, origin), init));
+  const client = new ApiClient(); t.after(() => client.destroy());
+  for (const method of ['GET', 'PATCH']) await t.test(method, async () => {
+    const callsBefore = methods.length;
+    await assert.rejects(method === 'GET' ? client.listProjects()
+      : client.updateSettings('sample', { expectedSettingsHash: initial.settingsHash, name: 'Changed' }),
+    error => error instanceof ApiError && error.kind === 'network' && error.status === 0 && !error.cause);
+    assert.deepEqual(methods.slice(callsBefore), [method]);
+    assert.equal(targetRequests, 0);
+  });
+  redirect = false;
+  assert.deepEqual(await client.listProjects(), page);
+  assert.equal(targetRequests, 0);
+});
 
 test('one request deadline covers credentials, headers, success body and error body without automatic retries', { timeout: 1000 }, async t => {
   for (const phase of ['credential', 'headers', 'success-body', 'error-body']) {

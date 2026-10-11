@@ -293,6 +293,7 @@ test('list requests keep the token in the header only and disable storage and ca
   assert.equal(calls[0].init.credentials, 'omit');
   assert.equal(calls[0].init.cache, 'no-store');
   assert.equal(calls[0].init.referrerPolicy, 'no-referrer');
+  assert.equal(calls[0].init.redirect, 'error');
   assert.equal(calls[0].init.body, undefined);
   assert.ok(!calls[0].url.includes(TOKEN));
 });
