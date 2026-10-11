@@ -32,7 +32,7 @@ try {
     await server.listen(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`; local.configure(origin);
     browser = await chromium.launch({ channel: values.channel, headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
-    let routeError = false, pageErrors = 0, deniedValidations = 0, heldWrites = 0;
+    let routeError = false, pageErrors = 0, deniedValidations = 0, deniedSettings = 0, heldWrites = 0;
     await context.route('**/*', async route => {
       const request = route.request(), url = new URL(request.url());
       const holding = url.origin === origin && request.method() === 'PATCH' && held && !held.used && url.pathname === held.path ? held : null;
@@ -47,6 +47,7 @@ try {
     page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', () => pageErrors++);
     page.on('response', response => {
       if (response.status() === 403 && new URL(response.url()).pathname.endsWith('/schemas/validate')) deniedValidations++;
+      if (response.status() === 403 && response.request().method() === 'PATCH' && new URL(response.url()).pathname === '/v1/projects/sembom') deniedSettings++;
     });
     stage = 'login'; await page.goto(origin); await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
     await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
@@ -55,25 +56,47 @@ try {
     const schema = page.locator('.schema-section'), label = page.locator('#schema-event-0-label');
     await label.waitFor(); assert.equal(await label.isEditable(), true);
     stage = 'permission-denial'; await label.fill('Preserved permission draft');
+    await page.locator('#settings-name').fill('Preserved settings draft');
     await local.setRole('reader');
     await schema.getByRole('button', { name: '정의 검증', exact: true }).click();
-    await schema.getByText('권한 확인 필요', { exact: true }).waitFor();
+    await schema.getByText('읽기 전용', { exact: true }).waitFor();
     assert.equal(deniedValidations, 1); assert.equal(await label.isEditable(), false);
     assert.equal(await label.inputValue(), 'Preserved permission draft');
     assert.equal(await schema.getByRole('button', { name: '정의 검증', exact: true }).isDisabled(), true);
     assert.equal(await schema.getByRole('button', { name: '새 버전 발행 (v2)', exact: true }).isDisabled(), true);
+    await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === true);
+    assert.equal(await page.locator('#settings-name').inputValue(), 'Preserved settings draft');
+    assert.equal(await page.getByRole('button', { name: '변경 저장', exact: true }).isDisabled(), true);
     const writesAtDenial = local.counts.apiWrites;
     await schema.getByRole('button', { name: '서버 상태 확인', exact: true }).click();
     await schema.getByText('읽기 전용', { exact: true }).waitFor();
     assert.equal(await schema.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).isDisabled(), true);
     assert.equal(await label.inputValue(), 'Preserved permission draft'); assert.equal(local.counts.apiWrites, writesAtDenial);
     stage = 'permission-restoration'; await local.setRole('owner');
+    await page.getByRole('button', { name: '최신 설정 확인', exact: true }).click();
+    await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
+    assert.equal(await page.locator('#settings-name').isEditable(), true);
     await schema.getByRole('button', { name: '서버 상태 확인', exact: true }).click();
     await schema.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
     assert.equal(await label.isEditable(), true); assert.equal(await label.inputValue(), 'Preserved permission draft');
     assert.equal(await schema.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true }).isChecked(), false);
     await schema.getByRole('button', { name: '정의 검증', exact: true }).click();
     await schema.getByText('정의 검증을 통과했어요. 개인정보 검토를 확인한 뒤 발행해 주세요.', { exact: true }).waitFor();
+    stage = 'settings-permission-denial';
+    await local.setRole('reader');
+    await page.getByRole('button', { name: '변경 저장', exact: true }).click();
+    await schema.getByText('읽기 전용', { exact: true }).waitFor();
+    assert.equal(deniedSettings, 1); assert.equal(await label.isEditable(), false);
+    assert.equal(await label.inputValue(), 'Preserved permission draft');
+    assert.equal(await page.locator('#settings-name').inputValue(), 'Preserved settings draft');
+    assert.equal(await page.getByRole('button', { name: '변경 저장', exact: true }).isDisabled(), true);
+    stage = 'settings-permission-restoration'; await local.setRole('owner');
+    await page.getByRole('button', { name: '최신 설정 확인', exact: true }).click();
+    await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
+    await schema.getByRole('button', { name: '서버 상태 확인', exact: true }).click();
+    await schema.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
+    assert.equal(await label.isEditable(), true);
+    assert.equal(await page.locator('#settings-name').isEditable(), true);
     const beginHeldWrite = async (projectId, name) => {
       held = { path: `/v1/projects/${projectId}`, used: false, cancelExpected: false, committed: deferred(), release: deferred(), finished: deferred() };
       await page.locator('#settings-name').fill(name);
@@ -100,7 +123,7 @@ try {
     assert.equal((await context.cookies()).length, 0);
     assert.equal((await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('access-other').first()).name, 'Committed before disconnect');
     assert.equal(routeError, false); assert.equal(pageErrors, 0); assert.equal(heldWrites, 2);
-    const report = { verified: true, browser: browser.version(), deniedValidations, preservedDraft: true, explicitPermissionRecovery: true,
+    const report = { verified: true, browser: browser.version(), deniedValidations, deniedSettings, crossSectionPermissionsRefreshed: true, preservedDraft: true, explicitPermissionRecovery: true,
       staleWriteAcrossProjectSwitchIgnored: true, disconnectedUiCleared: true, serverCommitsNotRolledBack: true,
       heldWrites, routeError, pageErrors, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));

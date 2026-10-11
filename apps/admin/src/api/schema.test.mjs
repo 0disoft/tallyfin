@@ -16,7 +16,7 @@ const project = { id: 'sample', name: 'Sample', status: 'active', timeZone: 'Asi
 const registry = (version, draft) => ({ project, ...metadata(version), allowedOrigins: ['https://example.invalid'],
   limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, ...draft });
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
-function fixture() {
+function fixture(onAccessLost) {
   const calls = [], schemas = new Map([[1, definitions()]]);
   const config = { owner: true, write: null, validate: null, read: null };
   const fetchImpl = async (url, init) => {
@@ -38,10 +38,29 @@ function fixture() {
     const version = Number(url.split('/').at(-1));
     return schemas.has(version) ? response(200, registry(version, schemas.get(version))) : response(404, { error: { code: 'not_found' } });
   };
-  const client = new ApiClient({ token: 'not-a-credential', fetchImpl }), editor = new SchemaEditor(client, 'sample');
+  const client = new ApiClient({ token: 'not-a-credential', fetchImpl }), editor = new SchemaEditor(client, 'sample', onAccessLost);
   return { client, editor, calls, schemas, config };
 }
 const ready = async editor => { await editor.load(); await editor.validate(); editor.setPrivacy(true); };
+
+test('schema permission changes notify siblings once and re-arm only on confirmed owner reads', async () => {
+  let losses = 0;
+  const f = fixture(() => { losses++; });
+  f.config.owner = false; await f.editor.load(); assert.equal(losses, 0);
+  f.config.owner = true; await f.editor.refresh();
+  f.config.validate = async () => response(403, { error: { code: 'forbidden' } });
+  const draft = f.editor.state.draft; await f.editor.validate(); assert.equal(losses, 1);
+  f.config.read = async () => response(403, { error: { code: 'forbidden' } });
+  await f.editor.refresh(); await f.editor.checkLatest(); assert.equal(losses, 1);
+  assert.equal(f.editor.state.draft, draft);
+  f.config.read = null; await f.editor.checkLatest(); f.editor.keepDraft();
+  f.config.owner = false; await f.editor.refresh(); assert.equal(losses, 2);
+  f.config.read = async () => { throw new TypeError('offline'); };
+  await f.editor.checkLatest();
+  f.config.read = null;
+  await f.editor.refresh(); assert.equal(losses, 2); assert.equal(f.editor.canEdit, false);
+  f.editor.destroy(); f.client.destroy();
+});
 
 const funnelDraft = () => schemaDefinitions(JSON.parse(readFileSync(new URL('../../../../api/examples/funnel-registry.json', import.meta.url), 'utf8')));
 

@@ -21,7 +21,7 @@ export default function LiveSettingsWorkspace({ client, projectId, version, regi
     </section>}
     <CollectionDiagnostics client={client} projectId={projectId} version={version} refreshTick={refreshTick + setupRefreshTick + diagnosticsRevision} />
     <LiveSettings client={client} projectId={projectId} onSaved={onSaved} refreshTick={refreshTick} onAccessLost={onAccessLost} registry={registry} />
-    <LiveSchemas client={client} projectId={projectId} refreshTick={refreshTick} onVersionChange={onVersionChange} />
+    <LiveSchemas client={client} projectId={projectId} refreshTick={refreshTick} onVersionChange={onVersionChange} onAccessLost={onAccessLost} />
     <LiveSdkSetup client={client} projectId={projectId} refreshTick={setupRefreshTick + refreshTick} />
   </>;
 }

@@ -55,8 +55,10 @@ export class SettingsEditor {
   #client: ApiClient;
   #projectId: string;
   #onSaved: ((settings: ProjectSettings) => void) | undefined;
-  constructor(client: ApiClient, projectId: string, onSaved?: (settings: ProjectSettings) => void) {
-    this.#client = client; this.#projectId = projectId; this.#onSaved = onSaved;
+  #onAccessLost?: () => void;
+  #knownOwner = false;
+  constructor(client: ApiClient, projectId: string, onSaved?: (settings: ProjectSettings) => void, onAccessLost?: () => void) {
+    this.#client = client; this.#projectId = projectId; this.#onSaved = onSaved; this.#onAccessLost = onAccessLost;
   }
   subscribe(listener: (state: SettingsState) => void): () => void {
     this.#listeners.add(listener); return () => { this.#listeners.delete(listener); };
@@ -65,6 +67,12 @@ export class SettingsEditor {
     if (this.#destroyed) return;
     this.state = state;
     for (const listener of this.#listeners) listener(state);
+    // Old snapshots survive failed reads; they cannot restore a revoked role.
+    const access = state.blocked ? false : state.phase === 'ready' ? state.snapshot?.canEdit : state.latest?.canEdit;
+    if (access !== undefined) {
+      const lost = this.#knownOwner && !access; this.#knownOwner = access;
+      if (lost) this.#onAccessLost?.();
+    }
   }
   #start(): { controller: AbortController; generation: number } {
     this.#controller?.abort();

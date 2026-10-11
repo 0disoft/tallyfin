@@ -19,11 +19,13 @@ const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   dimension_mismatch: '비교 기준은 모든 단계에 같은 자료형과 허용 값을 가진 필수 속성으로 있어야 해요.',
 };
 
-export default function LiveSchemas({ client, projectId, refreshTick, onVersionChange }: { client: ApiClient; projectId: string; refreshTick: number; onVersionChange?: (version: number) => void }) {
+export default function LiveSchemas({ client, projectId, refreshTick, onVersionChange, onAccessLost }: { client: ApiClient; projectId: string; refreshTick: number; onVersionChange?: (version: number) => void; onAccessLost?: () => void }) {
   const [state, setState] = useState<SchemaState | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
   const previousVersion = useRef<number | null | undefined>(undefined);
+  const activeScope = useRef({ client, projectId }); activeScope.current = { client, projectId };
+  const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;
   const version = state?.phase === 'ready' ? state.snapshot?.page.latestVersion : undefined;
   useEffect(() => {
     if (version === undefined) return;
@@ -31,7 +33,9 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     previousVersion.current = version;
   }, [version, onVersionChange]);
   useEffect(() => {
-    const editor = new SchemaEditor(client, projectId); editorRef.current = editor;
+    const editor = new SchemaEditor(client, projectId, () => {
+      if (activeScope.current.client === client && activeScope.current.projectId === projectId) accessCallbackRef.current?.();
+    }); editorRef.current = editor;
     const unsubscribe = editor.subscribe(setState); void editor.load();
     return () => { unsubscribe(); editor.destroy(); if (editorRef.current === editor) editorRef.current = null; };
   }, [client, projectId]);

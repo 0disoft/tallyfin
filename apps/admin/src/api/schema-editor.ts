@@ -24,9 +24,24 @@ export class SchemaEditor {
   #controller: AbortController | null = null;
   #generation = 0; #destroyed = false;
   #client: ApiClient; #projectId: string;
-  constructor(client: ApiClient, projectId: string) { this.#client = client; this.#projectId = projectId; }
+  #knownOwner = false;
+  #onAccessLost?: () => void;
+  constructor(client: ApiClient, projectId: string, onAccessLost?: () => void) {
+    this.#client = client; this.#projectId = projectId; this.#onAccessLost = onAccessLost;
+  }
   subscribe(listener: (s: SchemaState) => void) { this.#listeners.add(listener); listener(this.state); return () => { this.#listeners.delete(listener); }; }
-  #set(patch: Partial<SchemaState>) { if (!this.#destroyed) { this.state = { ...this.state, ...patch }; for (const listener of this.#listeners) listener(this.state); } }
+  #set(patch: Partial<SchemaState>, confirmedAccess?: boolean) {
+    if (this.#destroyed) return;
+    this.state = { ...this.state, ...patch };
+    for (const listener of this.#listeners) listener(this.state);
+    // Only confirmed reads and explicit denial change the cross-section signal.
+    // Loading/review snapshots must not re-arm it and cause refresh loops.
+    const access = patch.blocked === true ? false : confirmedAccess;
+    if (access !== undefined) {
+      const lost = this.#knownOwner && !access; this.#knownOwner = access;
+      if (lost) this.#onAccessLost?.();
+    }
+  }
   #start() { this.#controller?.abort(); const controller = new AbortController(); this.#controller = controller; return { controller, generation: ++this.#generation }; }
   #current(g: number) { return !this.#destroyed && g === this.#generation && !this.#controller?.signal.aborted; }
   get canEdit() { return !this.state.blocked && (this.state.latest ?? this.state.snapshot)?.settings.canEdit === true; }
@@ -40,7 +55,7 @@ export class SchemaEditor {
   }
   #accept(snapshot: Snapshot, notice: string | null) {
     this.#set({ phase: 'ready', snapshot, latest: null, draft: pretty(snapshot.definitions), target: nextVersion(snapshot.page.latestVersion),
-      report: null, validatedKey: null, privacyReviewed: false, pending: null, message: notice, formError: null, more: false, blocked: false });
+      report: null, validatedKey: null, privacyReviewed: false, pending: null, message: notice, formError: null, more: false, blocked: false }, snapshot.settings.canEdit);
   }
   async load() { await this.#read(false); }
   async refresh() {
@@ -67,10 +82,10 @@ export class SchemaEditor {
           if (!this.#current(generation)) return;
           if (target && canonicalDefinitions(target) === canonicalDefinitions(previous.pending.definitions)) {
             this.#set({ ...previous, phase: 'ready', snapshot, latest: null, pending: null, report: null, validatedKey: null, privacyReviewed: false, blocked: false,
-              target: nextVersion(page.latestVersion), message: `v${previous.pending.version} 발행을 서버에서 확인했어요. 입력한 정의는 그대로 뒀어요.` }); return;
+              target: nextVersion(page.latestVersion), message: `v${previous.pending.version} 발행을 서버에서 확인했어요. 입력한 정의는 그대로 뒀어요.` }, settings.canEdit); return;
           }
         }
-        this.#set({ ...previous, phase: 'review', latest: snapshot, message: '최신 서버 정의와 내 초안을 비교한 뒤 사용할 내용을 골라 주세요.', report: null, validatedKey: null, privacyReviewed: false, blocked: false });
+        this.#set({ ...previous, phase: 'review', latest: snapshot, message: '최신 서버 정의와 내 초안을 비교한 뒤 사용할 내용을 골라 주세요.', report: null, validatedKey: null, privacyReviewed: false, blocked: false }, settings.canEdit);
       } else this.#accept(snapshot, null);
     } catch (error) {
       if (!this.#current(generation)) return;

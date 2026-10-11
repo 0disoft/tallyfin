@@ -93,7 +93,9 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   // Rebuild the controller on mount and whenever the client or project
   // changes. StrictMode cleanup/replay creates and disposes it cleanly.
   useEffect(() => {
-    const editor = new SettingsEditor(client, projectId, settingsSaved);
+    const editor = new SettingsEditor(client, projectId, settingsSaved, () => {
+      if (activeScope.current.client === client && activeScope.current.projectId === projectId) accessCallbackRef.current?.();
+    });
     editorRef.current = editor;
     const unsubscribe = editor.subscribe(state => setSnapshotState({ client, projectId, state }));
     void editor.load();
@@ -188,15 +190,14 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
 
     {showRecovery && <section className="settings-recovery" aria-label="설정 충돌 확인">
       <p className="settings-recovery-message" role="status">{state.message ?? '입력한 값을 그대로 뒀어요. 저장을 잠갔으니 최신 설정을 확인한 뒤 선택해 주세요.'}</p>
+      <button className="secondary-button" type="button" disabled={loading || saving} onClick={() => { void editorRef.current?.checkLatest(); }}>최신 설정 확인</button>
       {reviewing && state.latest ? <>
         <ComparisonTable latest={state.latest} draft={activeDraft} />
         <div className="form-actions">
           <button className="primary-button" type="button" onClick={() => editorRef.current?.useServer()}>서버 설정 사용</button>
           <button className="secondary-button" type="button" onClick={() => editorRef.current?.keepChanges()} disabled={!state.latest.canEdit}>내 변경 유지하고 검토</button>
         </div>
-      </> : <div className="form-actions">
-        <button className="secondary-button" type="button" onClick={() => { void editorRef.current?.checkLatest(); }}>최신 설정 확인</button>
-      </div>}
+      </> : null}
     </section>}
 
     <form className="settings-form" onSubmit={submit} aria-busy={saving || loading || undefined} noValidate>

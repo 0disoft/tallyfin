@@ -253,20 +253,26 @@ test('uncertain write is not retried and read-back can recover a committed updat
 });
 
 test('reader and revoked owner cannot save, and refresh preserves a dirty form', async () => {
+  let accessLosses = 0;
   let current = settings({ canEdit: false });
   const { calls, fetchImpl } = capture((url, init) => init.method === 'PATCH'
     ? jsonResponse(403, { error: { code: 'forbidden', requestId: REQUEST_ID } }) : jsonResponse(200, current));
-  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom');
+  const editor = new SettingsEditor(new ApiClient({ token: TOKEN, fetchImpl }), 'sembom', undefined, () => { accessLosses++; });
   await editor.load(); editor.edit('name', 'Denied'); await editor.save();
+  assert.equal(accessLosses, 0);
   assert.equal(editor.state.draft.name, current.project.name); assert.equal(calls.length, 1);
   current = settings(); await editor.refresh(); editor.edit('name', 'Keep me');
   current = settings({ limits: { requestsPerMinute: 99, newReceiptsPerUtcDay: 400 }, settingsHash: 'b'.repeat(64) });
   await editor.refresh(); assert.equal(editor.state.phase, 'review'); assert.equal(editor.state.draft.name, 'Keep me');
   editor.keepChanges(); await editor.save(); assert.equal(editor.state.blocked, true);
+  assert.equal(accessLosses, 1);
   assert.equal(editor.state.draft.name, 'Keep me'); await editor.save();
   assert.equal(calls.filter(call => call.init.method === 'PATCH').length, 1);
   current = { ...current, canEdit: false }; await editor.checkLatest(); editor.keepChanges();
   assert.equal(editor.state.phase, 'review'); editor.useServer(); assert.equal(editor.state.blocked, true);
+  await editor.refresh(); assert.equal(accessLosses, 1);
+  current = settings(); await editor.refresh();
+  current = settings({ canEdit: false }); await editor.refresh(); assert.equal(accessLosses, 2);
   editor.destroy();
 });
 
