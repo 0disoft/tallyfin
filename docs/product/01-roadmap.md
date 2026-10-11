@@ -4,6 +4,19 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 관리자 접근 확인 도구: `install:access-check`를 로컬 구현했다. 준비한 설치
+  묶음의 다섯 파일을 먼저 재검증하고, 이미 발급된 관리자 access token을 비대화형 표준
+  입력에서만 받아 검토한 관리자 HTTPS 출처로 읽기 두 번만 보낸다. 먼저 `GET /v1/identity`로
+  서버가 검증한 issuer를 확인하고, 그 issuer가 설정한 발행자와 정확히 같을 때만
+  `GET /v1/projects?limit=1`을 읽는다. 리다이렉트 거부·자격 증명 생략·no-referrer·no-store·
+  재시도 없음에 요청당 5초·토큰 입력 후 검사 15초·표준 입력 30초·본문 16KiB 상한을 둔다. 보고서는 고정
+  `id`·`status`·`code`와 `accessChecksPassed`·`visibleProjectObserved`(true·false·null)를
+  담고 `operationalReadinessVerified`·`remoteChanges`·`tokensRequested`는 false로 둔다.
+  토큰은 인자·파일·보고서·오류에 남기지 않는다. 임시 서명 OIDC·실제 관리자 Worker 프록시·
+  로컬 Miniflare D1로 집중 검사 5/5, 루트 타입 검사, `--help`, `git diff --check`를 통과했다.
+  검사 전후로 DB와 준비 파일은 바뀌지 않았다. 실제 제공자·원격 배포는 아직 없다. API·DB·SDK·
+  의존성·CI·위생 정책 변경은 없고 푸시·배포도 없다. 사용법은
+  [접근 확인 안내](../../tools/runtime/INSTALL-ACCESS-CHECK.md)에 둔다.
 - 2026-10-11 발행 권한 세대 ID: 0009가 `project_publishers`에 불변 `grant_id`를 더하고
   `immutable_publisher_generation` 트리거로 UPDATE를 막는다. 이어서 발행자 목록·변경 응답에
   `grantId`를 더하고 `DELETE` 본문을 `expectedCreatedAt`에서 `expectedGrantId`(32자 소문자

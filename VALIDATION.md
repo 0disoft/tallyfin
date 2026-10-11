@@ -1,5 +1,34 @@
 # 검증
 
+## 관리자 접근 확인 도구 — 2026-10-11
+
+`install:access-check`를 로컬 구현했다. 준비한 설치 묶음의 다섯 파일을 먼저 재검증하고, 이미
+발급된 관리자 access token을 비대화형 표준 입력(30초·8192바이트 이하, TTY 거부)에서만 받은 뒤
+검토한 관리자 HTTPS 출처로 GET 두 개만 보낸다. `GET /v1/identity`로 서버가 검증한 issuer를
+확인하고 그 issuer가 설정한 발행자와 정확히 같을 때만 `GET /v1/projects?limit=1`을 읽는다.
+리다이렉트 거부·자격 증명 생략·no-referrer·no-store·재시도 없음, 요청당 5초·토큰 입력 후 검사 15초·
+본문 16KiB 상한이다. 보고서는 고정 `id`(`admin-identity`·`project-list`)·`status`·`code`와
+`accessChecksPassed`·`visibleProjectObserved`(true·false·null)를 담고 `operationalReadinessVerified`·
+`remoteChanges`·`tokensRequested`는 false로 둔다. 토큰·이름·subject·URL·응답 본문은 출력하지
+않는다.
+
+실행·결과: 집중 검사 5/5, 루트 `npm exec -- tsc --noEmit` 종료 코드 0, CLI `--help`,
+`git diff --check`가 통과했다. 처음 실행은 3/5가 실패했는데, 테스트 전송이 Node `Request`를
+그대로 Miniflare `dispatchFetch`에 넘겨 호환되지 않은 것이 원인이었다. 명시적 `request.url`과
+method·headers·redirect를 넘기도록 테스트 전송을 고쳐 5/5가 됐고 운영 코드 결함은 아니었다.
+
+검사는 임시 서명 OIDC와 실제 관리자 Worker 프록시, 로컬 Miniflare D1로 돌렸다. 빈 목록은
+`visibleProjectObserved=false`, 한 건 목록은 true로 확인했고 issuer/audience 거부·401·다른
+issuer identity·503·302 응답이 프로젝트 조회 전에 멈추는 것을 확인했다. 본문 16KiB·
+Content-Length·비JSON·닫힌 단일 페이지 형태, 요청 취소와 표준 입력 상한·TTY 거부·취소, 묶음
+재검증(변조 파일 거부)과 토큰·식별자·URL 비출력도 함께 확인했다. 검사 전후로 `projects`·
+`project_grants`·`admin_changes`·`ingest_daily_usage` 스냅샷이 같고 설치 묶음 다섯 파일이
+그대로였다.
+
+계약 원본 [설치 안내](docs/backend/installation.md)·[로드맵](docs/product/01-roadmap.md)·
+[접근 확인 안내](tools/runtime/INSTALL-ACCESS-CHECK.md)를 갱신했다. API·DB·SDK·의존성·CI
+러너·저장소 위생 정책 변경은 없다. 실제 제공자·원격 리소스·원격 DB·배포는 실행하지 않았다.
+
 ## 발행 권한 세대 ID API·화면 — 2026-10-11
 
 발행 권한 API와 관리자 화면을 생성 시각(`createdAt`) CAS에서 불변 부여 세대 `grantId`로

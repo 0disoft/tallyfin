@@ -15,6 +15,7 @@
     "admin:config": "node tools/runtime/prepare-admin.ts",
     "install:prepare": "node tools/runtime/prepare-installation.ts",
     "install:check": "node tools/runtime/install-check.ts",
+    "install:access-check": "node tools/runtime/install-access-check.ts",
     "install:database-check": "node tools/runtime/install-database-check.ts",
     "admin:build-configured": "node apps/admin/scripts/build-configured.mjs",
     "admin:types": "wrangler types .tmp/admin-worker-types.d.ts --config apps/admin/wrangler.jsonc --env-interface AdminEnv && tsc -p apps/admin/tsconfig.worker.json",

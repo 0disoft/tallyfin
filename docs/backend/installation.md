@@ -153,3 +153,32 @@ SHA-256, 대상 해시, 기준 마이그레이션 목록을 담는다. SQL·주�
 스키마 일치는 데이터 무결성·정리 Cron·백업·로그인을 확인한 결과가 아니다.
 운영 설치 묶음이 아직 없어 실제 운영 DB 접속은 확인하지 않았고, 통과 여부는 원격 실행 뒤에 판단한다.
 조회 명령은 [D1 Wrangler 안내](https://developers.cloudflare.com/d1/wrangler-commands/#d1-execute)를 따른다.
+
+## 관리자 접근 확인 — `install:access-check`
+
+```powershell
+npm run install:access-check -- --dir .tmp/installation --token-stdin
+```
+
+준비한 설치 디렉터리의 다섯 파일을 다시 검증한 뒤, 이미 발급된 관리자 access token을
+비대화형 표준 입력에서 받아 검토한 관리자 HTTPS 출처로 읽기 두 번만 보낸다. 먼저
+`GET /v1/identity`로 서버가 검증한 issuer를 확인하고, 그 issuer가 설정한 발행자와 정확히 같을
+때만 `GET /v1/projects?limit=1`을 읽는다. 토큰은 인자·파일·보고서·오류에 남기지 않는다.
+
+리다이렉트 거부·자격 증명 생략·no-referrer·no-store·재시도 없음, 요청당 5초·토큰 입력 후 검사 15초·
+표준 입력 30초·본문 16KiB 상한을 적용한다. 보고서는 `admin-identity`·`project-list`의
+고정 `status`·`code`, `accessChecksPassed`, `visibleProjectObserved`(true·false·null),
+`operationalReadinessVerified`·`remoteChanges`·`tokensRequested`(항상 false)를 담는다.
+원문 토큰·이름·subject·URL·본문은 출력하지 않는다.
+
+빈 프로젝트 목록은 접근 가능한 API를 뜻하지만 최초 프로젝트 권한·생성을 증명하지 않는다.
+issuer 불일치나 확인 실패는 프로젝트 조회를 건너뛰고 통과로 바꾸지 않는다. 이 명령은 로그인·
+토큰 발급·갱신·클라이언트 등록·원격 변경·배포·파일 쓰기를 하지 않는다.
+
+임시 서명 OIDC·실제 관리자 Worker 프록시·로컬 D1로 집중 검사 5/5를 통과했다. 실제 제공자와
+원격 배포는 아직 확인하지 않았다.
+
+`install:check`·`install:database-check`·`install:access-check`는 각각 공개 제공자, 원격 DB
+메타데이터, 관리자 읽기 접근을 따로 본다. 셋 중 무엇도 로그인·토큰 갱신·최초 owner/생성자
+권한·수집과 Cron·백업/복구까지 확인한 운영 준비 완료를 뜻하지 않는다. 자세한 사용법은
+[접근 확인 안내](../../tools/runtime/INSTALL-ACCESS-CHECK.md)에 있다.
