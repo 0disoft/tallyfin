@@ -1,5 +1,37 @@
 # 검증
 
+## 복구 연습 발행자 권한 확장 — 2026-10-11
+
+`verify:restore`가 전체 SQL export/restore를 대조한 뒤 합성 복원 DB에서만 발행 권한 회수·
+재부여를 연습하도록 `restore-publishers.ts`를 추가하고 `restore-drill.ts`를 넓혔다. 보호
+쓰기 목록에 `project_publishers`의 `grant_id`와 `admin_changes`의 `action` UPDATE를 더해 거부
+대상이 5개가 됐고, 보고서에 `publisherRecovery`(고정 boolean과 `addedAuditRows`)를 넣는다.
+
+실행·결과: 공식 `npm run verify:restore`가 종료 코드 0으로 통과했고 최종 결과는
+`.tmp/restore-drill/run-Ptns25/report.json`이다. 마이그레이션 `0001`~`0009` 아홉 개, 16개
+애플리케이션 테이블이 모두 비어 있지 않고 스키마·행 내용 fingerprint가 동일하며 `restored`
+fingerprint는 발행자 변이 전 값이다. 재전송은 브라우저 0 accepted·2 duplicates, 서버 0
+accepted·1 duplicate이고 `protectedWritesRejected`는 5다. `publisherRecovery` 일곱 boolean이
+모두 true이고 `addedAuditRows`는 2다. quick_check는 ok, 외래 키 위반은 0이다. 백업은 28,398
+bytes, export 3,774ms·restore 5,222ms·전체 14,873.6ms다(Node 24.18.0·Wrangler 4.148.0·
+Miniflare 4.20260730.0). 소표본 로컬 합성 결과이며 운영 RTO가 아니다.
+
+발행자 연습은 회수 뒤 새 non-funnel 서버 이벤트 거부와 DB 불변, 같은 밀리초 재부여의
+`grant_id` 변경·`created_at` 유지, stale 회수 계획의 `apply_conflict` 거부와 데이터·감사
+불변, no-op 부여의 감사 행 미생성, 재부여 뒤 이벤트 1건 저장(accepted=1·duplicates=0)을
+확인한다. 보고서는 subject·issuer·grantId를 담지 않고 원본 백업 SQL과 원본 DB는 바뀌지
+않았으며 기존·원격 DB를 열지 않았다.
+
+집중 검사 `node --test --test-timeout=30000 tools/runtime/test/restore-publishers.test.ts
+tools/runtime/test/restore-fingerprint.test.ts`는 4/4, 루트 `npm exec -- tsc --noEmit`는 종료
+코드 0이다. 초기 탐색용 `node --input-type=module -e` 실행이 멈췄는데, 설치된 Miniflare의
+동기 fetch가 `new Worker(eval:true)`에서 CommonJS `require`를 쓰면서 module 입력 인자를
+물려받아 Atomics에서 대기한 것이 원인이었다. 소유한 진단 프로세스를 확인해 직접 종료한 뒤
+공식 CLI로 통과했고 제품 복구 결함은 아니며 원격 호출과 무관하다.
+
+백업·복구 운영 문서와 로드맵을 갱신했다. API·DB 계약·SDK·의존성·CI 변경은 없고 푸시·
+배포도 없다.
+
 ## 관리자 접근 확인 도구 — 2026-10-11
 
 `install:access-check`를 로컬 구현했다. 준비한 설치 묶음의 다섯 파일을 먼저 재검증하고, 이미

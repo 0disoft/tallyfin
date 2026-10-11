@@ -16,9 +16,9 @@ npm run verify:restore
 운영 DB·사용자 백업을 열지 않으며 원격/대상/파일 옵션도 받지 않는다.
 전체 연습은 기본 CI에 추가하지 않았고 필요한 시점에 명시적으로 실행한다.
 
-현재 마이그레이션 0001~0007과 브라우저 workflow·혼합 출처 4단계 퍼널·권한·생성 이력·
-관리자 이력·영수증·사용량/거부·정리 커서를 저장한다. 마지막 퍼널 단계가 먼저 도착한
-실행과 최대 안전 정수 카운터도 포함한다. DB를 닫은 뒤 실제 Wrangler의
+현재 마이그레이션 0001~0009와 브라우저 workflow·혼합 출처 4단계 퍼널·관리자·발행 권한과
+그 세대 ID·생성 이력·관리자 이력·영수증·사용량/거부·정리 커서를 저장한다. 마지막 퍼널
+단계가 먼저 도착한 실행과 최대 안전 정수 카운터도 포함한다. DB를 닫은 뒤 실제 Wrangler의
 `d1 export --local`로 전체 SQL을 내보내고 별도 새 DB에 `d1 execute --local --file`로 복원한다.
 
 복원 검사는 다음을 확인한다.
@@ -28,7 +28,18 @@ npm run verify:restore
   공백만 비교에서 제외하며, 문자열 안의 공백은 그대로 비교한다.
 - `PRAGMA quick_check`가 `ok`이고 `PRAGMA foreign_key_check`에 위반이 없다.
 - 브라우저·서버 이벤트 재전송이 새 집계를 만들지 않는다.
-- 스키마 정의·생성 이력 변경과 잘못된 퍼널 누계를 DB가 거부하고 데이터가 그대로다.
+- 스키마 정의·생성 이력 변경과 잘못된 퍼널 누계, 관리자 이력·발행자 권한 세대 UPDATE를
+  DB가 거부하고 데이터가 그대로다.
+
+복원 대조를 마치면 합성 복원 DB에서만 발행 권한 회수·재부여 흐름을 연습한다. 실제
+`publisher-revoke`·`publisher-grant`를 적용해 회수 뒤 새 non-funnel 서버 이벤트가
+`forbidden`으로 거부되고 DB가 그대로인지, 같은 밀리초에 재부여하면 `grant_id`는 바뀌고
+`created_at`은 같은지, 회수 전에 잡아 둔 stale 회수 계획이 `apply_conflict`로 거부되고
+데이터·감사가 그대로인지, 이미 원하는 상태인 no-op 부여가 감사 행을 만들지 않는지
+확인한다. 실제 회수·재부여로 늘어나는 감사 행은 회수 1·재부여 1로 정확히 2개이고, 재부여
+뒤 같은 이벤트가 `accepted=1`·`duplicates=0`으로 저장된다. 이 변이는 합성 복원 DB에만
+적용하며 원본 백업 SQL과 원본 DB는 바뀌지 않는다. 실행 결과는
+[검증 기록](../../VALIDATION.md)에 둔다.
 
 근거는 [D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/)와
 [지원 PRAGMA](https://developers.cloudflare.com/d1/sql-api/sql-statements/#pragma-quick_check),
@@ -36,7 +47,10 @@ npm run verify:restore
 `quick_check`와 별도 내용·스키마·제약 조건 검사를 사용한다.
 
 `report.json`은 실행 버전·마이그레이션 파일 해시·SQL 크기/해시·테이블별 내용 해시와
-행 수·재전송/검사 결과·소요 시간을 담는다. 원본 행이나 인증 토큰을 보고서에 넣지 않는다.
+행 수·재전송/검사 결과·소요 시간을 담는다. 발행자 연습 결과는 `publisherRecovery`의
+고정 boolean과 `addedAuditRows` 개수만 담고 subject·issuer·grantId 같은 식별값은 넣지
+않는다. 발행자 변이 전에 기록한 복원 fingerprint는 `restored` 항목에 그대로 남는다.
+원본 행이나 인증 토큰을 보고서에 넣지 않는다.
 `backup.sql`과 두 DB는 조사용으로 남긴다. 공개 예제·합성 계정만 사용한다.
 실패는 0이 아닌 종료 코드와 `failure.json`, 내용 불일치는 `mismatch.json`으로 남긴다.
 소유한 Miniflare 인스턴스는 성공·실패 뒤 닫는다.

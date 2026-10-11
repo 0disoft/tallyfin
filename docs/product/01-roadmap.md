@@ -4,6 +4,21 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 복구 연습 확장: `verify:restore`가 16개 테이블 전체 SQL export/restore
+  fingerprint와 재전송 duplicate, 보호 쓰기 거부를 확인하는 흐름에 발행자 권한 연습을
+  더했다. 기준 마이그레이션은 `0001`~`0009`이고, 보호 쓰기는 스키마 정의·생성 이력·퍼널
+  누계에 관리자 이력·발행자 권한 세대 UPDATE를 더해 5개다. 복원 대조 뒤 합성 복원 DB에서만
+  발행 권한을 회수해 새 non-funnel 서버 이벤트가 `forbidden`으로 거부되고 DB가 그대로인지,
+  같은 밀리초 재부여가 `grant_id`만 바꾸고 `created_at`을 유지하는지, 회수 전에 잡은 stale
+  회수 계획이 `apply_conflict`로 거부되고 데이터·감사가 그대로인지, no-op 부여가 감사 행을
+  만들지 않는지 연습한다. 공식 CLI 실행은 종료 코드 0으로, 16개 테이블 fingerprint·재전송
+  duplicate·`protectedWritesRejected` 5·`publisherRecovery` boolean 전부 true·
+  `addedAuditRows` 2·quick_check ok·외래 키 위반 0을 확인했다(백업 28,398 bytes·전체
+  14,873.6ms). 집중 검사 4/4와 루트 `tsc --noEmit`도 통과했다. 보고서의 `publisherRecovery`는
+  고정 boolean과 `addedAuditRows` 2만 담고 subject·issuer·grantId는 넣지 않으며 발행자 변이
+  전 복원 fingerprint를 유지한다. 실행 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
+  실제 제공자·원격 DB·운영 복구·장애 전환은 아직 없고 API·DB 계약·SDK·의존성·CI 변경·푸시·
+  배포는 없다.
 - 2026-10-11 관리자 접근 확인 도구: `install:access-check`를 로컬 구현했다. 준비한 설치
   묶음의 다섯 파일을 먼저 재검증하고, 이미 발급된 관리자 access token을 비대화형 표준
   입력에서만 받아 검토한 관리자 HTTPS 출처로 읽기 두 번만 보낸다. 먼저 `GET /v1/identity`로

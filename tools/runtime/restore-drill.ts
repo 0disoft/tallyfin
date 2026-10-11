@@ -9,6 +9,7 @@ import { D1Store } from '@tallyfin/storage-d1';
 import { parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, sha256 } from '@tallyfin/core';
 import { seedRestoreFixture, DRILL_TIME } from './restore-fixture.ts';
 import { restoreFingerprint, restoreIntegrity } from './restore-fingerprint.ts';
+import { verifyRestoredPublishers } from './restore-publishers.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const execute = promisify(execFile);
@@ -71,6 +72,8 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
       'UPDATE project_schemas SET definitions_json=definitions_json',
       'UPDATE project_creations SET request_hash=request_hash',
       'UPDATE funnel_daily_counts SET reached_count=2 WHERE step_index=2',
+      'UPDATE project_publishers SET grant_id=grant_id',
+      'UPDATE admin_changes SET action=action',
     ];
     for (const sql of protectedWrites) {
       let rejected = false;
@@ -78,6 +81,9 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
       if (!rejected) throw Error('restored_protection_failed');
     }
     if ((await restoreFingerprint(recovered)).fingerprint !== after.fingerprint) throw Error('rejected_write_changed_data');
+    phase = 'verify-publishers';
+    const publisherRecovery = await verifyRestoredPublishers(recovered, fixture);
+    await restoreIntegrity(recovered);
     const migrations = [];
     for (const name of (await readdir(resolve(root, 'db/migrations'))).filter(name => /^\d{4}_[a-z_]+\.sql$/.test(name)).sort())
       migrations.push({ name, hash: await sha256(await readFile(resolve(root, 'db/migrations', name), 'utf8')) });
@@ -87,7 +93,7 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
       miniflare: JSON.parse(await readFile(resolve(root, 'node_modules/miniflare/package.json'), 'utf8')).version, migrations,
       backupBytes: bytes.length, backupHash: await sha256(bytes.toString('utf8')), exportMs, restoreMs,
       elapsedMs: performance.now() - started, restored: after, replay: { browser, server }, protectedWritesRejected: protectedWrites.length,
-      integrity: { quickCheck: 'ok', foreignKeyViolations: 0 } };
+      publisherRecovery, integrity: { quickCheck: 'ok', foreignKeyViolations: 0 } };
     await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2), { flag: 'wx' });
     return { ...report, output };
   } catch {
