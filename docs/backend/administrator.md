@@ -50,6 +50,8 @@ export default createWorker(bearer => hostVerify(bearer));
 
 지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 생성 POST·설정 PATCH·버전별 스키마 PUT·
 프로젝트 권한 PUT·DELETE다. 초안 검증 POST는 저장하지 않는 읽기 작업이다.
+발행자 권한 부여·회수는 아직 관리자 API에 없고 provisioning CLI(`publisher-grant`·
+`publisher-revoke`)만 있다. 발행자 목록은 위 owner 전용 GET으로 읽는다.
 
 - `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
 - `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
@@ -291,10 +293,13 @@ batch에서 읽는다. 인증 실패는 401, 잘못된 프로젝트·페이지 �
 응답에 넣지 않는다. change는 action에 필요한 값만 담는다. 프로젝트 생성은 action만,
 설정 변경은 바뀐 필드명 목록, 스키마는 동작과 버전 번호, grant는 대상 issuer/subject와
 이전/이후 역할이다.
+발행 권한 부여·회수(`publisher.granted`·`publisher.revoked`)는 대상 issuer/subject만 담고
+관리자 grant와 달리 역할은 넣지 않는다.
 
 기록 대상은 관리자 API의 프로젝트 생성·설정 변경·스키마 발행·grant 변경과 provisioning
-CLI의 register·grant·revoke다. 직접 SQL 쓰기, creator 권한 관리, 시스템 정리, 방문자
-활동은 기록하지 않는다.
+CLI의 register·grant·revoke·publisher-grant·publisher-revoke다. CLI 발행 권한 변경도 actor는
+식별자 없는 local_operator다. 직접 SQL 쓰기, creator 권한 관리, 시스템 정리, 방문자 활동은
+기록하지 않는다.
 
 limit은 기본 25·최대 100이고 occurredAt 내림차순, 같은 시각이면 기록 UUID
 내림차순이다. 커서는 프로젝트에 묶인 base64url 위치값(최대 512자)으로

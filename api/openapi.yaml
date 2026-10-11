@@ -666,6 +666,19 @@ components:
             action: { const: grant.role_changed }
             beforeRole: { const: owner }
             afterRole: { const: reader }
+    AdminPublisherChange:
+      type: object
+      additionalProperties: false
+      required: [action, target]
+      properties:
+        action: { type: string, enum: [publisher.granted, publisher.revoked] }
+        target:
+          type: object
+          additionalProperties: false
+          required: [issuer, subject]
+          properties:
+            issuer: { $ref: "#/components/schemas/GrantIssuer" }
+            subject: { $ref: "#/components/schemas/GrantSubject" }
     AdminChangeDetail:
       oneOf:
         - type: object
@@ -693,6 +706,7 @@ components:
             action: { type: string, enum: [schema.published, schema.status_changed] }
             schemaVersion: { type: integer, minimum: 1, maximum: 2147483647 }
         - $ref: "#/components/schemas/AdminGrantChange"
+        - $ref: "#/components/schemas/AdminPublisherChange"
     AdminChange:
       type: object
       additionalProperties: false

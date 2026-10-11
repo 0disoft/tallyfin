@@ -37,6 +37,32 @@ test('closed history parser accepts the wire example and rejects missing, contra
   valid.page.nextCursor = encode(75); assert.throws(() => parseAdminChangePage(valid));
 });
 
+test('closed history parser accepts publisher authority actions with identity-only targets', () => {
+  const publisher = (action, target = { issuer: 'https://machine.example.invalid', subject: 'build-bot' }) => {
+    const value = page([2, 1]); value.data[0].change = { action, target }; return value;
+  };
+  for (const action of ['publisher.granted', 'publisher.revoked']) {
+    const value = publisher(action); assert.deepEqual(parseAdminChangePage(value), value);
+  }
+  for (const mutate of [
+    v => v.data[0].change.beforeRole = 'owner', v => v.data[0].change.afterRole = null,
+    v => v.data[0].change.role = 'owner', v => v.data[0].change.fields = ['name'],
+    v => v.data[0].change.target.token = 'extra', v => delete v.data[0].change.target.subject,
+    v => delete v.data[0].change.target, v => v.data[0].change.target = 'https://machine.example.invalid',
+    v => v.data[0].change.target.issuer = 'http://machine.example.invalid',
+    v => v.data[0].change.target.issuer = 'https://machine.example.invalid?aud=1',
+    v => v.data[0].change.target.issuer = 'https://machine.example.invalid#fragment',
+    v => v.data[0].change.target.issuer = ' https://machine.example.invalid',
+    v => v.data[0].change.target.issuer = 'https://user:pass@machine.example.invalid',
+    v => v.data[0].change.target.subject = ' ', v => v.data[0].change.target.subject = 'build\u0000bot',
+    v => v.data[0].change.target.subject = 's'.repeat(513),
+    v => v.data[0].change.action = 'publisher.created', v => v.data[0].change.action = 'grant.created',
+    v => v.data[0].change = { action: 'publisher.granted' },
+    v => v.data[0].change = { action: 'publisher.granted', target: { issuer: 'https://machine.example.invalid' } },
+    v => v.data[0].change = { action: 'publisher.granted', target: { issuer: 'https://machine.example.invalid', subject: 'build-bot', role: null } },
+  ]) { const value = publisher('publisher.granted'); mutate(value); assert.throws(() => parseAdminChangePage(value)); }
+});
+
 test('client uses same-origin safe policy, checks project/limit and cursor progress, and sends no invalid cursor', async () => {
   const calls = [], client = new ApiClient({ fetchImpl: async (url, init) => { calls.push({ url, init }); return response(page([75])); } });
   await client.listChanges('sembom', { cursor: encode(76) });

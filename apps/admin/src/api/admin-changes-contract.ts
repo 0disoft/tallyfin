@@ -6,6 +6,7 @@ export type ChangeField = typeof CHANGE_FIELDS[number];
 export type AdminChangeDetail = { action: 'project.created' } |
   { action: 'project.settings_changed'; fields: ChangeField[] } |
   { action: 'schema.published' | 'schema.status_changed'; schemaVersion: number } |
+  { action: 'publisher.granted' | 'publisher.revoked'; target: { issuer: string; subject: string } } |
   { action: 'grant.created' | 'grant.role_changed' | 'grant.revoked'; target: { issuer: string; subject: string };
     beforeRole: GrantRole | null; afterRole: GrantRole | null };
 export type AdminChange = { id: string; occurredAt: string;
@@ -52,6 +53,11 @@ function detail(value: unknown): AdminChangeDetail {
         action === 'grant.revoked' ? row.beforeRole === null || row.afterRole !== null :
         row.beforeRole === null || row.afterRole === null || row.beforeRole === row.afterRole)) return fail();
     return { action, target: { issuer: target.issuer as string, subject: target.subject as string }, beforeRole: row.beforeRole, afterRole: row.afterRole };
+  }
+  if (action === 'publisher.granted' || action === 'publisher.revoked') {
+    const row = object(value, ['action', 'target']), target = object(row.target, ['issuer', 'subject']);
+    if (!validGrantIdentity(target.issuer, target.subject)) return fail();
+    return { action, target: { issuer: target.issuer as string, subject: target.subject as string } };
   }
   return fail();
 }

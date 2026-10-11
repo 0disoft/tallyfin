@@ -1,5 +1,6 @@
 import { canonicalJson, closed, integer, PROJECT_ID, sha256, validGrantIdentity } from '@tallyfin/core';
 import type { SqlDatabase } from '@tallyfin/storage-d1';
+import { adminChangeStatement } from '@tallyfin/storage-d1';
 import { ProvisionError } from './input.ts';
 
 type Operation = { kind: 'publisher-grant' | 'publisher-revoke'; projectId: string; issuer: string; subject: string };
@@ -72,9 +73,12 @@ export class PublisherProvisioner {
           .bind(op.projectId, op.issuer, op.subject, now, op.projectId, snapshot.projectCreatedAt, op.projectId, op.issuer, op.subject)
         : this.#db.prepare(`DELETE FROM project_publishers WHERE project_id=? AND issuer=? AND subject=? AND created_at=? AND ${project}`)
           .bind(op.projectId, op.issuer, op.subject, snapshot.publisherCreatedAt, op.projectId, snapshot.projectCreatedAt);
-      const rows = await this.#db.batch([statement]);
-      if (rows.length !== 1 || !rows[0]?.success || !integer(rows[0].meta?.changes, 0, 1)) throw Error();
-      if (rows[0].meta.changes !== 1) throw conflict();
+      const rows = await this.#db.batch([statement, adminChangeStatement(this.#db, op.projectId, null, {
+        action: after ? 'publisher.granted' : 'publisher.revoked', target: { issuer: op.issuer, subject: op.subject },
+      }, now)]);
+      if (rows.length !== 2 || rows.some(row => !row.success) || !integer(rows[0]!.meta?.changes, 0, 1) ||
+        rows[1]!.meta.changes !== rows[0]!.meta.changes) throw Error();
+      if (rows[0]!.meta.changes !== 1) throw conflict();
       return { applied: true, changes: 1 };
     } catch (error) {
       if (error instanceof ProvisionError && error.code === 'apply_conflict') throw error;

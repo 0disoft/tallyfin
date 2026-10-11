@@ -14,18 +14,29 @@ export async function openLocal(stateDir: string) {
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
   const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql']) {
+  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql']) {
     const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
     // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
     const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
     // Rebuilt tables already existed; only the stable publisher table marks migration 0006.
-    const tables = name === '0006_server_collection.sql' ? ['project_publishers'] : [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
+    const tables = name === '0006_server_collection.sql' ? ['project_publishers'] : name === '0008_publisher_history.sql' ? [] :
+      [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
     const columns = [...sql.matchAll(/ALTER TABLE ([a-z_]+) ADD COLUMN ([a-z_]+)/g)].map(match => ({ table: match[1]!, name: match[2]! }));
     migrations.push({ name, statements, tables, columns });
   }
   const result = await db.batch<{ name: string; sql: string }>([db.prepare("SELECT name, sql FROM sqlite_master WHERE type='table'")]);
   if (!result[0]?.success) throw Error();
   const existing = new Set(result[0].results.map(row => row.name));
+  const historySql = result[0].results.find(row => row.name === 'admin_changes')?.sql ?? '';
+  const expandedHistory = historySql.includes("'publisher.granted'") && historySql.includes("'publisher.revoked'");
+  if (existing.has('admin_changes_next') || historySql.includes("'publisher.granted'") !== historySql.includes("'publisher.revoked'"))
+    throw new ProvisionError('partial_database', '불완전한 발행자 이력 DB라 초기화를 중단했어요. DB 상태를 확인해 주세요.');
+  if (expandedHistory) {
+    const guards = await db.batch<{ name: string }>([db.prepare("SELECT name FROM sqlite_master WHERE type IN ('trigger','index') AND tbl_name='admin_changes'")]);
+    if (!guards[0]?.success || ['admin_changes_project_time', 'validate_admin_change_fields', 'immutable_admin_change'].some(name =>
+      !guards[0]!.results.some(row => row.name === name)))
+      throw new ProvisionError('partial_database', '발행자 이력 DB의 제약·인덱스가 빠져 초기화를 중단했어요. DB 상태를 확인해 주세요.');
+  }
   const serverSources = /CHECK\s*\(\s*source\s+IN\s*\(\s*'browser'\s*,\s*'server'\s*\)\s*\)/i;
   const extended = result[0].results.filter(row => ['event_receipts', 'event_daily_counts'].includes(row.name) && serverSources.test(row.sql)).length;
   if (existing.has('event_receipts_next') || existing.has('event_daily_counts_next') ||
@@ -45,6 +56,7 @@ export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ mig
     for (const column of columns[0].results) existingColumns.add(`${table}.${column.name}`);
   }
   const missing = migrations.filter(migration => {
+    if (migration.name === '0008_publisher_history.sql') return !expandedHistory;
     const count = migration.tables.filter(table => existing.has(table)).length + migration.columns.filter(column => existingColumns.has(`${column.table}.${column.name}`)).length;
     if (count && count !== migration.tables.length + migration.columns.length) throw new ProvisionError('partial_database', '불완전한 DB라 초기화를 중단했어요. DB 상태를 확인해 주세요.');
     return count === 0;

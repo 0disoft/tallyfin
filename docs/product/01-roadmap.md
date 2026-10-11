@@ -7,6 +7,12 @@
 - 서버 발행자 목록 `GET .../publishers`를 현재 owner 전용 조회 API로 로컬 구현했다.
   관리자 reader/owner grant 목록과 분리하고, 25건 기본·100건 상한·프로젝트/목록 종류별
   커서·페이지마다 owner 재확인을 적용한다. 다음은 등록·회수 API와 관리자 화면 연결이다.
+- 발행자 권한 부여·회수 CLI가 `project_publishers` 쓰기와 `admin_changes`
+  `publisher.granted`·`publisher.revoked` 감사 기록을 같은 D1 batch로 반영하고, 이력 저장이
+  실패하면 같은 batch의 권한 변경도 롤백한다. 재시도·no-op는 새 이력을 남기지 않는다.
+  `0008_publisher_history.sql`이 기존 행·인덱스·트리거를 유지한 채 이력 action을 넓혔고,
+  변경 이력 조회 API와 관리자 화면이 그 action을 표시한다. 발행자 등록·회수 API와 관리자
+  화면은 아직 없다.
 - 권한 조회·변경 화면과 관리자 변경 이력 저장·조회·화면 연결은 로컬 구현·검증 완료다.
 - 서버 발행 코어·저장·endpoint 슬라이스도 완료했다.
   `parseServerBatch`·`prepareServerBatch`, source별 payload hash, `planIngest`의 서버
@@ -49,7 +55,8 @@
   실제 제공자·원격 리소스는 아직 확인하지 않았으며 공개 검사 통과와 운영 준비를 구분한다.
 - 준비한 설치 묶음이 실제 원격 D1 메타데이터와 맞는지 읽기만으로 비교하는
   `install:database-check`를 로컬 구현·검증했다. 설치 파일 재검증, 기준 마이그레이션의
-  별도 인메모리 D1 적용, 원격 `sqlite_master` 한 번 조회·비교 순서다. 실제 운영 설치 묶음이
+  별도 인메모리 D1 적용, 원격 `sqlite_master` 한 번 조회·비교 순서다. 기준은 현재
+  `0001`~`0008` 여덟 마이그레이션·16개 테이블이다. 실제 운영 설치 묶음이
   없어 원격 실행은 하지 않았고, 통과는 운영 리소스를 제공한 뒤 확인한다.
 - 설치 설정 검증 실패가 어느 입력 항목인지 알려주도록 오류에 고정 `field`를 붙였다.
   `install:prepare`가 `input`·`admin`·`collector`·`admin.accountId`·`admin.collectorWorkerName`·
@@ -61,6 +68,19 @@
 아래 날짜별 기록의 “다음 단계”는 해당 작업 시점의 기록이며, 현재 순서는 위 목록을 따른다.
 
 작은 순차 슬라이스로 진행합니다.
+
+2026-10-11 발행자 이력·감사: `0008_publisher_history.sql`이 `admin_changes`를 복사·재생성해
+action 제약에 `publisher.granted`·`publisher.revoked`를 더했다. 열 13개와 기존 행·인덱스·
+트리거는 그대로 두고 backfill하지 않는다. 로컬 초기화는 최신 테이블 SQL로 적용 여부를
+판단하고 `admin_changes_next` 잔존, action 한쪽만 확장된 상태, 필수 인덱스·트리거 누락을
+`partial_database`로 거부한다. 기준 스키마 검사는 `0001`~`0008` 여덟 마이그레이션·16개
+테이블을 쓴다. `publisher-grant`·`publisher-revoke`는 `project_publishers` 쓰기와 감사 행을
+같은 D1 batch로 반영하고, 이력 저장이 실패하면 같은 batch의 권한 변경도 롤백한다. 재시도와
+이미 원하는 상태인 no-op는 새 행을 만들지 않는다. 변경 이력 조회 API와 관리자 화면은 대상
+issuer/subject를 표시하고 관리자 grant와 달리 역할은 담지 않는다. 운영 적용은 관리자 API·CLI
+쓰기를 멈추고 한 batch로 실행하며 전후 행 수·스키마·외래 키를 확인한다. 예전 관리자 이력
+리더는 새 action을 해석하지 못하므로 새 행 위에 되돌리지 않고 앞으로 고치는 방식을 우선한다.
+발행자 등록·회수 API와 관리자 화면은 아직 없다. 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 
 2026-10-11 설치 설정 오류 안내: `installation()`이 검증 실패 항목을 고정 `field`로 표시하는
 `InstallationConfigError`(기존 `TypeError` 호환)를 던지고 `install:prepare`가 오류에 그 `field`를
@@ -549,6 +569,8 @@ admission을 browser와 공유한다. 발행자 OIDC 검증기는 `exclusiveAudi
 `apply_conflict`이고, 적용 SQL 자체가 실패하면 `database_unavailable`로 남아 반영 여부가
 확인되지 않는다. 발행 권한 변경은 관리자 변경 이력(`admin_changes`)의 action 형식에 없어
 기록하지 않는다. 0006이 `project_publishers`를 이미 만들어 스키마·마이그레이션 변경은 없다.
+이후 슬라이스에서 발행 권한 변경을 `admin_changes`에 기록하도록 넓혔다(위 2026-10-11
+발행자 이력·감사 항목).
 검증은 [검증 기록](../../VALIDATION.md)에 둔다.
 2026-10-11 서버 SDK: `packages/server`(`@tallyfin/server`)에 dependency-free 서버 발행
 클라이언트를 로컬 구현했다. `createTallyfinServer({endpoint, schema, getToken, …})`가

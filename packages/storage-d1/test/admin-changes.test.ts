@@ -121,8 +121,8 @@ test('retention deletes bounded expired rows in only the selected project and pr
 test('additive migration upgrades once without backfill or changing existing project data, and history is immutable', async () => {
   const before = await f.db.prepare('SELECT * FROM projects ORDER BY id').all();
   await f.db.prepare('DROP TABLE admin_changes').run();
-  assert.deepEqual(await initialize(f.db, false), { migrations: ['0005_admin_changes.sql'], applied: false });
-  assert.deepEqual(await initialize(f.db, true), { migrations: ['0005_admin_changes.sql'], applied: true });
+  assert.deepEqual(await initialize(f.db, false), { migrations: ['0005_admin_changes.sql', '0008_publisher_history.sql'], applied: false });
+  assert.deepEqual(await initialize(f.db, true), { migrations: ['0005_admin_changes.sql', '0008_publisher_history.sql'], applied: true });
   assert.deepEqual(await initialize(f.db, true), { migrations: [], applied: false });
   assert.deepEqual((await f.db.prepare('SELECT * FROM projects ORDER BY id').all()).results, before.results);
   assert.equal((await rows()).length, 0);

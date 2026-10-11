@@ -3,8 +3,12 @@
 상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획, 저장·발행 권한, 전용 발행
 endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현했고 좁은 범위 검증을
 통과했다. `project_publishers` 부여·회수 CLI와 dependency-free 서버 SDK까지 로컬
-구현했다. 출처별 조회 API(`source` 선택, 기본 browser)는 로컬에서 구현·검증 완료했고 실제
-발행자 OIDC 제공자 설정은 아직 없고 서버 출처 조회 화면은 로컬에서 연결했다. 이 문서는
+구현했다. 그 CLI는 발행 권한 쓰기와 같은 D1 batch에서 관리자 변경 이력(`admin_changes`)에
+`publisher.granted`·`publisher.revoked` 감사 기록을 남기고, `0008_publisher_history.sql`이
+이력 action을 넓혔다. 변경 이력 조회 API와 관리자 화면도 이 action을 표시한다. 발행 권한을
+바꾸는 관리자 API·화면은 아직 없고 CLI만 있다. 출처별 조회 API(`source` 선택, 기본 browser)는
+로컬에서 구현·검증 완료했고 실제 발행자 OIDC 제공자 설정은 아직 없고 서버 출처 조회 화면은
+로컬에서 연결했다. 이 문서는
 확정한 것과 아직 계획인 것을 나눠 적는다.
 
 형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
@@ -184,6 +188,13 @@ OIDC 제공자 값과 원격 등록·배포는 아직 넣지 않았다.
 지워 롤백하지 않으며, 서버 수집을 끄고 server 출처 조회를 열지 않는다.
 `project_publishers` 권한도 삭제하지 않는다.
 
+`0008_publisher_history.sql`은 `admin_changes`를 복사·재생성해 action 제약에
+`publisher.granted`·`publisher.revoked`를 더한다. 열 13개와 기존 행·인덱스·트리거는 그대로
+유지하고 backfill은 하지 않는다. 관리자 API·provisioning CLI 쓰기를 멈춘 상태에서 한 batch로
+적용하고, 적용 전후 행 수와 스키마·외래 키를 비교해 확인한다. 롤백이 필요하면 확장 스키마는
+남겨 두되, 새 action을 해석하지 못하는 예전 관리자 이력 리더를 새 행 위에 다시 올리지 않는다.
+예전 리더로 되돌리는 대신 앞으로 고치는 방식을 우선한다.
+
 `0006`은 한 batch로 적용한다. 저장 어댑터 테스트는 0006의 마지막 문장이 실패하도록
 강제했을 때 기존 행·제약·marker가 롤백되는지도 확인한다.
 
@@ -196,10 +207,13 @@ issuer·subject는 코어 `validGrantIdentity`로 검사한다. role이나 프�
 `--apply`·`--expect-plan`으로 검토한 계획만 적용한다. 계획 출력은 원본 식별값 대신
 `principalHash`를 넣고, 프로젝트 생성 시각과 현재 권한 상태를 CAS로 비교한다.
 
-이 명령은 `project_publishers`만 바꾸고 관리자 `project_grants`·마지막 owner 검사·
-자격증명 발급은 건드리지 않는다. 발행 권한 변경은 관리자 변경 이력(`admin_changes`)에
-남지 않는다. 이 이력의 action 형식이 프로젝트·설정·스키마·관리자 grant만 다루기 때문이다.
-0006이 `project_publishers`를 이미 만들어 스키마·마이그레이션 변경은 없다. 세부 형식은
+이 명령은 발행 권한과 이력만 바꾸고 관리자 `project_grants`·마지막 owner 검사·자격증명
+발급은 건드리지 않는다. 적용은 권한 행 쓰기와 관리자 변경 이력(`admin_changes`) 기록을 같은
+D1 batch로 처리한다. 이력 저장이 실패하면 같은 D1 batch의 권한 변경도 롤백된다. 다시 실행해
+이미 원하는 상태면 DB를 쓰지 않고 no-op로 끝나므로 새 이력이 남지 않는다. actor는 API가 아닌
+CLI 변경이라 식별자 없는
+`local_operator`다. `0008_publisher_history.sql`이 이 이력의 action을 넓히고, 0006이
+`project_publishers`를 이미 만들어 발행 권한 테이블 자체의 스키마 변경은 없다. 세부 형식은
 [등록·권한 관리 CLI](./provisioning.md)에 있다.
 
 ## 서버 SDK
@@ -225,6 +239,8 @@ owner 권한이 회수된 경우도 403이며 매 페이지 권한과 행을 같
 Cache-Control은 no-store이고 CORS·쿠키·쓰기 없이 GET만 받는다. 인증 실패는 401,
 잘못된 입력은 400, 다른 메서드는 405(Allow: GET), 저장소 실패·손상 데이터는 503이다.
 등록·회수 API와 화면 연결은 다음 슬라이스이며 현재 CLI는 그대로 쓸 수 있다.
+CLI로 남긴 발행 권한 변경은 관리자 변경 이력에 `publisher.granted`·`publisher.revoked`로
+나타난다.
 
 ## 서버 출처 조회
 

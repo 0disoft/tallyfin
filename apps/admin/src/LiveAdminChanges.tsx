@@ -29,6 +29,10 @@ function ChangeCell({ change }: { change: AdminChangeDetail }) {
     return <div className="admin-changes-cell">
       <span className="admin-changes-actor">{change.action === 'schema.published' ? '스키마 발행' : '스키마 상태 변경'}</span>
       <span className="admin-changes-detail">스키마 버전 {change.schemaVersion}</span></div>;
+  if (change.action === 'publisher.granted' || change.action === 'publisher.revoked')
+    return <div className="admin-changes-cell">
+      <span className="admin-changes-actor">{change.action === 'publisher.granted' ? '서버 발행 권한 부여' : '서버 발행 권한 회수'}</span>
+      <span className="admin-changes-detail">대상 계정 {change.target.subject} · 발급자 {change.target.issuer}</span></div>;
   if (change.action === 'grant.created' || change.action === 'grant.role_changed' || change.action === 'grant.revoked')
     return <div className="admin-changes-cell">
       <span className="admin-changes-actor">{change.action === 'grant.created' ? '권한 부여' : change.action === 'grant.role_changed' ? '권한 역할 변경' : '권한 회수'}</span>

@@ -269,6 +269,14 @@ check('admin history projects only bounded typed changes and excludes bodies, va
   for (const code of ['200', '400', '401', '403', '405', '503']) assert.ok(route.responses[code]);
   assert.equal(route.responses['405'].headers.Allow.schema.const, 'GET');
 });
+check('publisher history uses explicit actions and targets without administrator roles or credentials', () => {
+  const detail = { action: 'publisher.granted', target: { issuer: 'https://publisher.example.invalid', subject: 'test-machine' } };
+  assert.ok(validate('AdminChangeDetail', detail));
+  assert.ok(validate('AdminChangeDetail', { ...detail, action: 'publisher.revoked' }));
+  for (const value of [{ ...detail, beforeRole: null }, { ...detail, afterRole: 'owner' },
+    { ...detail, target: { ...detail.target, token: 'unexpected' } }, { ...detail, action: 'publisher.changed' }])
+    assert.equal(validate('AdminChangeDetail', value), false);
+});
 check('publisher list exposes only bounded identity metadata under administrator authentication', () => {
   const page = example('project-publishers');
   for (const value of [{ ...page, accessToken: 'unexpected' }, { ...page, data: [{ ...page.data[0], role: 'owner' }] },

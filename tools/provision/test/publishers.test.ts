@@ -37,6 +37,21 @@ test('publisher preview, grant, retry and revoke preserve administrator authorit
     await f.store.publisherAccess('other', input);
     assert.deepEqual(await tool.apply(await tool.plan('publisher-revoke', input), now + 3), { applied: false, changes: 0 });
     assert.equal(await f.db.prepare('SELECT role FROM project_grants').first('role'), 'owner');
+    const changes = (await f.db.prepare('SELECT actor_kind,action,target_issuer,target_subject,before_role,after_role FROM admin_changes ORDER BY occurred_at').all()).results;
+    assert.deepEqual(changes.map(row => row.action), ['publisher.granted', 'publisher.granted', 'publisher.revoked']);
+    assert.ok(changes.every(row => row.actor_kind === 'local_operator' && row.target_issuer === input.issuer &&
+      row.target_subject === input.subject && row.before_role === null && row.after_role === null));
+  } finally { await f.mf.dispose(); }
+});
+
+test('publisher permission and history roll back together when history cannot be written', async () => {
+  const f = await setup();
+  try {
+    const input = principal(), tool = new PublisherProvisioner(f.db), plan = await tool.plan('publisher-grant', input);
+    await f.db.prepare(`CREATE TRIGGER reject_publisher_history BEFORE INSERT ON admin_changes
+      WHEN NEW.action = 'publisher.granted' BEGIN SELECT RAISE(ABORT, 'test_failure'); END;`).run();
+    await assert.rejects(tool.apply(plan, now), { code: 'database_unavailable' });
+    assert.equal(await f.db.prepare('SELECT count(*) AS n FROM project_publishers').first('n'), 0);
     assert.equal(await f.db.prepare('SELECT count(*) AS n FROM admin_changes').first('n'), 0);
   } finally { await f.mf.dispose(); }
 });

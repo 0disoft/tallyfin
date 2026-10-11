@@ -1,5 +1,26 @@
 # 검증
 
+## 서버 발행자 변경 이력 — 2026-10-11
+
+publisher.granted/revoked 이력을 target issuer/subject만 담는 별도 action으로 확장했다.
+0008은 admin_changes 13개 열과 기존 행을 그대로 복사하고 action/target 제약을 넓힌 뒤
+원래 인덱스·필드 검증·수정 금지 트리거를 재생성한다. 로컬 init이 두 action과 필요한
+가드를 확인하고 불완전한 업그레이드를 거부한다. CLI 부여/회수와 이력은 같은 batch이며
+중복·no-op에는 기록하지 않는다. 이력 조회/관리자 파서·표시에 두 action을 연결했다.
+
+실행·결과: 저장소/CLI/collector 이력 집중 테스트 20/20, 기존 서버 수집·퍼널·설치 DB
+검사 16/16, 관리자 이력 테스트 6/6, 루트 npm exec -- tsc --noEmit과
+npm run typecheck:admin·build:admin, tools/contracts lint·check 58/58 통과. 보조 에이전트의
+관리자 전체 테스트도 161/161 통과했다. 기존 history/project 행 보존·FK 무결성·반복 init,
+권한과 이력의 동시 롤백·중복 이력 없음·90일 정리·가드 손상 거부를 로컬 D1에서 확인했다.
+첫 타입 검사는 rows[0] 가능성으로 실패했고 비어 있는 batch 검사 뒤 non-null 표현을
+추가해 통과했다. 운영 DB에 마이그레이션은 적용하지 않았다.
+
+API/DB 계약 원본 api/openapi.yaml·db/schema.dbml과 문서/로드맵을 갱신했다.
+SDK·의존성·CI·위생 변경은 없으며 등록/회수 HTTP API와 발행자 관리 화면은 후속이다.
+DB 복사이므로 운영 적용 전 관리자·CLI 쓰기 중지와 백업·행 수·제약/FK 확인이 필요하다.
+실제 운영 리소스는 미정으로 원격/배포·실로그인 검증은 미실행이고 푸시·배포도 없다.
+
 ## 서버 발행자 목록 API — 2026-10-11
 
 현재 owner 전용 GET /v1/projects/{projectId}/publishers를 추가했다. 발행자 권한과 관리자

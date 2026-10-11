@@ -47,6 +47,9 @@ function metadata(row: HistoryRow, cutoff: number, now: number): AdminChange {
       row.before_role !== null && row.after_role !== null && row.before_role !== row.after_role))
     change = { action: row.action as 'grant.created' | 'grant.role_changed' | 'grant.revoked',
       target: { issuer: row.target_issuer!, subject: row.target_subject! }, beforeRole: row.before_role, afterRole: row.after_role };
+  else if ((row.action === 'publisher.granted' || row.action === 'publisher.revoked') &&
+    validGrantIdentity(row.target_issuer, row.target_subject) && row.before_role === null && row.after_role === null)
+    change = { action: row.action, target: { issuer: row.target_issuer!, subject: row.target_subject! } };
   else return storageError();
   if (change.action !== 'project.settings_changed' && fields.length ||
     !('schemaVersion' in change) && row.schema_version !== null ||
