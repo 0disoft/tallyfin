@@ -3,18 +3,24 @@ import { serializeCsv } from './csv-export.ts';
 import { compareFunnels } from './funnel-comparison.ts';
 import { parseFunnelBreakdown, type FunnelBreakdown } from './funnel-breakdown.ts';
 import { ContractError } from './validate.ts';
+import { compareFunnelBreakdowns } from './funnel-breakdown-comparison.ts';
+import type { FunnelComparisonRow } from './funnel-comparison.ts';
 
 export const FUNNEL_CSV_COLUMNS = ['project_id', 'schema_version', 'time_zone', 'from', 'to', 'generated_at', 'latest_received_at',
   'coverage', 'funnel_id', 'funnel_label', 'cohort_basis', 'row_type', 'date', 'step_index', 'event_name', 'source',
   'reached_runs', 'reach_rate_percent', 'conversion_rate_percent', 'not_reached_next', 'started_runs', 'completed_runs',
   'completion_rate_percent', 'provisional'] as const;
-export function funnelCsv(response: FunnelResponse, previous?: FunnelResponse, breakdown?: FunnelBreakdown): string {
+export function funnelCsv(response: FunnelResponse, previous?: FunnelResponse, breakdown?: FunnelBreakdown, previousBreakdown?: FunnelBreakdown): string {
   const data = parseFunnelResponse(response);
   const grouped = breakdown ? parseFunnelBreakdown(breakdown) : undefined;
   if (grouped && (['projectId', 'schemaVersion', 'timeZone', 'from', 'to'] as const).some(key => grouped.meta[key] !== data.meta[key]) ||
     grouped && (grouped.funnelId !== data.funnelId || JSON.stringify(grouped.definition) !== JSON.stringify(data.definition)))
     throw new ContractError('퍼널 CSV의 분류가 현재 프로젝트·기간·정의와 맞지 않아요.');
   const comparison = previous ? compareFunnels(data, previous) : null;
+  const beforeGrouped = previousBreakdown ? parseFunnelBreakdown(previousBreakdown) : undefined;
+  if (beforeGrouped && (!grouped || !previous || (['projectId', 'schemaVersion', 'timeZone', 'from', 'to'] as const).some(key => beforeGrouped.meta[key] !== previous.meta[key])))
+    throw new ContractError('퍼널 CSV의 직전 분류가 비교 기간과 맞지 않아요.');
+  const groupComparison = grouped && beforeGrouped ? compareFunnelBreakdowns(grouped, beforeGrouped) : null;
   const extended = Boolean(comparison || grouped);
   const columns = [...FUNNEL_CSV_COLUMNS, ...(extended ? ['period', 'metric', 'current_value', 'previous_value', 'change', 'change_unit'] : []),
     ...(grouped ? ['group_by', 'property_type', 'property_value'] : [])];
@@ -33,29 +39,36 @@ export function funnelCsv(response: FunnelResponse, previous?: FunnelResponse, b
     response.days.forEach(day => append(response, day, 'daily', day.date, day.provisional, name));
   };
   period(data, 'current');
-  if (grouped) for (const bucket of grouped.buckets) {
-    const report = { meta: grouped.meta, definition: grouped.definition, funnelId: grouped.funnelId, cohortBasis: grouped.cohortBasis, ...bucket };
-    append(report, report.summary, 'property_summary', null, report.days.some(day => day.provisional), 'current', bucket.value);
-    report.days.forEach(day => append(report, day, 'property_daily', day.date, day.provisional, 'current', bucket.value));
+  for (const [group, name] of [[grouped, 'current'], [beforeGrouped, 'previous']] as const) if (group) for (const bucket of group.buckets) {
+    const report = { meta: group.meta, definition: group.definition, funnelId: group.funnelId, cohortBasis: group.cohortBasis, ...bucket };
+    append(report, report.summary, 'property_summary', null, report.days.some(day => day.provisional), name, bucket.value);
+    report.days.forEach(day => append(report, day, 'property_daily', day.date, day.provisional, name, bucket.value));
   }
-  if (previous && comparison) {
-    period(parseFunnelResponse(previous), 'previous');
-    for (const row of comparison) {
+  const appendComparison = (rowsToAppend: FunnelComparisonRow[], report: Pick<FunnelResponse, 'meta' | 'definition' | 'funnelId' | 'cohortBasis'>,
+    provisional: boolean, property?: string | number | boolean) => {
+    for (const row of rowsToAppend) {
       const record: (string | number | boolean | null)[] = Array(columns.length).fill(null);
       const set = (column: string, value: string | number | boolean | null) => { record[columns.indexOf(column)] = value; };
-      for (const [key, value] of Object.entries({ project_id: data.meta.projectId, schema_version: data.meta.schemaVersion,
-        time_zone: data.meta.timeZone, from: data.meta.from, to: data.meta.to, generated_at: data.meta.generatedAt,
-        latest_received_at: data.meta.latestReceivedAt, coverage: data.meta.coverage, funnel_id: data.funnelId,
-        funnel_label: data.definition.label, cohort_basis: data.cohortBasis, row_type: 'comparison', period: 'current-vs-previous',
+      for (const [key, value] of Object.entries({ project_id: report.meta.projectId, schema_version: report.meta.schemaVersion,
+        time_zone: report.meta.timeZone, from: report.meta.from, to: report.meta.to, generated_at: report.meta.generatedAt,
+        latest_received_at: report.meta.latestReceivedAt, coverage: report.meta.coverage, funnel_id: report.funnelId,
+        funnel_label: report.definition.label, cohort_basis: report.cohortBasis, row_type: property === undefined ? 'comparison' : 'property_comparison', period: 'current-vs-previous',
         metric: row.key, current_value: row.current, previous_value: row.previous, change: row.change, change_unit: row.unit,
-        step_index: row.stepIndex, provisional: [data, previous].some(report => report.days.some(day => day.provisional)) })) set(key, value);
+        step_index: row.stepIndex, provisional })) set(key, value);
+      if (property !== undefined) { set('group_by', grouped!.groupBy); set('property_type', typeof property); set('property_value', property); }
       if (row.stepIndex !== null) {
-        const step = data.definition.steps[row.stepIndex]!;
+        const step = report.definition.steps[row.stepIndex]!;
         set('event_name', step.eventName); set('source', step.source);
       }
       rows.push(record);
     }
+  };
+  if (previous && comparison) {
+    period(parseFunnelResponse(previous), 'previous');
+    appendComparison(comparison, data, [data, previous].some(report => report.days.some(day => day.provisional)));
   }
+  if (grouped && beforeGrouped && groupComparison) for (const bucket of groupComparison)
+    appendComparison(bucket.rows, grouped, [grouped, beforeGrouped].some(report => report.buckets.some(bucket => bucket.days.some(day => day.provisional))), bucket.value);
   return serializeCsv(rows);
 }
 export function funnelCsvFilename(response: FunnelResponse): string {

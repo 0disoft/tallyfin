@@ -2,18 +2,26 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { ApiClient } from './api/client';
 import type { Registry } from './api/types';
 import type { FunnelResponse } from './api/funnel-contract';
-import { FunnelBreakdownReport, type FunnelBreakdownState } from './api/funnel-breakdown';
+import { FunnelBreakdownReport, type FunnelBreakdownState, type FunnelBreakdown as Breakdown } from './api/funnel-breakdown';
 import { formatCount, formatRate } from './data';
 import { sourceLabel } from './SourceEventTable';
+import type { DateRange } from './api/dates';
+import { compareFunnelBreakdowns, funnelValueKey } from './api/funnel-breakdown-comparison';
+import FunnelBreakdownComparison from './FunnelBreakdownComparison';
 
-export default function FunnelBreakdown({ client, registry, current, context, groupBy, onSelect, onState }: {
+export default function FunnelBreakdown({ client, registry, current, context, groupBy, onSelect, onState, compare, previous, comparisonError, comparisonContext, onPreviousState }: {
   client: ApiClient; registry: Registry; current: FunnelResponse; context: string; groupBy: string;
   onSelect: (value: string) => void; onState: (state: FunnelBreakdownState) => void;
+  compare: boolean; previous: DateRange | null; comparisonError: string | null; comparisonContext: string;
+  onPreviousState: (current: Breakdown, state: FunnelBreakdownState) => void;
 }) {
   const id = useId(), ref = useRef<FunnelBreakdownReport | null>(null);
   const [snapshot, setSnapshot] = useState<{ current: FunnelResponse; client: ApiClient; state: FunnelBreakdownState } | null>(null);
   const [retry, setRetry] = useState(0);
   const [selection, setSelection] = useState<string | null>(null);
+  const previousRef = useRef<FunnelBreakdownReport | null>(null);
+  const [previousSnapshot, setPreviousSnapshot] = useState<{ client: ApiClient; data: Breakdown; state: FunnelBreakdownState } | null>(null);
+  const [comparisonRetry, setComparisonRetry] = useState(0);
   const key = JSON.stringify([context, current.funnelId, current.meta.from, current.meta.to, groupBy]);
   useEffect(() => {
     setSelection(null);
@@ -28,7 +36,23 @@ export default function FunnelBreakdown({ client, registry, current, context, gr
   }, [client, registry, current, groupBy, key, retry, onState]);
   const state = snapshot?.client === client && snapshot.current === current && snapshot.state.context === key ? snapshot.state : null;
   const data = groupBy && state?.phase === 'ready' ? state.data : undefined;
-  const active = data?.buckets.find(bucket => JSON.stringify([typeof bucket.value, bucket.value]) === selection);
+  useEffect(() => {
+    if (!compare || !previous || !data || comparisonError) { setPreviousSnapshot(null); return; }
+    const report = new FunnelBreakdownReport(client, state => {
+      if (previousRef.current !== report) return;
+      if (state.phase === 'ready' && state.data) {
+        try { compareFunnelBreakdowns(data, state.data); }
+        catch { state = { phase: 'error', context: comparisonContext, groupBy }; }
+      }
+      setPreviousSnapshot({ client, data, state }); onPreviousState(data, state);
+    });
+    previousRef.current = report;
+    void report.load(registry, previous, current.funnelId, groupBy, comparisonContext);
+    return () => { if (previousRef.current === report) previousRef.current = null; report.dispose(); };
+  }, [client, registry, data, compare, previous?.from, previous?.to, comparisonError, current.funnelId, groupBy, comparisonContext, comparisonRetry, onPreviousState]);
+  const previousState = compare && previousSnapshot?.client === client && previousSnapshot.data === data && previousSnapshot.state.context === comparisonContext ? previousSnapshot.state : null;
+  const previousData = previousState?.phase === 'ready' ? previousState.data : undefined;
+  const active = data?.buckets.find(bucket => funnelValueKey(bucket.value) === selection);
   const first = current.definition.steps[0]!;
   const event = registry.events.find(event => event.name === first.eventName && event.source === first.source);
   const label = (value: string | number | boolean) => typeof value === 'boolean' ? value ? 'true' : 'false' : String(value);
@@ -45,18 +69,23 @@ export default function FunnelBreakdown({ client, registry, current, context, gr
     {groupBy && state?.phase === 'error' && <div role="alert"><p>퍼널 분류를 불러오지 못했어요. 전체 결과는 유지돼요.</p>
       <button className="secondary-button" type="button" onClick={() => setRetry(value => value + 1)}>퍼널 분류 다시 시도</button></div>}
     {data && <>
-      <p className="context-note">{data.groupBy} · 시작일 기준 · {data.meta.from} ~ {data.meta.to} · {data.meta.timeZone}. 분류 표는 현재 기간만 보여줘요.</p>
+      <p className="context-note">{data.groupBy} · 시작일 기준 · {data.meta.from} ~ {data.meta.to} · {data.meta.timeZone}. 아래 요약은 현재 기간이에요.</p>
       {data.buckets.length === 0 ? <p role="status">선택한 분류에서 관측된 값이 없어요.</p> : <>
         <div className="table-scroll" tabIndex={0} role="region" aria-label="퍼널 속성값별 완료율 표"><table className="event-table funnel-table">
           <caption className="sr-only">{data.groupBy} 값별 시작·완료 실행 수와 완료율</caption>
           <thead><tr><th scope="col">속성 값</th><th scope="col" className="number-cell">시작</th><th scope="col" className="number-cell">완료</th><th scope="col" className="number-cell">완료율</th></tr></thead>
-          <tbody>{data.buckets.map(bucket => { const key = JSON.stringify([typeof bucket.value, bucket.value]); return <tr key={key}>
+          <tbody>{data.buckets.map(bucket => { const key = funnelValueKey(bucket.value); return <tr key={key}>
             <th scope="row"><button type="button" className="text-button" aria-pressed={key === selection} onClick={() => setSelection(previous => previous === key ? null : key)}>{label(bucket.value)}</button></th>
             <td className="number-cell">{formatCount(bucket.summary.startedRuns)}</td><td className="number-cell">{formatCount(bucket.summary.completedRuns)}</td>
             <td className="number-cell">{formatRate(bucket.summary.completionRate)}</td></tr>; })}</tbody>
         </table></div><p className="context-note">값을 선택하면 단계별 수치와 일별 내역을 볼 수 있어요. 전체 표와 조회 시각이 달라 합계가 다를 수 있어요. 좁은 화면에서는 표를 옆으로 밀어 볼 수 있어요.</p>
       </>}
       {data.buckets.some(bucket => bucket.days.some(day => day.provisional)) && <p className="notice" role="status">집계 중인 시작일이 포함돼 분류 결과가 바뀔 수 있어요.</p>}
+      {compare && (comparisonError ? <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 분류 결과를 내보낼 수 있어요.</p>
+        : previousState?.phase === 'error' ? <div role="alert"><p>직전 기간 분류를 불러오지 못했어요. 현재 분류 결과는 유지돼요.</p>
+          <button className="secondary-button" type="button" onClick={() => setComparisonRetry(value => value + 1)}>퍼널 분류 비교 다시 시도</button></div>
+        : previousData ? <FunnelBreakdownComparison current={data} previous={previousData} selection={selection} onSelect={key => setSelection(value => value === key ? null : key)} />
+        : <p role="status" aria-busy="true">직전 기간 분류를 조회하는 중이에요.</p>)}
       {active && <>
         <h4>{label(active.value)} 단계별 내역</h4>
         <div className="table-scroll" tabIndex={0} role="region" aria-label="선택한 속성값의 퍼널 단계 표"><table className="event-table funnel-table">
