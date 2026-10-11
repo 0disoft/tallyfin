@@ -1,5 +1,29 @@
 # 검증
 
+## 설치 공개 제공자 검사 — 2026-10-11
+
+`install:check -- --dir <prepared-installation>`은 다섯 설치 파일을 재검증하고 공개 OIDC
+discovery·JWKS GET과 진단용 token endpoint OPTIONS만 보낸다. 코드 교환·로그인·토큰
+발급/갱신·클라이언트 등록·Cloudflare 조회·DB·배포·파일 쓰기는 하지 않는다. 같은 출처는
+CORS 헤더와 OPTIONS를 요구하지 않고 발행자 인증을 켰으면 발행자 JWKS도 검사한다.
+필수 공개 검사만 `publicChecksPassed`에 반영하고 운영 준비는 항상 미확인으로 반환한다.
+
+실행·통과: `node --test tools/runtime/test/install-check.test.ts
+tools/runtime/test/installation.test.ts` 7/7(신규 4·기존 3), 루트 `tsc --noEmit`, 신규 명령
+`--help`, 누락된 설치 디렉터리의 종료 코드 1·고정 오류 출력, `git diff --check`.
+집중 검사는 issuer·PKCE·알고리즘·HTTPS/CORS 오류, 같은 출처, 별도 발행자 키,
+비공개 필드·약한/잘못된 용도 공개키, 선언/실측 본문 상한, 요청 전 취소·멈춘 스트림 취소,
+설치 파일 변조 때 무네트워크·추가 인자 거부·파일 무변경을 확인했다. 제공자 응답과
+공개키는 격리된 메모리 fixture다. 초기 취소 검사 실패는 요청 전 취소 확인을 추가해 수정했다.
+
+읽기 전용 Workbench snapshot의 등록 대상에는 Tallyfin이 없었다. vault 기반 Cloudflare
+목록은 `unknown/no-visible-accounts`, coverage partial이므로 계정 부재로 단정하지 않는다.
+저장소 `.tmp` 안에는 실제 설치 묶음이 없었고 실제 제공자·운영 리소스 검사는 미실행이다.
+실제 로그인·갱신·토큰 audience/type·클라이언트 등록·원격 DB/Worker/Cron은 확인하지 않았다.
+
+설치 안내·로드맵·검증 기록을 갱신했고 API·DB 스키마·마이그레이션·SDK·의존성·CI
+워크플로/러너·위생 정책 변경은 없다. npm 명령만 추가했으며 푸시·배포도 없다.
+
 ## 수집기 로컬 부하 실험 — 2026-10-11
 
 `npm run bench:collector`(opt-in, 기본 test/check/CI에 연결하지 않음)를 추가했다. 새 합성

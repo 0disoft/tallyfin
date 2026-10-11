@@ -96,3 +96,32 @@ npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 
 현재는 제공자 등록·CORS·JWT 발급·갱신·원격 Worker 연결을 검증하지 않았다.
 설정 준비 완료와 운영 로그인 완료를 구분한다.
+
+## 공개 제공자 확인 — `install:check`
+
+```powershell
+npm run install:check -- --dir .tmp/installation
+```
+
+준비한 설치 디렉터리의 다섯 파일을 다시 검증한 뒤 공개 OIDC discovery와 JWKS를
+GET한다. token endpoint에는 진단용 OPTIONS만 보내고, 같은 출처이면 이 요청도 생략한다.
+로그인·코드 교환·토큰 발급·갱신·클라이언트 등록·Cloudflare 조회·DB 접근·배포·파일 쓰기는
+하지 않는다. 발행자 인증을 켰으면 설정된 발행자 JWKS도 읽는다.
+
+요청은 HTTPS만 허용하고 쿼리·해시·주소의 사용자 정보를 거부한다. 쿠키·인증 헤더·
+referrer 없이 보내며 리다이렉트를 따르지 않는다. 요청당 5초·CLI 전체 45초·본문 64KiB·
+키 32개 상한을 적용한다. issuer 정확 일치·code 응답·PKCE S256·ID token 알고리즘을
+확인하고 공개키를 실제 import한다. RSA는 2048비트 이상, ES256은 P-256이다.
+
+교차 출처 discovery/JWKS GET은 관리자 출처 또는 `*`를 허용하는 CORS 헤더가 필요하다.
+같은 출처에는 CORS 헤더를 요구하지 않는다. token OPTIONS 결과는 실제 POST·갱신의
+증거가 아니고, 405나 확인 실패는 비차단 `unknown`으로 남긴다. 제공자의 클라이언트·
+callback·scope·audience·token type 설정과 실제 로그인을 별도로 확인한다.
+
+`publicChecksPassed`는 필수 공개 검사가 모두 pass일 때만 true다.
+`operationalReadinessVerified`는 항상 false이고 `manualRequired` 목록을 함께 반환한다.
+필수 검사 실패·미확인은 종료 코드 1이다. 입력·응답 본문·키·주소·식별자는 출력하지 않는다.
+자세한 사용법은 [설치 검사 안내](../../tools/runtime/INSTALL-CHECK.md)에 있다.
+기준은 [OIDC Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html),
+[RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html),
+[CORS 안내](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)를 참고한다.

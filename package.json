@@ -14,6 +14,7 @@
     "dev:admin": "npm run dev --workspace @tallyfin/admin --",
     "admin:config": "node tools/runtime/prepare-admin.ts",
     "install:prepare": "node tools/runtime/prepare-installation.ts",
+    "install:check": "node tools/runtime/install-check.ts",
     "admin:build-configured": "node apps/admin/scripts/build-configured.mjs",
     "admin:types": "wrangler types .tmp/admin-worker-types.d.ts --config apps/admin/wrangler.jsonc --env-interface AdminEnv && tsc -p apps/admin/tsconfig.worker.json",
     "admin:dry-run": "node tools/runtime/dry-run-admin.ts",
