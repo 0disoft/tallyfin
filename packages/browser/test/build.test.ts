@@ -17,7 +17,7 @@ for (const profile of ['index', 'funnels'] as const) test(`minified ${profile} p
   async function trace(factory: typeof createTallyfin | typeof createTallyfinFunnels) {
     const host = new FakeBrowser(); let next = 0;
     host.uuid = () => ids[next++]!;
-    host.reply = async index => ({ status: index === 0 ? 503 : 200, retryAfter: null });
+    host.reply = async index => ({ status: index === 0 ? 502 : 200, retryAfter: null });
     const options = { endpoint, schema: profile === 'index' ? schema : { version: 1, events: { first: {}, second: {} },
       funnels: { task: { steps: ['first', 'second'], dimensions: [] } } } };
     const client = factory(options as any, host) as any;

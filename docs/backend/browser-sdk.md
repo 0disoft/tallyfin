@@ -51,11 +51,11 @@
 
 빌드는 SDK 내부 Batch의 `__tfBatch` 예약 필드 6개만 짧게 만든다. 공개 SDK·HTTP 키는
 이름을 유지한다. 고정 endpoint와 설정을 포함한 관리자 생성 코드의 로컬 번들은 gzip
-3063 B이며 현재 SDK 실측은 기본 2743 B·Sembom 3022 B·퍼널 2912 B·참조 예제 3038 B다.
+3072 B이며 현재 SDK 실측은 기본 2750 B·Sembom 3026 B·퍼널 2920 B·참조 예제 3047 B다.
 
 ## 버퍼·재시도·전송
 - 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
-- 429·503·네트워크 실패만 최대 2회 재시도한다. Retry-After 정수 초를 존중하고, 배치는 시작 시각부터 10분이 지나면 버린다. 재시도는 원래 ID·시각·바디를 유지한다.
+- 네트워크·타임아웃 실패(상태 0)·408·429·모든 5xx만 최대 2회 재시도하고 401·403·409·422는 재시도하지 않는다. 대기는 Retry-After 정수 초를 우선하고 없으면 1·2초 백오프를 쓴다. 배치는 시작 시각부터 10분이 지나면 버린다. 재시도는 원래 ID·시각·바디를 유지한다.
 - 응답 본문은 저장·로그하지 않고 취소한다. 상태 코드만 사용한다.
 - 네이티브 `sendBeacon`은 credentials를 강제로 포함하므로 쓰지 않는다. keepalive fetch로 `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`, `mode: cors`를 쓴다.
 - 숨김 콜백은 진행 중 배치를 다시 보내지 않고 Retry-After를 건너뛰지 않으며, 아직 안 보낸 keepalive 배치를 최대 2개까지 즉시 시작한다. `BrowserPlatform.beacon`은 명시적 커스텀 호스트용 선택 포트로 남아 있고 `false`이거나 예외면 keepalive fetch로 넘어간다. beacon `true`는 브라우저 큐 수락이며 서버 저장 완료가 아니다.
@@ -69,13 +69,14 @@ npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2743 B·Sembom 3022 B·퍼널 SDK 2912 B·퍼널+참조 예제 3038 B다. 내부 필드 압축 뒤 브라우저 SDK·빌드·수집기 관련 48개 테스트와 루트 타입 검사·SDK 빌드를 통과했다. 서버 SDK·관리자 생성 코드 검증을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2750 B·Sembom 3026 B·퍼널 SDK 2920 B·퍼널+참조 예제 3047 B다. 이전 내부 필드 압축 때는 브라우저 SDK·빌드·수집기 관련 48개 테스트와 루트 타입 검사·SDK 빌드를 통과했다. 재시도 조건 확대와 배열 복사 정리 뒤에는 브라우저 검사 30개·관리자 SDK 코드 생성 검사 6개, 총 36/36과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 서버 SDK·관리자 생성 코드 검증을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 남은 검증
-합성 화면의 실브라우저 초기 실행·동기 호출·전송과 수집기 종료 시 동작은
-[측정 도구](../../tools/browser-bench/README.md)로 확인했다.
+합성 화면의 실브라우저 초기 실행·동기 호출·전송, 수집기 종료 시 동작, 502·응답 유실
+복구는 [측정 도구](../../tools/browser-bench/README.md)의 `recovery`·`outage`
+화면으로 확인했다.
 실제 Sembom 설치·활성화와 서비스 지연·처리량, 모바일·운영 환경, 원격 배포는 남았다.
-퍼널 예제의 실제 서비스 적용과 관리자 퍼널 집계 연결도 남았다. 관리자 SDK 코드 생성은
-표준·퍼널 프로필과 서버 설정을 만들도록 로컬 구현·검증했고, reader/owner 퍼널 조회 API와
-집계 화면이 다음이다.
+퍼널 예제의 실제 서비스 적용도 남았다. 관리자 SDK 코드 생성은 표준·퍼널 프로필과 서버
+설정을 만들도록 로컬 구현·검증했고, reader/owner 퍼널 일별 조회 API와 관리자 퍼널 분석
+화면·CSV, 퍼널 전용 단계 편집 폼도 로컬에서 구현·검증했다.
 실제 운영 발행자·관리자 인증 연결도 후속이다.

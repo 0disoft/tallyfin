@@ -34,8 +34,8 @@ test('429 and 503 honor Retry-After, retain byte-identical bodies and stop after
   assert.ok(host.calls.every(call => call.body === host.calls[0]!.body));
   await host.tick(600000); assert.equal(host.calls.length, 3); client.destroy();
 });
-test('network rejection is retried; validation/conflict/status errors are dropped without retry', async () => {
-  for (const status of [400, 403, 404, 409, 413, 415, 422, 500]) {
+test('network rejection is retried; validation/auth/conflict errors are dropped without retry', async () => {
+  for (const status of [400, 401, 403, 404, 409, 413, 415, 422]) {
     const host = new FakeBrowser(); host.reply = () => Promise.resolve({ status, retryAfter: null });
     const client = host.client(); client.track('view', { tool: 'loan' }); client.flush(); await host.tick(20000);
     assert.equal(host.calls.length, 1); assert.equal(client.pending, 0); client.destroy();
@@ -43,6 +43,33 @@ test('network rejection is retried; validation/conflict/status errors are droppe
   const host = new FakeBrowser(); host.reply = () => Promise.reject(Error('network'));
   const client = host.client(); client.track('view', { tool: 'loan' }); client.flush(); await host.tick(4000);
   assert.equal(host.calls.length, 3); assert.equal(client.pending, 0); client.destroy();
+});
+
+test('transient HTTP failures recover with unchanged event bytes and a bounded retry budget', async () => {
+  for (const status of [408, 429, 500, 502, 503, 504, 599]) {
+    const host = new FakeBrowser();
+    host.reply = async index => ({ status: index < 2 ? status : 200, retryAfter: null });
+    const client = host.client(); const attempt = client.start('conversion', { tool: 'loan' })!;
+    client.flush(); await host.tick(0);
+    assert.equal(host.calls.length, 1); assert.equal(client.pending, 1);
+    // Host work and its completion can continue while collection waits for a retry.
+    assert.equal(attempt.succeed(), true); assert.equal(client.pending, 2);
+    client.flush(); await host.tick(999); assert.equal(host.calls.length, 1);
+    await host.tick(1); assert.equal(host.calls.length, 2);
+    await host.tick(1999); assert.equal(host.calls.length, 2);
+    await host.tick(1); assert.equal(host.calls.length, 4); assert.equal(client.pending, 0);
+    assert.ok(host.calls.slice(0, 3).every(call => call.body === host.calls[0]!.body));
+    const start = JSON.parse(host.calls[0]!.body).events[0];
+    const terminal = JSON.parse(host.calls[3]!.body).events[0];
+    assert.deepEqual(start.attempt, terminal.attempt);
+    client.destroy(); assert.equal(host.timers.size, 0);
+
+    const failing = new FakeBrowser(); failing.reply = async () => ({ status, retryAfter: null });
+    const dropped = failing.client(); dropped.track('view', { tool: 'loan' }); dropped.flush();
+    await failing.tick(600000);
+    assert.equal(failing.calls.length, 3); assert.equal(dropped.pending, 0);
+    assert.equal(failing.timers.size, 0); dropped.destroy();
+  }
 });
 test('daily Retry-After beyond 10 minutes drops the batch instead of scheduling it', async () => {
   const host = new FakeBrowser(); host.reply = () => Promise.resolve({ status: 429, retryAfter: '86400' });

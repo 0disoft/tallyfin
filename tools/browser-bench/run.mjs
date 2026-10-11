@@ -24,6 +24,7 @@ if (values.help) {
     async function measure(mode, round) {
       abort.signal.throwIfAborted();
       const requestOffset = local.requests.length;
+      if (mode === 'recovery') local.recoverNextCollection();
       const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, serviceWorkers: 'block' });
       try {
         // Benchmarks never visit a remote URL or use an authenticated browser profile.
@@ -48,14 +49,23 @@ if (values.help) {
         const beforeFlush = local.requests.length;
         await page.evaluate(() => window.__bench.flush());
         if (mode === 'enabled') await page.waitForFunction(() => window.__bench.pending === 0);
+        if (mode === 'recovery') {
+          await page.waitForFunction(() => window.__bench.pending > 0);
+          // Perform another real UI calculation while the failed batch waits for retry.
+          await page.locator('#left').fill('40');
+          await page.locator('#calculate').click();
+          assert.equal(await page.locator('#result').textContent(), '42');
+          await page.evaluate(() => window.__bench.flush());
+          await page.waitForFunction(() => window.__bench.pending === 0);
+        }
         if (mode === 'outage') {
           await page.waitForTimeout(3300); // Observe both bounded retries before destroy.
           assert.ok(local.requests.slice(beforeFlush).some(request => request.status === 503));
         }
         await page.waitForTimeout(80); // Allow frame/PerformanceObserver callbacks to finish.
         const row = await page.evaluate(() => window.__bench.snapshot());
-        assert.equal(row.calculations, 11);
-        assert.equal(row.accepted, mode === 'disabled' ? 0 : 24);
+        assert.equal(row.calculations, mode === 'recovery' ? 12 : 11);
+        assert.equal(row.accepted, mode === 'disabled' ? 0 : mode === 'recovery' ? 26 : 24);
         if (mode === 'disabled') assert.deepEqual(row.sdkResource, []);
         else assert.equal(row.sdkResource.length, 1);
         await page.evaluate(() => window.__bench.destroy());
@@ -65,6 +75,13 @@ if (values.help) {
         const transport = local.requests.slice(requestOffset);
         if (mode === 'disabled') assert.deepEqual(transport, []);
         if (mode === 'enabled') assert.ok(transport.length && transport.every(request => request.status === 200));
+        if (mode === 'recovery') {
+          assert.deepEqual(transport.map(request => request.status), [502, 0, 200, 200]);
+          assert.ok(transport.slice(0, 3).every(request => request.bodyHash === transport[0].bodyHash));
+          assert.equal(transport[1].accepted, 20); assert.equal(transport[2].accepted, 0);
+          assert.equal(transport[2].duplicates, 20);
+          assert.equal(transport.reduce((total, request) => total + request.accepted, 0), 26);
+        }
         rows.push({ mode, round, ...row, transport: { requests: transport.length,
           bodyBytes: transport.reduce((sum, request) => sum + request.bodyBytes, 0),
           statuses: transport.map(request => request.status) } });
@@ -73,11 +90,20 @@ if (values.help) {
     for (let i = 0; i < samples; i++) {
       for (const mode of i % 2 ? ['enabled', 'disabled'] : ['disabled', 'enabled']) await measure(mode, i + 1);
     }
-    const stored = await local.snapshot();
-    const counts = Object.fromEntries(stored.events.map(row => [row.event_name, row.count]));
+    const baseline = await local.snapshot();
+    const counts = Object.fromEntries(baseline.events.map(row => [row.event_name, row.count]));
     assert.deepEqual(counts, { calculation_success: 11 * samples, input_start: 11 * samples,
       tool_view: samples, validation_error: samples });
-    assert.deepEqual(stored.workflows, [{ started: 11 * samples, succeeded: 11 * samples }]);
+    assert.deepEqual(baseline.workflows, [{ started: 11 * samples, succeeded: 11 * samples }]);
+    assert.equal(baseline.receipts, 24 * samples);
+    await measure('recovery', 1);
+    const stored = await local.snapshot();
+    assert.deepEqual(Object.fromEntries(stored.events.map(row => [row.event_name, row.count])), {
+      calculation_success: 11 * samples + 12, input_start: 11 * samples + 12,
+      tool_view: samples + 1, validation_error: samples + 1,
+    });
+    assert.deepEqual(stored.workflows, [{ started: 11 * samples + 12, succeeded: 11 * samples + 12 }]);
+    assert.equal(stored.receipts, 24 * samples + 26);
     await local.stopCollector(); // Actual collector stopped; the calculation page remains live.
     await measure('outage', 1);
     assert.deepEqual(errors, [], 'Browser script errors');
@@ -89,7 +115,7 @@ if (values.help) {
       const at = percentile => sorted[Math.max(0, Math.ceil(sorted.length * percentile) - 1)];
       return { n: sorted.length, p50: at(.5), p95: at(.95), max: sorted.at(-1) };
     }
-    const summary = Object.fromEntries(['disabled', 'enabled', 'outage'].map(mode => {
+    const summary = Object.fromEntries(['disabled', 'enabled', 'recovery', 'outage'].map(mode => {
       const runs = rows.filter(row => row.mode === mode);
       return [mode, Object.fromEntries(['sdkImportMs', 'sdkInitMs', 'sdkCallsMs', 'handlersMs', 'handlerToSecondFrameMs', 'fcpMs']
         .map(key => [key, distribution(runs.flatMap(row => row[key]))]))];
@@ -102,7 +128,9 @@ if (values.help) {
     await mkdir(new URL('./', output), { recursive: true });
     await writeFile(output, JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify({ report: fileURLToPath(output), sdkGzipBytes: report.sdkGzipBytes,
-      verified: { dbCounts: counts, workflow: stored.workflows[0], calculationsDuringOutage: 11, credentialAndReferrerFree: true }, summary }, null, 2));
+      verified: { baselineDbCounts: counts, workflow: stored.workflows[0], receipts: stored.receipts,
+        calculationsDuringRecovery: 12, lostResponseDuplicateEvents: 20, calculationsDuringOutage: 11,
+        credentialAndReferrerFree: true }, summary }, null, 2));
   } finally {
     process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
     try { await browser?.close(); } finally { await local?.close(); }

@@ -106,5 +106,6 @@ test('the generated browser factory with its endpoint and schema fits the SDK in
         path: fileURLToPath(new URL('../../../../packages/browser/src/funnels.ts', import.meta.url)),
       }));
     } }] });
-  assert.ok(gzipSync(result.outputFiles[0].contents).length <= 3072);
+  const gzipBytes = gzipSync(result.outputFiles[0].contents).length;
+  assert.ok(gzipBytes <= 3072, `Generated SDK integration is ${gzipBytes} gzip bytes; budget is 3072`);
 });

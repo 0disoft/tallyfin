@@ -85,7 +85,11 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   const encoder = new TextEncoder(); const queue: string[] = [];
   const active = new Set<Batch>(); let stopped = false; let draining = false;
   let cancelTimer: (() => void) | undefined;
-  const pending = () => queue.length + [...active].reduce((count, batch) => count + batch.__tfBatchCount, 0);
+  const pending = () => {
+    let count = queue.length;
+    for (const batch of active) count += batch.__tfBatchCount;
+    return count;
+  };
   const snapshot = (name: string, properties: Properties): Properties | undefined => {
     if (!own(schema.events, name) || !properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
     const definitions = schema.events[name]!;
@@ -128,7 +132,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     const finish = (status: number, header: string | null = null) => {
       if (finished || stopped || !active.has(batch)) return;
       finished = true; stopTimeout(); batch.__tfBatchStopRequest = undefined;
-      if ([0, 429, 503].includes(status) && batch.__tfBatchTries < 2) {
+      if (([0, 408, 429].includes(status) || (status >= 500 && status <= 599)) && batch.__tfBatchTries < 2) {
         let delay = 1000 * 2 ** batch.__tfBatchTries;
         if (header !== null && /^\d+$/.test(header)) delay = Math.max(1000, Number(header) * 1000);
         if (platform.now() + delay < batch.__tfBatchCreatedAt + 600000) {
@@ -167,7 +171,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     if (stopped) return;
     draining = true;
     // In-flight requests already use keepalive. Do not bypass a pending Retry-After.
-    if ([...active].some(batch => batch.__tfBatchStopRetry)) return;
+    for (const batch of active) if (batch.__tfBatchStopRetry) return;
     while (queue.length && platform.beacon) {
       const batch = pack(); if (!batch.__tfBatchCount) break;
       let queued = false; try { queued = platform.beacon(endpoint, batch.__tfBatchBody); } catch { /* fetch fallback */ }
