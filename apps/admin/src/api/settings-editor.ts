@@ -66,13 +66,18 @@ export class SettingsEditor {
   #set(state: SettingsState): void {
     if (this.#destroyed) return;
     this.state = state;
-    for (const listener of this.#listeners) listener(state);
+    for (const listener of this.#listeners) this.#notify(() => listener(state));
     // Old snapshots survive failed reads; they cannot restore a revoked role.
     const access = state.blocked ? false : state.phase === 'ready' ? state.snapshot?.canEdit : state.latest?.canEdit;
     if (access !== undefined) {
       const lost = this.#knownOwner && !access; this.#knownOwner = access;
-      if (lost) this.#onAccessLost?.();
+      if (lost) this.#notify(this.#onAccessLost);
     }
+  }
+  // UI notifications do not own the confirmed server result or request outcome.
+  #notify(callback: (() => void) | undefined): void {
+    if (this.#destroyed) return;
+    try { callback?.(); } catch { /* Keep state authoritative and avoid exposing UI error details. */ }
   }
   #start(): { controller: AbortController; generation: number } {
     this.#controller?.abort();
@@ -82,7 +87,7 @@ export class SettingsEditor {
   #current(generation: number): boolean { return !this.#destroyed && generation === this.#generation && !this.#controller?.signal.aborted; }
   #accept(snapshot: ProjectSettings, message: string | null): void {
     this.#set({ phase: 'ready', snapshot, draft: settingsDraft(snapshot), latest: null, message, errors: {}, blocked: !snapshot.canEdit });
-    this.#onSaved?.(snapshot);
+    this.#notify(() => this.#onSaved?.(snapshot));
   }
   async load(): Promise<void> { await this.#read(false); }
   async refresh(): Promise<void> {
@@ -154,7 +159,7 @@ export class SettingsEditor {
     }
     this.#set({ ...this.state, phase: 'ready', snapshot: latest, draft: next, latest: null, blocked: false, errors: {},
       message: '최신 설정에 내 변경을 적용했어요. 값을 검토한 뒤 저장해 주세요.' });
-    this.#onSaved?.(latest);
+    this.#notify(() => this.#onSaved?.(latest));
   }
   destroy(): void {
     this.#destroyed = true; ++this.#generation; this.#controller?.abort(); this.#listeners.clear();

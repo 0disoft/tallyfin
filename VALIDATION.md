@@ -1,5 +1,29 @@
 # 검증
 
+## 설정 편집기 콜백 격리 — 2026-10-12
+
+`SettingsEditor`의 UI 구독자 호출과 `onSaved`·`onAccessLost` 콜백이 던진 동기
+예외가 상태 갱신 밖으로 전파되던 경로를 수정했다. 새
+`apps/admin/src/api/settings-editor.test.mjs` 5개는 수정 전 모두 실패했고, 확인된 저장
+결과가 `ready` 대신 review에 머물거나 성공한 조회가 error로 처리되고 던진 구독자·권한
+콜백이 나머지 통지와 잠금 처리를 끊는 재현이었다. 수정 후 settings-editor·client·요청
+수명 검사 합계 55/55가 통과했다. 이 콜백 fault는 합성 단위 검사로만 확인했고 브라우저에서
+콜백 예외를 재현한 것은 아니다.
+
+`npm run typecheck:admin`·`npm run build:admin`, `node --test
+apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11,
+`git diff --check`를 통과했다. `npm run verify:admin-access -- --channel chromium`은
+verified=true, Chromium 156.0.8078.4, 스키마·설정 권한 거부 각 1회, 보류 저장 2회,
+crossSectionPermissionsRefreshed·preservedDraft·explicitPermissionRecovery·
+staleWriteAcrossProjectSwitchIgnored·disconnectedUiCleared·serverCommitsNotRolledBack
+모두 true, routeError=false·pageErrors=0, API 읽기 127·쓰기 요청 5, 브라우저 배치 0이었다.
+
+이 브라우저 실행은 기존 정상/권한/유실/프로젝트 전환 회귀 스모크이고 이번 콜백 격리
+경로를 단독으로 겨냥하지는 않았다. API·DB 계약, UI 레이아웃, SDK, 의존성, CI와 runner는
+바꾸지 않았고 푸시·배포도 없다. 변경 없는 전체 백엔드 검사는 생략했고 lint 스크립트가
+없어 린트도 생략했다. 실제 운영 OIDC 제공자와 원격 DB는 미검증이다. 설계 기준 문서와
+검증 기록도 갱신했다.
+
 ## 서버 프로젝트 권한 경계 — 2026-10-12
 
 기존 HTTP/D1 권한 검사 31개, 퍼널·서버 이벤트·생성 권한 검사 10개와 설치 접근 검사
