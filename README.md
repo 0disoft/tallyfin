@@ -49,7 +49,7 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 실제 첫 설치·업그레이드·배포·롤백 절차는 [릴리스 런북](docs/ops/release.md)과 [롤백 런북](docs/ops/rollback.md)에 정리했다. 원격 배포·마이그레이션·백업/복원은 승인 후 수동으로 실행하고 실제 환경에서는 아직 실행하지 않았다.
 
-운영 로그 요약은 표준 입력에 앱 NDJSON을 넣어 실행한다(`node tools/runtime/summarize-observations.ts --stdin`, Windows에서는 `npm.cmd run --silent logs:summary -- --stdin`). `http_request` 고정 7필드와 scheduled 정리 로그를 집계하고 `requestId`·프로젝트 ID·원문은 보고서에 넣지 않는다. 사용법과 한계는 [로그 요약 안내](tools/runtime/LOG-SUMMARY.md)에 있다.
+운영 로그 요약은 표준 입력에 앱 NDJSON을 넣어 실행한다(`node tools/runtime/summarize-observations.ts --stdin`, Windows에서는 `npm.cmd run --silent logs:summary -- --stdin`). `http_request` 고정 7필드와 scheduled 정리 로그를 집계하고 `diagnostics`에서 관측된 오류·거부·정리 실패와 확인할 항목을 구분한다. `requestId`·프로젝트 ID·원문은 보고서에 넣지 않는다. 사용법과 한계는 [로그 요약 안내](tools/runtime/LOG-SUMMARY.md)에 있다.
 
 ## 문서
 

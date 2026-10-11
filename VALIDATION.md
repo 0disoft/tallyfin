@@ -1,5 +1,27 @@
 # 검증
 
+## 로그 기반 진단 — 2026-10-11
+
+`tools/runtime/observation-diagnostics.ts`와 집중 검사 파일을 추가하고 기존 집계기·CLI 검사를
+연결했다. 문서 안내는 README·로드맵·로그 요약 계약·운영 관측에 반영한다. API·DB·마이그레이션·
+수집기·SDK·환경 변수·package script·의존성·CI·위생 정책은 바뀌지 않는다.
+
+`node --test --test-timeout=30000 tools/runtime/test/observation-diagnostics.test.ts tools/runtime/test/observation-summary.test.ts tools/runtime/test/summarize-observations.test.ts`
+종료 코드 0으로 20/20을 통과했다. `npm.cmd exec -- tsc --noEmit`도 종료 코드 0이었다.
+성공 표본만 있을 때 정상 판정하지 않는지, 4xx 보호 거부가 review인지, operation별 중복 없는
+분류와 관측수(가중치 아님), 역순 입력의 같은 결과, 정리 실패의 합집합·상세 누락·원문 ID
+미출력을 검사했다. 기존 CLI subprocess 검사에서도 error 진단이 있어도 입력 집계는 exit 0이고
+원문 runId를 출력하지 않는 것을 확인했다.
+
+추가 코드가 로컬 로그 요약에만 실행되므로 수집기·관리자·SDK 전체 검사·빌드·부하 실험은
+생략했다. 합성 로그 검증이며 실제 운영 로그·알림 발송·원격 변경·푸시·배포는 미실행이다.
+
+PowerShell 합성 NDJSON(저장소 503 한 줄·상세 없는 정리 실패 한 줄)을
+`npm.cmd run --silent logs:summary -- --stdin`에 파이프해 종료 코드 0으로 진단
+`storage_errors`·`cleanup_failures`·`cleanup_report_missing`와 `serviceHealth=unknown`을 확인했다.
+보고서에 원문 requestId·runId는 없었다. 다섯 Markdown 파일의 로컬 링크 119개 존재와
+`git diff --check`를 확인했다. 링크 검사는 파일 존재 검사이며 앵커·외부 URL 전체 검사는 아니다.
+
 ## 정리 로그 요약 확장 — 2026-10-11
 
 `tools/runtime/LOG-SUMMARY.md`·`docs/ops/observability.md`·`README.md`에 scheduled 정리 로그

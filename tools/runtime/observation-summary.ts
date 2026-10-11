@@ -1,6 +1,7 @@
 import type { ErrorCode } from '@tallyfin/core';
 import type { LatencyBucket, RequestOperation } from '../../apps/collector/src/request-observation.ts';
 import { CLEANUP_PROJECT_LIMIT, type CleanupReport } from '../../apps/collector/src/cleanup.ts';
+import { diagnoseObservations } from './observation-diagnostics.ts';
 
 export const SUMMARY_LIMITS = { bytes: 8 * 1024 * 1024, lines: 50000, lineBytes: 16384 } as const;
 const OPERATIONS = ['browser_collection', 'server_collection', 'administrator', 'other'] as const satisfies readonly RequestOperation[];
@@ -48,9 +49,11 @@ function cleanupEntry(value: Record<string, unknown>): { runId: string; report?:
 }
 
 function summarizeCleanup(runs: ReadonlyMap<string, CleanupRun>) {
+  let failedRuns = 0;
   const summary = { observedRuns: runs.size, reportedRuns: 0, failureMarkerRuns: 0, reportlessFailureRuns: 0,
     attemptedProjects: 0, completedProjects: 0, failedProjects: 0, cursorAdvancedReports: 0, cursorNotAdvancedReports: 0 };
   for (const run of runs.values()) {
+    if (run.failureMarker || (run.report && (run.report.failed > 0 || !run.report.cursorAdvanced))) failedRuns++;
     if (run.failureMarker) summary.failureMarkerRuns++;
     if (!run.report) { summary.reportlessFailureRuns++; continue; }
     summary.reportedRuns++;
@@ -60,7 +63,7 @@ function summarizeCleanup(runs: ReadonlyMap<string, CleanupRun>) {
     if (run.report.cursorAdvanced) summary.cursorAdvancedReports++;
     else summary.cursorNotAdvancedReports++;
   }
-  return summary;
+  return { summary, failedRuns };
 }
 
 /** Accept the app's JSON line, not platform envelopes or arbitrary request details. */
@@ -154,9 +157,11 @@ export class ObservationSummary {
         }),
       }];
     });
+    const cleanup = summarizeCleanup(this.#cleanupRuns);
     return { schemaVersion: 'tallyfin.observation-summary/v2', coverage: 'provided-app-log-lines-only',
       exactRequestCounts: false, latencyPercentilesAvailable: false, timeWindowAvailable: false,
       input: { lines: this.#lines, blankLines: this.#blank, ignoredOtherLogLines: this.#ignored,
-        duplicateLogLines: this.#duplicates }, ...total, operations, cleanup: summarizeCleanup(this.#cleanupRuns) };
+        duplicateLogLines: this.#duplicates }, ...total, operations, cleanup: cleanup.summary,
+      diagnostics: diagnoseObservations(operations, cleanup.summary, cleanup.failedRuns, this.#ignored) };
   }
 }

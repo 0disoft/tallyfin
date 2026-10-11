@@ -4,6 +4,14 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 로그 기반 진단: 기존 보고서 v2에 `diagnostics`(독립 스키마 v1)를 추가했다.
+  operation별 HTTP 오류를 저장소·서버·수집 한도·설정·권한·그 외 거부로 한 번씩 분류하고,
+  정리 실패는 실패 표시·프로젝트 실패·커서 미진행의 고유 실행 합집합으로 센다. 상세 없는
+  실패는 별도로 표시하며 관측 범위를 HTTP·정리·정리 상세로 나눈다. 서비스 정상 여부는 항상
+  unknown이며 4xx는 보호 동작일 수 있어 error가 아닌 review다. CLI의 성공 종료는 입력
+  집계 성공을 뜻하고 자동 알림·임계값·기간 비교는 추가하지 않았다. 집중 검사 20/20과
+  루트 타입 검사를 통과했다. 수집기·API·DB·SDK·의존성·CI 변경은 없다. 검증은
+  [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 정리 로그 요약 확장: 로컬 집계기와 CLI 검사를 확장하고
   `tools/runtime/LOG-SUMMARY.md`·`docs/ops/observability.md`·`README.md`에 사용법을 적었다. `runId`로 상세 보고
   (`retention_cleanup` 6필드)와 실패 표시(`retention_cleanup_failed` 2필드)를 이어 붙이고, 같은

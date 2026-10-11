@@ -72,6 +72,7 @@ non-silent일 때 배너를 섞으므로 정확한 JSON stdout에는 `--silent`�
 | `weightedRequestsEstimate` | 성공 로그×64 + 그 밖×1 |
 | `operations` | `operation`별 합계와 `responses`(status·code), `latencyBuckets` |
 | `cleanup` | 아래 실행 수·프로젝트 처리 횟수·커서 진행 보고 집계 |
+| `diagnostics` | 아래 진단 객체(additive, `tallyfin.observation-diagnostics/v1`) |
 
 ## 정리(cleanup) 로그
 
@@ -109,6 +110,51 @@ non-silent일 때 배너를 섞으므로 정확한 JSON stdout에는 `--silent`�
 실행의 처리 횟수는 알 수 없으므로 `failedProjects=0`이어도 프로젝트 실패가 없었다고 판단하지
 않는다. 실패 표시가 없더라도 상세 보고의 `failed>0` 또는 `cursorAdvanced=false`를 확인한다.
 
+## 진단(diagnostics)
+
+`diagnostics`는 보고서 v2에 additive로 붙는다. `schemaVersion`은
+`tallyfin.observation-diagnostics/v1`이고 `serviceHealth`는 항상 `unknown`이다. 관측 로그만으로
+서비스 상태를 판정하지 않는다.
+
+| `coverage` | 값 |
+| --- | --- |
+| `http` | `observed`·`unobserved` |
+| `cleanup` | `observed`·`unobserved` |
+| `cleanupDetails` | `complete_for_observed_runs`·`partial_for_observed_runs`·`unobserved` |
+| `otherLogsIgnored` | boolean |
+
+`cleanupDetails`의 `complete_for_observed_runs`는 관측된 실행에 대해서만 상세가 있다는 뜻이지 모든
+Cron 실행이나 호스트 로그 전체를 봤다는 보장이 아니다.
+
+`findings`는 항목 배열이고 각 항목은 `code`·`severity`(`error`·`review`)·`operation`
+(`RequestOperation` 또는 `retention_cleanup`)·`unit`(`responses`·`runs`)·`observedCount`·`action`(고정
+코드)을 담는다.
+
+| code | 조건 | severity·unit | action |
+| --- | --- | --- | --- |
+| `storage_errors` | HTTP 5xx이면서 `storage_unavailable` | error·responses | `inspect_storage` |
+| `server_errors` | 그 밖의 HTTP 5xx | error·responses | `inspect_collector` |
+| `collection_quota_rejections` | 수집 경로(`browser_collection`·`server_collection`) 429 `quota_exceeded` | review·responses | `review_collection_limits` |
+| `collection_configuration_rejections` | 수집 경로 4xx `origin_denied`·`project_unavailable`·`unknown_schema` | review·responses | `review_collection_configuration` |
+| `access_denials` | 401·403 `unauthorized`·`forbidden` | review·responses | `review_access_configuration` |
+| `request_rejections` | 그 밖의 4xx | review·responses | `review_request_contract` |
+| `cleanup_failures` | 아래 정의 | error·runs | `inspect_retention_cleanup` |
+| `cleanup_report_missing` | 상세 보고가 없는 실패 실행 | review·runs | `inspect_cleanup_log_coverage` |
+
+- HTTP 항목의 `operation`은 그 응답의 `operation`이고, 한 HTTP 응답은 최대 한 항목에만 든다. 수집 경로는
+  `browser_collection`·`server_collection`뿐이라 `administrator`·`other`의 429·4xx는 수집 항목이 아니라
+  `request_rejections`·`access_denials`로 분류된다.
+- `cleanup_failures`는 실패 표시가 있거나 `failed>0`이거나 `cursorAdvanced=false`인 고유 `runId`의
+  합집합 개수다.
+- `cleanup_report_missing`은 상세 보고가 없는 실패 실행 수이고 `cleanup_failures`와 겹칠 수 있다. 두 수를
+  더해 총 실패 실행 수로 쓰지 않는다.
+- `observedCount`는 관측 수이지 가중치나 실패율이 아니다. 관측 수가 0인 항목은 넣지 않으므로 항목이
+  없다고 서비스가 정상이라는 뜻이 아니고 오류 0건도 정상 근거가 아니다.
+- 4xx `review` 항목은 정상 보호 동작이나 의도된 거부일 수 있어 장애 알림이 아니다.
+
+CLI 동작은 그대로다. 옵션·입력 상한·종료 코드가 바뀌지 않고 `error` 항목이 있어도 입력 집계가
+성공하면 종료 코드는 0이다. 알림 발송·네트워크·시간 창·임계값은 없다.
+
 ## 해석 한계
 
 - `observedResponses`와 `weightedRequestsEstimate`는 다르다. 뒤쪽은 가중 어림이고 정확한 요청 수가
@@ -124,5 +170,5 @@ non-silent일 때 배너를 섞으므로 정확한 JSON stdout에는 `--silent`�
 - 앱 emitter(`apps/collector/src/request-observation.ts`)는 그대로이며 로그를 더 만들지 않는다.
 - 최초 슬라이스는 CLI 도구와 package script를 더했고, 이번 확장은 집계기·검사·문서를 바꾼다. 수집기·API·DB·SDK·환경 변수는 바뀌지 않았고
   CI 워크플로와 의존성도 바뀌지 않았다. 원격 자동화는 돌리지 않았고 성능 수치를 주장하지 않는다.
-- 루트 기본 테스트 글롭은 이 도구의 검사 16개(집계기 9개·CLI 7개)를 포함한다.
+- 루트 기본 테스트 글롭은 이 도구의 검사 20개(집계기 9개·진단 4개·CLI 7개)를 포함한다.
 - 필드·표본 규칙은 [로그 경계](../../docs/backend/06-logging-and-observability.md)에 있다.

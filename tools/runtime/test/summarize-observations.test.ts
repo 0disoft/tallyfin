@@ -123,6 +123,9 @@ test('actual Node CLI supports cleanup-only and mixed logs and rejects conflicti
     assert.equal(report.schemaVersion, 'tallyfin.observation-summary/v2');
     assert.equal(report.observedResponses, prefix ? 1 : 0);
     assert.equal(report.cleanup.observedRuns, 1); assert.equal(report.cleanup.failedProjects, 1);
+    assert.equal(report.diagnostics.serviceHealth, 'unknown');
+    assert.deepEqual(report.diagnostics.findings, [{ code: 'cleanup_failures', severity: 'error',
+      action: 'inspect_retention_cleanup', operation: 'retention_cleanup', unit: 'runs', observedCount: 1 }]);
     assert.equal(report.input.duplicateLogLines, 1);
     assert.ok(!passed.stdout.includes(runId) && !passed.stdout.includes('runId') && !passed.stdout.includes(row.requestId));
   }

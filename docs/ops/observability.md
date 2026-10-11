@@ -53,6 +53,15 @@ Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdi
 누락된 실패 실행 수다. `cleanup.failedProjects`·`cursorNotAdvancedReports`·`failureMarkerRuns`를
 함께 보되 서로 겹치는 실행 수를 더해서 총 실패 실행 수로 쓰지 않는다.
 
+보고서에는 진단 객체 `diagnostics`가 additive로 붙는다(`tallyfin.observation-diagnostics/v1`).
+`serviceHealth`는 항상 `unknown`이고 `coverage`가 http·cleanup·cleanupDetails·otherLogsIgnored를 나눠
+본다. `findings`는 `error`·`review` 항목과 `observedCount`·고정 `action` 코드를 담고, HTTP 응답
+하나는 최대 한 항목에만 든다. `cleanup_failures`는 실패 표시·`failed>0`·커서 미전진 실행의 고유
+`runId` 합집합이고 `cleanup_report_missing`과 겹칠 수 있다. `observedCount`는 관측 수이지 가중치나
+실패율이 아니며, 관측 수가 0인 항목은 넣지 않으므로 오류 0건도 서비스 정상 근거가 아니다. 4xx
+`review`는 정상 보호 동작일 수 있다. CLI 옵션·상한·종료 코드는 그대로이고 알림·네트워크·임계값은
+없다.
+
 ## 지금 할 수 없는 증거
 
 로그 줄 수로 실패 비율을 바로 계산할 수 없다. 성공은 1/64, 실패는 전량이라 섞어 세면
