@@ -1,5 +1,31 @@
 # 검증
 
+## 정리 로그 요약 확장 — 2026-10-11
+
+`tools/runtime/LOG-SUMMARY.md`·`docs/ops/observability.md`·`README.md`에 scheduled 정리 로그
+지원을 적고 `docs/product/01-roadmap.md`에 이 슬라이스를 기록했다. 집계기
+`tools/runtime/observation-summary.ts`와 집계·CLI 검사 두 파일을 변경했다.
+
+실행·결과: `node --test --test-timeout=30000 tools/runtime/test/observation-summary.test.ts tools/runtime/test/summarize-observations.test.ts`
+종료 코드 0으로 16/16을 통과했다. `npm.cmd exec -- tsc --noEmit`도 종료 코드 0이었다.
+
+실제 `runCleanup` 함수의 합성 store 결과를 사용해 시도 3·성공 2·실패 1에서 커서가
+진행할 수 있음을 확인했다. 상세 보고+실패 표시의 연계, UUID 대소문자·키 순서·중복·역순 입력,
+상세 없는 실패를 미관측으로 남기는 `reportlessFailureRuns`, 카운터 상한·합계·필드 검증,
+상충 보고의 `run_conflict`와 부분 보고 거부를 검사했다. 실제 Node CLI subprocess로 정리만·
+HTTP 혼합 입력·민감한 여분 필드·충돌의 stdout/stderr·종료 코드와 runId 미출력을 확인했다.
+보고서 스키마는 `tallyfin.observation-summary/v2`이고 `cleanup`의 9개 고정 필드는 안내에 적었다.
+
+수집기·API·DB·마이그레이션·SDK·환경 변수·의존성·package script·CI·위생 정책은 바뀌지 않았다.
+해당 부분의 전체 검사·빌드·부하 실험은 생략했다. 합성 로컬 로그 검사이며 실제 운영 로그·
+원격 자동화·운영 알림·푸시·배포 검증은 아니다.
+
+PowerShell 합성 정리 로그 두 줄을 `npm.cmd run --silent logs:summary -- --stdin`에 파이프해
+종료 코드 0·`observedResponses=0`·`cleanup.observedRuns=1`·`failedProjects=1`·
+`cursorAdvancedReports=1`을 확인했다. 출력에 원문 runId는 없었다. 변경한 다섯 Markdown 파일의
+로컬 링크 118개가 모두 존재하고 `git diff --check`를 통과했다. 링크 검사는 파일 존재만
+확인했고 모든 앵커·외부 URL 검사는 아니다.
+
 ## 앱 로그 요약 도구 — 2026-10-11
 
 `tools/runtime/LOG-SUMMARY.md`를 새로 쓰고 `docs/ops/observability.md`·`README.md`에 연결·설명을,

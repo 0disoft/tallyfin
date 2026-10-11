@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { ObservationSummary, ObservationSummaryError, SUMMARY_LIMITS } from '../observation-summary.ts';
 import { sampleRequestObservation } from '../../../apps/collector/src/request-observation.ts';
+import { runCleanup } from '../../../apps/collector/src/cleanup.ts';
 
 const requestId = '01000000-0000-4000-8000-000000000001';
 function log(overrides = {}) {
@@ -20,11 +21,13 @@ test('summarizes actual emitter output with separate observed and weighted count
   for (const row of rows) summary.addLine(JSON.stringify(row));
   summary.addLine(JSON.stringify(rows[0]));
   summary.addLine('');
-  summary.addLine(JSON.stringify({ code: 'retention_cleanup', privateValue: 'must-not-be-reported' }));
+  summary.addLine(JSON.stringify({ code: 'unrelated_log', privateValue: 'must-not-be-reported' }));
   const report = summary.report();
   assert.equal(report.observedResponses, 4); assert.equal(report.weightedRequestsEstimate, 130);
   assert.deepEqual(report.input, { lines: 7, blankLines: 1, ignoredOtherLogLines: 1, duplicateLogLines: 1 });
   assert.equal(report.coverage, 'provided-app-log-lines-only');
+  assert.equal(report.schemaVersion, 'tallyfin.observation-summary/v2');
+  assert.equal(report.cleanup.observedRuns, 0);
   assert.equal(report.exactRequestCounts, false); assert.equal(report.latencyPercentilesAvailable, false);
   assert.equal(report.timeWindowAvailable, false);
   assert.deepEqual(report.operations.map(row => [row.operation, row.observedResponses, row.weightedRequestsEstimate]),
@@ -36,6 +39,71 @@ test('summarizes actual emitter output with separate observed and weighted count
   assert.ok(!encoded.includes('requestId') && !encoded.includes(requestId) && !encoded.includes('must-not-be-reported'));
   report.operations[0]!.responses[0]!.observedResponses = 999;
   assert.equal(summary.report().operations[0]!.responses[0]!.observedResponses, 1);
+});
+
+const runId = 'ff000000-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+function cleanup(overrides = {}) {
+  return { runId, code: 'retention_cleanup', attempted: 3, completed: 2, failed: 1, cursorAdvanced: true, ...overrides };
+}
+function marker(id = runId) { return { runId: id, code: 'retention_cleanup_failed' }; }
+
+test('summarizes cleanup report semantics from runCleanup and correlates its failure marker without double counting', async () => {
+  const actual = await runCleanup({
+    async nextCleanupPage() { return { projects: [
+      { id: 'project-a', timeZone: 'UTC' }, { id: 'project-b', timeZone: 'UTC' }, { id: 'project-c', timeZone: 'UTC' },
+    ], revision: 0 }; },
+    async cleanup(projectId) { if (projectId === 'project-b') throw Error('private-storage-message'); },
+    async advanceCleanupCursor() { return true; },
+  }, 0);
+  const summary = new ObservationSummary();
+  summary.addLine(JSON.stringify({ runId, code: 'retention_cleanup', ...actual }));
+  summary.addLine(JSON.stringify(marker()));
+  const report = summary.report();
+  assert.equal(report.observedResponses, 0); assert.equal(report.weightedRequestsEstimate, 0);
+  assert.deepEqual(report.operations, []);
+  assert.deepEqual(report.cleanup, { observedRuns: 1, reportedRuns: 1, failureMarkerRuns: 1, reportlessFailureRuns: 0,
+    attemptedProjects: 3, completedProjects: 2, failedProjects: 1, cursorAdvancedReports: 1, cursorNotAdvancedReports: 0 });
+  const encoded = JSON.stringify(report);
+  for (const privateValue of [runId, 'runId', 'project-a', 'project-b', 'private-storage-message']) assert.ok(!encoded.includes(privateValue));
+  report.cleanup.attemptedProjects = 99;
+  assert.equal(summary.report().cleanup.attemptedProjects, 3);
+});
+
+test('cleanup markers may precede reports; duplicates normalize UUID/key order and reportless failures remain uncovered', () => {
+  const summary = new ObservationSummary();
+  for (const row of [marker(), marker(runId.toUpperCase()), cleanup(),
+    Object.fromEntries(Object.entries(cleanup({ runId: runId.toUpperCase() })).reverse()),
+    marker('ff000000-0000-4000-8000-000000000002'),
+    cleanup({ runId: 'ff000000-0000-4000-8000-000000000003', attempted: 0, completed: 0, failed: 0, cursorAdvanced: false }), log()])
+    summary.addLine(JSON.stringify(row));
+  const report = summary.report();
+  assert.equal(report.input.duplicateLogLines, 2); assert.equal(report.observedResponses, 1);
+  assert.deepEqual(report.cleanup, { observedRuns: 3, reportedRuns: 2, failureMarkerRuns: 2, reportlessFailureRuns: 1,
+    attemptedProjects: 3, completedProjects: 2, failedProjects: 1, cursorAdvancedReports: 1, cursorNotAdvancedReports: 1 });
+  const onlyMarker = new ObservationSummary(); onlyMarker.addLine(JSON.stringify(marker()));
+  assert.equal(onlyMarker.report().cleanup.reportlessFailureRuns, 1);
+  assert.equal(onlyMarker.report().cleanup.reportedRuns, 0);
+});
+
+test('cleanup validation rejects private fields and impossible project counters; failures poison the whole summary', () => {
+  const invalid = [cleanup({ attempted: 6 }), cleanup({ completed: -1 }), cleanup({ failed: 0.5 }),
+    cleanup({ attempted: '3' }), cleanup({ failed: 0 }), cleanup({ cursorAdvanced: 'true' }),
+    cleanup({ runId: 'private-run-marker' }), cleanup({ token: 'private-marker' }),
+    { ...marker(), failed: 1 }, { code: 'retention_cleanup_failed' },
+    Object.fromEntries(Object.entries(cleanup()).filter(([key]) => key !== 'cursorAdvanced'))];
+  for (const row of invalid) {
+    const summary = new ObservationSummary(); summary.addLine(JSON.stringify(log()));
+    assert.throws(() => summary.addLine(JSON.stringify(row)), failed('invalid_log'));
+    assert.throws(() => summary.report(), failed('invalid_log'));
+  }
+});
+
+test('conflicting cleanup details reject everything, while complementary markers are accepted', () => {
+  const summary = new ObservationSummary();
+  summary.addLine(JSON.stringify(cleanup())); summary.addLine(JSON.stringify(marker()));
+  assert.throws(() => summary.addLine(JSON.stringify(cleanup({ cursorAdvanced: false }))), failed('run_conflict'));
+  assert.throws(() => summary.report(), failed('run_conflict'));
+  assert.throws(() => summary.addLine(JSON.stringify(log())), failed('run_conflict'));
 });
 
 test('rejects malformed/private fields, unbounded dimensions and invalid sampling without partial reports', () => {

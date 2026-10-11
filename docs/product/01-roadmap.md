@@ -4,6 +4,17 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 정리 로그 요약 확장: 로컬 집계기와 CLI 검사를 확장하고
+  `tools/runtime/LOG-SUMMARY.md`·`docs/ops/observability.md`·`README.md`에 사용법을 적었다. `runId`로 상세 보고
+  (`retention_cleanup` 6필드)와 실패 표시(`retention_cleanup_failed` 2필드)를 이어 붙이고, 같은
+  종류 중복은 한 번만 세며 상세 보고 충돌은 `run_conflict`로 거부한다. `attempted`는 프로젝트
+  시도 횟수 합계, `completed`는 정리 호출 성공 수이지 삭제 행 수가 아니고 `cursorAdvanced=true`도
+  프로젝트 실패 부재가 아니라고 구분했다. 상세 보고가 없는 실행은 미관측으로 남기고, 정리 기록만
+  있으면 `observedResponses=0`으로 정상 보고한다. 보고서 스키마는
+  `tallyfin.observation-summary/v2`이고 패키지 버전을 올리는 것은 아니다. `cleanup`에 실행 수·
+  처리 횟수·커서 진행 수를 담고 `reportlessFailureRuns`로 누락된 상세를 구분한다.
+  집중 검사 16/16과 루트 타입 검사를 통과했다. 수집기·API·DB·SDK·의존성·CI 변경은 없다. 검증은
+  [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 앱 로그 요약 도구: `tools/runtime/LOG-SUMMARY.md`를 새로 쓰고
   `docs/ops/observability.md`·`README.md`에 연결·설명을 더했다. CLI
   `tools/runtime/summarize-observations.ts`는 옵션이 `--stdin`·`--help`뿐이고, 표준

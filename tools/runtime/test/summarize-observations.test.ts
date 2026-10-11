@@ -105,3 +105,31 @@ test('actual Node CLI emits one JSON report or a fixed error on stderr with no p
   const broken = await closedOutput();
   assert.equal(broken.status, 1); assert.deepEqual(JSON.parse(broken.stderr), { code: 'output_unavailable' });
 });
+
+test('actual Node CLI supports cleanup-only and mixed logs and rejects conflicting run reports privately', async () => {
+  const runId = 'ff000000-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const details = { runId, code: 'retention_cleanup', attempted: 2, completed: 1, failed: 1, cursorAdvanced: true };
+  const marker = { runId, code: 'retention_cleanup_failed' };
+  const markerOnly = await cli(['--stdin'], JSON.stringify(marker));
+  assert.equal(markerOnly.status, 0); assert.equal(markerOnly.stderr, '');
+  const uncovered = JSON.parse(markerOnly.stdout);
+  assert.equal(uncovered.observedResponses, 0); assert.equal(uncovered.cleanup.reportedRuns, 0);
+  assert.equal(uncovered.cleanup.reportlessFailureRuns, 1);
+  const records = [marker, details, marker];
+  for (const prefix of ['', line + '\n']) {
+    const passed = await cli(['--stdin'], prefix + records.map(record => JSON.stringify(record)).join('\r\n'));
+    assert.equal(passed.status, 0); assert.equal(passed.stderr, '');
+    const report = JSON.parse(passed.stdout);
+    assert.equal(report.schemaVersion, 'tallyfin.observation-summary/v2');
+    assert.equal(report.observedResponses, prefix ? 1 : 0);
+    assert.equal(report.cleanup.observedRuns, 1); assert.equal(report.cleanup.failedProjects, 1);
+    assert.equal(report.input.duplicateLogLines, 1);
+    assert.ok(!passed.stdout.includes(runId) && !passed.stdout.includes('runId') && !passed.stdout.includes(row.requestId));
+  }
+  const rejected = await cli(['--stdin'], [details, { ...details, cursorAdvanced: false }].map(record => JSON.stringify(record)).join('\n'));
+  assert.equal(rejected.status, 1); assert.equal(rejected.stdout, '');
+  assert.deepEqual(JSON.parse(rejected.stderr), { code: 'run_conflict' });
+  const privateField = await cli(['--stdin'], JSON.stringify({ ...marker, token: 'private-marker' }));
+  assert.equal(privateField.status, 1); assert.equal(privateField.stdout, '');
+  assert.deepEqual(JSON.parse(privateField.stderr), { code: 'invalid_log' });
+});

@@ -35,7 +35,7 @@ CPU 시간이나 실제 전체 지연이 아니고 SLO 판정 근거가 아니�
 Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdin
 ```
 
-표준 입력의 앱 NDJSON에서 직접 낸 `http_request` 줄만 세어 `operation`·`status`·`code`·
+표준 입력의 앱 NDJSON에서 직접 낸 `http_request` 줄을 세어 `operation`·`status`·`code`·
 `latencyBucket`별 관측 수와 가중 어림을 JSON 한 건으로 낸다. `requestId`·원문은 출력에 넣지
 않고 조회·파일 쓰기·네트워크를 하지 않는다. Windows에서는 `npm.ps1` 파이프 대신 직접 node나
 `npm.cmd` 별칭을 쓴다. 계약과 한계는
@@ -44,6 +44,14 @@ Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdi
 `coverage`는 받은 앱 로그 줄에 한정하고 `exactRequestCounts`·`latencyPercentilesAvailable`·
 `timeWindowAvailable`은 항상 false다. 관측 응답 수와 가중 어림은 다르며 실패율·p95·SLO 근거로
 쓰지 않는다.
+
+표준 입력의 정리(cleanup) 로그도 같은 도구가 `runId`로 이어 붙인다. `attempted`는 프로젝트
+시도 횟수 합계, `completed`는 정리 호출 성공 수이지 삭제 행 수가 아니며 `cursorAdvanced=true`도
+프로젝트 실패가 없었다는 뜻이 아니다. 상세 보고가 없는 실행은 미관측으로 남는다. 정리 기록만
+있으면 `observedResponses=0`으로 정상 보고한다.
+`cleanup.reportedRuns`가 처리 횟수 집계의 범위이고, `cleanup.reportlessFailureRuns`는 상세가
+누락된 실패 실행 수다. `cleanup.failedProjects`·`cursorNotAdvancedReports`·`failureMarkerRuns`를
+함께 보되 서로 겹치는 실행 수를 더해서 총 실패 실행 수로 쓰지 않는다.
 
 ## 지금 할 수 없는 증거
 

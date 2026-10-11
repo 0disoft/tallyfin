@@ -1,5 +1,6 @@
 import type { ErrorCode } from '@tallyfin/core';
 import type { LatencyBucket, RequestOperation } from '../../apps/collector/src/request-observation.ts';
+import { CLEANUP_PROJECT_LIMIT, type CleanupReport } from '../../apps/collector/src/cleanup.ts';
 
 export const SUMMARY_LIMITS = { bytes: 8 * 1024 * 1024, lines: 50000, lineBytes: 16384 } as const;
 const OPERATIONS = ['browser_collection', 'server_collection', 'administrator', 'other'] as const satisfies readonly RequestOperation[];
@@ -13,7 +14,7 @@ const CODES: Record<ErrorCode | 'ok', true> = {
 };
 const KEYS = ['event', 'requestId', 'operation', 'status', 'code', 'latencyBucket', 'samplingDenominator'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type Failure = 'invalid_log' | 'input_limit' | 'request_conflict' | 'no_observations';
+type Failure = 'invalid_log' | 'input_limit' | 'request_conflict' | 'run_conflict' | 'no_observations';
 export class ObservationSummaryError extends Error {
   readonly code: Failure;
   constructor(code: Failure) { super(code); this.name = 'ObservationSummaryError'; this.code = code; }
@@ -26,6 +27,41 @@ interface Counts { observedResponses: number; weightedRequestsEstimate: number }
 interface ResponseGroup extends Counts { status: number; code: ErrorCode | 'ok' }
 function counts(): Counts { return { observedResponses: 0, weightedRequestsEstimate: 0 }; }
 function add(count: Counts, weight: number) { count.observedResponses++; count.weightedRequestsEstimate += weight; }
+
+interface CleanupRun { report?: CleanupReport; failureMarker: boolean }
+const CLEANUP_KEYS = ['runId', 'code', 'attempted', 'completed', 'failed', 'cursorAdvanced'];
+function cleanupEntry(value: Record<string, unknown>): { runId: string; report?: CleanupReport } {
+  const keys = value.code === 'retention_cleanup' ? CLEANUP_KEYS : ['runId', 'code'];
+  if (Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key)) ||
+    typeof value.runId !== 'string' || !UUID.test(value.runId)) throw new ObservationSummaryError('invalid_log');
+  const runId = value.runId.toLowerCase();
+  if (value.code === 'retention_cleanup_failed') return { runId };
+  for (const key of ['attempted', 'completed', 'failed']) {
+    const count = value[key];
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > CLEANUP_PROJECT_LIMIT)
+      throw new ObservationSummaryError('invalid_log');
+  }
+  if (Number(value.completed) + Number(value.failed) !== value.attempted || typeof value.cursorAdvanced !== 'boolean')
+    throw new ObservationSummaryError('invalid_log');
+  return { runId, report: { attempted: Number(value.attempted), completed: Number(value.completed),
+    failed: Number(value.failed), cursorAdvanced: value.cursorAdvanced } };
+}
+
+function summarizeCleanup(runs: ReadonlyMap<string, CleanupRun>) {
+  const summary = { observedRuns: runs.size, reportedRuns: 0, failureMarkerRuns: 0, reportlessFailureRuns: 0,
+    attemptedProjects: 0, completedProjects: 0, failedProjects: 0, cursorAdvancedReports: 0, cursorNotAdvancedReports: 0 };
+  for (const run of runs.values()) {
+    if (run.failureMarker) summary.failureMarkerRuns++;
+    if (!run.report) { summary.reportlessFailureRuns++; continue; }
+    summary.reportedRuns++;
+    summary.attemptedProjects += run.report.attempted;
+    summary.completedProjects += run.report.completed;
+    summary.failedProjects += run.report.failed;
+    if (run.report.cursorAdvanced) summary.cursorAdvancedReports++;
+    else summary.cursorNotAdvancedReports++;
+  }
+  return summary;
+}
 
 /** Accept the app's JSON line, not platform envelopes or arbitrary request details. */
 function entry(value: Record<string, unknown>): Entry {
@@ -44,10 +80,11 @@ function entry(value: Record<string, unknown>): Entry {
     samplingDenominator: sampled ? 64 : 1 };
 }
 
-/** Bounded local aggregation; request IDs stay private and never enter the report. */
+/** Bounded local aggregation; request/run IDs stay private and never enter the report. */
 export class ObservationSummary {
   #bytes = 0; #lines = 0; #blank = 0; #ignored = 0; #duplicates = 0; #failure: Failure | null = null;
   #requests = new Map<string, string>();
+  #cleanupRuns = new Map<string, CleanupRun>();
   #operations = new Map<RequestOperation, { total: Counts; responses: Map<string, ResponseGroup>; latency: Map<LatencyBucket, Counts> }>();
   addLine(line: string): void {
     if (this.#failure) throw new ObservationSummaryError(this.#failure);
@@ -60,6 +97,22 @@ export class ObservationSummary {
       let value: unknown;
       try { value = JSON.parse(line); } catch { throw new ObservationSummaryError('invalid_log'); }
       if (!value || typeof value !== 'object' || Array.isArray(value)) throw new ObservationSummaryError('invalid_log');
+      if ('code' in value && (value.code === 'retention_cleanup' || value.code === 'retention_cleanup_failed')) {
+        const parsed = cleanupEntry(value as Record<string, unknown>);
+        const run = this.#cleanupRuns.get(parsed.runId) ?? { failureMarker: false };
+        if (parsed.report) {
+          if (run.report) {
+            if (JSON.stringify(run.report) !== JSON.stringify(parsed.report)) throw new ObservationSummaryError('run_conflict');
+            this.#duplicates++; return;
+          }
+          run.report = parsed.report;
+        } else {
+          if (run.failureMarker) { this.#duplicates++; return; }
+          run.failureMarker = true;
+        }
+        this.#cleanupRuns.set(parsed.runId, run);
+        return;
+      }
       if (!('event' in value) || value.event !== 'http_request') { this.#ignored++; return; }
       const parsed = entry(value as Record<string, unknown>);
       const signature = JSON.stringify([parsed.operation, parsed.status, parsed.code, parsed.latencyBucket, parsed.samplingDenominator]);
@@ -87,7 +140,7 @@ export class ObservationSummary {
   }
   report() {
     if (this.#failure) throw new ObservationSummaryError(this.#failure);
-    if (!this.#requests.size) throw new ObservationSummaryError('no_observations');
+    if (!this.#requests.size && !this.#cleanupRuns.size) throw new ObservationSummaryError('no_observations');
     const total = counts();
     const operations = OPERATIONS.flatMap(operation => {
       const state = this.#operations.get(operation); if (!state) return [];
@@ -101,9 +154,9 @@ export class ObservationSummary {
         }),
       }];
     });
-    return { schemaVersion: 'tallyfin.observation-summary/v1', coverage: 'provided-app-log-lines-only',
+    return { schemaVersion: 'tallyfin.observation-summary/v2', coverage: 'provided-app-log-lines-only',
       exactRequestCounts: false, latencyPercentilesAvailable: false, timeWindowAvailable: false,
       input: { lines: this.#lines, blankLines: this.#blank, ignoredOtherLogLines: this.#ignored,
-        duplicateLogLines: this.#duplicates }, ...total, operations };
+        duplicateLogLines: this.#duplicates }, ...total, operations, cleanup: summarizeCleanup(this.#cleanupRuns) };
   }
 }
