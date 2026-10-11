@@ -4,6 +4,16 @@
 
 ## 현재 진행 순서 — 2026-10-11
 
+- 2026-10-11 릴리스·롤백 런북(문서 전용): `docs/ops/release.md`·`docs/ops/rollback.md`의 빈
+  scaffold를 첫 설치·업그레이드·중지·롤백 인계 중심으로 채웠다. 마이그레이션 기준
+  `0001`~`0009`·16개 테이블, 0006·0008·0009 테이블 복사의 쓰기 중지·적용 전후 확인,
+  빈 DB·기존 DB 업그레이드·전체 백업 SQL 복원 구분, `install:check`·`install:database-check`·
+  `install:access-check` 셋의 분리를 적었다. Worker 롤백이 코드·버전 설정만 되돌리고 D1
+  데이터를 되돌리지 않는다는 점과 라우팅·도메인·Cron을 별도 인벤토리로 확인한다는 점,
+  0008 새 action의 예전 리더 비호환과 0009 `grant_id` 회수를 넣었다. `README.md`에 런북
+  링크와 빠져 있던 `install:access-check` 안내를 더했다. 실제 provider·원격 DB·배포·백업/복원·
+  운영 로그인은 미실행이고 코드·DB·API·SDK·의존성·CI 변경은 없다. 검증은
+  [검증 기록](../../VALIDATION.md)에 둔다.
 - 2026-10-11 수집기 완료 관측 로그: `request-observation.ts`를 추가하고 `handler.ts`에 선택적
   `observe`·`monotonicNow` 포트를, 네이티브 Worker에는 오류 전용 로그 대신 완료 관측 포트를
   연결했다. 응답이 준비되면 고정 필드 일곱 개(`event`·`requestId`·`operation`·`status`·

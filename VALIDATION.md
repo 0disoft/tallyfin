@@ -1,5 +1,32 @@
 # 검증
 
+## 릴리스·롤백 런북 (문서 전용) — 2026-10-11
+
+`docs/ops/release.md`·`docs/ops/rollback.md`의 빈 scaffold를 현재 소스, 설치·백업·마이그레이션
+문서와 설치된 CLI 도움말에 맞춰 채우고, `README.md`에 런북 링크와 빠져 있던
+`install:access-check` 안내를 더했다. `docs/product/01-roadmap.md`에 이 슬라이스를 기록했다.
+문서 전용 변경이며 코드·API·DB·SDK·의존성·CI 변경이 없다.
+
+실행·결과: 문서만 바꿔 코드 테스트를 돌리지 않았다. 명령·옵션 근거는 설치된 CLI 도움말이다.
+`wrangler deploy`·`rollback`·`d1 migrations apply`·`d1 migrations list`·
+`d1 export`·`deployments list` 도움말과 여섯 로컬 도구(`install:prepare`·
+`install:check`·`install:database-check`·`install:access-check`·
+`admin:build-configured`·`admin:dry-run`) 도움말을 확인했다. 모두 종료 코드 0이고 원격 접촉이
+없다. 실제 provider·원격 DB·배포·백업/복원·운영 로그인은 실행하지 않았다.
+
+추가 검증: 변경한 다섯 Markdown 파일의 로컬 링크 107개가 모두 존재하며 `git diff --check`가
+통과했다. 링크 검사는 파일 존재를 확인한 것이며 전체 과거 기록의 앵커나 원격 URL 응답 검사는
+아니다. 첫 링크 검사 시도는 문서 교체 중 파일을 읽어 ENOENT로 끝났고, 편집 완료 뒤 다시 실행해
+통과했다. 설치·마이그레이션 소스와 문서의 명령·순서를 대조했고, Worker 롤백의 연결 리소스
+비복원 경계는 [Cloudflare 공식 안내](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)로
+확인했다. export는 원격 읽기라는 점, 기존 DB 쓰기 중지 뒤 백업한다는 순서, 버전 롤백과
+라우팅·Cron의 별도 확인, 이벤트 스키마 버전과 마이그레이션 번호 구분을 최종 문서에 반영했다.
+
+문서 전용 변경이라 타입 검사·코드 테스트·빌드·SDK 크기·부하 검사는 생략했다. 실제 설치
+묶음·운영 인증 제공자·원격 리소스가 없어 운영 배포·롤백·복구 절차의 실환경 검증은 남았다.
+계약 원본은 릴리스·롤백 문서이며 README·로드맵과 이 검증 기록을 갱신했다. API·DB 계약·
+마이그레이션·SDK·의존성·CI 러너·저장소 위생 정책 변경과 푸시·배포는 없다.
+
 ## 수집기 완료 관측 로그 — 2026-10-11
 
 `apps/collector/src/request-observation.ts`를 추가하고 `handler.ts`에 선택적 `observe`·
