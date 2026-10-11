@@ -1,0 +1,305 @@
+{
+  "meta": {
+    "projectId": "modufile",
+    "schemaVersion": 1,
+    "from": "2026-10-08",
+    "to": "2026-10-09",
+    "timeZone": "Asia/Seoul",
+    "generatedAt": "2026-10-11T03:00:00.000Z",
+    "latestReceivedAt": "2026-10-09T03:00:00.000Z",
+    "coverage": "observed-only"
+  },
+  "funnelId": "conversion",
+  "definition": {
+    "id": "conversion",
+    "label": "File conversion",
+    "steps": [
+      {
+        "eventName": "file_selected",
+        "source": "browser"
+      },
+      {
+        "eventName": "upload_finished",
+        "source": "browser"
+      },
+      {
+        "eventName": "job_started",
+        "source": "server"
+      },
+      {
+        "eventName": "job_finished",
+        "source": "server"
+      }
+    ],
+    "dimensions": [
+      "kind"
+    ]
+  },
+  "cohortBasis": "startedAt",
+  "groupBy": "kind",
+  "summary": {
+    "startedRuns": 11,
+    "completedRuns": 6,
+    "completionRate": 54.54545454545454,
+    "steps": [
+      {
+        "stepIndex": 0,
+        "reachedRuns": 11,
+        "reachRate": 100,
+        "conversionRate": null,
+        "notReachedNext": 2
+      },
+      {
+        "stepIndex": 1,
+        "reachedRuns": 9,
+        "reachRate": 81.81818181818183,
+        "conversionRate": 81.81818181818183,
+        "notReachedNext": 1
+      },
+      {
+        "stepIndex": 2,
+        "reachedRuns": 8,
+        "reachRate": 72.72727272727273,
+        "conversionRate": 88.88888888888889,
+        "notReachedNext": 2
+      },
+      {
+        "stepIndex": 3,
+        "reachedRuns": 6,
+        "reachRate": 54.54545454545454,
+        "conversionRate": 75,
+        "notReachedNext": null
+      }
+    ]
+  },
+  "buckets": [
+    {
+      "value": "image",
+      "summary": {
+        "startedRuns": 1,
+        "completedRuns": 1,
+        "completionRate": 100,
+        "steps": [
+          {
+            "stepIndex": 0,
+            "reachedRuns": 1,
+            "reachRate": 100,
+            "conversionRate": null,
+            "notReachedNext": 0
+          },
+          {
+            "stepIndex": 1,
+            "reachedRuns": 1,
+            "reachRate": 100,
+            "conversionRate": 100,
+            "notReachedNext": 0
+          },
+          {
+            "stepIndex": 2,
+            "reachedRuns": 1,
+            "reachRate": 100,
+            "conversionRate": 100,
+            "notReachedNext": 0
+          },
+          {
+            "stepIndex": 3,
+            "reachedRuns": 1,
+            "reachRate": 100,
+            "conversionRate": 100,
+            "notReachedNext": null
+          }
+        ]
+      },
+      "days": [
+        {
+          "date": "2026-10-08",
+          "startedRuns": 1,
+          "completedRuns": 1,
+          "completionRate": 100,
+          "steps": [
+            {
+              "stepIndex": 0,
+              "reachedRuns": 1,
+              "reachRate": 100,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 1,
+              "reachedRuns": 1,
+              "reachRate": 100,
+              "conversionRate": 100,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 2,
+              "reachedRuns": 1,
+              "reachRate": 100,
+              "conversionRate": 100,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 3,
+              "reachedRuns": 1,
+              "reachRate": 100,
+              "conversionRate": 100,
+              "notReachedNext": null
+            }
+          ],
+          "provisional": false
+        },
+        {
+          "date": "2026-10-09",
+          "startedRuns": 0,
+          "completedRuns": 0,
+          "completionRate": null,
+          "steps": [
+            {
+              "stepIndex": 0,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 1,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 2,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 3,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": null
+            }
+          ],
+          "provisional": true
+        }
+      ]
+    },
+    {
+      "value": "pdf",
+      "summary": {
+        "startedRuns": 10,
+        "completedRuns": 5,
+        "completionRate": 50,
+        "steps": [
+          {
+            "stepIndex": 0,
+            "reachedRuns": 10,
+            "reachRate": 100,
+            "conversionRate": null,
+            "notReachedNext": 2
+          },
+          {
+            "stepIndex": 1,
+            "reachedRuns": 8,
+            "reachRate": 80,
+            "conversionRate": 80,
+            "notReachedNext": 1
+          },
+          {
+            "stepIndex": 2,
+            "reachedRuns": 7,
+            "reachRate": 70,
+            "conversionRate": 87.5,
+            "notReachedNext": 2
+          },
+          {
+            "stepIndex": 3,
+            "reachedRuns": 5,
+            "reachRate": 50,
+            "conversionRate": 71.42857142857143,
+            "notReachedNext": null
+          }
+        ]
+      },
+      "days": [
+        {
+          "date": "2026-10-08",
+          "startedRuns": 10,
+          "completedRuns": 5,
+          "completionRate": 50,
+          "steps": [
+            {
+              "stepIndex": 0,
+              "reachedRuns": 10,
+              "reachRate": 100,
+              "conversionRate": null,
+              "notReachedNext": 2
+            },
+            {
+              "stepIndex": 1,
+              "reachedRuns": 8,
+              "reachRate": 80,
+              "conversionRate": 80,
+              "notReachedNext": 1
+            },
+            {
+              "stepIndex": 2,
+              "reachedRuns": 7,
+              "reachRate": 70,
+              "conversionRate": 87.5,
+              "notReachedNext": 2
+            },
+            {
+              "stepIndex": 3,
+              "reachedRuns": 5,
+              "reachRate": 50,
+              "conversionRate": 71.42857142857143,
+              "notReachedNext": null
+            }
+          ],
+          "provisional": false
+        },
+        {
+          "date": "2026-10-09",
+          "startedRuns": 0,
+          "completedRuns": 0,
+          "completionRate": null,
+          "steps": [
+            {
+              "stepIndex": 0,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 1,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 2,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": 0
+            },
+            {
+              "stepIndex": 3,
+              "reachedRuns": 0,
+              "reachRate": null,
+              "conversionRate": null,
+              "notReachedNext": null
+            }
+          ],
+          "provisional": true
+        }
+      ]
+    }
+  ]
+}

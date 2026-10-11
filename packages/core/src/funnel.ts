@@ -12,6 +12,12 @@ export interface FunnelResponse {
   meta: FunnelQueryMeta; funnelId: string; definition: FunnelDefinition; cohortBasis: 'startedAt';
   summary: FunnelCounts; days: (FunnelCounts & { date: string; provisional: boolean })[];
 }
+export interface FunnelBreakdownResponse {
+  meta: FunnelQueryMeta; funnelId: string; definition: FunnelDefinition; cohortBasis: 'startedAt';
+  groupBy: string; summary: FunnelCounts;
+  buckets: { value: string | number | boolean; summary: FunnelCounts;
+    days: (FunnelCounts & { date: string; provisional: boolean })[] }[];
+}
 
 export type { FunnelDefinition } from './types.ts';
 /** One random task identity, not a visitor identity, credential or proof of a browser event. */

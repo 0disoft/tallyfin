@@ -25,9 +25,26 @@ for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry
   'server-summary-response':'SummaryResponse', 'server-event-series-response':'EventSeriesResponse',
   'project-settings':'ProjectSettings', 'project-settings-update':'ProjectSettingsUpdate', 'project-creation':'ProjectCreation',
   'project-grants':'ProjectGrantPage', 'project-publishers':'ProjectPublisherPage', 'admin-changes':'AdminChangePage', 'admin-identity':'AdminIdentity', 'admin-health':'AdminHealth',
-  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry', 'funnel-response':'FunnelResponse' })) {
+  'funnel-definition':'FunnelDefinition', 'funnel-event':'FunnelEvent', 'funnel-registry':'Registry', 'funnel-response':'FunnelResponse', 'funnel-breakdown-response':'FunnelBreakdownResponse' })) {
   check(`example ${file}`, () => assert.ok(validate(schema, example(file)), JSON.stringify(ajv.errors)));
 }
+check('funnel dimension read contract is closed, bounded, typed and requires explicit registered grouping', () => {
+  const report = example('funnel-breakdown-response');
+  for (const mutate of [v => v.runId = 'private-marker', v => v.meta.source = 'browser', v => delete v.groupBy,
+    v => v.buckets[0].value = null, v => v.buckets[0].token = 'private-marker',
+    v => v.buckets = Array(33).fill(v.buckets[0]), v => v.buckets[0].days = []]) {
+    const value = structuredClone(report); mutate(value); assert.equal(validate('FunnelBreakdownResponse', value), false);
+  }
+  for (const value of [false, 0]) {
+    const response = structuredClone(report); response.buckets[0].value = value;
+    assert.ok(validate('FunnelBreakdownResponse', response), JSON.stringify(ajv.errors));
+  }
+  const route = spec.paths['/v1/projects/{projectId}/funnels/{funnelId}/breakdown'].get;
+  assert.equal(route.operationId, 'getFunnelPropertyCohorts');
+  const grouping = route.parameters.find(parameter => parameter.name === 'groupBy');
+  assert.equal(grouping.required, true); assert.equal(grouping.in, 'query');
+  assert.ok(!route.parameters.some(parameter => parameter.name === 'source'));
+});
 check('administrator storage health is authenticated, closed and scoped to reads', () => {
   const health = example('admin-health');
   for (const changed of [{ ...health, issuer: 'not-returned' }, { ...health, projectId: 'not-returned' },

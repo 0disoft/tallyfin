@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { DAY, dateEnd, dimensionKey, funnelCounts, parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, validateRegistry } from '@tallyfin/core';
-import type { FunnelQueryMeta, FunnelResponse } from '@tallyfin/core';
+import type { FunnelQueryMeta, FunnelResponse, FunnelBreakdownResponse } from '@tallyfin/core';
 import { D1Queries } from '@tallyfin/storage-d1';
 import type { SqlDatabase, SqlStatement } from '@tallyfin/storage-d1';
 import { funnelSeries } from '../../../packages/storage-d1/src/funnel-query.ts';
+import { funnelBreakdown, FUNNEL_DIMENSION_ROW_LIMIT } from '../../../packages/storage-d1/src/funnel-breakdown.ts';
 import { example, setup } from '../../../packages/storage-d1/test/helpers.ts';
 import { createCollector } from '../src/handler.ts';
 
@@ -32,7 +33,7 @@ beforeEach(async () => {
 function handler(at = now, identity: typeof principal | null = principal, queries = new D1Queries(f.db)) {
   return createCollector(f.store, { now: () => at, admin: { store: queries, verifyBearer: async () => identity } });
 }
-async function read(path = base + range, status = 200, at = now, identity: typeof principal | null = principal, method = 'GET') {
+async function read<T = FunnelResponse>(path = base + range, status = 200, at = now, identity: typeof principal | null = principal, method = 'GET') {
   const response = await handler(at, identity)(new Request('https://collector.example.invalid' + path,
     { method, headers: { Authorization: 'Bearer not-a-credential' } }));
   assert.equal(response.status, status, await response.clone().text());
@@ -40,7 +41,7 @@ async function read(path = base + range, status = 200, at = now, identity: typeo
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
   assert.equal(response.headers.get('Set-Cookie'), null);
   if (status === 405) assert.equal(response.headers.get('Allow'), 'GET');
-  return response.json() as Promise<FunnelResponse>;
+  return response.json() as Promise<T>;
 }
 async function rows(date: string, values: number[], kind = 'pdf', version = 1, project = 'modufile') {
   for (const [index, count] of values.entries())
@@ -48,6 +49,83 @@ async function rows(date: string, values: number[], kind = 'pdf', version = 1, p
       .bind(project, version, date, 'conversion', dimensionKey({ kind }, ['kind']), index, count, now).run();
 }
 
+const breakdownPath = base.replace('/daily', '/breakdown') + range + '&groupBy=kind';
+test('funnel breakdown reads existing D1 counts by registered dimension and reconciles all requested start days', async () => {
+  await rows('2026-10-08', [10, 8, 7, 5]); await rows('2026-10-08', [1, 1, 1, 1], 'image');
+  await rows('2026-10-09', [2, 1, 1, 0]);
+  const result = await read<FunnelBreakdownResponse>(breakdownPath), overall = await read();
+  assert.deepEqual(result.summary, overall.summary); assert.equal(result.groupBy, 'kind');
+  assert.deepEqual(result.buckets.map(bucket => bucket.value), ['image', 'pdf']);
+  const pdf = result.buckets.find(bucket => bucket.value === 'pdf')!;
+  assert.deepEqual(pdf.summary, funnelCounts([12, 9, 8, 5]));
+  assert.deepEqual(pdf.days.map(day => day.startedRuns), [10, 2, 0, 0]);
+  assert.deepEqual(pdf.days.map(day => day.provisional), [false, true, true, true]);
+  assert.equal(pdf.days[2]!.completionRate, null);
+  assert.deepEqual(result.definition.steps.map(step => step.source), ['browser', 'browser', 'server', 'server']);
+  assert.equal(Object.hasOwn(result.meta, 'source'), false);
+  assert.ok(!JSON.stringify(result).includes('dimension_key') && !JSON.stringify(result).includes('runId'));
+});
+test('breakdown keeps empty observation separate from absent definitions, respects grants and rejects unwanted query filters', async () => {
+  const empty = await read<FunnelBreakdownResponse>(breakdownPath);
+  assert.deepEqual(empty.buckets, []); assert.equal(empty.summary.completionRate, null);
+  for (const suffix of ['&source=browser', '&source=server', '&groupBy=kind', '&runId=x']) await read(breakdownPath + suffix, 400);
+  await read(breakdownPath.replace('&groupBy=kind', ''), 400);
+  await read(breakdownPath.replace('groupBy=kind', 'groupBy=unknown'), 400);
+  await read(breakdownPath.replace('/conversion/', '/unknown/'), 404);
+  await read(breakdownPath, 401, now, null);
+  await read(breakdownPath, 405, now, principal, 'POST');
+  await f.db.prepare('DELETE FROM project_grants').run(); await read(breakdownPath, 403);
+});
+test('breakdown prevents cross-version/project leakage and malformed persisted dimension data fails closed', async () => {
+  await rows('2026-10-08', [4, 3, 2, 1]);
+  await f.db.prepare("INSERT INTO project_schemas VALUES ('modufile',2,'active',?,?,NULL)")
+    .bind(JSON.stringify({ events: registry.events, workflows: [], funnels: registry.funnels }), now).run();
+  await rows('2026-10-08', [100, 100, 100, 100], 'pdf', 2);
+  assert.equal((await read<FunnelBreakdownResponse>(breakdownPath)).summary.startedRuns, 4);
+  assert.equal((await read<FunnelBreakdownResponse>(breakdownPath.replace('Version=1', 'Version=2'))).summary.startedRuns, 100);
+  await read(breakdownPath.replace('/modufile/', '/missing/'), 403);
+  await f.db.prepare("UPDATE funnel_daily_counts SET dimension_key=? WHERE project_id='modufile' AND schema_version=1")
+    .bind(JSON.stringify(['private-malformed-marker'])).run();
+  const failed = await read<any>(breakdownPath, 503);
+  assert.equal(failed.error.code, 'storage_unavailable'); assert.ok(!JSON.stringify(failed).includes('private-malformed-marker'));
+});
+test('grouping validates full combinations before aggregation and preserves boolean false and integer zero', () => {
+  const input = { projectId: 'modufile', version: 1, kind: 'funnel-breakdown' as const, name: 'conversion', groupBy: 'kind' };
+  const meta: FunnelQueryMeta = { projectId: 'modufile', schemaVersion: 1, from: '2026-10-08', to: '2026-10-08',
+    timeZone: 'Asia/Seoul', generatedAt: new Date(now).toISOString(), latestReceivedAt: null, coverage: 'observed-only' };
+  const first = { cohort_date: '2026-10-08', dimension_key: dimensionKey({ kind: 'pdf' }, ['kind']), step_index: 0, reached_count: 10 };
+  for (const invalid of [[first, first], [{ ...first, step_index: 1, reached_count: 1 }, { ...first, dimension_key: dimensionKey({ kind: 'image' }, ['kind']) }],
+    [{ ...first, reached_count: -1 }], [{ ...first, step_index: 4 }], [{ ...first, cohort_date: '2026-10-09' }],
+    [{ ...first, dimension_key: '[]' }], [{ ...first, dimension_key: 'x'.repeat(513) }],
+    [{ ...first, dimension_key: dimensionKey({ kind: 'unknown' }, ['kind']) }]])
+    assert.throws(() => funnelBreakdown(registry, input, meta, [meta.from], invalid, now), { code: 'storage_unavailable' });
+  for (const [rule, value] of [[{ type: 'boolean', required: true, purpose: 'Finite classification' }, false], [{ type: 'integer', required: true, purpose: 'Finite classification', minimum: 0, maximum: 1 }, 0]] as const) {
+    const reg = structuredClone(registry); reg.events.forEach(event => { event.properties.kind = rule; });
+    const result = funnelBreakdown(reg, input, meta, [meta.from], [{ ...first, dimension_key: dimensionKey({ kind: value }, ['kind']) }], now);
+    assert.equal(result.buckets[0]!.value, value); assert.equal(result.summary.startedRuns, 10);
+  }
+  assert.throws(() => funnelBreakdown(registry, input, meta, [meta.from], Array(FUNNEL_DIMENSION_ROW_LIMIT + 1).fill(first), now), { code: 'storage_unavailable' });
+  assert.throws(() => funnelBreakdown(registry, input, meta, [meta.from], [
+    { ...first, reached_count: Number.MAX_SAFE_INTEGER },
+    { ...first, dimension_key: dimensionKey({ kind: 'image' }, ['kind']), reached_count: 1 }], now), { code: 'storage_unavailable' });
+});
+test('breakdown collapses other registered dimensions and refuses reordered duplicate combinations', () => {
+  const modified = structuredClone(registry);
+  modified.events.forEach(event => { event.properties.flag = { type: 'boolean', required: true, purpose: 'Finite classification' }; });
+  modified.funnels![0]!.dimensions.push('flag');
+  const reg = validateRegistry(modified);
+  const input = { projectId: 'modufile', version: 1, kind: 'funnel-breakdown' as const, name: 'conversion', groupBy: 'kind' };
+  const meta: FunnelQueryMeta = { projectId: 'modufile', schemaVersion: 1, from: '2026-10-08', to: '2026-10-08',
+    timeZone: 'Asia/Seoul', generatedAt: new Date(now).toISOString(), latestReceivedAt: null, coverage: 'observed-only' };
+  const counts = (flag: boolean, reached: number[]) => reached.map((count, step_index) => ({ cohort_date: meta.from,
+    dimension_key: dimensionKey({ kind: 'pdf', flag }, ['kind', 'flag']), step_index, reached_count: count }));
+  const result = funnelBreakdown(reg, input, meta, [meta.from], [...counts(false, [10, 8, 6, 4]), ...counts(true, [2, 2, 1, 0])], now);
+  assert.equal(result.buckets.length, 1); assert.deepEqual(result.summary, funnelCounts([12, 10, 7, 4]));
+  assert.deepEqual(result.buckets[0]!.summary, result.summary);
+  const one = counts(false, [1, 0, 0, 0])[0]!;
+  assert.throws(() => funnelBreakdown(reg, input, meta, [meta.from], [one,
+    { ...one, dimension_key: JSON.stringify(JSON.parse(one.dimension_key).reverse()) }], now), { code: 'storage_unavailable' });
+});
 test('funnel daily query combines dimensions, fills dates and derives rates from totals, not mean daily rates', async () => {
   await rows('2026-10-08', [10, 8, 7, 5]); await rows('2026-10-08', [1, 1, 1, 1], 'image');
   await rows('2026-10-09', [2, 1, 1, 0]);

@@ -110,6 +110,24 @@ null 버킷은 없고 관찰된 값만 반환한다. 빈 결과는 buckets=[], 0
 
 ## 퍼널 일별 조회
 
+`GET /v1/projects/{projectId}/funnels/{funnelId}/breakdown`은 기존에 저장한 필수 시작일 차원으로
+퍼널을 나눠 읽는다. `schemaVersion`·`from`·`to`·`groupBy`가 필수다. groupBy는 선택 퍼널의
+dimensions 중 하나이며, 단계의 browser/server 출처를 합쳐 조회하므로 source는 받지 않는다.
+프로젝트 reader/owner grant·정의·집계를 같은 D1 batch에서 읽고 각 SELECT가 grant를 다시
+확인한다. 범위는 최근 90일 안의 1~31일이고 최대 256개 원래 차원 조합·10단계·79,360행을
+읽는다. 상한보다 한 행 더 요청해 넘침을 발견하면 503으로 거부한다.
+
+응답은 source 없는 meta·funnelId·definition·cohortBasis(startedAt)·groupBy·전체 summary와
+최대 32개 buckets다. 각 bucket의 value는 등록된 string/boolean/integer 값이며 false·0도
+보존한다. 필수 차원이므로 null은 없고 관측 행이 없으면 buckets는 빈 배열이다. 각 bucket은
+summary와 모든 조회일의 days를 담고, 없는 날은 건수 0·비율 null이다. 비율과 provisional은
+daily 조회와 같으며 평균 일별 비율을 쓰지 않고 전체 건수에서 계산한다.
+
+감싼 다른 차원을 합치기 전에 각 날짜/원래 조합의 연속 단계 건수를 검사한다. 미등록 값·
+중복 단계·다른 날짜·잘못된 차원 JSON·안전 정수 넘침·앞 단계보다 큰 건수는 503이다.
+runId·dimension_key·원문 이벤트는 응답에 넣지 않는다. DB·마이그레이션은 그대로이며
+이 읽기 API는 로컬에서 구현·검증했다. 관리자 분류 화면·CSV 연결은 다음 단계다.
+
 `GET /v1/projects/{projectId}/funnels/{funnelId}/daily`는 등록 퍼널의 시작일 cohort 도달 수와
 전환율을 읽는다. `schemaVersion`·`from`·`to`가 필수이고 프로젝트-local 최근 90일 안에서
 1~31일(양끝 포함)을 읽는다. 정의 조회·집계·reader/owner grant 검사는 같은 D1 batch에서

@@ -1,5 +1,31 @@
 # 검증
 
+## 다단계 퍼널의 속성별 읽기 API — 2026-10-11
+
+OpenAPI에 별도 GET `/v1/projects/{projectId}/funnels/{funnelId}/breakdown`, 필수 groupBy와
+`FunnelBreakdownResponse`·bucket을 추가하고 코어 타입·D1 투영·관리자 라우트를 연결했다.
+기존 dimension_key별 카운트만 읽어 등록된 시작 차원 하나로 묶으며 모든 조합의 단계 순서를
+집계 전에 검사한다. 기존 daily 응답·등록·쓰기·보존 규칙과 DB는 유지했다.
+
+- `node --test --test-timeout=30000 apps/collector/test/funnel-query.test.ts
+  apps/collector/test/server-query.test.ts`: 21/21, 종료 코드 0. 실제 로컬 D1/HTTP에서 분류/전체
+  합계·누락 날짜·0/null·잠정 여부·출처 교차·인증/권한/다른 프로젝트/버전·잘못된 파라미터·
+  저장 차원 손상과 기존 daily/server 조회 회귀를 확인했다. 투영 검사는 boolean false·integer
+  0, 원래 조합 병합, 순서를 바꾼 중복, 손상 조합을 정상 조합이 가리는 경우, 행 상한과 안전
+  정수 넘침을 확인한다. 초기 오류 주입은 DB JSON CHECK에 막혀 유효 JSON의 잘못된 tuple로
+  수정했고, 새 테스트 정의의 누락 purpose도 보완한 뒤 통과했다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 종료 코드 0.
+- `node node_modules/typescript/bin/tsc -p apps/collector/tsconfig.runtime.json`: 종료 코드 0.
+- `tools/contracts`의 `npm.cmd run check`: 63/63, 종료 코드 0. 새 예제·닫힌 응답·값 자료형·
+  bucket/일수 상한·필수 groupBy·source 미지원과 기존 API/DB 계약을 확인한다.
+- 같은 폴더의 `npm.cmd run lint`: OpenAPI valid, 종료 코드 0.
+- `git diff --check`: 종료 코드 0.
+
+계약 원본 `api/openapi.yaml`과 API 예제·관리자 경계·제품 명세·로드맵을 갱신했다.
+DB·마이그레이션·SDK·관리자 UI·의존성·CI 러너·위생 정책은 바뀌지 않았다. 화면 연결은
+다음 슬라이스라 관리자 빌드/브라우저 검사는 하지 않았고, 전체 출시·부하 검사는 이번 읽기
+범위에서 반복하지 않았다. 운영 인증·원격 DB/배포·Sembom 활성화·푸시는 미실행이다.
+
 ## 다단계 퍼널의 직전 기간 비교·CSV — 2026-10-11
 
 선택한 퍼널의 현재 보고서가 준비된 뒤 같은 프로젝트·스키마 버전·정의의 직전 같은 길이

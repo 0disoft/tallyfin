@@ -20,7 +20,7 @@ export interface ProjectPublisher { issuer: string; subject: string; createdAt: 
 export interface ProjectPublisherPage {
   projectId: string; data: ProjectPublisher[]; page: { limit: number; nextCursor: string | null };
 }
-export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown' | 'funnel';
+export type QueryKind = 'registry' | 'summary' | 'event' | 'workflow' | 'workflow-breakdown' | 'funnel' | 'funnel-breakdown';
 export interface AdminQuery {
   projectId: string; version: number; kind: QueryKind;
   from?: string; to?: string; name?: string; groupBy?: string; source?: 'browser' | 'server';
