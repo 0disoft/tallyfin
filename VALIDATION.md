@@ -1,5 +1,25 @@
 # 검증
 
+## 같은 D1의 로컬 수집 Worker 분리 — 2026-10-11
+
+`collectorHarness`의 기본 Worker 하나는 유지하고 선택 2~4개 프로필에 루프백 라우터와
+별도 이름의 수집 Worker를 연결했다. 모든 수집 Worker가 같은 새 D1 ID를 바인딩하며
+응답의 검증 전용 헤더로 실제 실행 인스턴스를 구분한다. 키/JWKS/서명 토큰은 메모리에만
+두고 기존 DB 경로나 원격 URL을 받지 않는다. 호환 날짜는 기존 실험 대상 그대로다.
+
+- `node --test --test-timeout=30000 tools/runtime/test/collector-cluster.test.ts
+  tools/runtime/test/collector-bench.test.ts tools/runtime/test/retained-bench.test.ts`: 6/6,
+  종료 코드 0. 세 Worker의 같은 배치 동시 HTTP 전송에서 accepted 합계 1·duplicates 2,
+  인스턴스별 서명 인증 조회·공유 D1 행 수·라우터 경로 거부와 기존 fixture/부하 도구를
+  확인했다. 초기 테스트 이벤트 이름이 등록 정의와 달라 422였고 실제 tool_view로 고친 뒤
+  통과했다. 각 테스트 런타임은 finally에서 닫는다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 종료 코드 0.
+
+한 Miniflare/workerd 안의 별도 수집 Worker 3개 검증이며 다중 프로세스/지역·장기간·운영
+D1 검증은 아니다. 다음은 이 환경의 누적 데이터·실제 예정 부하·정리 동시 실행이다.
+API·DB·SDK·의존성·CI·위생 정책 변경은 없다. 관리자/SDK 빌드는 범위 밖이라 생략하고
+일반 소스 lint 스크립트는 없다. 운영 인증·배포·푸시·서비스 연동은 미실행이다.
+
 ## 퍼널 속성별 직전 기간 비교·CSV — 2026-10-11
 
 같은 차원·프로젝트·버전·퍼널 정의의 직전 같은 길이 코호트를 추가 조회한다. 값의 자료형을
