@@ -1,5 +1,30 @@
 # 검증
 
+## 수집기 로컬 부하 실험 — 2026-10-11
+
+`npm run bench:collector`(opt-in, 기본 test/check/CI에 연결하지 않음)를 추가했다. 새 합성
+D1·loopback HTTP에서 실제 bearer·JWT 검증과 D1 집계를 거치는 216요청을 측정했고 204건
+200, 12건은 설계한 할당량 429다(Retry-After 확인). 동시성 1·4·8·16 단계는 각각 12배치
+240개 신규 이벤트와 같은 DB 조회 6건을 처리했고 workflow 쓰기 p95는
+47.13/111.39/190.01/322.82ms, 인증 조회 p95는 9.35/109.87/189.35/321.15ms였다. 같은 20개
+이벤트를 16동시로 재전송한 단계는 accepted 20·duplicates 300이고, browser/server가 공유하는
+분당 한도 12는 성공 12·429 12였으며 이후 다른 프로젝트 2건은 정상 수락됐다.
+
+실행·통과: 루트 `tsc --noEmit`, `node --test tools/runtime/test/collector-bench.test.ts` 2/2,
+신규 명령 `--help`와 옵션 인자 거부, `npm run bench:collector`. 환경은 Node 24.18.0·Miniflare 4.20260730.0·
+win32 x64이며 결과는 `.tmp/collector-bench/run-QOCW8g/report.json`이다. 최종 DB는 영수증
+1090·workflow 시작/성공 480/480·4단계 퍼널 완료 24·할당량 수락 12/거부 12이고 API 조회
+합계와 독립 DB 집계가 일치했다.
+
+Worker 시계는 고정했고 HTTP 시간은 호스트 단조 시계 실측이며 JWKS는 메모리 합성이라 실제
+제공자 로그인·토큰 갱신·JWKS 장애는 미실행이다. 작은 순차 스윕으로 단계마다 DB가 커지고
+쓰기 12개·조회 6개 표본의 p95는 최댓값이므로 운영 처리량·SLO·원인 귀속으로 일반화하지
+않는다. 원격 DB·실제 운영 인증·지속 대용량 부하·정리 중 부하·다중 Worker는 미실행이다.
+측정 조건은 `tools/runtime/COLLECTOR-BENCH.md`에 있다.
+
+API·DB 스키마·마이그레이션·의존성·CI 워크플로/러너·위생 정책 변경은 없고 opt-in
+`bench:collector` 명령만 추가했으며 푸시·배포는 없다.
+
 ## 전체 스키마 SQL 백업·복구 연습 — 2026-10-11
 
 `verify:restore` 명령과 로컬 합성 fixture·스키마/행 내용 fingerprint를 추가했다.
