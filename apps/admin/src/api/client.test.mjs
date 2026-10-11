@@ -17,6 +17,28 @@ function exportRows(file) {
     return Object.fromEntries(CSV_COLUMNS.map((key,index)=>[key,cells[index]]));
   });
 }
+test('CSV separates the selected query source from unselected event declarations', () => {
+  const { registry, snapshot } = comparisonFixture();
+  registry.events.push({ name: 'backend', label: 'Backend', source: 'server', properties: {} });
+  for (const source of ['browser', 'server']) {
+    const current = structuredClone(snapshot);
+    current.summary.meta.source = source;
+    if (source === 'server') {
+      current.workflows = [];
+      current.summary.events = [{ name: 'backend', count: 4 }]; current.summary.totalEvents = 4;
+    }
+    const file = analyticsCsv({ registry, current, view: 'events', source });
+    const rows = exportRows(file);
+    assert.ok(rows.every(row => row.query_source === source));
+    const other = rows.find(row => row.record_type === 'event_total' && row.source !== source);
+    assert.ok(other); assert.equal(other.availability, 'not_selected'); assert.equal(other.count, '');
+    assert.equal(other.source, source === 'browser' ? 'server' : 'browser');
+    const selected = rows.find(row => row.record_type === 'event_total' && row.source === source);
+    assert.equal(selected.availability, 'available');
+    assert.equal(file.filename.includes('-server-'), source === 'server');
+  }
+});
+
 test('CSV quotes delimiters, newlines and formula-like text; numeric negative, false, zero and blank remain distinct', () => {
   assert.equal(csvCell('한글,"이름"\n줄'), '"한글,""이름""\n줄"');
   for (const value of ['=1+1',' +2','-1','@SUM(A1)','\tplain','\rtext','\ntext','＝1','＋2','－3','＠A1']) assert.equal(csvCell(value),`"'${value}"`);

@@ -804,3 +804,11 @@ CSV는 실제 양 기간 분류 행과 값별 property_comparison을 추가하�
 브라우저가 형식화할 수 있는 이름). 서버가 돌려준 지원 시간대와 별칭은 다시 쓰지 않고
 그대로 표시하며 UTC로 바꾸지 않는다. `DeferredPanel`의 새로고침 안내는 예상치 못한 렌더
 오류용으로 남고, 시간대 응답은 여기까지 오지 않는다.
+
+## CSV 조회 출처 열 — 2026-10-12
+
+CSV 마지막 열 `query_source`는 사용자가 조회한 출처(browser/server)를 모든 행에 적는다.
+기존 `source` 열은 그대로 두어 `event_total` 행에서는 선언된 이벤트 출처를, 나머지 행에서는
+`meta.source`를 뜻한다. 선택하지 않은 출처의 `event_total` 행은
+`availability=not_selected`와 빈 `count`를 유지하고 0을 채우지 않는다. 열 순서는 그대로 두고
+맨 뒤에만 붙였다. CSV를 읽는 쪽은 열 개수를 고정하지 말고 헤더 이름으로 찾는다.

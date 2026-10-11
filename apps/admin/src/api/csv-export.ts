@@ -16,7 +16,7 @@ export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'tim
   'selected_event', 'selected_group_by', 'period', 'from', 'to', 'generated_at', 'coverage', 'source',
   'record_type', 'metric', 'name', 'label', 'cohort_basis', 'date', 'group_by', 'value_type', 'value', 'count', 'share_percent',
   'started_attempts', 'succeeded_attempts', 'failed_attempts', 'pending_attempts', 'completion_rate_percent',
-  'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit'] as const;
+  'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit', 'query_source'] as const;
 
 /** Quoted UTF-8 CSV for spreadsheet viewing. Protect text cells, never alter numeric negatives. */
 export function csvCell(value: Cell): string {
@@ -47,7 +47,7 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
     project_id: registry.project.id, project_name: registry.project.name, schema_version: registry.schemaVersion,
     time_zone: meta.timeZone, view, event_filter: filter, selected_event: selection?.eventName,
     selected_group_by: selection?.groupBy, period, from: meta.from, to: meta.to, generated_at: meta.generatedAt,
-    coverage: meta.coverage, source: meta.source, availability: 'available', ...row,
+    coverage: meta.coverage, source: meta.source, availability: 'available', ...row, query_source: source,
   });
   const workflowFields = (summary: WorkflowSummary): Row => ({ started_attempts: summary.startedAttempts,
     succeeded_attempts: summary.succeededAttempts, failed_attempts: summary.failedAttempts,

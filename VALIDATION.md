@@ -3611,3 +3611,20 @@ pageerror 0·routeError false로 verified=true였고, 기존 접근 회수·CSV 
 
 합성 로컬 RS256 로그인과 격리된 Miniflare D1/Vite를 쓴 검사이며 실제 운영 제공자는
 확인하지 않았다. API·DB·SDK·의존성·위생 정책·CI 러너 변경은 없고 푸시·배포도 없다.
+
+## CSV 조회 출처 열 — 2026-10-12
+
+`CSV_COLUMNS` 마지막에 `query_source`를 추가해 기존 열 순서와 `source` 동작을 유지한다.
+`event_total` 행의 `source`는 선언된 이벤트 출처, 다른 행은 `meta.source`이고,
+`query_source`는 모든 행에서 조회한 browser/server를 가리킨다. 선택하지 않은 출처의
+`event_total` 행은 `availability=not_selected`와 빈 `count`를 유지하며 0을 만들지 않는다.
+
+새 `client.test.mjs` 검사는 수정 전 실패하고 수정 후 통과했다. 최종
+`node --test apps/admin/src/api/client.test.mjs apps/admin/src/api/server-source.test.mjs`
+41/41, `typecheck:admin`·`build:admin` 통과, `verify:admin-analysis-access`의 실제
+내려받은 CSV 헤더 `query_source` 검사를 통과했다. 최종 Chromium 156.0.8078.4 실행은
+verified=true, pageErrors 0·routeError false·읽기 23·쓰기 0·로그인 1,
+invalidZoneReads 1·deniedReads 1·heldReads 1이었다.
+
+CSV 열이 하나 늘어 소비자는 고정 열 개수 대신 헤더를 읽어야 한다. API·DB·SDK·의존성·
+위생 정책·CI 러너 변경은 없고 푸시·배포도 없다.
