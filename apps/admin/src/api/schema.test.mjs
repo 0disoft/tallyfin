@@ -18,7 +18,7 @@ const registry = (version, draft) => ({ project, ...metadata(version), allowedOr
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
 function fixture() {
   const calls = [], schemas = new Map([[1, definitions()]]);
-  const config = { owner: true, write: null, validate: null };
+  const config = { owner: true, write: null, validate: null, read: null };
   const fetchImpl = async (url, init) => {
     calls.push({ url, init });
     if (init.method === 'PUT') {
@@ -28,6 +28,7 @@ function fixture() {
       return response(200, { projectId: 'sample', ...metadata(version), definitionHash: await definitionHash(draft) });
     }
     if (init.method === 'POST') return config.validate ? config.validate(url, init) : response(200, { valid: true, issues: [], privacyReviewRequired: true });
+    if (config.read) return config.read(url, init);
     if (url === '/v1/projects/sample') return response(200, { project, allowedOrigins: ['https://example.invalid'],
       limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: config.owner });
     if (url.includes('/schemas?')) {
@@ -135,9 +136,51 @@ test('reader and revoked owner cannot edit/publish, and refresh does not silentl
   await f.editor.refresh(); assert.equal(f.editor.state.phase, 'review'); assert.equal(f.editor.state.draft, JSON.stringify(definitions()));
   f.editor.keepDraft(); await f.editor.validate(); f.editor.setPrivacy(true);
   f.config.write = async () => { f.config.owner = false; return response(403, { error: { code: 'forbidden' } }); };
-  await f.editor.publish(); await f.editor.checkLatest(); f.editor.keepDraft(); assert.equal(f.editor.state.phase, 'review');
+  await f.editor.publish(); assert.equal(f.editor.canEdit, false);
+  await f.editor.checkLatest(); f.editor.keepDraft(); assert.equal(f.editor.state.phase, 'review');
   f.editor.useServer(); assert.equal(f.editor.canEdit, false); f.editor.destroy();
 });
+test('denied validation locks retained drafts and requires a fresh permission review before editing', async () => {
+  for (const status of [401, 403]) {
+    const f = fixture(); await f.editor.load();
+    const mine = definitions(); mine.events[0].label = 'Retained draft';
+    const draft = JSON.stringify(mine); f.editor.edit('draft', draft);
+    f.config.validate = async () => response(status, { error: { code: status === 401 ? 'unauthorized' : 'forbidden' } });
+    await f.editor.validate();
+    assert.equal(f.editor.canEdit, false);
+    f.editor.edit('draft', '{}'); f.editor.setPrivacy(true); await f.editor.validate(); await f.editor.publish();
+    assert.equal(f.editor.state.draft, draft); assert.equal(f.editor.state.privacyReviewed, false);
+    assert.equal(f.calls.filter(c => c.init.method === 'POST').length, 1);
+    assert.equal(f.calls.filter(c => c.init.method === 'PUT').length, 0);
+    // Successful registry reads alone do not prove that editing authority returned.
+    await f.editor.selectVersion(1); assert.equal(f.editor.canEdit, false);
+    f.config.owner = false; await f.editor.refresh();
+    assert.equal(f.editor.canEdit, false); assert.equal(f.editor.state.draft, draft);
+    f.editor.keepDraft(); assert.equal(f.editor.state.phase, 'review');
+    f.config.owner = true; await f.editor.checkLatest(); f.editor.keepDraft();
+    assert.equal(f.editor.canEdit, true); assert.equal(f.editor.state.draft, draft);
+    assert.equal(f.editor.state.validatedKey, null); assert.equal(f.editor.state.privacyReviewed, false);
+    f.editor.destroy(); f.client.destroy();
+  }
+});
+
+test('denied reads lock all schema read paths and subsequent network errors cannot unlock them', async () => {
+  for (const action of ['refresh', 'selectVersion', 'loadMore']) {
+    const f = fixture(); await ready(f.editor);
+    const draft = f.editor.state.draft;
+    if (action === 'loadMore') f.editor.state.snapshot.page.page.beforeVersion = 1;
+    f.config.read = async () => response(403, { error: { code: 'forbidden' } });
+    await f.editor[action](1);
+    assert.equal(f.editor.state.phase, 'review'); assert.equal(f.editor.canEdit, false);
+    assert.equal(f.editor.state.draft, draft); assert.equal(f.editor.state.validatedKey, null);
+    assert.equal(f.editor.state.privacyReviewed, false); assert.equal(f.editor.state.more, false);
+    f.config.read = async () => { throw new TypeError('offline'); };
+    await f.editor.checkLatest(); assert.equal(f.editor.canEdit, false);
+    f.editor.edit('draft', '{}'); assert.equal(f.editor.state.draft, draft);
+    f.editor.destroy(); f.client.destroy();
+  }
+});
+
 test('destroyed controllers ignore late validation replies and do not issue writes', async () => {
   const f = fixture(); await f.editor.load(); let release;
   f.config.validate = async () => new Promise(resolve => { release = resolve; });

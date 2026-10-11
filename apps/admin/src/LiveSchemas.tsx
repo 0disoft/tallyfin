@@ -50,16 +50,17 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     <p role={state?.phase === 'error' ? 'alert' : 'status'}>{state?.phase === 'error' ? state.message : '스키마 목록과 권한을 불러오는 중이에요.'}</p>
     {state?.phase === 'error' && <button className="secondary-button" onClick={() => { void editorRef.current?.load(); }}>다시 불러오기</button>}
   </section>;
-  const { snapshot } = state, busy = ['loading', 'validating', 'publishing'].includes(state.phase), owner = state.latest?.settings.canEdit ?? snapshot.settings.canEdit;
+  const { snapshot } = state, busy = ['loading', 'validating', 'publishing'].includes(state.phase), owner = !state.blocked && (state.latest?.settings.canEdit ?? snapshot.settings.canEdit);
   const unlocked = state.phase === 'ready' && !state.more, editable = unlocked && owner;
   const publishable = editable && state.validatedKey === `${state.target}\n${state.draft}` && state.privacyReviewed;
   let preview: { events: unknown[]; workflows: unknown[]; funnels?: unknown[] } | null = null;
   try { preview = readDraft(state.draft); } catch { /* Invalid JSON remains in the editor until explicitly validated. */ }
   return <section className="settings-section schema-section" aria-labelledby="schema-heading" aria-busy={busy || undefined}>
     <div className="settings-head"><h2 id="schema-heading">이벤트 스키마</h2>
-      <span className="settings-badge">{owner ? '소유자' : '읽기 전용'}</span></div>
+      <span className="settings-badge">{state.blocked ? '권한 확인 필요' : owner ? '소유자' : '읽기 전용'}</span></div>
     <p className="context-note">이벤트·속성·작업 흐름·퍼널 정의를 새 버전으로 발행해요. 기존 버전과 집계는 그대로 유지돼요.</p>
-    {!owner && <p className="notice">등록된 정의를 읽을 수 있어요. 편집·검증·발행에는 소유자 권한이 필요해요.</p>}
+    {state.blocked ? <p className="notice">초안은 보존했지만 편집·검증·발행은 잠겼어요. 서버 상태를 확인하고 사용할 내용을 다시 골라 주세요.</p>
+      : !owner && <p className="notice">등록된 정의를 읽을 수 있어요. 편집·검증·발행에는 소유자 권한이 필요해요.</p>}
     <div className="schema-toolbar"><p>조회한 최신 버전: <strong>{snapshot.page.latestVersion === null ? '아직 없음' : `v${snapshot.page.latestVersion}`}</strong></p>
       <button className="secondary-button" disabled={busy || state.more} onClick={() => { void editorRef.current?.refresh(); }}>목록 새로고침</button></div>
     <div className="table-scroll" tabIndex={0} aria-label="스키마 버전 목록"><table className="event-table">

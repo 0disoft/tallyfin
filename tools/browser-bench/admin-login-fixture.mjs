@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 
 // Test-only provider. Keys, codes and tokens are ephemeral; no external identity service is contacted.
 export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
-  assert.ok(['login', 'onboarding'].includes(profile));
+  assert.ok(['login', 'onboarding', 'access'].includes(profile));
   const issuer = 'https://identity.example.invalid', clientId = 'tallyfin-smoke-public';
   const audience = 'tallyfin-smoke-api', resource = 'urn:tallyfin:smoke:api';
   const subject = 'synthetic-login-operator';
@@ -50,12 +50,24 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
       const provisioner = new Provisioner(db);
       await provisioner.apply(await provisioner.plan('register', registry), Date.now());
       await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer, subject, role: 'owner' }), Date.now());
+      if (profile === 'access') {
+        await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer,
+          subject: 'synthetic-backup-operator', role: 'owner' }));
+        const other = structuredClone(registry); other.project.id = 'access-other'; other.project.name = 'Other access fixture';
+        await provisioner.apply(await provisioner.plan('register', other));
+        await provisioner.apply(await provisioner.plan('grant', { projectId: other.project.id, issuer, subject, role: 'owner' }));
+      }
     }
     return { mf, db, issuer, clientId, resource,
       configure(value) { origin = value; },
       setMode(value) { assert.ok(['normal', 'bad-state', 'refresh-error'].includes(value)); mode = value; },
+      async setRole(role) {
+        assert.equal(profile, 'access'); assert.ok(['owner', 'reader'].includes(role));
+        const provisioner = new Provisioner(db);
+        await provisioner.apply(await provisioner.plan('grant', { projectId: 'sembom', issuer, subject, role }));
+      },
       get counts() { return { authorizations, exchanges, refreshes, apiReads, apiWrites, browserBatches }; },
-      async route(route, { dropResponse = false } = {}) {
+      async route(route, { dropResponse = false, afterCommit } = {}) {
         const request = route.request(), url = new URL(request.url());
         if (url.origin === origin) {
           if (url.pathname.startsWith('/v1/')) {
@@ -68,16 +80,19 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
               if (request.method() === 'GET') apiReads++; else apiWrites++;
             }
           }
-          if (dropResponse) {
+          if (dropResponse || afterCommit) {
             // Test only: execute the authenticated write against real local D1,
             // then lose its successful response before the page can observe it.
-            assert.equal(profile, 'onboarding');
+            assert.equal(profile, dropResponse ? 'onboarding' : 'access');
             assert.ok(url.pathname.startsWith('/v1/'));
-            assert.ok(['POST', 'PUT'].includes(request.method()));
+            assert.ok((dropResponse ? ['POST', 'PUT'] : ['PATCH']).includes(request.method()));
             const committed = await route.fetch({ maxRedirects: 0, timeout: 15000 });
-            assert.ok(committed.ok());
-            await committed.dispose();
-            return route.abort('failed');
+            try {
+              assert.ok(committed.ok());
+              if (dropResponse) return await route.abort('failed');
+              await afterCommit();
+              return await route.fulfill({ response: committed });
+            } finally { await committed.dispose(); }
           }
           return route.continue();
         }

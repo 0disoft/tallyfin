@@ -80,6 +80,9 @@ npm run dev -- --local --state-dir .tmp/collector-db
 원격 서비스는 쓰지 않는다. Playwright 준비와 출력 범위는 [온보딩 검증 안내](tools/browser-bench/ADMIN-ONBOARDING.md)에 있다.
 `--lost-responses`를 붙이면 생성·발행을 저장한 뒤 응답을 끊고, 화면의 명시적 확인으로
 초안과 첫 이벤트 조회까지 복구되는지도 확인한다.
+권한 거부·복구와 저장 중 프로젝트 전환/연결 해제는
+`npm run verify:admin-access -- --channel chromium`으로 별도 확인한다.
+[권한 검증 안내](tools/browser-bench/ADMIN-ACCESS.md)를 따른다.
 
 관리자 설정에는 `logs:summary` JSON 파일을 읽는 `운영 로그 보고서`도 있다. 브라우저
 Worker에서 8MiB 이하 보고서를 검증하고 오류·응답·정리 기록을 표로 표시한다. 파일 전송이나

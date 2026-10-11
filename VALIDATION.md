@@ -1,5 +1,38 @@
 # 검증
 
+## 스키마 권한 거부·프로젝트 전환 중 저장 — 2026-10-12
+
+권한을 잃은 뒤 스키마 검증 POST가 401/403으로 거부돼도 기존 owner snapshot으로 편집이
+가능한 것처럼 표시되던 경로를 수정했다. 신규 회귀 검사에서 수정 전 canEdit=true로 실패했다.
+SchemaEditor는 검증·발행·목록/버전 조회의 권한 거부를 blocked/review로 반영한다.
+초안은 보존하되 편집·검증·발행과 기존 검증/개인정보 확인을 잠근다. 조회 실패가 반복돼도
+잠금은 유지한다. 성공한 최신 설정 조회 뒤 명시적 서버/초안 선택으로만 복구한다.
+화면은 이 상태를 소유자 대신 `권한 확인 필요`로 표시한다.
+
+새 옵트인 `npm run verify:admin-access -- --channel chromium`은 합성 서명 제공자와 새 D1을
+사용했다. 로컬 운영 도구로 실제 owner→reader→owner 권한을 변경한 뒤 UI 검증이 실제
+403으로 거부되고 초안/잠금/권한 표시와 명시적 복구가 이어짐을 확인했다. 이어 설정 PATCH를
+서버에 저장한 뒤 응답을 보류하고 프로젝트 전환과 연결 해제를 각각 수행했다. 이전 저장
+응답이 새 프로젝트/연결 해제 화면을 바꾸지 않았고, 서버에 이미 저장한 이름은 DB에 남았다.
+이것은 UI 취소가 서버 커밋을 되돌린다는 증거가 아니다.
+
+최종 실행은 verified=true, Chromium 156.0.8078.4, 실제 검증 거부 1회, 보류된 저장 2회,
+API 읽기 49·쓰기 요청 4, routeError=false·pageErrors=0, 쿠키/local/session storage 비어
+있음이었다. 결과는 `.tmp/admin-access-U4BO8H/report.json`이다. 첫 브라우저 시도는 복수
+checkbox를 단일 항목으로 찾는 검사 오류로 권한 복구 단계에서 실패했다. 개인정보 검토
+checkbox의 정확한 이름으로 수정한 다음 성공했고 초기 실패 자료는 보존했다.
+
+스키마/생성/번들 검사 36/36, 관리자 타입·빌드, runner/fixture 구문과 whitespace 확인이
+통과했다. 기존 `verify:admin-onboarding -- --channel chromium --lost-responses`도
+verified=true·첫 이벤트 1·단계 3·pageerror 0으로 통과했다. 테스트용 access 프로필만
+추가하고 기존 GET 전용 login·onboarding 프로필을 유지했다. 모든 브라우저/Vite/Miniflare를
+종료했다. runner는 기본 검사나 CI에 자동 추가하지 않았다.
+
+Frontend 설계·README·권한 검증 안내와 이 기록을 갱신했다. API/DB 계약·백엔드·SDK·
+의존성·hygiene·CI 변경과 푸시·배포는 없다. 변경 없는 전체 백엔드 검사는 반복하지 않았고
+일반 lint 명령은 없어 생략했다. 실제 운영 제공자/원격 DB, 전 역할·조직 경계와 기기별
+동작은 아직 미검증이며 이번 사용자 경로로 전체 준비가 완료됐다고 판단하지 않는다.
+
 ## 생성·발행 응답 유실 뒤 실제 화면 복구 — 2026-10-12
 
 `verify:admin-onboarding`에 옵트인 `--lost-responses`를 추가했다. 합성 서명 로그인과 새 로컬
