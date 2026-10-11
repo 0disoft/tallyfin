@@ -4,6 +4,7 @@ import { Miniflare, Log, LogLevel } from 'miniflare';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_SETTINGS } from '../../apps/collector/src/config.ts';
+import { createBenchmarkTokens } from './benchmark-tokens.ts';
 
 /** Local benchmark only: fresh database ID, ephemeral keys in memory, no external provider. */
 export async function collectorHarness(directory: string, frozenNow?: number, workerCount = 1) {
@@ -13,10 +14,11 @@ export async function collectorHarness(directory: string, frozenNow?: number, wo
   const principal = { issuer: 'https://identity.example.invalid', subject: 'synthetic-benchmark-operator' };
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwks = { keys: [{ ...await exportJWK(publicKey), kid: 'ephemeral-benchmark', alg: 'RS256' }] };
-  const token = async (audience: string) => new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'ephemeral-benchmark', typ: 'at+jwt' })
-    .setIssuer(principal.issuer).setSubject(principal.subject).setAudience(audience).setIssuedAt(Math.floor(now / 1000))
-    .setExpirationTime(Math.floor(now / 1000) + 300).sign(privateKey);
-  const adminToken = await token('benchmark-admin'), publisherToken = await token('benchmark-publisher');
+  const tokens = createBenchmarkTokens(async (audience, issuedAt, expiresAt) => new SignJWT({})
+    .setProtectedHeader({ alg: 'RS256', kid: 'ephemeral-benchmark', typ: 'at+jwt' })
+    .setIssuer(principal.issuer).setSubject(principal.subject).setAudience(audience).setIssuedAt(issuedAt)
+    .setExpirationTime(expiresAt).sign(privateKey), frozenNow === undefined ? Date.now : () => frozenNow);
+  const adminToken = await tokens.getAdminToken(), publisherToken = await tokens.getPublisherToken();
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../', import.meta.url)),
     contents: `import worker from './apps/collector/src/runtime.ts'; ${frozenNow === undefined ? '' : `Date.now = () => ${now};`}
       globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)});
@@ -45,5 +47,5 @@ export async function collectorHarness(directory: string, frozenNow?: number, wo
         url.pathname = match[2]; return env['W' + match[1]].fetch(new Request(url, request));
       } };` }, ...collectorNames.map(name => ({ ...options, name, bindings: { ...bindings, BENCH_INSTANCE: name } }))] }),
     log: new Log(LogLevel.NONE) });
-  return { mf, principal, adminToken, publisherToken, now, collectorNames };
+  return { mf, principal, adminToken, publisherToken, now, collectorNames, tokens };
 }

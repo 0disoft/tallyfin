@@ -1,5 +1,23 @@
 # 검증
 
+## 로컬 부하 인증의 만료 전 갱신 — 2026-10-11
+
+공용 실험 harness는 5분짜리 메모리 서명 토큰의 초기 문자열을 유지하며 선택 getter로
+만료 30초 전 다시 발급한다. 관리자/발행자 audience와 캐시는 독립이며 같은 audience의
+동시 갱신은 서명 한 번을 공유한다. 시계·서명·지연 오류는 고정 실패로 반환하고 캐시하지
+않으며 발급 횟수만 관측한다. 실제 제공자 갱신이나 운영 자격증명 발급 기능은 아니다.
+
+- `node --test --test-timeout=30000 tools/runtime/test/benchmark-tokens.test.ts
+  tools/runtime/test/collector-cluster.test.ts`: 4/4, 종료 코드 0. 실제 RS256 서명/검증으로
+  만료 전 갱신·16개 동시 요청의 단일 서명·옛 토큰 만료·새 토큰 유효·audience 분리,
+  실패/지연/잘못된 시계와 기존 실제 Worker HTTP/D1 연결을 확인했다. 시계 경계는
+  테스트의 주입 시각으로 검사했고 5분 실시간 실행을 이번 커밋에서 기다리지는 않았다.
+- `node node_modules/typescript/bin/tsc --noEmit`: 종료 코드 0.
+
+API·DB·제품 인증·SDK·의존성·CI·위생 정책 변경은 없고 운영 제공자/원격/배포·푸시는 없다.
+실시간 10분 부하와 실제 HTTP 토큰 교체는 다음 슬라이스다. 관리자/SDK 빌드와 전체 부하는
+변경 범위 밖이라 생략했으며 일반 소스 lint 스크립트는 없다.
+
 ## 누적 데이터·수집 Worker 3개의 동시 부하 — 2026-10-11
 
 별도 opt-in `npm.cmd run bench:cluster`가 한 workerd 안의 수집 Worker 3개와 새 공유 D1을
