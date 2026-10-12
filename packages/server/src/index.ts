@@ -267,6 +267,7 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
       for (let attempt = 1; attempt <= attempts; attempt++) {
         const remaining = deadline - host.monotonicNow();
         if (remaining <= 0) return fail('unavailable', 'retry_deferred', true);
+        const requestDeadline = Math.min(deadline, host.monotonicNow() + timeout);
         let header: string | null = null; let issued = false;
         try {
           const outcome = await limited(async requestSignal => {
@@ -274,6 +275,8 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
             try { token = await getToken(requestSignal); }
             catch { throw authFailed; }
             if (requestSignal.aborted) throw aborted;
+            // Synchronous credential work can outlast the timer before the event loop runs it.
+            if (host.monotonicNow() >= requestDeadline) throw timedOut;
             if (typeof token !== 'string' || !token || token.length > 8185 || /[\s,]/.test(token)) throw authFailed;
             issued = true; sent++;
             const response = await host.fetch(endpoint, { method: 'POST',

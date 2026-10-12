@@ -149,6 +149,13 @@ await client.send([completed]);
 취소는 토큰 획득·요청·응답 읽기·재시도 대기를 모두 덮는다. 중간에 취소되면
 `aborted`/`aborted`이고 `retryable: false`다.
 
+토큰 획득은 호스트 함수라 동기 작업이면 이벤트 루프를 점유한다. 그래서 SDK는 요청을 보내기
+전에 `host.monotonicNow()`로 시도 기한(`min(전체 재시도 기한, 시도 시작 + requestTimeoutMs)`)을
+한 번 더 확인하고, 이미 지났으면 그 시도를 HTTP 요청 없이 끝낸다. 이 시도에서는 HTTP 요청
+수를 늘리지 않으며 결과는 `unavailable`/`authentication_unavailable`에 `retryable: true`다.
+시도에 넘긴 신호는 정리하며 취소한다. 동기 함수 자체를 중간에 끊지는 못하지만, 같은 이벤트로
+새 `send`를 호출해 다시 시도할 수 있다.
+
 시간 초과나 호출 취소 뒤 늦게 도착한 응답은 본문 정리를 요청하고 폐기한다. 이전 시도의
 응답이 현재 시도의 HTTP 상태·영수증을 바꾸지 않는다. 거부 응답·유효하지 않은 영수증의
 본문과 중단된 reader도 정리하며, 정리 Promise가 실패하거나 멈춰도 결과 판단과 재시도

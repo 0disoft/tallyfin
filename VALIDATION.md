@@ -1,5 +1,26 @@
 # 검증
 
+## 서버 SDK 자격증명 기한 검사 (2026-10-12)
+
+`getToken`이 동기로 오래 걸리면 이벤트 루프가 막혀 `requestTimeoutMs`·`retryBudgetMs` 타이머가
+늦게 돌아도 그 사이에 HTTP 전송이 시작됐다. 전송 직전에 `host.monotonicNow`와 시도
+기한(`min(전체 재시도 기한, 시도 시작 + requestTimeoutMs)`)을 검사해 기한이 지났으면 HTTP
+요청 없이 시도를 끝내도록 고쳤다.
+
+새 회귀 3개(source·minified·native HTTP)는 수정 전 모두 실패했고 수정 뒤 통과했다.
+`npm run test:server` 34/34(새 자격증명 기한 3개 포함), `npm run build:server`는 선언 `tsc`
+포함 성공, 빌드는 9021 bytes/gzip 3703 bytes·런타임 의존성 0개였다. native `fetch`로 임시
+포트 로컬 HTTP 서버에 동기 `getToken` 120ms·`requestTimeoutMs` 100ms를 주면 수정 전은
+attempts 1·`transport_unavailable`, 수정 뒤는 attempts 0·`authentication_unavailable`·
+`retryable: true`·HTTP 요청 0이었다. 같은 이벤트를 이어서 바로 다시 보내면 delivered·
+attempts 1·HTTP 1로 `eventId`가 유지됐다. 동기 함수 자체를 중간에 끊지는 못하며 시도 신호는
+정리할 때 취소한다.
+
+범위는 SDK source 단위 테스트·빌드·로컬 HTTP 실험이고 원격 OIDC·운영 DB·Worker 검증은 하지
+않았다. 전송 직전 SDK 분기만 바뀌어 변경 없는 관리자·수집기 전체 검사는 생략했고 일반 lint
+스크립트는 없다. API·DB·public types·의존성·CI·위생 변경은 없고 push·배포도 하지 않았다.
+관련 파일 `git diff --check` 통과.
+
 ## 프로젝트 생성 입력·결과 불명의 이탈 보호 (2026-10-12)
 
 생성 폼의 닫기·연결 해제·데모 API 모드 이탈·reload는 기존 설정/스키마 guard에
