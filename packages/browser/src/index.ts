@@ -1,4 +1,4 @@
-import { createTransport, namePattern, own, uuidPattern } from './common.ts';
+import { createTransport, namePattern, own, record, uuidPattern } from './common.ts';
 import type { BrowserClient, BrowserOptions, BrowserPlatform, BrowserSchema, Properties } from './types.js';
 export type { Value, Properties, Rule, BrowserSchema, BrowserOptions, AttemptHandle, BrowserClient, BrowserPlatform } from './types.js';
 const empty = (): BrowserClient => ({ track: () => false, start: () => undefined, flush() {}, destroy() {}, pending: 0 });
@@ -43,7 +43,7 @@ export function createTallyfin(options: BrowserOptions, host?: BrowserPlatform):
         let ended = false;
         const end = (name: string | undefined, values: Properties = {}) => {
           try {
-            if (ended || !name || !values || typeof values !== 'object' || Array.isArray(values)) return false;
+            if (ended || !name || !record(values)) return false;
             const now = platform.now();
             const copied = { ...dimensions, ...values };
             if (now < started || now - started > 86400000 ||

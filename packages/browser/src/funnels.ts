@@ -1,4 +1,4 @@
-import { createTransport, integer, namePattern, own, uuidPattern } from './common.ts';
+import { createTransport, integer, namePattern, own, record, uuidPattern } from './common.ts';
 import type { BrowserClient, BrowserOptions, BrowserPlatform, BrowserSchema, Properties } from './types.js';
 export type { BrowserPlatform, Properties } from './types.js';
 
@@ -15,7 +15,6 @@ export interface FunnelClient extends Omit<BrowserClient, 'start'> {
   trackFunnel(name: string, properties: Properties, link: FunnelLink, occurredAt?: string): boolean;
 }
 export type FunnelOptions = Omit<BrowserOptions, 'schema'> & { schema: FunnelSchema };
-const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 function valid(schema: FunnelSchema): boolean {
   if (Object.keys(schema).length !== 3 || !record(schema.funnels)) return false;
   const funnels = Object.entries(schema.funnels);

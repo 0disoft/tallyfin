@@ -54,7 +54,9 @@
 
 빌드는 SDK 내부 Batch의 `__tfBatch` 예약 필드 6개만 짧게 만든다. 공개 SDK·HTTP 키는
 이름을 유지한다. 고정 endpoint와 설정을 포함한 관리자 생성 코드의 로컬 번들은 gzip
-3KiB 예산 이내이며 현재 SDK 실측은 기본 2754 B·Sembom 3034 B·퍼널 2919 B·참조 예제 3043 B다.
+3KiB 예산 이내다. 2026-10-12 gzip 실측은 기본 2775 B·Sembom 3047 B·퍼널 2920 B·
+참조 예제 3050 B·관리자 생성 퍼널 코드 3072 B다. 생성 코드 측정은 고정된 참조
+레지스트리와 endpoint 기준이며, 임의로 큰 사용자 스키마까지 3KiB를 보장하지 않는다.
 
 ## 버퍼·재시도·전송
 - 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
@@ -74,7 +76,13 @@ npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2754 B·Sembom 3034 B·퍼널 SDK 2919 B·퍼널+참조 예제 3043 B다. 본문 정리·리다이렉트 개선 뒤 브라우저 검사 32개·관리자 퍼널 SDK 생성 검사 6개, 총 38/38과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 스키마 검증·배치 포장·퍼널 링크 복사의 중복 배열/객체 생성을 줄였고 숫자 검사는 같은 공용 safe-integer 검사로 모았다. 이름·식별자 원시 문자열 검사 뒤에는 브라우저 검사 36개·관리자 퍼널 SDK 생성 검사 6개, 총 42/42와 `npx --no-install tsc --noEmit`·`build:browser`·`check:browser-size`를 확인했고, 새 `packages/browser/test/identities.test.ts` 4개는 검사 추가 전 HEAD를 격리 실행하면 3개가 실패했다. 공개 SDK·HTTP 키와 검증 범위는 유지한다. 실브라우저 확인을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 관리자 `sdkSetup`이 생성한 퍼널 코드도 source SDK에 직접 연결해 endpoint·스키마를 포함한 크기와 런타임 의존성 없음·다른 프로필 없음 경계를 같은 명령에서 검사한다. 현재 크기는 위 2026-10-12 측정을 따른다. 본문 정리·리다이렉트 개선 뒤 브라우저 검사 32개·관리자 퍼널 SDK 생성 검사 6개, 총 38/38과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 스키마 검증·배치 포장·퍼널 링크 복사의 중복 배열/객체 생성을 줄였고 숫자 검사는 같은 공용 safe-integer 검사로 모았다. 이름·식별자 원시 문자열 검사 뒤에는 브라우저 검사 36개·관리자 퍼널 SDK 생성 검사 6개, 총 42/42와 `npx --no-install tsc --noEmit`·`build:browser`·`check:browser-size`를 확인했고, 새 `packages/browser/test/identities.test.ts` 4개는 검사 추가 전 HEAD를 격리 실행하면 3개가 실패했다. 공개 SDK·HTTP 키와 검증 범위는 유지한다. 실브라우저 확인을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+
+생성 퍼널 코드의 3099 B 초과는 공용 객체 검사, 재시도 대기 하한의 단일 계산,
+타이머 중계 함수·beacon 임시값 제거로 3072 B까지 줄였다. 입력·기간·재시도 검사와
+공개 키는 유지한다. 브라우저 45/45·관리자 242/242·SDK 빌드·루트 타입 검사와
+로컬 Chromium 생성 SDK 온보딩/응답 유실 회귀가 통과했다. 생성 코드가 상한에
+딱 맞으므로 도구·SDK 변경 때 같은 명령을 다시 측정해야 한다.
 
 ## 남은 검증
 합성 화면의 실브라우저 초기 실행·동기 호출·전송, 수집기 종료 시 동작, 502·응답 유실

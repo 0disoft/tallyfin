@@ -1,5 +1,42 @@
 # 검증
 
+## 생성 브라우저 퍼널 SDK 크기 복구 (2026-10-12)
+
+이전 관리자 전체 검사에서 확인한 `funnel-setup.test.mjs` 생성 코드 초과를
+단독 재실행해 gzip 3,099바이트·종료 1로 재확인했다. 기존 예제 크기 명령은 퍼널
+참조 예제 3,072바이트로 통과해 실제 관리자 생성 팩토리의 초과를 포착하지 못했다.
+
+`common.ts`의 객체 검사를 workflow 종료·속성 snapshot·퍼널 입력 검증에서 공유하고,
+Retry-After 하한을 한 번 계산하며, 타이머에서만 쓰는 중계 함수와 beacon 결과
+임시값을 제거했다. 입력 검증·10분 만료·1초 하한·원래 바디 재시도·종료 정리는
+그대로다. 퍼널 이벤트 조회를 Set으로 바꾸는 후보는 크기가 늘어 최종 변경에서
+제외했다. 중간 후보 생성 코드 3,084/3,093바이트 실패도 통과로 세지 않았다.
+
+`tools/browser/check.mjs`는 관리자 `sdkSetup`의 참조 생성 코드를 직접 번들링해
+endpoint·스키마 포함 3KiB 예산과 외부 런타임·서버/관리자 런타임·다른 프로필
+번들 유입 금지까지 기존 명령에서 검사한다. 예산·fixture·공개 SDK/HTTP 키를
+바꾸지 않았다. 최종 gzip은 기본 SDK 2,775·Sembom 예제 3,047·퍼널 SDK 2,920·
+퍼널 참조 예제 3,050·관리자 생성 퍼널 코드 3,072바이트이며 모두 종료 0이다.
+이는 고정 참조 레지스트리·endpoint 기준이며 임의 크기의 사용자 스키마 보장은 아니다.
+생성 코드의 예산 여유는 0바이트로 향후 변경 때 재측정이 필요하다.
+
+브라우저 전체 45/45·관리자 전체 242/242, `build:browser`(선언 포함),
+`npx --no-install tsc --noEmit`, `git diff --check`를 통과했다. minified 프로필의
+재시도·공개 키·동일 바디, 잘못된 입력·핸들 보존, beacon false/예외 fallback,
+숨김/종료 처리가 기존 회귀에서 유지됐다. `verify:admin-onboarding -- --channel
+chromium --lost-responses`도 종료 0·verified=true, Chromium 156.0.8078.4에서
+빈 프로젝트 생성·스키마 발행·생성 SDK 실제 실행·첫 이벤트 DB/표 1건·단계 3·
+생성/발행 유실 각 1회 복구를 통과했다. API reads 31·writes 5·browserBatches 1·
+pageErrors 0·routeError=false이고 `.tmp/admin-onboarding-1oB1FB/report.json`에 남겼다.
+로컬 Vite·Miniflare·브라우저는 종료했다. 실브라우저는 기본 생성 SDK 전송을
+확인했고 퍼널 생성 팩토리는 합성 host와 minified/크기 검사로 확인했다.
+
+소유 문서 `docs/backend/browser-sdk.md`와 이 기록을 갱신했다. API·DB·공개 타입·
+의존성·CI workflow·러너·위생 정책 변경은 없다. 불변 관리자 빌드/번들/Sites는
+직전 `d2f20f7`의 결과를 재사용했고 전체 백엔드 검사는 변경 없어 생략했다.
+일반 소스 lint 명령은 없다. 실제 서비스 설치·원격 OIDC/DB·배포·모바일 브라우저는
+미검증이고 푸시·게시·배포는 하지 않았다. 전체 목표는 계속 진행 중이다.
+
 ## 이벤트 상세 시간대 불일치 차단 — 2026-10-12
 
 `LiveDashboard`가 상세 응답의 프로젝트 시간대를 대조하지 않아, CSV에서는 거부하는

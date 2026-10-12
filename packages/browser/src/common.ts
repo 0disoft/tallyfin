@@ -12,6 +12,7 @@ export const namePattern = /^[a-z][a-z0-9_]{0,47}$/;
 const enumPattern = /^[a-z0-9][a-z0-9_-]{0,31}$/;
 export const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 export const own = Object.hasOwn;
+export const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 export const integer = (value: unknown, low: number, high: number): value is number =>
   Number.isSafeInteger(value) && (value as number) >= low && (value as number) <= high;
 
@@ -95,7 +96,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     return count;
   };
   const snapshot = (name: string, properties: Properties): Properties | undefined => {
-    if (typeof name !== 'string' || !own(schema.events, name) || !properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
+    if (typeof name !== 'string' || !own(schema.events, name) || !record(properties)) return undefined;
     const definitions = schema.events[name]!;
     const entries = Object.entries(properties);
     for (const [key, value] of entries) {
@@ -110,7 +111,10 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     return copy;
   };
   const schedule = (milliseconds: number) => {
-    cancelTimer?.(); cancelTimer = platform.timer(() => { cancelTimer = undefined; pump(); }, milliseconds);
+    cancelTimer?.(); cancelTimer = platform.timer(() => {
+      cancelTimer = undefined;
+      if (!stopped && !active.size && queue.length) launch();
+    }, milliseconds);
   };
   const pack = (): Batch => {
     const prefix = `{"schemaVersion":${schema.version},"source":"browser","events":[`;
@@ -146,9 +150,10 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
         // Round-trip rejects normalized invalid dates and nonstandard date strings.
         else if (header?.length === 29 && new Date(header).toUTCString() === header)
           delay = Date.parse(header) - platform.now();
-        if (platform.now() + Math.max(1000, delay) < batch.__tfBatchCreatedAt + 600000) {
+        delay = Math.max(1000, delay);
+        if (platform.now() + delay < batch.__tfBatchCreatedAt + 600000) {
           batch.__tfBatchTries++;
-          batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, Math.max(1000, delay));
+          batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);
           return;
         }
       }
@@ -159,9 +164,6 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     try { platform.send(endpoint, batch.__tfBatchBody, controller.signal).then(r => finish(r.status, r.retryAfter), () => finish(0)); }
     catch { finish(0); }
   };
-  function pump() {
-    if (!stopped && !active.size && queue.length) launch();
-  }
   function launch() {
     const batch = pack(); if (!batch.__tfBatchCount) { queue.shift(); schedule(0); return; }
     queue.splice(0, batch.__tfBatchCount); active.add(batch); send(batch);
@@ -184,8 +186,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     for (const batch of active) if (batch.__tfBatchStopRetry) return;
     while (queue.length && platform.beacon) {
       const batch = pack(); if (!batch.__tfBatchCount) break;
-      let queued = false; try { queued = platform.beacon(endpoint, batch.__tfBatchBody); } catch { /* fetch fallback */ }
-      if (!queued) break;
+      try { if (!platform.beacon(endpoint, batch.__tfBatchBody)) break; } catch { break; }
       // Beacon true means browser queue acceptance, not a committed server receipt.
       queue.splice(0, batch.__tfBatchCount);
     }
