@@ -32,7 +32,9 @@ export function workflowBreakdown(registry: Registry, input: AdminQuery, meta: Q
   }
   if (values.size > 32) throw new CollectionError('storage_unavailable', 503);
   const summary = (value: Counts) => workflowCounts(value.started, value.succeeded, value.failed, hasFailure);
+  // Date boundaries depend on the request, not on the dimension bucket.
+  const dayStates = values.size ? dates.map(date => ({ date, provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY })) : [];
   return { meta, workflowId: definition.id, cohortBasis: 'startedAt' as const, groupBy: input.groupBy, summary: summary(totals),
     buckets: [...values.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, bucket]) => ({ value: bucket.value, summary: summary(bucket.total),
-      days: dates.map(date => ({ date, ...summary(bucket.days.get(date) ?? empty()), provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY })) })) };
+      days: dayStates.map(({ date, provisional }) => ({ date, ...summary(bucket.days.get(date) ?? empty()), provisional })) })) };
 }

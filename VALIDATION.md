@@ -1,5 +1,26 @@
 # 검증
 
+## 분류별 집계 날짜 계산 재사용 (2026-10-12)
+
+흐름·퍼널 분류 조회가 각 버킷에서 같은 날짜의 시간대 경계를 반복 계산했다. 31일·32개
+버킷 회귀 검사에서 수정 전 두 경로 모두 `Intl.DateTimeFormat` 생성 992회로 실패했다.
+날짜별 확정 여부를 한 응답 안에서만 재사용해 31회로 줄였고, 빈 버킷 결과는 계산하지 않는다.
+다른 요청과 캐시를 공유하지 않아 시간 경계 이후 새 조회의 provisional 값은 다시 계산된다.
+
+- `node --test --test-timeout=30000 packages/storage-d1/test/breakdown-dates.test.ts
+  apps/collector/test/admin.test.ts apps/collector/test/funnel-query.test.ts`: 34/34 통과.
+  새 검사 6개는 최대 버킷·기간, 빈 결과, 뉴욕 봄/가을 DST의 날짜 끝 +48시간 직전·경계·
+  직후와 누락 날짜의 0건·null 비율을 확인한다. 기존 로컬 Miniflare D1 API 검사도 통과했다.
+- `npx --no-install tsc --noEmit`, `git diff --check` 통과.
+- 로컬 Node 24.18.0에서 HEAD의 수정 전 코드와 수정 후 코드를 각각 한 번 예열하고
+  교대로 5회 실행했다. 31일·32개 버킷에서 흐름 992행 중앙값은 277.71→11.13ms,
+  퍼널 3,968행은 362.66→39.40ms였다. 모든 결과를 deepEqual로 비교해 일치를 확인했다.
+  `.tmp/breakdown-bench.mjs`는 임시 측정이며 네트워크·DB·Worker CPU와 운영 지연은 측정하지 않았다.
+
+API·DB·SDK 공개 계약·의존성·CI/러너·위생 정책 변경은 없다. 변경 없는 관리자 UI와 SDK,
+전체 저장소 검사는 반복하지 않았고 일반 lint 명령은 없다. 운영 환경·실제 OIDC 제공자와
+원격 DB는 미검증이며 푸시·배포는 하지 않았다. 소유 문서는 이 검증 기록만 갱신했다.
+
 ## 관리자 API 응답 본문 크기 제한 (2026-10-12)
 
 기본 native fetch 경로가 관리자 API 응답을 파싱할 때 크기 상한 없이 본문 전체를 메모리에

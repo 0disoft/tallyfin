@@ -48,8 +48,10 @@ export function funnelBreakdown(registry: Registry, input: AdminQuery, meta: Fun
     bucket.days.set(row.cohort_date, day); groups.set(bucketId, bucket);
   }
   for (const combination of combinations.values()) funnelCounts(combination.counts);
+  // Reuse within this response only; a later request must reevaluate freshness.
+  const dayStates = groups.size ? dates.map(date => ({ date, provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY })) : [];
   return { meta, funnelId: definition.id, definition, cohortBasis: 'startedAt', groupBy: input.groupBy,
     summary: funnelCounts(total), buckets: [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, bucket]) => ({
-      value: bucket.value, summary: funnelCounts(bucket.total), days: dates.map(date => ({ date,
-        ...funnelCounts(bucket.days.get(date) ?? empty()), provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY })) })) };
+      value: bucket.value, summary: funnelCounts(bucket.total), days: dayStates.map(({ date, provisional }) => ({ date,
+        ...funnelCounts(bucket.days.get(date) ?? empty()), provisional })) })) };
 }
