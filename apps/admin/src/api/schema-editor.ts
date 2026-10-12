@@ -30,18 +30,27 @@ export class SchemaEditor {
   constructor(client: ApiClient, projectId: string, onAccessLost?: () => void) {
     this.#client = client; this.#projectId = projectId; this.#onAccessLost = onAccessLost;
   }
-  subscribe(listener: (s: SchemaState) => void) { this.#listeners.add(listener); listener(this.state); return () => { this.#listeners.delete(listener); }; }
+  subscribe(listener: (s: SchemaState) => void) {
+    if (this.#destroyed) return () => {};
+    this.#listeners.add(listener); this.#notify(() => listener(this.state));
+    return () => { this.#listeners.delete(listener); };
+  }
   #set(patch: Partial<SchemaState>, confirmedAccess?: boolean) {
     if (this.#destroyed) return;
     this.state = { ...this.state, ...patch };
-    for (const listener of this.#listeners) listener(this.state);
+    for (const listener of this.#listeners) this.#notify(() => listener(this.state));
     // Only confirmed reads and explicit denial change the cross-section signal.
     // Loading/review snapshots must not re-arm it and cause refresh loops.
     const access = patch.blocked === true ? false : confirmedAccess;
     if (access !== undefined) {
       const lost = this.#knownOwner && !access; this.#knownOwner = access;
-      if (lost) this.#onAccessLost?.();
+      if (lost) this.#notify(this.#onAccessLost);
     }
+  }
+  // UI callbacks cannot reclassify a confirmed server result or interrupt revocation.
+  #notify(callback: (() => void) | undefined) {
+    if (this.#destroyed) return;
+    try { callback?.(); } catch { /* Preserve state without exposing UI error details. */ }
   }
   #start() { this.#controller?.abort(); const controller = new AbortController(); this.#controller = controller; return { controller, generation: ++this.#generation }; }
   #current(g: number) { return !this.#destroyed && g === this.#generation && !this.#controller?.signal.aborted; }
