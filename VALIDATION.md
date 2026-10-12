@@ -1,5 +1,38 @@
 # 검증
 
+## 목표·퍼널 분석 권한 회수 실브라우저 검증 (2026-10-12)
+
+옵트인 `verify:admin-goal-access`를 추가했다. 공유 로그인 fixture의 goals 프로필만
+작업 흐름·퍼널과 보조 소유자를 등록하며 기존 login/access/onboarding 프로필은 유지한다.
+Core 검증·D1 commit으로 현재와 직전 기간의 합성 이벤트 16개를 준비하고, 실제
+RS256 로그인·서명 API·Miniflare D1 grant 회수로 목표/퍼널의 여섯 읽기 경로에서
+403을 확인했다. 표·분류·비교·내보내기 제거 또는 비활성화와 명시적 새로고침 복구를
+검사했다. 일곱 번째는 이전 프로젝트의 실제 403 응답을 보류했다가 전환 뒤 해제해
+새 프로젝트 화면·CSV에 영향을 주지 않는지 확인했다. 제품 코드 수정은 필요하지 않았다.
+
+최종 Chromium 156.0.8078.4 실행은 exit 0·verified=true, 시나리오 7·실제 403 관측 7,
+API reads 67·writes 0·browserBatches 0·pageErrors 0·routeError=false다.
+정상 퍼널 비교의 loan/current와 timer/previous 행을 화면 셀로 정확히 대조했고,
+실제 다운로드 CSV의 양 기간 시작·완료 1건·완료율 100 및 속성별 1/0·0/1을 확인했다.
+D1 workflow 시작 합계 4·funnel 시작 합계 4, 다른 프로젝트 CSV의 이전 ID 부재와
+연결 해제 뒤 분석 제거도 통과했다. 근거는
+`.tmp/admin-goal-access-mwpKGf/report.json`과 두 화면 스크린샷이다.
+
+초기 실행은 첫 거부·화면 차단을 통과한 뒤, 이미 제거된 비교 checkbox를 복구 전에
+읽으려는 검증 도구의 오류로 exit 1이었다. 서버 새로고침으로 화면을 복구한 뒤 checkbox를
+읽도록 고쳤으며 실패를 제품 버그나 전체 통과로 세지 않았다. 정상 행/CSV 검증을
+추가하기 전 중간 실행도 통과했지만 최종 근거는 위 실행이다.
+공유 fixture 회귀로 `verify:admin-login -- --channel chromium`을 실행해 exit 0·
+verified=true, PKCE·서명 API·공유 토큰 갱신·갱신 실패·재로그인·연결 해제·새로고침·
+빈 storage를 확인했다. reads 27·writes 0·pageErrors 0이다.
+
+새 도구·공유 fixture 구문 검사, 실행 없는 `--help`, `git diff --check`를 통과했다.
+안내 `tools/browser-bench/ADMIN-GOAL-ACCESS.md`와 이 기록을 추가했다. 선택 실행 명령과
+합성 fixture만 변경했고 제품 런타임·API·DB·SDK·의존성·위생 정책·CI는 바꾸지 않았다.
+제품 소스가 불변이므로 타입/빌드·관리자 단위·백엔드 전체·루트 check는 반복하지 않았다.
+일반 소스 lint 명령은 없다. 실제 제공자·원격 DB·Chrome/Edge·모바일은 미검증이고
+푸시·게시·배포는 하지 않았다. 전체 저장소 목표는 계속 진행 중이다.
+
 ## SDK 차원 enum 순서 불일치 수정 (2026-10-12)
 
 Core가 동일한 enum 집합으로 인정한 스키마도 단계별 허용 값 순서가 다르면 브라우저의

@@ -13,7 +13,7 @@ import { readFile } from 'node:fs/promises';
 
 // Test-only provider. Keys, codes and tokens are ephemeral; no external identity service is contacted.
 export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
-  assert.ok(['login', 'onboarding', 'access'].includes(profile));
+  assert.ok(['login', 'onboarding', 'access', 'goals'].includes(profile));
   const issuer = 'https://identity.example.invalid', clientId = 'tallyfin-smoke-public';
   const audience = 'tallyfin-smoke-api', resource = 'urn:tallyfin:smoke:api';
   const subject = 'synthetic-login-operator';
@@ -47,10 +47,12 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
       await creators.apply(await creators.plan('creator-grant', { issuer, subject, maxProjects: 2 }));
     } else {
       const registry = JSON.parse(await readFile(new URL('../../api/examples/registry.json', import.meta.url), 'utf8'));
+      if (profile === 'goals') registry.funnels = [{ id: 'calculation_funnel', label: '계산 퍼널',
+        steps: ['input_start', 'calculation_success'].map(eventName => ({ eventName, source: 'browser' })), dimensions: ['tool'] }];
       const provisioner = new Provisioner(db);
       await provisioner.apply(await provisioner.plan('register', registry), Date.now());
       await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer, subject, role: 'owner' }), Date.now());
-      if (profile === 'access') {
+      if (profile === 'access' || profile === 'goals') {
         await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer,
           subject: 'synthetic-backup-operator', role: 'owner' }));
         const other = structuredClone(registry); other.project.id = 'access-other'; other.project.name = 'Other access fixture';
