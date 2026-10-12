@@ -37,19 +37,19 @@ function valid(schema: FunnelSchema): boolean {
   }
   return true;
 }
-function utc(value: unknown): number {
+function utc(value: unknown): Date {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(value)) throw Error();
   const date = new Date(value);
   // Regex bounds fractional precision; compare calendar/time to reject Date.parse normalization.
   if (date.toISOString().slice(0, 19) !== value.slice(0, 19)) throw Error();
-  return date.getTime();
+  return date;
 }
 function copyLink(input: FunnelLink, schema: FunnelSchema): FunnelLink {
   if (!record(input)) throw Error();
   const value = { ...input };
   if (Object.keys(value).length !== 3 || typeof value.funnelId !== 'string' ||
     !own(schema.funnels, value.funnelId) || typeof value.runId !== 'string' || !uuidPattern.test(value.runId)) throw Error();
-  value.startedAt = new Date(utc(value.startedAt)).toISOString();
+  value.startedAt = utc(value.startedAt).toISOString();
   return Object.freeze(value);
 }
 
@@ -76,7 +76,7 @@ export function createTallyfinFunnels(options: FunnelOptions, host?: BrowserPlat
     trackFunnel(name, properties, input, occurredAt) {
       try {
         const link = copyLink(input, schema), index = schema.funnels[link.funnelId]!.steps.indexOf(name), start = Date.parse(link.startedAt);
-        const now = platform.now(), time = occurredAt === undefined ? (index === 0 ? start : now) : utc(occurredAt);
+        const now = platform.now(), time = occurredAt === undefined ? (index === 0 ? start : now) : +utc(occurredAt);
         if (index < 0 || !integer(now, 0, 8640000000000000) || time < now - 86400000 || time > now + 300000 ||
           time < start || time - start > 86400000 || index === 0 && time !== start) return false;
         return enqueue(name, properties, time, { funnel: link });

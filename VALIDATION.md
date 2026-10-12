@@ -1,5 +1,37 @@
 # 검증
 
+## SDK 차원 enum 순서 불일치 수정 (2026-10-12)
+
+Core가 동일한 enum 집합으로 인정한 스키마도 단계별 허용 값 순서가 다르면 브라우저의
+workflow·funnel 클라이언트가 비활성화되고 서버 SDK 생성이 실패하던 경로를 수정했다.
+공식 예제 레지스트리의 종료 단계 값 순서만 뒤집어 투영한 소스·minified ESM 회귀
+6개가 수정 전 모두 실패했다. 각 SDK의 내부 JSON 스냅샷에서 enum을 정렬해 비교하고,
+호스트의 동결된 원본·예제·레지스트리 해시와 wire 형식은 바꾸지 않는다.
+
+회귀는 실제 Core `prepareBatch`·`prepareServerBatch`로 전송 본문과 단계 정보를
+검사하고, 다른 집합·누락·중복 값 거부와 원본 보존도 확인한다. 브라우저·서버 SDK와
+Core 스키마 관련 검사 82/82, 루트 `tsc --noEmit`, 양쪽 SDK 빌드(타입 선언 포함)를
+통과했다. 브라우저 퍼널의 UTC 검사에서 만든 Date를 재사용해 추가 변환을 줄였다.
+초기 수정의 생성 코드 gzip 3,078바이트와 중간 후보 3,077바이트 실패는 통과로
+세지 않았다. 최종 `check:browser-size`는 기본 SDK 2,780·Sembom 예제 3,053·퍼널 SDK
+2,918·퍼널 참조 예제 3,047·관리자 생성 퍼널 코드 3,069바이트로 모두 종료 0이다.
+서버 SDK는 minified 9,015바이트·gzip 3,701바이트, 런타임 의존성 0개다.
+
+`verify:server-recovery`는 종료 단계 enum 순서를 뒤집은 합성 레지스트리로 기본 Node
+fetch·실제 루프백 소켓·Miniflare 수집기 3개·새 D1을 사용했다. 종료 0·verified=true,
+저장 전 503 뒤 accepted 2·duplicates 0·attempts 2, 저장 후 연결 유실 뒤 accepted 0·
+duplicates 2·attempts 2였다. 영수증 8개·완료 run 2개와 동일 본문 재시도, 발행자 회수
+후 403·단일 요청·DB 불변도 통과했다. 리포트는
+`.tmp/server-recovery/run-6A8lEC/report.json`에 있다. 로컬 relay와 Miniflare는 정리했다.
+브라우저 새 회귀는 합성 host와 minified ESM에서 확인했으며 실브라우저는 이번에 실행하지 않았다.
+
+소유 문서 `docs/backend/browser-sdk.md`·`docs/backend/server-sdk.md`·
+`tools/runtime/SERVER-RECOVERY.md`와 이 기록을 갱신했다. 복구 도구의 합성 fixture만
+확장했고 API·DB·공개 타입·의존성·위생 정책·CI workflow 변경은 없다. 변경 없는 관리자와
+백엔드 전체 검사·루트 전체 check는 생략했으며 일반 소스 lint 명령은 없다.
+실제 운영 OIDC·원격 DB·서비스 설치는 미검증이고 푸시·게시·배포는 하지 않았다.
+전체 목표는 계속 진행 중이다.
+
 ## 생성 브라우저 퍼널 SDK 크기 복구 (2026-10-12)
 
 이전 관리자 전체 검사에서 확인한 `funnel-setup.test.mjs` 생성 코드 초과를

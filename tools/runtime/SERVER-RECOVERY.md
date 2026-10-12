@@ -32,6 +32,8 @@ npm run verify:server-recovery
 - 브라우저 시드는 relay를 거치지 않고 `collector-0`에 직접 `POST`해 `file_selected`·
   `upload_finished` 두 이벤트를 넣는다(200, accepted 2). 같은 `runId`로 서버 단계 `job_started`·
   `job_finished`가 뒤따라 4단계를 완성한다.
+- 합성 레지스트리의 `job_finished.kind` 허용 값 순서를 뒤집어, Core에서 같은 집합으로
+  인정한 규칙을 SDK도 받아들이는지 실제 전송 경로에서 확인한다. 원본 예제 파일은 바꾸지 않는다.
 
 relay는 `POST`와 정확한 경로가 아니면 404, 본문이 16KiB를 넘으면 413으로 끝낸다. 받은 본문은
 sha256만 계산해 메모리 배열에 담고, 본문 자체는 밖으로 내보내지 않는다. 통과한 요청은

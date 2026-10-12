@@ -26,9 +26,10 @@ function schemaValid(schema: EventSchema): boolean {
     for (const [key, rule] of rules) {
       if (!namePattern.test(key) || !Array.isArray(rule) || typeof rule[1] !== 'boolean') return false;
       let values: number;
+      // Only the private JSON snapshot is sorted; enum domains are unordered in Core.
       if (rule[0] === 'boolean' && rule.length === 2) values = 2;
       else if (rule[0] === 'enum' && rule.length === 3 && Array.isArray(rule[2]) &&
-        rule[2].every(value => typeof value === 'string' && enumPattern.test(value)) && new Set(rule[2]).size === rule[2].length) values = rule[2].length;
+        rule[2].every(value => typeof value === 'string' && enumPattern.test(value)) && new Set(rule[2].sort()).size === rule[2].length) values = rule[2].length;
       else if (rule[0] === 'integer' && rule.length === 4 && integer(rule[2], -1000000, 1000000) && integer(rule[3], -1000000, 1000000)) values = rule[3] - rule[2] + 1;
       else return false;
       if (values < 1 || values > 32) return false;

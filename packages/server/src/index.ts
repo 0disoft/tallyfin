@@ -66,9 +66,10 @@ function schemaValid(value: unknown): value is ServerSchema {
     for (const [key, rule] of Object.entries(properties)) {
       if (!NAME.test(key) || !Array.isArray(rule) || typeof rule[1] !== 'boolean') return false;
       let count: number;
+      // Normalize the private snapshot so equivalent enum domains compare equally.
       if (rule[0] === 'boolean' && rule.length === 2) count = 2;
       else if (rule[0] === 'enum' && rule.length === 3 && Array.isArray(rule[2]) &&
-        rule[2].every(value => typeof value === 'string' && ENUM.test(value)) && new Set(rule[2]).size === rule[2].length) count = rule[2].length;
+        rule[2].every(value => typeof value === 'string' && ENUM.test(value)) && new Set(rule[2]).size === rule[2].length) count = rule[2].sort().length;
       else if (rule[0] === 'integer' && rule.length === 4 && integer(rule[2], -1000000, 1000000) &&
         integer(rule[3], -1000000, 1000000)) count = rule[3] - rule[2] + 1;
       else return false;

@@ -29,6 +29,8 @@ export async function verifyServerRecovery(signal: AbortSignal) {
   try {
     const db = await mf.getD1Database('DB'); await initialize(db, true);
     const raw = JSON.parse(await readFile(join(root, 'api/examples/funnel-registry.json'), 'utf8'));
+    // A reviewed enum domain is the same set even when the terminal lists it differently.
+    for (const event of raw.events) if (event.name === 'job_finished') event.properties.kind.values.reverse();
     const registry = validateRegistry({ ...raw, project: { ...raw.project, id: 'recovery-funnel' } });
     const provision = new Provisioner(db), publishers = new PublisherProvisioner(db);
     await provision.apply(await provision.plan('register', registry));

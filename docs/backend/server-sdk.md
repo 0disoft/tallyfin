@@ -35,6 +35,10 @@
 이름·속성 규칙·label·purpose는 SDK에 넣지 않는다. 해당 퍼널이 없으면 funnels를 생략해
 기존 정의 형태를 유지한다.
 
+퍼널 차원의 enum 허용 값은 Core와 같이 순서와 무관한 집합으로 비교한다. 단계별로
+`pdf, image`와 `image, pdf`를 사용해도 같은 규칙으로 인정한다. 내부 JSON 스냅샷만
+정렬하므로 원본 스키마를 바꾸지 않으며, 중복·다른 값 집합·필수 여부와 종류의 불일치는 거부한다.
+
 `host`는 선택이고 `now`·`monotonicNow`·`uuid`·`fetch`·`wait`를 모두 함수로 줘야 한다.
 기본은 `Date.now`·`performance.now`·`crypto.randomUUID`·`globalThis.fetch`다.
 
