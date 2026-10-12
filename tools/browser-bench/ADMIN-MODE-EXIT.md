@@ -14,6 +14,13 @@ Add `--check-creation-draft` for the connection-wide project creation checks:
 npm run verify:admin-mode-exit -- --channel chromium --check-creation-draft
 ```
 
+Add `--check-authority-drafts` for project-grant and server-publisher forms.
+The options can run together:
+
+```text
+npm run verify:admin-mode-exit -- --channel chromium --check-creation-draft --check-authority-drafts
+```
+
 The command uses the actual `/demo` entry, App, API workspace and client with
 a new Miniflare D1 and the existing ephemeral signed provider. It first logs in
 at the ordinary entry, receives the test-only signed bearer in process memory,
@@ -45,6 +52,21 @@ but must leave exactly one project row. Confirmed creation may open its project
 without a false draft warning. The ordinary command still permits zero writes;
 this option permits exactly these two POSTs and leaves the original project
 name unchanged. It does not test an accepted exit while a write is pending.
+
+`--check-authority-drafts` checks raw issuer/subject and role-only edits, project
+switch/reload cancellation, hidden-form mode/disconnect cancellation and review
+retention after settings navigation. Manual list refresh must allow canceling
+review disposal before an approved refresh. A grant-row action must protect its
+review even with empty add-form fields. Each authority endpoint then receives
+one actual PUT whose committed response is deliberately lost. Project switch,
+disconnect, mode exit and reload cancellation must retain the fixed request.
+Explicit same-request PUT confirmation must leave exactly one matching D1 row
+and remove the unload warning after confirmation. This option permits exactly
+four PUTs; together with creation, exactly six writes are allowed. It changes no
+ordinary fixture grant and only enables response-loss injection for these two
+local authority endpoints. Finally, raw drafts on both authority forms must
+survive a canceled mode exit and disappear after approved disposal. Existing
+user identities, remote services and profiles are never used.
 
 The report `.tmp/admin-mode-exit-*/report.json` contains fixed flags and counts,
 not credentials or draft values. Failures retain a fixed stage/code/counts and

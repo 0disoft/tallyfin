@@ -1,5 +1,48 @@
 # 검증
 
+## 권한·발행자 입력과 변경 확인의 이탈 보호 (2026-10-12)
+
+`LiveGrants`/`LivePublishers`의 원시 입력과 검토/저장/결과 불명 요청은 기존 프로젝트
+이탈 guard에 등록되지 않았다. 설정 화면 복귀의 자동 목록 갱신은 검토 요청도 취소했다.
+raw 입력의 dirty boolean과 새 컨트롤러 getter를 기존 `DraftExitGuard`·`beforeunload`에
+연결하고, 자동 갱신은 검토 요청을 유지하며 수동 새로고침은 요청 폐기를 확인하도록 고쳤다.
+식별자·초안을 부모나 저장소에 복사하지 않는다. 저장 확인·권한 거부·취소·destroy는 요청
+보호를 해제하며 남은 원시 입력은 기본값으로 돌아갈 때까지 보호한다.
+
+추가 Node 검사 4개는 수정 전 모두 실패했다. 브라우저는 수정 전
+`grant-project-switch-cancel`에서 exit 1이었다(`.tmp/admin-mode-exit-PL7sYm/failure.json`).
+첫 수정 후 실행도 같은 단계에서 실패했다(`.tmp/admin-mode-exit-sC0leW/failure.json`).
+이 실패 원인은 확정하지 않았다. 선택 시작값을 명시적으로 확인하도록 도구를 보강한 뒤
+raw 입력 검사가 통과했고, 실제 commit 응답 유실과 갱신/폐기 확인까지 확장한 최종 통합
+검사는 exit 0이었다. 과거 실패 기록은 성공 기록과 구분해 남긴다.
+
+`verify:admin-mode-exit -- --channel chromium --check-authority-drafts --check-creation-draft`는
+Chromium 156.0.8078.4·합성 서명 HTTP·격리 Miniflare D1에서 verified=true·reads 159·
+writes 6·pageErrors 0·routeError=false,
+`.tmp/admin-mode-exit-fF5KTn/report.json`이었다. 두 폼의 원시 입력·role만 변경·검토 요청·
+빈 추가 폼의 행 변경을 보호하고, 프로젝트/연결/모드/reload 취소 뒤 입력과 같은 확인
+요청을 유지했다. 자동 목록 갱신은 검토를 보존하고 수동 새로고침은 취소/승인을 구분했다.
+생성 응답 1회·권한/발행자 응답 각 1회가 실제 commit 뒤 유실됐다. 명시적 재확인 후
+프로젝트·해당 권한·해당 발행자 행은 각각 1개였고, 확인한 입력은 경고를 해제했다.
+최종 모드 이탈 취소는 두 폼 입력을 유지했고 승인은 기존 DOM을 제거했다. API 재진입은
+빈 토큰으로 새 연결을 요구하며 local/session storage와 cookies는 비어 있었다.
+
+기존 `verify:admin-access -- --channel chromium`는 실제 거부 2회·보류 쓰기 2회·
+reads 128·writes 5·pageErrors 0·routeError=false,
+`.tmp/admin-access-HibHMo/report.json`으로 통과했다. 권한 회수/명시적 복구와 프로젝트
+전환·연결 해제 뒤 늦은 commit 응답 격리는 유지했다. 집중 Node 17/17·관리자 전체
+258/258·타입·최종 빌드(5231 modules)·번들 2/2·Sites 9/9·실행 없는 help·diff도 통과했다.
+최종 두 브라우저 실행에서 workerd 연결 중단 진단은 관측하지 않았다. 기존 원인 미확인
+진단이나 초기 후속 실행 실패의 원인이 해결됐다고 확대하지 않는다. 브라우저·Vite·D1
+런타임은 도구가 종료했다. 문서 초안은 CommandCode DeepSeek 4.1 Flash high로 받아
+실제 결과와 대조했으며 모델이 검증을 수행하지 않았다.
+
+Frontend 설계·검증 기록·선택 도구 안내를 갱신했다. 이번 단위는 HTTP API·DB·SDK·의존성·
+버전·CI/러너·위생 정책을 바꾸지 않았으며 푸시·게시·배포도 하지 않았다. backend/SDK 전체는
+변경 범위 밖이라 반복하지 않았고 일반 lint 명령은 없다. 원격 OIDC/D1·다중 운영자·
+모바일/타 브라우저·권한/발행자 pending 상태에서 승인한 이탈의 늦은 응답·종료 뒤 복구·
+힙 zeroing은 미검증이며 전체 저장소/72개 질문 점검은 미완료다.
+
 ## 서버 SDK 자격증명 기한 검사 (2026-10-12)
 
 `getToken`이 동기로 오래 걸리면 이벤트 루프가 막혀 `requestTimeoutMs`·`retryBudgetMs` 타이머가

@@ -5,13 +5,16 @@ import { PublisherList, type PublisherListState } from './api/publisher-list.ts'
 import { PublisherEditor, type PublisherEditorState } from './api/publisher-editor.ts';
 import type { PublisherRequest } from './api/publishers-contract.ts';
 import PublisherChangePanel from './PublisherChangePanel.tsx';
+import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
+import useUnloadWarning from './useUnloadWarning.ts';
 
 /** Owner-only server publisher permission surface. The list and the single write follow the same conventions as LiveGrants. */
-export default function LivePublishers({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost, onSaved, onBusyChange }: {
+export default function LivePublishers({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost, onSaved, onBusyChange, registerDraft }: {
   client: ApiClient; projectId: string; canView: boolean; timeZone: string; refreshTick: number;
   locked?: boolean; onAccessLost?: () => void; onSaved?: () => void;
   /** Reports an in-flight or unresolved write so sibling surfaces can lock; the review step itself stays unlocked. */
   onBusyChange?: (busy: boolean) => void;
+  registerDraft?: DraftExitRegistration<ApiClient>;
 }) {
   const [snapshot, setSnapshot] = useState<{ client: ApiClient; projectId: string; state: PublisherListState } | null>(null);
   const [mutation, setMutation] = useState<{ client: ApiClient; projectId: string; state: PublisherEditorState } | null>(null);
@@ -19,6 +22,7 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
   const [form, setForm] = useState<{ client: ApiClient; projectId: string; issuer: string; subject: string } | null>(null);
   const listRef = useRef<PublisherList | null>(null), tickRef = useRef(refreshTick);
   const editorRef = useRef<PublisherEditor | null>(null);
+  const inputDirtyRef = useRef(false);
   const scopeRef = useRef<{ client: ApiClient; projectId: string } | null>(null);
   const renderedScope = useRef({ client, projectId }); renderedScope.current = { client, projectId };
   const callbacksRef = useRef(onAccessLost); callbacksRef.current = onAccessLost;
@@ -46,6 +50,7 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
         savedRef.current?.();
       },
     }); editorRef.current = editor;
+    const removeExitCheck = registerDraft?.(client, projectId, () => current() && (inputDirtyRef.current || editor.hasUnsavedChanges));
     const unsubscribeEditor = editor.subscribe(state => { if (current()) setMutation({ ...scope, state }); });
     const unsubscribe = list.subscribe(state => {
       if (!current()) return;
@@ -54,18 +59,19 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
     });
     void list.refresh();
     return () => {
-      unsubscribe(); unsubscribeEditor(); list.destroy(); editor.destroy();
+      unsubscribe(); unsubscribeEditor(); list.destroy(); editor.destroy(); removeExitCheck?.();
       if (scopeRef.current === scope) scopeRef.current = null;
       if (listRef.current === list) listRef.current = null;
       if (editorRef.current === editor) editorRef.current = null;
     };
-  }, [client, projectId, canView]);
+  }, [client, projectId, canView, registerDraft]);
   useEffect(() => {
     if (tickRef.current === refreshTick) return;
     tickRef.current = refreshTick;
-    // A settings read cannot cancel a publisher write or discard an uncertain outcome.
+    // Recheck the list without discarding a reviewed or unresolved request.
     if (!['saving', 'uncertain'].includes(editorRef.current?.state.phase ?? 'idle')) {
-      editorRef.current?.cancel(); void listRef.current?.refresh();
+      if (!editorRef.current?.hasUnsavedChanges) editorRef.current?.cancel();
+      void listRef.current?.refresh();
     }
   }, [refreshTick]);
   const formatter = useMemo(() => {
@@ -88,6 +94,8 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
   useEffect(() => () => { if (reportedBusy.current) { reportedBusy.current = false; busyRef.current?.(false); } }, []);
   const actionsLocked = locked || loading || state?.phase !== 'ready' || Boolean(write && ['review', 'saving', 'uncertain', 'error', 'denied'].includes(write.phase));
   const values = form?.client === client && form.projectId === projectId ? form : { issuer: '', subject: '' };
+  inputDirtyRef.current = visible && (values.issuer !== '' || values.subject !== '');
+  useUnloadWarning(visible && (inputDirtyRef.current || Boolean(editorRef.current?.hasUnsavedChanges)));
   const edit = (key: 'issuer' | 'subject', value: string) => {
     if (actionsLocked) return;
     setForm({ client, projectId, ...values, [key]: value });
@@ -97,6 +105,7 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
   const stamp = (value: string) => formatter ? formatter.format(new Date(value)) : value;
   const reload = () => {
     if (saving || uncertain || locked) return;
+    if (editorRef.current?.hasUnsavedChanges && !window.confirm('확인 중인 발행 권한 변경을 버리고 목록을 새로 읽을까요?')) return;
     editorRef.current?.cancel(); void listRef.current?.refresh();
   };
   useEffect(() => {

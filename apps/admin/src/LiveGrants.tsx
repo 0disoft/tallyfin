@@ -5,10 +5,12 @@ import { GrantList, type GrantListState } from './api/grant-list.ts';
 import { GrantEditor, type GrantEditorState } from './api/grant-editor.ts';
 import type { GrantChange, GrantRole } from './api/grants-contract.ts';
 import GrantChangePanel from './GrantChangePanel.tsx';
+import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
+import useUnloadWarning from './useUnloadWarning.ts';
 
-export default function LiveGrants({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost, onSaved }: {
+export default function LiveGrants({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost, onSaved, registerDraft }: {
   client: ApiClient; projectId: string; canView: boolean; timeZone: string; refreshTick: number;
-  locked?: boolean; onAccessLost?: () => void; onSaved?: () => void;
+  locked?: boolean; onAccessLost?: () => void; onSaved?: () => void; registerDraft?: DraftExitRegistration<ApiClient>;
 }) {
   const [snapshot, setSnapshot] = useState<{ client: ApiClient; projectId: string; state: GrantListState } | null>(null);
   const [mutation, setMutation] = useState<{ client: ApiClient; projectId: string; state: GrantEditorState } | null>(null);
@@ -16,6 +18,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
   const [form, setForm] = useState<{ client: ApiClient; projectId: string; issuer: string; subject: string; role: GrantRole } | null>(null);
   const listRef = useRef<GrantList | null>(null), tickRef = useRef(refreshTick);
   const editorRef = useRef<GrantEditor | null>(null);
+  const inputDirtyRef = useRef(false);
   const scopeRef = useRef<{ client: ApiClient; projectId: string } | null>(null);
   const renderedScope = useRef({ client, projectId }); renderedScope.current = { client, projectId };
   const callbacksRef = useRef(onAccessLost); callbacksRef.current = onAccessLost;
@@ -42,6 +45,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
         savedRef.current?.();
       },
     }); editorRef.current = editor;
+    const removeExitCheck = registerDraft?.(client, projectId, () => current() && (inputDirtyRef.current || editor.hasUnsavedChanges));
     const unsubscribeEditor = editor.subscribe(state => { if (current()) setMutation({ ...scope, state }); });
     const unsubscribe = list.subscribe(state => {
       if (!current()) return;
@@ -50,18 +54,19 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
     });
     void list.refresh();
     return () => {
-      unsubscribe(); unsubscribeEditor(); list.destroy(); editor.destroy();
+      unsubscribe(); unsubscribeEditor(); list.destroy(); editor.destroy(); removeExitCheck?.();
       if (scopeRef.current === scope) scopeRef.current = null;
       if (listRef.current === list) listRef.current = null;
       if (editorRef.current === editor) editorRef.current = null;
     };
-  }, [client, projectId, canView]);
+  }, [client, projectId, canView, registerDraft]);
   useEffect(() => {
     if (tickRef.current === refreshTick) return;
     tickRef.current = refreshTick;
-    // A settings read cannot cancel a grant write or discard an uncertain outcome.
+    // Recheck the list without discarding a reviewed or unresolved request.
     if (!['saving', 'uncertain'].includes(editorRef.current?.state.phase ?? 'idle')) {
-      editorRef.current?.cancel(); void listRef.current?.refresh();
+      if (!editorRef.current?.hasUnsavedChanges) editorRef.current?.cancel();
+      void listRef.current?.refresh();
     }
   }, [refreshTick]);
   const formatter = useMemo(() => {
@@ -76,6 +81,8 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
   const loading = visible && (!state || state.phase === 'loading'), saving = write?.phase === 'saving', uncertain = write?.phase === 'uncertain';
   const actionsLocked = locked || loading || state?.phase !== 'ready' || Boolean(write && ['review', 'saving', 'uncertain', 'error', 'denied'].includes(write.phase));
   const values = form?.client === client && form.projectId === projectId ? form : { issuer: '', subject: '', role: 'reader' as GrantRole };
+  inputDirtyRef.current = visible && (values.issuer !== '' || values.subject !== '' || values.role !== 'reader');
+  useUnloadWarning(visible && (inputDirtyRef.current || Boolean(editorRef.current?.hasUnsavedChanges)));
   const edit = (key: 'issuer' | 'subject' | 'role', value: string) => {
     if (actionsLocked) return;
     setForm({ client, projectId, ...values, [key]: value } as NonNullable<typeof form>);
@@ -84,6 +91,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
   const submit = (event: FormEvent) => { event.preventDefault(); prepare({ issuer: values.issuer, subject: values.subject, role: values.role, expectedRole: null }); };
   const reload = () => {
     if (saving || uncertain || locked) return;
+    if (editorRef.current?.hasUnsavedChanges && !window.confirm('확인 중인 권한 변경을 버리고 목록을 새로 읽을까요?')) return;
     editorRef.current?.cancel(); void listRef.current?.refresh();
   };
   useEffect(() => {

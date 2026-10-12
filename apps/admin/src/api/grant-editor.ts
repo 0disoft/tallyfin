@@ -17,6 +17,9 @@ export class GrantEditor {
   constructor(client: ApiClient, projectId: string, callbacks: Callbacks = {}) {
     this.#client = client; this.#projectId = projectId; this.#callbacks = callbacks;
   }
+  get hasUnsavedChanges(): boolean {
+    return !this.#destroyed && !this.#accessLost && this.state.change !== null;
+  }
   subscribe(listener: (state: GrantEditorState) => void): () => void {
     this.#listeners.add(listener); this.#notify(() => listener(this.state)); return () => { this.#listeners.delete(listener); };
   }

@@ -252,11 +252,11 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
     </form>
 
     <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
-      canView={canEdit && !blocked} locked={loading || saving || reviewing || publishersBusy} onAccessLost={accessLost} onSaved={grantsSaved} />
+      canView={canEdit && !blocked} locked={loading || saving || reviewing || publishersBusy} onAccessLost={accessLost} onSaved={grantsSaved} registerDraft={registerDraft} />
 
     <LivePublishers client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
       canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} onSaved={publishersSaved}
-      onBusyChange={publisherBusyChange} />
+      onBusyChange={publisherBusyChange} registerDraft={registerDraft} />
 
     <LiveAdminChanges client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone}
       refreshTick={`${refreshTick}:${historyRevision}`} canView={canEdit && !blocked}

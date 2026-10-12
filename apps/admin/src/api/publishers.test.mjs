@@ -29,6 +29,32 @@ const failure = (status, code) => ({ ok: false, status, json: async () => ({ err
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const defer = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 
+test('publisher exit protection follows review and unresolved writes, not confirmed or disposed changes', async () => {
+  let lose = true;
+  const editor = new PublisherEditor(new ApiClient({ fetchImpl: async () => {
+    if (lose) throw new TypeError('response lost');
+    return response(result());
+  } }), 'sembom');
+  try {
+    assert.equal(editor.hasUnsavedChanges, false);
+    editor.prepare(grant); assert.equal(editor.hasUnsavedChanges, true);
+    editor.cancel(); assert.equal(editor.hasUnsavedChanges, false);
+    editor.prepare(grant); const writing = editor.confirm(); assert.equal(editor.hasUnsavedChanges, true);
+    await writing; assert.equal(editor.state.phase, 'uncertain'); assert.equal(editor.hasUnsavedChanges, true);
+    editor.cancel(); assert.equal(editor.hasUnsavedChanges, true);
+    lose = false; await editor.confirm(); assert.equal(editor.hasUnsavedChanges, false);
+    editor.prepare(grant); editor.destroy(); assert.equal(editor.hasUnsavedChanges, false);
+  } finally { editor.destroy(); }
+});
+
+test('known publisher conflicts retain a proposed change while denied authority clears its exit protection', async () => {
+  for (const [status, code, dirty] of [[409, 'publisher_conflict', true], [403, 'forbidden', false]]) {
+    const editor = new PublisherEditor(new ApiClient({ fetchImpl: async () => failure(status, code) }), 'sembom');
+    try { editor.prepare(grant); await editor.confirm(); assert.equal(editor.hasUnsavedChanges, dirty); }
+    finally { editor.destroy(); }
+  }
+});
+
 test('publisher page parser keeps the closed shape, BINARY byte order and the canonical position', () => {
   assert.deepEqual(parseProjectPublisherPage(page()), page());
   assert.deepEqual(parseProjectPublisherPage(page([])), page([]));

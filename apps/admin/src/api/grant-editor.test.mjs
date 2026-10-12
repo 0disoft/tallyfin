@@ -13,6 +13,32 @@ const failure = (status, code) => ({ ok: false, status, json: async () => ({ err
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const defer = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 
+test('grant exit protection follows review and unresolved writes, not confirmed or disposed changes', async () => {
+  let lose = true;
+  const editor = new GrantEditor(new ApiClient({ fetchImpl: async () => {
+    if (lose) throw new TypeError('response lost');
+    return response(result());
+  } }), 'sembom');
+  try {
+    assert.equal(editor.hasUnsavedChanges, false);
+    editor.prepare(change); assert.equal(editor.hasUnsavedChanges, true);
+    editor.cancel(); assert.equal(editor.hasUnsavedChanges, false);
+    editor.prepare(change); const writing = editor.confirm(); assert.equal(editor.hasUnsavedChanges, true);
+    await writing; assert.equal(editor.state.phase, 'uncertain'); assert.equal(editor.hasUnsavedChanges, true);
+    editor.cancel(); assert.equal(editor.hasUnsavedChanges, true);
+    lose = false; await editor.confirm(); assert.equal(editor.hasUnsavedChanges, false);
+    editor.prepare(change); editor.destroy(); assert.equal(editor.hasUnsavedChanges, false);
+  } finally { editor.destroy(); }
+});
+
+test('known grant conflicts retain a proposed change while denied authority clears its exit protection', async () => {
+  for (const [status, code, dirty] of [[409, 'grant_conflict', true], [403, 'forbidden', false]]) {
+    const editor = new GrantEditor(new ApiClient({ fetchImpl: async () => failure(status, code) }), 'sembom');
+    try { editor.prepare(change); await editor.confirm(); assert.equal(editor.hasUnsavedChanges, dirty); }
+    finally { editor.destroy(); }
+  }
+});
+
 test('grant mutation response is closed and keeps absence, creation time and roles consistent', () => {
   assert.deepEqual(parseGrantMutationResult(result()), result());
   assert.deepEqual(parseGrantMutationResult(result({ ...change, role: null })), result({ ...change, role: null }));

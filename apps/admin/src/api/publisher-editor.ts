@@ -17,6 +17,9 @@ export class PublisherEditor {
   constructor(client: ApiClient, projectId: string, callbacks: Callbacks = {}) {
     this.#client = client; this.#projectId = projectId; this.#callbacks = callbacks;
   }
+  get hasUnsavedChanges(): boolean {
+    return !this.#destroyed && !this.#accessLost && this.state.request !== null;
+  }
   subscribe(listener: (state: PublisherEditorState) => void): () => void {
     this.#listeners.add(listener); this.#notify(() => listener(this.state)); return () => { this.#listeners.delete(listener); };
   }

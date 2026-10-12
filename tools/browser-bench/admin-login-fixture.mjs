@@ -12,9 +12,10 @@ import { CreatorProvisioner } from '../provision/creators.ts';
 import { readFile } from 'node:fs/promises';
 
 // Test-only provider. Keys, codes and tokens are ephemeral; no external identity service is contacted.
-export async function adminLoginFixture(directory, { profile = 'login', allowCreation = false } = {}) {
+export async function adminLoginFixture(directory, { profile = 'login', allowCreation = false, allowAuthorityChanges = false } = {}) {
   assert.ok(['login', 'onboarding', 'access', 'goals'].includes(profile));
   assert.equal(typeof allowCreation, 'boolean'); assert.ok(!allowCreation || profile === 'access');
+  assert.equal(typeof allowAuthorityChanges, 'boolean'); assert.ok(!allowAuthorityChanges || profile === 'access');
   const issuer = 'https://identity.example.invalid', clientId = 'tallyfin-smoke-public';
   const audience = 'tallyfin-smoke-api', resource = 'urn:tallyfin:smoke:api';
   const subject = 'synthetic-login-operator';
@@ -92,6 +93,9 @@ export async function adminLoginFixture(directory, { profile = 'login', allowCre
             if (dropResponse && profile === 'onboarding') assert.ok(['POST', 'PUT'].includes(request.method()));
             else if (dropResponse && profile === 'access' && allowCreation && url.pathname === '/v1/projects')
               assert.equal(request.method(), 'POST');
+            else if (dropResponse && profile === 'access' && allowAuthorityChanges &&
+              ['/v1/projects/sembom/grants', '/v1/projects/sembom/publishers'].includes(url.pathname))
+              assert.equal(request.method(), 'PUT');
             else {
               assert.equal(request.method(), 'PATCH');
               assert.ok(['/v1/projects/sembom', '/v1/projects/access-other'].includes(url.pathname));
