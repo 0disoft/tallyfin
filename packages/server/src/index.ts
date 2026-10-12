@@ -283,8 +283,14 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
               headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body,
               signal: requestSignal, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
             if (requestSignal.aborted) { discardBody(response.body); throw aborted; }
+            // Timers may be delayed by synchronous transport work or a busy event loop.
+            if (host.monotonicNow() >= requestDeadline) { discardBody(response.body); throw timedOut; }
             httpStatus = response.status; header = response.headers.get('Retry-After');
-            if (response.status === 200) return await receipt(response, count, requestSignal);
+            if (response.status === 200) {
+              const result = await receipt(response, count, requestSignal);
+              if (host.monotonicNow() >= requestDeadline) throw timedOut;
+              return result;
+            }
             discardBody(response.body);
             return null;
           }, Math.min(timeout, remaining), signal);

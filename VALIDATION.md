@@ -1,5 +1,31 @@
 # 검증
 
+## 서버 SDK 응답 기한 검사 (2026-10-12)
+
+전송 전 자격증명 기한 검사는 있었지만 응답 헤더·영수증 처리의 동기 지연은 타이머에만
+의존했다. 이벤트 루프가 막히면 기한 이후 정상 영수증을 `delivered`로 받아들였다.
+소스·minified·동일 배치 자동 재시도 회귀 3개가 수정 전 모두 실패했다. 헤더 수신 직후와
+영수증 해석 뒤 단조 시계로 시도/전체 기한을 확인해 늦은 응답은 결과 불명으로 처리한다.
+취소·재시도 횟수·총 예산·기존 이벤트 식별자는 유지한다.
+
+- `npm run test:server`: 38/38 통과. 새 결정적 검사는 timeout/총 budget의 정확한 경계와
+  초과를 헤더·본문 양쪽에서 확인한다. 후속 send가 동일 본문으로 중복 영수증을 받는다.
+  실제 루프백 HTTP의 100ms 동기 헤더/스트림 처리와 50ms timeout에서도 늦은 성공을
+  거부하며, 빠른 재시도가 같은 바이트를 보내는지 확인했다. 소표본 성능 측정은 아니다.
+- `npx --no-install tsc --noEmit`, `npm run build:server` 통과. 서버 번들 9110 bytes,
+  gzip 3718 bytes, runtimeDependencies 0. 브라우저 SDK 크기 예산과 별개다.
+- `npm run verify:server-recovery`: verified=true, defaultSdkFetch=true, 실제 임시
+  Miniflare 수집기 3개와 격리 D1. 커밋 전 503 뒤 accepted 2/attempts 2, 커밋 후 소켓 유실
+  뒤 duplicates 2/attempts 2, 403 뒤 attempts 1 및 추가 저장 없음. receipts 8,
+  completedRuns 2, byteIdenticalRetries=true. 기존/원격 DB 접근은 없다.
+  결과: `.tmp/server-recovery/run-tJXMUl`. runner가 검증 서버를 종료했다.
+- `git diff --check` 통과. SDK 동작 안내와 이 검증 기록을 갱신했다.
+
+API·DB·SDK 공개 타입·의존성·CI/러너·위생 정책 변경은 없다. 변경 없는 관리자·수집기
+전체 검사와 브라우저 UI 검사는 반복하지 않았으며 일반 lint 명령은 없다. 원격 제공자·
+운영 DB·배포 환경은 미검증이다. 실제 서버 저장 후 기한이 지나면 결과가 불명일 수 있어
+기존 이벤트로 재시도해야 한다. 푸시·배포·게시는 하지 않았다.
+
 ## 관리자 요청 제한의 동기 지연 강제 (2026-10-12)
 
 `ApiClient`가 제한 시간을 `setTimeout` 콜백에만 맡겨, `getBearer`가 동기로 이벤트 루프를
