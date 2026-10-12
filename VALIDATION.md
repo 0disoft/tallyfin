@@ -1,5 +1,29 @@
 # 검증
 
+## 프로젝트 생성 알림 예외 격리 — 2026-10-12
+
+`ProjectCreator`의 최초 구독 통지·상태 변경 통지와 `onOpened` 인계 콜백에서 동기 예외가
+성공한 POST의 receipt·생성 완료 상태를 바꾸거나 나머지 구독자 통지와 열기 인계를 막는
+경로를 수정했다. 생성·설정 조회 상태를 알린 뒤 generation과 파괴 여부를 다시 확인해, 종료된
+화면에서는 새 요청이나 인계를 시작하지 않는다. 파괴된 뒤 등록한 구독자는 호출하지 않는다. 새
+`project-notifications.test.mjs` 5개는 수정 전 5/5 실패했다. 수정 후 project-notifications·
+project-creation·request-lifecycle 검사 합계 27/27이 통과했다.
+
+`npm run typecheck:admin`, `npm run build:admin`, `node --test
+apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11,
+`git diff --check`를 통과했다. `npm run verify:admin-onboarding -- --channel chromium
+--lost-responses`는 exit 0·verified=true였고 Chromium 156.0.8078.4에서 emptyProjectCreated·
+schemaPublished·generatedSdkExecuted·correctOnboardingStep·eventVisible·lostResponseRecovery가
+모두 true, firstEventCount 1, 유실된 생성 1·발행 1, 교체 대화상자 3, routeError=false·
+pageErrors=0, auth 1·exchanges 1·refreshes 0, API 읽기 31·쓰기 5, 브라우저 배치 1이었다.
+이 실행은 로컬 서명 OIDC·D1 smoke이며, UI 콜백 예외는 합성 포트로 주입한 단위 검사이고
+브라우저에서 예외를 직접 주입한 검사는 아니다.
+
+설계 기준 문서 `docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록을 갱신했다. API·DB·SDK·
+의존성·위생 정책·CI 러너 변경과 소스 계약 변경은 없다. 변경 없는 전체 백엔드 검사는
+생략했고 일반 소스 lint 명령은 없다. 실제 운영 OIDC 제공자·도메인·원격 DB는 미정·미검증이며
+푸시·배포는 하지 않았다.
+
 ## 스키마 편집기 알림 예외 격리 — 2026-10-12
 
 `SchemaEditor`의 초기 구독·상태 변경·권한 상실 통지에서 동기 예외가 조회와 검증·발행

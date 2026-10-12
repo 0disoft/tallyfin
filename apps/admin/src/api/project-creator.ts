@@ -12,8 +12,21 @@ export class ProjectCreator {
   #client: ApiClient; #onOpened: (settings: ProjectSettings) => void;
   #controller: AbortController | null = null; #generation = 0; #destroyed = false;
   constructor(client: ApiClient, onOpened: (settings: ProjectSettings) => void) { this.#client = client; this.#onOpened = onOpened; }
-  subscribe(listener: (state: CreatorState) => void) { this.#listeners.add(listener); listener(this.state); return () => { this.#listeners.delete(listener); }; }
-  #set(patch: Partial<CreatorState>) { if (!this.#destroyed) { this.state = { ...this.state, ...patch }; for (const listener of this.#listeners) listener(this.state); } }
+  subscribe(listener: (state: CreatorState) => void) {
+    if (this.#destroyed) return () => {};
+    this.#listeners.add(listener); this.#notify(() => listener(this.state));
+    return () => { this.#listeners.delete(listener); };
+  }
+  #set(patch: Partial<CreatorState>) {
+    if (this.#destroyed) return;
+    const state = this.state = { ...this.state, ...patch };
+    for (const listener of this.#listeners) this.#notify(() => listener(state));
+  }
+  // UI callbacks cannot change a confirmed server outcome or interrupt other subscribers.
+  #notify(callback: () => void): boolean {
+    if (this.#destroyed) return false;
+    try { callback(); return true; } catch { return false; }
+  }
   #start() { this.#controller?.abort(); const controller = new AbortController(); this.#controller = controller; return { controller, generation: ++this.#generation }; }
   #current(g: number) { return !this.#destroyed && g === this.#generation && !this.#controller?.signal.aborted; }
   edit(key: keyof CreationDraft, value: string) {
@@ -30,6 +43,7 @@ export class ProjectCreator {
   async #submit(input: ProjectCreation) {
     const { controller, generation } = this.#start();
     this.#set({ phase: 'creating', pending: structuredClone(input), errors: {}, message: null });
+    if (!this.#current(generation)) return;
     try {
       const receipt = await this.#client.createProject(input, { signal: controller.signal });
       if (!this.#current(generation)) return;
@@ -48,11 +62,14 @@ export class ProjectCreator {
     if (this.#destroyed || this.state.phase !== 'created' || !this.state.receipt) return;
     const id = this.state.receipt.projectId, { controller, generation } = this.#start();
     this.#set({ phase: 'opening' });
+    if (!this.#current(generation)) return;
     try {
       const settings = await this.#client.getSettings(id, { signal: controller.signal });
       if (!this.#current(generation)) return;
       this.#set({ phase: 'created', message: '프로젝트 생성을 확인했어요. 첫 스키마를 등록해 주세요.' });
-      this.#onOpened(settings);
+      if (!this.#current(generation)) return;
+      if (!this.#notify(() => this.#onOpened(settings)))
+        this.#set({ message: '생성한 프로젝트 화면을 열지 못했어요. 생성한 프로젝트 열기를 다시 눌러 주세요.' });
     } catch { if (this.#current(generation)) this.#set({ phase: 'created', message: '생성은 확인했지만 프로젝트 설정을 불러오지 못했어요. 생성 요청을 다시 보내지 않고 설정만 조회해요.' }); }
   }
   destroy() { this.#destroyed = true; ++this.#generation; this.#controller?.abort(); this.#listeners.clear(); }
