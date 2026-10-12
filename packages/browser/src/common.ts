@@ -142,10 +142,13 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       finished = true; stopTimeout(); batch.__tfBatchStopRequest = undefined;
       if (([0, 408, 429].includes(status) || (status >= 500 && status <= 599)) && batch.__tfBatchTries < 2) {
         let delay = 1000 * 2 ** batch.__tfBatchTries;
-        if (header !== null && /^\d+$/.test(header)) delay = Math.max(1000, Number(header) * 1000);
-        if (platform.now() + delay < batch.__tfBatchCreatedAt + 600000) {
+        if (header !== null && /^\d+$/.test(header)) delay = Number(header) * 1000;
+        // Round-trip rejects normalized invalid dates and nonstandard date strings.
+        else if (header?.length === 29 && new Date(header).toUTCString() === header)
+          delay = Date.parse(header) - platform.now();
+        if (platform.now() + Math.max(1000, delay) < batch.__tfBatchCreatedAt + 600000) {
           batch.__tfBatchTries++;
-          batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);
+          batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, Math.max(1000, delay));
           return;
         }
       }
@@ -157,8 +160,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     catch { finish(0); }
   };
   function pump() {
-    if (stopped || active.size || !queue.length) return;
-    launch();
+    if (!stopped && !active.size && queue.length) launch();
   }
   function launch() {
     const batch = pack(); if (!batch.__tfBatchCount) { queue.shift(); schedule(0); return; }

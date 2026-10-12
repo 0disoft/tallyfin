@@ -1,5 +1,31 @@
 # 검증
 
+## 브라우저 SDK 날짜형 재시도 안내 — 2026-10-12
+
+`packages/browser`의 재시도 대기가 정수 초와 표준 IMF-fixdate(예 `Thu, 08 Oct
+2026 15:01:15 GMT`)를 함께 처리한다. `common.ts`는 정규 UTC 문자열 왕복 파싱으로
+날짜를 받아들이고, 남은 시간은 브라우저 호스트 현재 시각 기준으로 계산한다. 하한은
+1초라 이미 지난 시각도 1초를 기다리고, 형식이 어긋나면 1·2초 백오프를 쓴다. 대기가
+배치 시작부터 10분 이상이 되면 재전송 없이 버리고, `flush`와 숨김 콜백은 대기를
+우회하지 못하며 재시도는 원래 ID·시각·본문을 유지한다. 새
+`packages/browser/test/retry-after.test.ts` 6개는 수정 전 HEAD에서 6/6 실패했고 수정
+후 전체 `npm run test:browser` 42/42를 통과했다.
+
+esbuild minified `build.test` 2개는 HTTP-date 헤더 대기 검증으로 넓혀 별도 2/2를
+통과했다(기존 42개에 포함되므로 44로 합산하지 않는다). 첫 확장 실행은 fixture 시각이
+50ms 밀린 탓에 HTTP-date 초 정밀도와 어긋나 59999ms 기대값으로 2/2 실패했고, 대기
+시간을 HTTP-date 기준 차이로 계산하도록 fixture를 고친 뒤 2/2를 통과했다. 이 실패는
+검사 fixture 문제이며 제품 결함이 아니다. 전체 42/42 뒤에는 검사 파일만 바뀌어 관련
+2/2만 다시 확인했고 `npm run build:browser`, `npx --no-install tsc --noEmit`,
+`git diff --check`, `npm run check:browser-size`(sdk 2786·Sembom 3065·funnelSdk 2947·
+funnelExample 3072 gzip bytes, 예산 3072)는 같은 결과를 재사용했다.
+
+검사는 합성 호스트 fake clock, esbuild minified 번들, Node 네이티브 어댑터 대역으로만
+확인했고 실제 Chromium 실행과 원격 서비스는 검증하지 않았다. 변화가 없는 기존 백엔드·admin
+전체 검사는 돌리지 않았고 lint 스크립트는 없다. API·DB·공개 타입·의존성·CI·runner·위생
+변경은 없고 SDK 재시도 동작 확장과 소유 문서 `docs/backend/browser-sdk.md`·
+`docs/backend/event-contract.md` 갱신만 있었으며 푸시·배포는 하지 않았다.
+
 ## 브라우저 SDK 이름·식별자 원시 문자열 검사 — 2026-10-12
 
 `packages/browser`가 이벤트 이름·workflow ID·attempt ID·이벤트 ID를 강제 변환 전에
