@@ -1,5 +1,31 @@
 # 검증
 
+## 권한 편집기 알림 예외 격리 — 2026-10-12
+
+`GrantEditor`와 `PublisherEditor`의 `subscribe` 최초 통지와 `#set` 구독자 호출에서
+동기 예외가 상태 갱신 밖으로 전파되던 경로를 수정했다. 각 호출을 감싼 `#notify`는
+파괴된 편집기에서 콜백을 부르지 않고 돌아온다. 새
+`apps/admin/src/api/permission-notifications.test.mjs` 4개는 수정 전 모두 실패했고(유효
+fixture로 재실행 확인), 수정 후 관련 grant-editor·publishers·settings-editor·요청 수명
+검사와 합계 36/36이 통과했다. 기존 `onSaved`·`onAccessLost` 격리는 유지했다. 이 fault는
+client 포트를 대역으로 바꾼 합성 notification 검사이며 실제 인증·브라우저에서 알림 예외를
+주입한 검사는 아니다.
+
+`npm run typecheck:admin`·`npm run build:admin`,
+`node --test apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11,
+`npm run verify:admin-access -- --channel chromium`을 통과했다. 브라우저 검사는 exit 0,
+verified=true, Chromium 156.0.8078.4, 스키마·설정 권한 거부 각 1회,
+crossSectionPermissionsRefreshed·preservedDraft·explicitPermissionRecovery·
+staleWriteAcrossProjectSwitchIgnored·disconnectedUiCleared·serverCommitsNotRolledBack 모두 true,
+heldWrites 2, routeError=false·pageErrors=0, authorizations 1·exchanges 1·refreshes 0,
+API 읽기 128·쓰기 요청 5, 브라우저 배치 0이었다. 이 브라우저 실행은 기존 설정/스키마
+회귀 smoke이고 이번 grant/publisher 알림 예외 경로를 겨냥하지 않았다.
+
+API·DB·SDK·의존성·CI·runner·hygiene은 바꾸지 않았고 푸시·배포도 없다. lint 스크립트가 없어
+린트를 생략했고, 변경 없는 전체 백엔드 검사와 native 운영 검사는 변경 범위가 admin 편집기
+알림 격리뿐이라 생략했다. 실제 운영 OIDC 제공자와 원격 DB는 미검증이다. 설계 기준 문서
+`docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록을 갱신했다.
+
 ## 설정 편집기 콜백 격리 — 2026-10-12
 
 `SettingsEditor`의 UI 구독자 호출과 `onSaved`·`onAccessLost` 콜백이 던진 동기

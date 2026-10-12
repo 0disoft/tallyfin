@@ -18,11 +18,11 @@ export class PublisherEditor {
     this.#client = client; this.#projectId = projectId; this.#callbacks = callbacks;
   }
   subscribe(listener: (state: PublisherEditorState) => void): () => void {
-    this.#listeners.add(listener); listener(this.state); return () => { this.#listeners.delete(listener); };
+    this.#listeners.add(listener); this.#notify(() => listener(this.state)); return () => { this.#listeners.delete(listener); };
   }
   #set(state: PublisherEditorState) {
     if (this.#destroyed) return;
-    this.state = state; for (const listener of this.#listeners) listener(state);
+    this.state = state; for (const listener of this.#listeners) this.#notify(() => listener(state));
   }
   prepare(input: PublisherRequest): boolean {
     if (this.#destroyed || this.#accessLost || ['saving', 'uncertain', 'denied'].includes(this.state.phase)) return false;
@@ -68,7 +68,10 @@ export class PublisherEditor {
     // UI callbacks cannot turn a confirmed write into an unknown outcome or trigger a replay.
     this.#notify(() => this.#callbacks.onSaved?.(result));
   }
-  #notify(callback: (() => void) | undefined) { try { callback?.(); } catch { /* The confirmed server result remains authoritative. */ } }
+  #notify(callback: (() => void) | undefined) {
+    if (this.#destroyed) return;
+    try { callback?.(); } catch { /* Notifications cannot change request outcomes or skip access-loss handling. */ }
+  }
   destroy(): void {
     this.#destroyed = true; ++this.#generation; this.#controller?.abort(); this.#listeners.clear(); this.#callbacks = {};
     this.state = initial();

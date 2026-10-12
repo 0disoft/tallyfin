@@ -237,6 +237,17 @@ phase(loading/ready/saving/review/error)·필드 오류·잠금을 소유하며,
 계속 상태를 정한다. 오류 상세는 출력하지 않는다. API·DB 계약과 자동 재시도 정책은
 그대로다.
 
+## 권한 편집기 알림 격리 확대 — 2026-10-12
+
+`GrantEditor`와 `PublisherEditor`도 `SettingsEditor`와 같은 규칙으로 UI 구독자 호출과
+`onSaved`·`onAccessLost` 콜백의 동기 예외를 격리한다. `subscribe`가 등록 직후 보내는 최초
+통지와 `#set`이 구독자마다 부르는 `#notify` 호출을 각각 감싸므로, 한 구독자가 던져도 나머지
+구독자 통지와 권한 상실 잠금 판정은 그대로 진행된다. `#notify`는 파괴된 편집기에서 콜백을
+부르지 않고 돌아온다. 예외는 상태와 phase, 확인된 저장 결과를 바꾸지 않아 성공한 쓰기가
+미확인으로 남거나 재전송되지 않는다. 오류 상세는 노출하지 않고 기존 `onSaved`·`onAccessLost`
+격리도 유지한다. API·DB·SDK·의존성 계약과 자동 재시도 정책은 그대로다. 검증 기록은
+[VALIDATION.md](../../VALIDATION.md)에 둔다.
+
 ## 스키마 편집 상태·API 연결 — 2026-10-09
 
 2026-10-12 보완: 검증·발행·목록/버전 조회가 401/403으로 거부되면 `blocked`와 review
