@@ -1,5 +1,39 @@
 # 검증
 
+## 새 프로젝트 생성 후 화면 이동 취소 (2026-10-12)
+
+Tallyfin에서 새 프로젝트 생성 뒤 자동 이동이 기존 설정·스키마 초안을 확인 없이 버리는
+버그를 재현했다. native confirm을 취소하면 기존 초안과 선택 프로젝트는 그대로 남고,
+새 프로젝트는 목록과 생성 영수증에 유지된다. 자동 열기 한 번과 명시적 다시 열기 한 번을
+취소한 뒤 승인해도 생성 POST는 1회만 나가고 재열기는 GET만 쓴다. 취소는 생성 성공을
+실패나 결과 불명으로 바꾸지 않는다. 확인은 실제 Chromium, 서명 HTTP, 격리 Miniflare D1에서
+했다. 관리자 테스트 249개와 타입·빌드가 통과했고, 최초 프로젝트 온보딩과 생성/스키마
+발행 응답 유실 복구도 통과했다. HTTP API·DB·의존성·CI 변경은 없고 푸시·배포도 하지 않았다.
+실제 운영·모바일·기타 폼은 미검증이며 전체 저장소와 72질문 목표는 미완료다.
+
+컨트롤러 회귀는 수정 전 취소를 무시하는 성공 메시지로 exit 1, 브라우저 회귀는
+`created-project-cancel` exit 1이었다. 실패 기록은
+`.tmp/admin-settings-navigation-GuEMTb/failure.json`이다. 구현 후 집중 Node 16/16,
+최종 `verify:admin-settings-navigation -- --channel chromium --check-created-exit`는
+Chromium 156.0.8078.4·exit 0·verified=true·reads 154·writes 1·pageErrors 0·routeError=false,
+`.tmp/admin-settings-navigation-t5VZm8/report.json`이었다. 기존 이름 DB 불변·reader 잠금·
+새 프로젝트 행 1개·승인 뒤 기존 초안 폐기·storage/cookie 부재도 확인했다.
+두 옵션을 결합한 최종 실행도 exit 0·verified=true·native beforeunload 4회 취소·
+reads 162·writes 1·pageErrors 0·routeError=false였다
+(`.tmp/admin-settings-navigation-4Ap0yj/report.json`). workerd WSASend 10054 연결 중단
+로그도 관측했다. 원인 미확인 로그이며 사용자 흐름 통과를 전체 런타임 정상으로 확대하지 않는다.
+
+`verify:admin-onboarding -- --channel chromium --lost-responses`도 exit 0·verified=true,
+생성/발행 실제 commit 응답 유실 각 1회 복구·첫 SDK 이벤트 DB/표 1건·3 SDK 연결 전환,
+스키마 교체 confirm 3회·reads 31·writes 5·browserBatches 1·pageErrors 0·routeError=false,
+`.tmp/admin-onboarding-5SpwPt/report.json`에 기록했다. 번들 2/2·Sites 9/9·diff도 통과했다.
+문서 초안은 지정 CommandCode DeepSeek 4.1 Flash high로 받아 검토했고, 취소 두 번의
+위치는 실제 자동 열기/명시적 열기로 바로잡았다. 외부 모델은 검증을 실행하지 않았다.
+변경 없는 backend/SDK 전체는 반복하지 않았고 일반 lint 명령은 없다. 새 옵션은 기존
+access fixture에만 생성 권한을 추가하며 기본 실행과 일반 CI에 쓰기를 늘리지 않는다.
+모드 전환·다른 폼·pending 기존 설정 쓰기 중 생성·운영 인증/D1·모바일·승인한 종료 뒤
+복구와 전체 목표는 여전히 미검증/미완료다. SDK·버전·위생 정책 변경도 없다.
+
 ## 프로젝트 선택·연결 해제 초안 확인 (2026-10-12)
 
 현재 프로젝트의 설정·스키마 초안을 버리는 두 명시적 버튼에 native confirm을 추가했다.

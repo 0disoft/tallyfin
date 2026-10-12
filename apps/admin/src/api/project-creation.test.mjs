@@ -26,6 +26,29 @@ function fixture() {
   for (const [key, value] of Object.entries(draft)) creator.edit(key, value);
   return { creator, client, calls, config, opened };
 }
+
+test('canceling the opened-screen handoff retains confirmed creation and retries only GET', async () => {
+  const f = fixture(); let allow = false, attempts = 0;
+  const creator = new ProjectCreator(f.client, () => { attempts++; return allow; });
+  for (const [key, value] of Object.entries(draft)) creator.edit(key, value);
+  try {
+    await creator.create();
+    assert.equal(creator.state.phase, 'created');
+    assert.equal(creator.state.pending, null);
+    assert.equal(creator.state.receipt.projectId, input.id);
+    assert.match(creator.state.message, /화면 이동은 취소/);
+    const confirmed = creator.state.receipt;
+    await creator.create(); await creator.confirm();
+    assert.equal(attempts, 1);
+    await creator.open();
+    assert.match(creator.state.message, /화면 이동은 취소/);
+    allow = true; await creator.open();
+    assert.equal(attempts, 3); assert.equal(creator.state.phase, 'created');
+    assert.deepEqual(creator.state.receipt, confirmed);
+    assert.equal(f.calls.filter(call => call.init.method === 'POST').length, 1);
+    assert.equal(f.calls.filter(call => call.init.method === 'GET').length, 3);
+  } finally { creator.destroy(); f.creator.destroy(); f.client.destroy(); }
+});
 test('creation transport and receipt agree with the actual core contract and retain current settings on handoff', async () => {
   assert.equal(await creationHash(input), await projectCreationHash(parseProjectCreation(input)));
   const f = fixture(); await f.creator.create();

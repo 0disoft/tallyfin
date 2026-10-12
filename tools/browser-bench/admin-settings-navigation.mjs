@@ -11,13 +11,14 @@ import { answerConfirm } from './answer-confirm.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 let local, server, browser, page, directory, watchdog, unloadProbe, stage = 'arguments';
 try {
-  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, 'check-unload': { type: 'boolean' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, 'check-unload': { type: 'boolean' }, 'check-created-exit': { type: 'boolean' }, help: { type: 'boolean' } } });
   assert.ok(['chromium', 'chrome', 'msedge'].includes(values.channel));
-  if (values.help) console.log('npm run verify:admin-settings-navigation -- [--channel chromium|chrome|msedge] [--check-unload]\nLocal signed settings/schema drafts across navigation and permission refresh; no remote service.');
+  if (values.help) console.log('npm run verify:admin-settings-navigation -- [--channel chromium|chrome|msedge] [--check-unload] [--check-created-exit]\nLocal signed settings/schema drafts across navigation and permission refresh; no remote service.');
   else {
     watchdog = setTimeout(() => { void browser?.close(); }, 90000);
     await mkdir(resolve(root, '.tmp'), { recursive: true }); directory = await mkdtemp(resolve(root, '.tmp/admin-settings-navigation-'));
-    stage = 'fixture'; local = await adminLoginFixture(directory, { profile: 'access' });
+    stage = 'fixture'; local = await adminLoginFixture(directory, { profile: 'access', allowCreation: Boolean(values['check-created-exit']) });
+    const expectedWrites = values['check-created-exit'] ? 1 : 0;
     const collector = new URL(await local.mf.ready).origin, previous = process.env.TALLYFIN_COLLECTOR_ORIGIN;
     delete process.env.TALLYFIN_COLLECTOR_ORIGIN;
     try {
@@ -111,6 +112,26 @@ try {
     assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
     assert.equal(await name.inputValue(), 'Retained navigation settings');
     assert.equal(await label.inputValue(), 'Retained navigation schema');
+    if (values['check-created-exit']) {
+      stage = 'created-project-cancel';
+      await page.getByRole('button', { name: '프로젝트 추가', exact: true }).click();
+      await page.locator('#create-name').fill('Created exit fixture');
+      await page.locator('#create-id').fill('draft-exit-new');
+      await page.locator('#create-timeZone').fill('Asia/Seoul');
+      await answerConfirm(page, () => page.getByRole('button', { name: '프로젝트 만들기', exact: true }).click(), false);
+      await page.getByText('프로젝트 생성은 완료됐어요. 화면 이동은 취소했어요. 준비되면 생성한 프로젝트 열기를 눌러 주세요.', { exact: true }).waitFor();
+      assert.equal(await projectSelect.inputValue(), 'sembom');
+      assert.equal(await projectSelect.locator('option[value="draft-exit-new"]').count(), 1);
+      assert.equal(await name.inputValue(), 'Retained navigation settings');
+      assert.equal(await label.inputValue(), 'Retained navigation schema');
+      assert.equal((await local.db.prepare('SELECT count(*) AS n FROM projects WHERE id = ?').bind('draft-exit-new').first()).n, 1);
+      stage = 'created-project-reopen-cancel';
+      await answerConfirm(page, () => page.getByRole('button', { name: '생성한 프로젝트 열기', exact: true }).click(), false);
+      assert.equal(await projectSelect.inputValue(), 'sembom');
+      assert.equal(await name.inputValue(), 'Retained navigation settings');
+      assert.equal(await label.inputValue(), 'Retained navigation schema');
+      assert.equal(local.counts.apiWrites, 1);
+    }
     stage = 'draft-return';
     await enter();
     await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false || document.querySelector('.settings-recovery'));
@@ -120,7 +141,7 @@ try {
     await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
     await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
     assert.equal(await name.isEditable(), true); assert.equal(await label.isEditable(), true);
-    assert.equal(local.counts.apiWrites, 0);
+    assert.equal(local.counts.apiWrites, expectedWrites);
     assert.equal((await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name, initialName);
     stage = 'revoked-while-away'; await leave(); await local.setRole('reader'); await enter();
     await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).waitFor();
@@ -130,7 +151,14 @@ try {
     assert.equal(await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).isDisabled(), true);
     stage = 'scope-disposal'; await leave();
-    await answerConfirm(page, () => projectSelect.selectOption('access-other'), true);
+    if (values['check-created-exit']) {
+      stage = 'created-project-open-accept';
+      await answerConfirm(page, () => page.getByRole('button', { name: '생성한 프로젝트 열기', exact: true }).click(), true);
+      await page.waitForFunction(() => document.getElementById('settings-name')?.value === 'Created exit fixture');
+      assert.equal(await projectSelect.inputValue(), 'draft-exit-new');
+      assert.equal(await label.count(), 0); assert.equal(local.counts.apiWrites, 1);
+      await projectSelect.selectOption('access-other');
+    } else await answerConfirm(page, () => projectSelect.selectOption('access-other'), true);
     await enter(); await page.waitForFunction(() => document.getElementById('settings-name')?.value === 'Other access fixture');
     assert.notEqual(await label.inputValue(), 'Retained navigation schema');
     await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
@@ -141,7 +169,7 @@ try {
     assert.equal(await name.count(), 0); assert.equal(await label.count(), 0);
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     assert.equal((await context.cookies()).length, 0);
-    assert.equal(local.counts.apiWrites, 0); assert.equal(pageErrors, 0); assert.equal(routeError, false);
+    assert.equal(local.counts.apiWrites, expectedWrites); assert.equal(pageErrors, 0); assert.equal(routeError, false);
     if (values['check-unload']) {
       stage = 'clean-disconnect-reload';
       const unexpected = async dialog => { unloadWarnings++; await dialog.dismiss(); };
@@ -155,6 +183,7 @@ try {
       projectSwitchDisposesDrafts: true, disconnectDisposesHiddenWorkspace: true, noStorageOrCookie: true,
       canceledProjectSwitchRetainsDrafts: true, canceledDisconnectRetainsSession: true,
       independentEditorExitChecked: Boolean(values['check-unload']),
+      createdProjectExitChecked: Boolean(values['check-created-exit']),
       unloadChecked: Boolean(values['check-unload']), tabCloseCanceled: Boolean(values['check-unload']), unloadWarnings, pageErrors, routeError, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
   }

@@ -149,6 +149,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const validVersion = Number.isInteger(version) && version >= 1 && version <= MAX_SCHEMA_VERSION;
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
+  const confirmDraftExit = useCallback(() => !client || draftExit.canLeave(client, activeProjectId, () =>
+    window.confirm('저장하지 않은 설정이나 스키마가 있어요. 초안을 버리고 계속할까요? 이미 서버에 저장된 값은 되돌리지 않아요.')),
+  [client, activeProjectId, draftExit]);
   const settingsScopeRetained = retainedSettings?.client === client && retainedSettings?.projectId === activeProjectId;
   // Retain only the current session/project while moving between analysis views.
   // The transition keys, not the retained-state update, trigger a fresh permission check.
@@ -203,10 +206,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     sessionRef.current += 1;
     projectsControllerRef.current?.abort(); cancelMore();
     setProjects(previous => ({ status: 'ready', data: [...(previous.data ?? []).filter(p => p.id !== settings.project.id), settings.project].sort((a, b) => a.id.localeCompare(b.id)) }));
+    if (settings.project.id !== activeProjectId && !confirmDraftExit()) return false;
     setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setGrouping(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setNewProjectId(settings.project.id); setShowCreate(false); setPageError(null);
     onNavigate?.('settings');
-  }, [onNavigate, cancelMore]);
+    return true;
+  }, [onNavigate, cancelMore, activeProjectId, confirmDraftExit]);
   const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, []);
   const connected = useCallback((login: BrowserLogin) => {
     sessionRef.current += 1;
@@ -234,10 +239,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     setSession({ token, basePath: resolved.basePath });
     setShowCreate(false); setNewProjectId(null);
     setToken('');
-  }
-  function confirmDraftExit(): boolean {
-    return !client || draftExit.canLeave(client, activeProjectId, () =>
-      window.confirm('저장하지 않은 설정이나 스키마가 있어요. 초안을 버리고 계속할까요? 이미 서버에 저장된 값은 되돌리지 않아요.'));
   }
   function switchProject(next: string | null) {
     if (next === projectId || !confirmDraftExit()) return;

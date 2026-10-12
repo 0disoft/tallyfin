@@ -14,7 +14,7 @@ const fields: { key: keyof CreationDraft; label: string; help: string; placehold
   { key: 'requestsPerMinute', label: '분당 요청 한도', help: '1~600 사이 정수. 기본 입력값은 120이에요.' },
   { key: 'newReceiptsPerUtcDay', label: 'UTC 하루 신규 수신 한도', help: '1~1,000,000 사이 정수. 기본 입력값은 100,000이에요.' },
 ];
-export default function LiveProjectCreate({ client, onCreated, onClose }: { client: ApiClient; onCreated: (settings: ProjectSettings) => void; onClose: () => void }) {
+export default function LiveProjectCreate({ client, onCreated, onClose }: { client: ApiClient; onCreated: (settings: ProjectSettings) => boolean | void; onClose: () => void }) {
   const [state, setState] = useState<CreatorState | null>(null), [limitsOpen, setLimitsOpen] = useState(false);
   const creator = useRef<ProjectCreator | null>(null), heading = useRef<HTMLHeadingElement>(null);
   const opened = useRef(onCreated);

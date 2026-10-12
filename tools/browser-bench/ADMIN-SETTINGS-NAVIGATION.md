@@ -38,6 +38,14 @@ and schema-only edits each also require a cancelable project-switch confirmation
 The separate `verify:admin-access` accepts both confirmations while real settings
 commits await a held response and still checks late-response isolation.
 
+Add `--check-created-exit` to grant creation authority only to this ephemeral
+access fixture. It creates one additional project while existing drafts are
+hidden, cancels automatic opening and one explicit reopen, then accepts reopening.
+The old project/drafts and new option/receipt must survive both cancellations.
+The new D1 project row must exist exactly once and `apiWrites` must remain one
+after the accepted reopen. This flag can be combined with `--check-unload`.
+It does not grant authority to an existing profile or real identity provider.
+
 The fixture revokes the owner grant while analysis is visible. Returning must
 retain both drafts but lock them under the current reader role. Project switching
 must dispose the old drafts and returning to that project must show server data.
@@ -48,6 +56,7 @@ multi-project draft storage, all forms, mobile accessibility or remote auth/D1.
 The report `.tmp/admin-settings-navigation-*/report.json` contains fixed flags and
 counts, not tokens or draft values. Failures preserve a fixed stage/code/counts
 and a synthetic screenshot in that ignored directory. A 90-second watchdog closes
-the browser; final cleanup closes browser, Vite and Miniflare. No server mutation
-should occur: the report requires `apiWrites=0` and checks the project's original
-name directly in D1. See [VALIDATION.md](../../VALIDATION.md) for observed evidence.
+the browser; final cleanup closes browser, Vite and Miniflare. The default report
+requires `apiWrites=0`; `--check-created-exit` requires exactly one creation write.
+Both check the original project's unchanged name directly in D1.
+See [VALIDATION.md](../../VALIDATION.md) for observed evidence.

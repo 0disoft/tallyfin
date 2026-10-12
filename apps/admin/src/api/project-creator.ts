@@ -9,9 +9,9 @@ export type CreatorState = { phase: 'ready' | 'creating' | 'uncertain' | 'create
 export class ProjectCreator {
   state: CreatorState = { phase: 'ready', draft: initialCreationDraft(), errors: {}, message: null, pending: null, receipt: null };
   #listeners = new Set<(state: CreatorState) => void>();
-  #client: ApiClient; #onOpened: (settings: ProjectSettings) => void;
+  #client: ApiClient; #onOpened: (settings: ProjectSettings) => boolean | void;
   #controller: AbortController | null = null; #generation = 0; #destroyed = false;
-  constructor(client: ApiClient, onOpened: (settings: ProjectSettings) => void) { this.#client = client; this.#onOpened = onOpened; }
+  constructor(client: ApiClient, onOpened: (settings: ProjectSettings) => boolean | void) { this.#client = client; this.#onOpened = onOpened; }
   subscribe(listener: (state: CreatorState) => void) {
     if (this.#destroyed) return () => {};
     this.#listeners.add(listener); this.#notify(() => listener(this.state));
@@ -68,8 +68,13 @@ export class ProjectCreator {
       if (!this.#current(generation)) return;
       this.#set({ phase: 'created', message: '프로젝트 생성을 확인했어요. 첫 스키마를 등록해 주세요.' });
       if (!this.#current(generation)) return;
-      if (!this.#notify(() => this.#onOpened(settings)))
+      let canceled = false;
+      const notified = this.#notify(() => { canceled = this.#onOpened(settings) === false; });
+      if (!this.#current(generation)) return;
+      if (!notified)
         this.#set({ message: '생성한 프로젝트 화면을 열지 못했어요. 생성한 프로젝트 열기를 다시 눌러 주세요.' });
+      else if (canceled)
+        this.#set({ message: '프로젝트 생성은 완료됐어요. 화면 이동은 취소했어요. 준비되면 생성한 프로젝트 열기를 눌러 주세요.' });
     } catch { if (this.#current(generation)) this.#set({ phase: 'created', message: '생성은 확인했지만 프로젝트 설정을 불러오지 못했어요. 생성 요청을 다시 보내지 않고 설정만 조회해요.' }); }
   }
   destroy() { this.#destroyed = true; ++this.#generation; this.#controller?.abort(); this.#listeners.clear(); }

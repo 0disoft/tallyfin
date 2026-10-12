@@ -12,8 +12,9 @@ import { CreatorProvisioner } from '../provision/creators.ts';
 import { readFile } from 'node:fs/promises';
 
 // Test-only provider. Keys, codes and tokens are ephemeral; no external identity service is contacted.
-export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
+export async function adminLoginFixture(directory, { profile = 'login', allowCreation = false } = {}) {
   assert.ok(['login', 'onboarding', 'access', 'goals'].includes(profile));
+  assert.equal(typeof allowCreation, 'boolean'); assert.ok(!allowCreation || profile === 'access');
   const issuer = 'https://identity.example.invalid', clientId = 'tallyfin-smoke-public';
   const audience = 'tallyfin-smoke-api', resource = 'urn:tallyfin:smoke:api';
   const subject = 'synthetic-login-operator';
@@ -42,10 +43,11 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
   try {
     await mf.ready;
     const db = await mf.getD1Database('DB'); await initialize(db, true);
-    if (profile === 'onboarding') {
+    if (profile === 'onboarding' || allowCreation) {
       const creators = new CreatorProvisioner(db);
-      await creators.apply(await creators.plan('creator-grant', { issuer, subject, maxProjects: 2 }));
-    } else {
+      await creators.apply(await creators.plan('creator-grant', { issuer, subject, maxProjects: allowCreation ? 3 : 2 }));
+    }
+    if (profile !== 'onboarding') {
       const registry = JSON.parse(await readFile(new URL('../../api/examples/registry.json', import.meta.url), 'utf8'));
       if (profile === 'goals') registry.funnels = [{ id: 'calculation_funnel', label: '계산 퍼널',
         steps: ['input_start', 'calculation_success'].map(eventName => ({ eventName, source: 'browser' })), dimensions: ['tool'] }];
