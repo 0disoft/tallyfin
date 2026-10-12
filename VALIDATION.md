@@ -1,5 +1,25 @@
 # 검증
 
+## 서버 SDK 배치 빈 항목 검증 — 2026-10-12
+
+`send`가 `Array.map`으로 이벤트를 검사하면서 희소 배열의 빈 칸을 건너뛰고, 이를 JSON의
+`null`로 전송하던 경로를 수정했다. 고정한 배치 길이의 모든 위치가 배열 자신의 항목인지
+확인한 뒤 이벤트 스냅샷을 만든다. 잘못된 항목은 `invalid_event`·`attempts: 0`으로
+거부하며 자격증명 조회·HTTP 요청·재시도를 시작하지 않는다.
+
+새 `packages/server/test/batch-slots.test.ts`의 소스·minified ESM 검사 2개는 수정 전
+모두 실패했고, 수정 후 `npm run test:server` 26/26이 통과했다. 빈 배열 슬롯·앞/중간/끝
+빈 칸·삭제된 항목·상속 항목·undefined·null 거부와, 실패 후 동일 클라이언트의 정상
+동결 배치 전송을 확인했다. 정상 본문은 Core `parseServerBatch`로 직접 검사한다.
+이 검사는 Node 합성 transport이며 실제 HTTP·원격 수집기 검증은 아니다.
+
+`npx --no-install tsc --noEmit`, `npm run build:server`(타입 선언 포함),
+`git diff --check`를 통과했다. 서버 SDK는 런타임 의존성 0개, minified 9,008바이트·gzip
+3,699바이트다. 소유 문서 `docs/backend/server-sdk.md`와 이 기록만 갱신했다.
+API·DB·공개 타입·의존성·저장소 위생·CI 러너 변경은 없다. 변경 없는 관리자·브라우저·
+전체 백엔드 검사는 생략했으며 일반 소스 lint 명령은 없다. 실제 운영 OIDC·원격 DB는
+미검증이고 푸시·배포는 하지 않았다.
+
 ## 프로젝트 생성 알림 예외 격리 — 2026-10-12
 
 `ProjectCreator`의 최초 구독 통지·상태 변경 통지와 `onOpened` 인계 콜백에서 동기 예외가

@@ -114,6 +114,9 @@ await client.send([completed]);
 
 - 이벤트·속성·funnel 링크를 다시 검사하고 복사·동결한 스냅샷으로 첫 시도 전에 본문을
   만든다. 재시도는 같은 본문을 쓰고 토큰은 시도마다 `getToken`으로 새로 받는다.
+- 배열의 모든 위치에 직접 담긴 이벤트가 있어야 한다. 빈 칸·삭제된 항목·프로토타입에서
+  가져온 항목·`undefined`·`null`은 `rejected`/`invalid_event`로 거부하며, 토큰 조회·HTTP
+  요청·재시도 없이 `attempts: 0`을 반환한다. 같은 클라이언트로 정상 배치를 다시 보낼 수 있다.
 - 검증·자격증명·전송 실패는 예외 대신 결과로 알린다. 다만 호스트가 넘긴 `ServerPlatform`은
   아래 계약을 지켜야 하고, 계약을 어기는 프로그래머 오류는 던져질 수 있다. `delivered`는
   `{accepted, duplicates, attempts}`, 그 밖은 `{reason, httpStatus, retryable, attempts}`다.

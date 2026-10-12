@@ -250,9 +250,14 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
       let body: string; let count: number;
       try {
         if (!Array.isArray(events) || !events.length || events.length > 20) return fail('rejected', 'invalid_batch', false);
-        const now = host.now(); const snapshot = events.map(event => eventSnapshot(event, schema, now));
+        const now = host.now(); const snapshot: ServerEvent[] = [];
+        // Array.map skips holes, which JSON would serialize as null. Inspect every own slot.
+        count = events.length;
+        for (let index = 0; index < count; index++) {
+          if (!own(events, String(index))) throw new ServerInputError();
+          snapshot.push(eventSnapshot(events[index], schema, now));
+        }
         if (new Set(snapshot.map(e => e.eventId)).size !== snapshot.length) return fail('rejected', 'invalid_batch', false);
-        count = snapshot.length;
         body = JSON.stringify({ schemaVersion: schema.version, source: 'server', events: snapshot });
         if (encoder.encode(body).byteLength > 16384) return fail('rejected', 'invalid_batch', false);
       } catch { return fail('rejected', 'invalid_event', false); }
