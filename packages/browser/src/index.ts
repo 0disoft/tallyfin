@@ -32,11 +32,11 @@ export function createTallyfin(options: BrowserOptions, host?: BrowserPlatform):
     },
     start(workflowId, properties = {}) {
       try {
-        if (!own(schema.workflows, workflowId)) return undefined;
+        if (typeof workflowId !== 'string' || !own(schema.workflows, workflowId)) return undefined;
         const workflow = schema.workflows[workflowId]!;
         const copied = snapshot(workflow.start, properties); if (!copied) return undefined;
         const started = platform.now(); const attemptId = platform.uuid();
-        if (!uuidPattern.test(attemptId)) return undefined;
+        if (typeof attemptId !== 'string' || !uuidPattern.test(attemptId)) return undefined;
         const attempt = { workflowId, attemptId, startedAt: new Date(started).toISOString() };
         if (!enqueue(workflow.start, copied, started, { attempt })) return undefined;
         const dimensions = Object.fromEntries(workflow.dimensions.map(key => [key, copied[key]!])) as Properties;

@@ -86,7 +86,7 @@ export function createTransport<Schema extends EventSchema>(options: Omit<Browse
 }
 
 function client<Schema extends EventSchema>(endpoint: string, schema: Schema, platform: BrowserPlatform): Transport & { schema: Schema; platform: BrowserPlatform } {
-  const encoder = new TextEncoder(); const queue: string[] = [];
+  const queue: string[] = [];
   const active = new Set<Batch>(); let stopped = false; let draining = false;
   let cancelTimer: (() => void) | undefined;
   const pending = () => {
@@ -95,7 +95,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     return count;
   };
   const snapshot = (name: string, properties: Properties): Properties | undefined => {
-    if (!own(schema.events, name) || !properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
+    if (typeof name !== 'string' || !own(schema.events, name) || !properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
     const definitions = schema.events[name]!;
     const entries = Object.entries(properties);
     for (const [key, value] of entries) {
@@ -118,7 +118,9 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     for (const event of queue) {
       if (count === 20) break;
       const candidate = events + (count ? ',' : '') + event;
-      if (encoder.encode(prefix + candidate + ']}').length > 16384) break;
+      // Validated names, enums, IDs and ISO timestamps are ASCII. Numbers and
+      // booleans are serialized as ASCII too, so length is the UTF-8 byte size.
+      if ((prefix + candidate + ']}').length > 16384) break;
       events = candidate; count++;
     }
     return { __tfBatchBody: prefix + events + ']}', __tfBatchCount: count, __tfBatchCreatedAt: platform.now(), __tfBatchTries: 0 };
@@ -165,9 +167,9 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   const enqueue = (name: string, properties: Properties, occurredAt: number, attachment?: object) => {
     if (stopped || pending() >= 40) return false;
     const copied = snapshot(name, properties); if (!copied) return false;
-    const eventId = platform.uuid(); if (!uuidPattern.test(eventId)) return false;
+    const eventId = platform.uuid(); if (typeof eventId !== 'string' || !uuidPattern.test(eventId)) return false;
     const event = JSON.stringify({ eventId, name, occurredAt: new Date(occurredAt).toISOString(), properties: copied, ...attachment });
-    if (encoder.encode(event).length > 16000) return false;
+    if (event.length > 16000) return false;
     queue.push(event);
     if (!active.size && (queue.length >= 20 || !cancelTimer)) schedule(queue.length >= 20 ? 0 : 5000);
     return true;
