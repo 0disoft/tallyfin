@@ -4,7 +4,7 @@ export type { Value, Properties, Rule, BrowserSchema, BrowserOptions, AttemptHan
 const empty = (): BrowserClient => ({ track: () => false, start: () => undefined, flush() {}, destroy() {}, pending: 0 });
 
 function workflowsValid(schema: BrowserSchema): boolean {
-  if (Object.keys(schema.workflows).length > 10) return false;
+  if (!record(schema.workflows) || Object.keys(schema.workflows).length > 10) return false;
   const bound = new Set<string>();
   for (const [id, workflow] of Object.entries(schema.workflows)) {
     if (!namePattern.test(id) || !Array.isArray(workflow.dimensions) || workflow.dimensions.length > 4 || new Set(workflow.dimensions).size !== workflow.dimensions.length) return false;

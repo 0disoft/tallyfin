@@ -1,5 +1,27 @@
 # 검증
 
+## 브라우저 SDK 정의 맵의 객체 검사 (2026-10-13)
+
+이벤트 속성 정의가 `[]`, 숫자, 불리언 또는 빈 문자열이어도 `Object.entries`가
+빈 목록을 반환해 속성 없는 이벤트로 받아들였다. 빈 배열·스칼라 workflow 맵도
+정상적인 빈 workflow 목록으로 해석됐다. 두 맵이 객체인지 확인해 잘못된 설정은
+SDK 생성 시 비활성화한다. 정상적인 빈 객체 정의는 계속 지원한다. 검증된 버전의
+배치 JSON 접두부는 SDK 생성 때 한 번 만들어 배치별 재생성을 줄인다.
+
+- 새 `configuration.test.ts`의 원본·minified 일반/퍼널 검사 4개가 수정 전
+  `properties: []`에서 모두 실패했다. 수정 뒤 50개 잘못된 맵 조합에서 이벤트
+  대기·전송·Beacon·타이머·visibility listener가 없고 정상 빈 객체는 전송된다.
+- `npm run test:browser`: 53/53 통과. 원본과 실제 esbuild minified 모듈을 확인한다.
+- `npm run build:browser`, `npx --no-install tsc --noEmit`, `git diff --check` 통과.
+- `npm run check:browser-size`: 3,072 bytes gzip 예산 통과. Sembom 연동 포함
+  3,067 bytes, 퍼널 연동 포함 3,046 bytes, 생성된 퍼널 연동 포함 3,068 bytes.
+  초기 수정은 생성된 퍼널 예산을 넘었으며 최종 코드로 다시 확인했다.
+
+API·DB·SDK 공개 타입·의존성·CI·위생 정책 변경은 없다. 소유 문서는 이 검증 기록만
+갱신했다. 변경 없는 관리자·서버 SDK·수집기 전체 검사는 생략했고, 실제 Chromium과
+운영 OIDC·원격 DB·배포 환경은 확인하지 않았다. 설정 오류는 기존 비활성 SDK 방식으로
+처리되어 UI에 별도 오류 알림을 제공하지 않는다. 푸시·배포는 하지 않았다.
+
 ## 분류별 집계 날짜 계산 재사용 (2026-10-12)
 
 흐름·퍼널 분류 조회가 각 버킷에서 같은 날짜의 시간대 경계를 반복 계산했다. 31일·32개

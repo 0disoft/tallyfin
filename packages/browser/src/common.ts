@@ -21,7 +21,7 @@ function schemaValid(schema: EventSchema): boolean {
   if (!integer(schema.version, 1, 2147483647) || events.length < 1 || events.length > 50) return false;
   for (const [name, properties] of events) {
     const rules = Object.entries(properties);
-    if (!namePattern.test(name) || rules.length > 4) return false;
+    if (!namePattern.test(name) || !record(properties) || rules.length > 4) return false;
     let count = 1;
     for (const [key, rule] of rules) {
       if (!namePattern.test(key) || !Array.isArray(rule) || typeof rule[1] !== 'boolean') return false;
@@ -117,8 +117,8 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       if (!stopped && !active.size && queue.length) launch();
     }, milliseconds);
   };
+  const prefix = `{"schemaVersion":${schema.version},"source":"browser","events":[`;
   const pack = (): Batch => {
-    const prefix = `{"schemaVersion":${schema.version},"source":"browser","events":[`;
     let count = 0; let events = '';
     for (const event of queue) {
       if (count === 20) break;
