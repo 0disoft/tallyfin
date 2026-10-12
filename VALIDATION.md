@@ -1,5 +1,37 @@
 # 검증
 
+## 브라우저 SDK 이름·식별자 원시 문자열 검사 — 2026-10-12
+
+`packages/browser`가 이벤트 이름·workflow ID·attempt ID·이벤트 ID를 강제 변환 전에
+원시 문자열인지 검사하도록 좁혔다. 이벤트 이름은 `common.ts`의 스냅샷이, `start`의
+workflow ID·attempt ID는 `index.ts`가, 이벤트 ID는 `common.ts`의 enqueue가
+`typeof === 'string'`을 통과해야 한다. `toString`·`toJSON`을 가진 객체는 이 단계에서
+거부되므로 등록 조회나 직렬화가 일어나지 않고, 등록되지 않은 내용이 이름·식별자 자리에
+실려 나가지 않는다.
+
+수정 전 HEAD를 `.tmp`에 격리한 대역 호스트에서는 `track({ toString: () => 'view',
+toJSON: () => 'unregistered text 한글' }, { tool: 'loan' })`이 `true`를 돌려주고 flush
+뒤 전송 본문의 이벤트 이름이 `unregistered text 한글`로 기록됐다. 이는 합성 SDK 본문
+증거이며 실제 HTTP·수집기·브라우저 실행이 아니다. 새
+`packages/browser/test/identities.test.ts` 4개는 수정 전 HEAD를 격리해 같은 파일을
+돌리면 3개가 실패하고 1개만 통과했다.
+
+배치 16384와 이벤트 16000 한도는 UTF-8 바이트가 아니라 JavaScript 문자열 길이로 재도록
+바꿨다. 직렬화되는 이름·키·enum은 ASCII 패턴으로 제한되고 UUID·ISO 시각·불리언·정수도
+ASCII라서 두 값이 같지만, 자유 문자열이나 비ASCII 값을 허용 범위에 넣는 확장을 하면
+UTF-8 바이트 측정으로 되돌려야 한다. 스키마 32768 한도는 이전부터 문자열 길이
+기준이고 이번에 바뀌지 않았다.
+
+최종 `npm run test:browser` 36/36, `node --test
+apps/admin/src/api/funnel-setup.test.mjs` 6/6, `npm run build:browser`,
+`npx --no-install tsc --noEmit`, `npm run check:browser-size`(sdk 2754·Sembom
+3034·funnelSdk 2919·funnelExample 3043 gzip bytes, 예산 3072), `git diff --check`를
+통과했다. 네이티브 어댑터 검사는 Node 전역 `fetch`·`Response` 대역을 쓰며 실제
+Chromium 실행이 아니고, 이번 변경의 실브라우저·배포 수집기 smoke는 없다. API·DB 공개
+계약은 그대로이며 SDK 검증만 강화했고 의존성·CI·runner·위생 정책 변경과 푸시·배포는
+없다. 변경 범위 밖인 전체 백엔드 검사와 관리자 전체 빌드는 생략했고 lint 스크립트는 없다.
+기준 문서 `docs/backend/browser-sdk.md`와 이 기록을 갱신했다.
+
 ## 권한 편집기 알림 예외 격리 — 2026-10-12
 
 `GrantEditor`와 `PublisherEditor`의 `subscribe` 최초 통지와 `#set` 구독자 호출에서

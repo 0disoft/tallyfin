@@ -1,6 +1,7 @@
 # 브라우저 SDK (packages/browser)
 
-상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 기본 엔트리와 분리한 선택 프로필 `@tallyfin/browser/funnels`의 퍼널 연결 전송도 로컬 구현·검증했고, 관리자 연결 안내가 이 프로필 코드를 만드는 경로도 로컬 구현·검증했다. 전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
+상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 기본 엔트리와 분리한 선택 프로필 `@tallyfin/browser/funnels`의 퍼널 연결 전송도 로컬 구현·검증했고, 관리자 연결 안내가 이 프로필 코드를 만드는 경로도 로컬 구현·검증했다. 이름·식별자 원시 문자열 검사는 `15faf3d`에 커밋했다.
+전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
 
 ## 경계
 `createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
@@ -25,6 +26,8 @@
 `track`·`succeed`·`fail`의 `true`는 메모리 버퍼가 이벤트를 받았다는 뜻이다. 서버 저장 완료를 뜻하지 않는다.
 
 이벤트는 넣기 전에 한 번 스냅샷하고 등록 규칙으로 검사한다. 알 수 없는 이름·키, 자유 문자열, 중첩 객체·배열은 버린다. 이벤트 ID는 `crypto.randomUUID`로 만들고 실패하면 보내지 않으며 약한 난수로 대체하지 않는다.
+
+이름과 식별자는 변환하기 전에 원시 문자열인지 먼저 본다. 이벤트 이름은 `common.ts`의 스냅샷이, `start`의 workflow 식별자와 attempt ID는 `index.ts`가, 이벤트 ID는 `common.ts`의 enqueue가 `typeof value === 'string'`을 통과해야 한다. `toString`·`toJSON`으로 문자열처럼 보이는 객체는 이 단계에서 거부되므로 변환이나 직렬화가 일어나지 않고, 등록되지 않은 내용이 이름·식별자 자리에 실려 나가지 않는다.
 
 ## 퍼널 프로필 (`@tallyfin/browser/funnels`)
 
@@ -51,7 +54,7 @@
 
 빌드는 SDK 내부 Batch의 `__tfBatch` 예약 필드 6개만 짧게 만든다. 공개 SDK·HTTP 키는
 이름을 유지한다. 고정 endpoint와 설정을 포함한 관리자 생성 코드의 로컬 번들은 gzip
-3KiB 예산 이내이며 현재 SDK 실측은 기본 2746 B·Sembom 3023 B·퍼널 2918 B·참조 예제 3044 B다.
+3KiB 예산 이내이며 현재 SDK 실측은 기본 2754 B·Sembom 3034 B·퍼널 2919 B·참조 예제 3043 B다.
 
 ## 버퍼·재시도·전송
 - 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
@@ -62,6 +65,8 @@
 
 원문 입력·결과, 금액, 이메일, 계정·주문·파일 ID, URL·리퍼러·DOM·영구 식별자·쿠키를 보내지 않고 `localStorage`/`sessionStorage`도 쓰지 않는다.
 
+배치 16384 bytes와 이벤트 하나 16000 bytes 한도는 UTF-8 바이트가 아니라 JavaScript 문자열 길이로 잰다. 직렬화되는 이름·키·enum은 ASCII 패턴(`namePattern`·`enumPattern`)으로 제한되고 UUID·ISO 시각·불리언·정수도 ASCII라서 지금은 두 값이 같다. 허용 범위에 자유 문자열이나 비ASCII 값을 넣는 확장을 하면 이 두 비교는 UTF-8 바이트 측정으로 되돌려야 한다.
+
 ## 빌드·검사
 ```sh
 npm run test:browser
@@ -69,7 +74,7 @@ npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2746 B·Sembom 3023 B·퍼널 SDK 2918 B·퍼널+참조 예제 3044 B다. 본문 정리·리다이렉트 개선 뒤 브라우저 검사 32개·관리자 퍼널 SDK 생성 검사 6개, 총 38/38과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 스키마 검증·배치 포장·퍼널 링크 복사의 중복 배열/객체 생성을 줄였고 숫자 검사는 같은 공용 safe-integer 검사로 모았다. 공개 SDK·HTTP 키와 검증 범위는 유지한다. 실브라우저 확인을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, gzip 3KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 현재 로컬 실측 gzip은 기본 SDK 2754 B·Sembom 3034 B·퍼널 SDK 2919 B·퍼널+참조 예제 3043 B다. 본문 정리·리다이렉트 개선 뒤 브라우저 검사 32개·관리자 퍼널 SDK 생성 검사 6개, 총 38/38과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 스키마 검증·배치 포장·퍼널 링크 복사의 중복 배열/객체 생성을 줄였고 숫자 검사는 같은 공용 safe-integer 검사로 모았다. 이름·식별자 원시 문자열 검사 뒤에는 브라우저 검사 36개·관리자 퍼널 SDK 생성 검사 6개, 총 42/42와 `npx --no-install tsc --noEmit`·`build:browser`·`check:browser-size`를 확인했고, 새 `packages/browser/test/identities.test.ts` 4개는 검사 추가 전 HEAD를 격리 실행하면 3개가 실패했다. 공개 SDK·HTTP 키와 검증 범위는 유지한다. 실브라우저 확인을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
 ## 남은 검증
 합성 화면의 실브라우저 초기 실행·동기 호출·전송, 수집기 종료 시 동작, 502·응답 유실
@@ -80,3 +85,5 @@ npm run check:browser-size
 설정을 만들도록 로컬 구현·검증했고, reader/owner 퍼널 일별 조회 API와 관리자 퍼널 분석
 화면·CSV, 퍼널 전용 단계 편집 폼도 로컬에서 구현·검증했다.
 실제 운영 발행자·관리자 인증 연결도 후속이다.
+이름·식별자 원시 문자열 검사는 Node 대역 검사로만 확인했고 실제 브라우저 실행이나
+배포된 수집기로는 확인하지 않았다.
