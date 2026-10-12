@@ -37,3 +37,17 @@ test('late old registration cleanup cannot remove a replacement or another scope
   other();
   assert.equal(guard.canLeave(newClient, 'one', () => false), true);
 });
+
+test('connection-wide drafts participate only in full connection exits', () => {
+  const guard = new DraftExitGuard(), client = {}, other = {};
+  const remove = guard.register(client, null, () => true);
+  let prompts = 0; const cancel = () => { prompts++; return false; };
+  assert.equal(guard.canLeave(client, 'one', cancel), true);
+  assert.equal(guard.canLeave(client, null, cancel), true);
+  assert.equal(guard.canLeave(other, 'one', cancel, true), true);
+  assert.equal(prompts, 0);
+  assert.equal(guard.canLeave(client, 'one', cancel, true), false);
+  assert.equal(guard.canLeave(client, null, cancel, true), false);
+  assert.equal(prompts, 2);
+  remove(); assert.equal(guard.canLeave(client, null, cancel, true), true);
+});

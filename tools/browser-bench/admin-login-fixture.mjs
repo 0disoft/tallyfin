@@ -90,6 +90,8 @@ export async function adminLoginFixture(directory, { profile = 'login', allowCre
             assert.ok(dropResponse ? ['onboarding', 'access'].includes(profile) : profile === 'access');
             assert.ok(url.pathname.startsWith('/v1/'));
             if (dropResponse && profile === 'onboarding') assert.ok(['POST', 'PUT'].includes(request.method()));
+            else if (dropResponse && profile === 'access' && allowCreation && url.pathname === '/v1/projects')
+              assert.equal(request.method(), 'POST');
             else {
               assert.equal(request.method(), 'PATCH');
               assert.ok(['/v1/projects/sembom', '/v1/projects/access-other'].includes(url.pathname));

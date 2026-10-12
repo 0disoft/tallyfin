@@ -7,11 +7,17 @@ export type CreatorState = { phase: 'ready' | 'creating' | 'uncertain' | 'create
   errors: CreationErrors; message: string | null; pending: ProjectCreation | null; receipt: CreatedProject | null };
 /** One connection lifetime. No automatic creation retries; uncertain writes keep an immutable request. */
 export class ProjectCreator {
-  state: CreatorState = { phase: 'ready', draft: initialCreationDraft(), errors: {}, message: null, pending: null, receipt: null };
+  #initialDraft = initialCreationDraft();
+  state: CreatorState = { phase: 'ready', draft: { ...this.#initialDraft }, errors: {}, message: null, pending: null, receipt: null };
   #listeners = new Set<(state: CreatorState) => void>();
   #client: ApiClient; #onOpened: (settings: ProjectSettings) => boolean | void;
   #controller: AbortController | null = null; #generation = 0; #destroyed = false;
   constructor(client: ApiClient, onOpened: (settings: ProjectSettings) => boolean | void) { this.#client = client; this.#onOpened = onOpened; }
+  get hasUnsavedChanges(): boolean {
+    if (this.#destroyed || this.state.receipt) return false;
+    return this.state.phase === 'creating' || this.state.phase === 'uncertain' || this.state.pending !== null ||
+      (Object.keys(this.#initialDraft) as (keyof CreationDraft)[]).some(key => this.state.draft[key] !== this.#initialDraft[key]);
+  }
   subscribe(listener: (state: CreatorState) => void) {
     if (this.#destroyed) return () => {};
     this.#listeners.add(listener); this.#notify(() => listener(this.state));

@@ -1,5 +1,39 @@
 # 검증
 
+## 프로젝트 생성 입력·결과 불명의 이탈 보호 (2026-10-12)
+
+생성 폼의 닫기·연결 해제·데모 API 모드 이탈·reload는 기존 설정/스키마 guard에
+참여하지 않아 입력이나 확인 요청을 버릴 수 있었다. 수정 전 생성 getter/연결 scope
+집중 검사 3개와 브라우저 `dirty-creation-close-cancel` 단계가 실패했다. 생성 컨트롤러가
+기본 입력을 한 번 기억하고, 입력 차이·생성 중·결과 불명 요청에만 이탈 보호를 제공한다.
+확인한 생성 영수증·destroy는 보호를 해제한다. 연결 전체를 떠날 때는 생성 guard도
+확인하지만 생성 폼이 남는 프로젝트 선택에서는 확인하지 않는다. pending 요청의 기존
+불변·명시적 재확인·멱등성 계약은 바꾸지 않았다.
+
+최종 `verify:admin-mode-exit -- --channel chromium --check-creation-draft`는 Chromium
+156.0.8078.4에서 exit 0·verified=true·reads 61·writes 2·pageErrors 0·routeError=false,
+`.tmp/admin-mode-exit-FtQERw/report.json`이었다. 기본 폼 무경고 닫기, dirty 닫기 취소/승인,
+프로젝트 선택 시 입력 유지, 연결/모드/reload 취소를 확인했다. 실제 D1 commit 뒤 생성
+응답 1회를 버린 뒤 연결 해제를 취소하면 같은 확인 요청이 남았고, 명시적 POST 재확인
+뒤 DB 행은 1개였다. 확인 완료 후 자동 이동과 깨끗한 전환은 경고하지 않았다. 기존 숨긴
+설정/스키마 이탈 검사·빈 재연결 토큰·storage/cookie 부재도 통과했다.
+
+같은 수정으로 기존 `verify:admin-settings-navigation -- --channel chromium --check-created-exit`는
+verified=true·reads 152·writes 1·pageErrors 0·routeError=false였다
+(`.tmp/admin-settings-navigation-VE2D0i/report.json`). 실행 중 workerd WSASend 10054/10053
+연결 중단 로그가 있어 원인 미확인으로 남긴다. 온보딩 `--lost-responses`는 생성/발행 응답
+유실 각 1회, 첫 이벤트 DB/표 1건, `3 SDK 연결`, 스키마 교체 확인 3회를 통과했다.
+reads 31·writes 5·browserBatches 1·pageErrors 0·routeError=false,
+`.tmp/admin-onboarding-NWsq8Y/report.json`이다. 합성 서명 HTTP·격리 Miniflare D1 검사이며
+실제 운영 인증 제공자나 원격 DB 검증은 아니다.
+
+관리자 전체 254/254·타입 검사, 집중 컨트롤러/Guard 21/21·번들 2/2·Sites 9/9,
+빌드·실행 없는 help·diff 검사가 통과했다. 브라우저·Vite·Miniflare는 도구가 종료한다.
+Frontend 설계·선택 실행 안내·검증 기록을 갱신했다. HTTP API·DB·SDK·의존성·버전·
+CI/러너·위생 정책 변경과 푸시·게시·배포는 없다. 변경 없는 backend/SDK 전체는 반복하지
+않았고 일반 lint 명령은 없다. 승인한 이탈 후 복구·다른 폼·운영 세션·모바일·다른 브라우저·
+힙 메모리 zeroing과 전체 저장소/72개 질문 점검은 계속 미검증/미완료다.
+
 ## 데모 API 모드 이탈의 미저장 초안 확인 (2026-10-12)
 
 Tallyfin `/demo`에서 API 연결을 Sample로 바꾸면 숨긴 미저장 설정·스키마가 확인 없이

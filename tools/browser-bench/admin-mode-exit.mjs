@@ -11,13 +11,13 @@ import { answerConfirm } from './answer-confirm.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 let local, server, browser, page, directory, watchdog, stage = 'arguments';
 try {
-  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, 'check-creation-draft': { type: 'boolean' }, help: { type: 'boolean' } } });
   assert.ok(['chromium', 'chrome', 'msedge'].includes(values.channel));
-  if (values.help) console.log('npm run verify:admin-mode-exit -- [--channel chromium|chrome|msedge]\nActual /demo API exit confirmation with ephemeral signed authority and isolated local D1; no remote service.');
+  if (values.help) console.log('npm run verify:admin-mode-exit -- [--channel chromium|chrome|msedge] [--check-creation-draft]\nActual /demo API exit confirmation with ephemeral signed authority and isolated local D1; no remote service.');
   else {
     watchdog = setTimeout(() => { void browser?.close(); }, 90000);
     await mkdir(resolve(root, '.tmp'), { recursive: true }); directory = await mkdtemp(resolve(root, '.tmp/admin-mode-exit-'));
-    stage = 'fixture'; local = await adminLoginFixture(directory, { profile: 'access' });
+    stage = 'fixture'; local = await adminLoginFixture(directory, { profile: 'access', allowCreation: Boolean(values['check-creation-draft']) });
     const collector = new URL(await local.mf.ready).origin, previous = process.env.TALLYFIN_COLLECTOR_ORIGIN;
     delete process.env.TALLYFIN_COLLECTOR_ORIGIN;
     try {
@@ -32,9 +32,14 @@ try {
     await server.listen(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`; local.configure(origin);
     browser = await chromium.launch({ channel: values.channel, headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
-    let pageErrors = 0, routeError = false;
+    let pageErrors = 0, routeError = false, loseCreation = false, droppedCreationResponses = 0;
     await context.route('**/*', async route => {
-      try { await local.route(route); } catch { routeError = true; await route.abort().catch(() => {}); }
+      try {
+        const request = route.request(), url = new URL(request.url());
+        const dropResponse = loseCreation && request.method() === 'POST' && url.origin === origin && url.pathname === '/v1/projects';
+        if (dropResponse) { loseCreation = false; droppedCreationResponses++; }
+        await local.route(route, { dropResponse });
+      } catch { routeError = true; await route.abort().catch(() => {}); }
     });
     page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', () => pageErrors++);
     stage = 'signed-authority'; await page.goto(origin);
@@ -51,12 +56,6 @@ try {
     await page.getByRole('button', { name: '연결', exact: true }).click();
     const project = page.getByRole('combobox', { name: '프로젝트 선택', exact: true });
     await project.selectOption('sembom');
-    const navigation = page.getByRole('navigation', { name: '주요 탐색', exact: true });
-    await navigation.getByRole('button', { name: '설정', exact: true }).click();
-    const name = page.locator('#settings-name'), label = page.locator('#schema-event-0-label');
-    await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false && document.getElementById('schema-event-0-label')?.disabled === false);
-    const initialName = (await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name;
-    await name.fill('Mode exit draft'); await label.fill('Mode exit schema');
     const noDialog = async action => {
       let unexpected = false;
       const dismiss = async dialog => { unexpected = true; await dialog.dismiss(); };
@@ -64,6 +63,55 @@ try {
       try { await action(); assert.equal(unexpected, false); }
       finally { page.off('dialog', dismiss); }
     };
+    if (values['check-creation-draft']) {
+      const add = page.getByRole('button', { name: '프로젝트 추가', exact: true });
+      const form = page.locator('.project-create'), creationName = page.locator('#create-name');
+      const close = form.getByRole('button', { name: '닫기', exact: true });
+      stage = 'empty-creation-close'; await add.click(); await creationName.waitFor(); await noDialog(() => close.click());
+      stage = 'dirty-creation-close-cancel'; await add.click(); await creationName.fill('Creation exit draft');
+      await answerConfirm(page, () => close.click(), false);
+      assert.equal(await creationName.inputValue(), 'Creation exit draft');
+      await answerConfirm(page, () => close.click(), true); assert.equal(await creationName.count(), 0);
+      await add.click(); assert.equal(await creationName.inputValue(), '');
+      await creationName.fill('Creation exit draft'); await page.locator('#create-id').fill('creation-draft-test');
+      await page.locator('#create-timeZone').fill('Asia/Seoul');
+      stage = 'creation-project-switch'; await noDialog(() => project.selectOption('access-other'));
+      assert.equal(await creationName.inputValue(), 'Creation exit draft');
+      stage = 'creation-disconnect-cancel';
+      await answerConfirm(page, () => page.getByRole('button', { name: '연결 끊기', exact: true }).click(), false);
+      assert.equal(await project.inputValue(), 'access-other'); assert.equal(await creationName.inputValue(), 'Creation exit draft');
+      stage = 'creation-mode-cancel'; await answerConfirm(page, () => sample.click(), false);
+      assert.equal(await api.getAttribute('aria-pressed'), 'true'); assert.equal(await creationName.inputValue(), 'Creation exit draft');
+      stage = 'creation-reload-cancel'; let observed = false;
+      const dismiss = async dialog => { assert.equal(dialog.type(), 'beforeunload'); observed = true; await dialog.dismiss(); };
+      page.once('dialog', dismiss);
+      try {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 1500 }).catch(error => {
+          if (!observed || !(error.name === 'TimeoutError' || /ERR_ABORTED/.test(error.message))) throw error;
+        });
+        assert.equal(observed, true);
+      } finally { page.off('dialog', dismiss); }
+      assert.equal(await creationName.inputValue(), 'Creation exit draft');
+      stage = 'creation-lost-response'; loseCreation = true;
+      await form.getByRole('button', { name: '프로젝트 만들기', exact: true }).click();
+      const confirm = form.getByRole('button', { name: '같은 요청으로 생성 확인', exact: true }); await confirm.waitFor();
+      assert.equal((await local.db.prepare('SELECT count(*) AS n FROM projects WHERE id = ?').bind('creation-draft-test').first()).n, 1);
+      assert.equal(local.counts.apiWrites, 1); assert.equal(await creationName.isDisabled(), true);
+      stage = 'uncertain-creation-disconnect-cancel';
+      await answerConfirm(page, () => page.getByRole('button', { name: '연결 끊기', exact: true }).click(), false);
+      assert.equal(await confirm.count(), 1); assert.equal(local.counts.apiWrites, 1);
+      stage = 'creation-confirm'; await noDialog(() => confirm.click());
+      await page.waitForFunction(() => document.querySelector('select[aria-label="프로젝트 선택"]')?.value === 'creation-draft-test');
+      assert.equal(await creationName.count(), 0); assert.equal(local.counts.apiWrites, 2); assert.equal(droppedCreationResponses, 1);
+      assert.equal((await local.db.prepare('SELECT count(*) AS n FROM projects WHERE id = ?').bind('creation-draft-test').first()).n, 1);
+      await noDialog(() => project.selectOption('sembom'));
+    }
+    const navigation = page.getByRole('navigation', { name: '주요 탐색', exact: true });
+    await navigation.getByRole('button', { name: '설정', exact: true }).click();
+    const name = page.locator('#settings-name'), label = page.locator('#schema-event-0-label');
+    await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false && document.getElementById('schema-event-0-label')?.disabled === false);
+    const initialName = (await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name;
+    await name.fill('Mode exit draft'); await label.fill('Mode exit schema');
     stage = 'same-mode'; await noDialog(() => api.click());
     assert.equal(await name.inputValue(), 'Mode exit draft'); assert.equal(await label.inputValue(), 'Mode exit schema');
     await navigation.getByRole('button', { name: '이벤트 분석', exact: true }).click();
@@ -86,12 +134,13 @@ try {
     stage = 'clean-exit'; await noDialog(() => sample.click());
     assert.equal(await sample.getAttribute('aria-pressed'), 'true');
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
-    assert.equal((await context.cookies()).length, 0); assert.equal(local.counts.apiWrites, 0);
+    assert.equal((await context.cookies()).length, 0); assert.equal(local.counts.apiWrites, values['check-creation-draft'] ? 2 : 0);
     assert.equal((await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name, initialName);
     assert.equal(pageErrors, 0); assert.equal(routeError, false);
     const report = { verified: true, browser: browser.version(), signedManualDemoConnection: true, hiddenDraftExitCanceled: true,
       canceledModeRetainsDraftsAndSelection: true, acceptedModeDisposesApiWorkspace: true, apiReentryRequiresConnection: true,
-      sameModeAndCleanExitDoNotWarn: true, noStorageOrCookie: true, pageErrors, routeError, ...local.counts };
+      sameModeAndCleanExitDoNotWarn: true, noStorageOrCookie: true, creationDraftChecked: Boolean(values['check-creation-draft']),
+      droppedCreationResponses, pageErrors, routeError, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
   }
 } catch {

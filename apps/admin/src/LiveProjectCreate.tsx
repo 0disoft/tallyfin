@@ -5,6 +5,8 @@ import type { ProjectSettings } from './api/types.ts';
 import { ProjectCreator } from './api/project-creator.ts';
 import type { CreatorState } from './api/project-creator.ts';
 import type { CreationDraft } from './api/project-creation.ts';
+import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
+import useUnloadWarning from './useUnloadWarning.ts';
 
 const fields: { key: keyof CreationDraft; label: string; help: string; placeholder?: string; max?: number }[] = [
   { key: 'name', label: '프로젝트 이름', help: '관리자 목록에 표시할 이름, 1~80자.', placeholder: '예: 내 서비스', max: 80 },
@@ -14,16 +16,18 @@ const fields: { key: keyof CreationDraft; label: string; help: string; placehold
   { key: 'requestsPerMinute', label: '분당 요청 한도', help: '1~600 사이 정수. 기본 입력값은 120이에요.' },
   { key: 'newReceiptsPerUtcDay', label: 'UTC 하루 신규 수신 한도', help: '1~1,000,000 사이 정수. 기본 입력값은 100,000이에요.' },
 ];
-export default function LiveProjectCreate({ client, onCreated, onClose }: { client: ApiClient; onCreated: (settings: ProjectSettings) => boolean | void; onClose: () => void }) {
+export default function LiveProjectCreate({ client, onCreated, onClose, registerDraft }: { client: ApiClient; onCreated: (settings: ProjectSettings) => boolean | void; onClose: () => void; registerDraft?: DraftExitRegistration<ApiClient> }) {
   const [state, setState] = useState<CreatorState | null>(null), [limitsOpen, setLimitsOpen] = useState(false);
   const creator = useRef<ProjectCreator | null>(null), heading = useRef<HTMLHeadingElement>(null);
+  useUnloadWarning(Boolean(creator.current?.hasUnsavedChanges));
   const opened = useRef(onCreated);
   opened.current = onCreated;
   useEffect(() => {
     const controller = new ProjectCreator(client, settings => opened.current(settings)); creator.current = controller;
+    const removeExitCheck = registerDraft?.(client, null, () => controller.hasUnsavedChanges);
     const unsubscribe = controller.subscribe(setState);
-    return () => { unsubscribe(); controller.destroy(); creator.current = null; };
-  }, [client]);
+    return () => { unsubscribe(); controller.destroy(); removeExitCheck?.(); if (creator.current === controller) creator.current = null; };
+  }, [client, registerDraft]);
   const errorKey = fields.find(f => state?.errors[f.key])?.key;
   useEffect(() => { if (errorKey === 'requestsPerMinute' || errorKey === 'newReceiptsPerUtcDay') setLimitsOpen(true); }, [errorKey]);
   useEffect(() => { if (errorKey) document.getElementById(`create-${errorKey}`)?.focus(); }, [state?.errors, errorKey, limitsOpen]);
@@ -61,7 +65,9 @@ export default function LiveProjectCreate({ client, onCreated, onClose }: { clie
       </div> : <div className="form-actions">
         {state.receipt ? <button className="primary-button" type="button" disabled={busy} onClick={() => { void creator.current?.open(); }}>{busy ? '불러오는 중…' : '생성한 프로젝트 열기'}</button>
           : <button className="primary-button" type="submit" disabled={locked}>{busy ? '생성 확인 중…' : '프로젝트 만들기'}</button>}
-        <button className="secondary-button" type="button" disabled={busy} onClick={onClose}>닫기</button>
+        <button className="secondary-button" type="button" disabled={busy} onClick={() => {
+          if (!creator.current?.hasUnsavedChanges || window.confirm('작성 중인 프로젝트 정보를 버리고 닫을까요?')) onClose();
+        }}>닫기</button>
       </div>}
     </form>
   </section>;

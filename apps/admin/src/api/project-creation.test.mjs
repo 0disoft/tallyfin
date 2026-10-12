@@ -49,6 +49,40 @@ test('canceling the opened-screen handoff retains confirmed creation and retries
     assert.equal(f.calls.filter(call => call.init.method === 'GET').length, 3);
   } finally { creator.destroy(); f.creator.destroy(); f.client.destroy(); }
 });
+
+test('creation unload protection tracks raw input and stops after confirmation or disposal', async () => {
+  const f = fixture(), creator = new ProjectCreator(f.client, () => false);
+  try {
+    const baseline = { ...creator.state.draft };
+    assert.equal(creator.hasUnsavedChanges, false);
+    creator.edit('name', ' '); assert.equal(creator.hasUnsavedChanges, true);
+    creator.edit('name', baseline.name); assert.equal(creator.hasUnsavedChanges, false);
+    creator.edit('requestsPerMinute', ''); assert.equal(creator.hasUnsavedChanges, true);
+    creator.edit('requestsPerMinute', baseline.requestsPerMinute); assert.equal(creator.hasUnsavedChanges, false);
+    for (const [key, value] of Object.entries(draft)) creator.edit(key, value);
+    const creating = creator.create(); assert.equal(creator.hasUnsavedChanges, true);
+    await creating; assert.equal(creator.hasUnsavedChanges, false);
+    assert.equal(creator.state.receipt.projectId, input.id);
+    assert.match(creator.state.message, /화면 이동은 취소/);
+    assert.equal(f.creator.hasUnsavedChanges, true);
+    f.creator.destroy(); assert.equal(f.creator.hasUnsavedChanges, false);
+  } finally { creator.destroy(); f.creator.destroy(); f.client.destroy(); }
+});
+
+test('an uncertain creation keeps unload protection until the immutable request is confirmed', async () => {
+  const f = fixture();
+  try {
+    f.config.post = async () => { throw new TypeError('response lost'); };
+    await f.creator.create(); assert.equal(f.creator.state.phase, 'uncertain');
+    const pending = structuredClone(f.creator.state.pending);
+    assert.equal(f.creator.hasUnsavedChanges, true);
+    f.creator.edit('name', 'Must not replace pending request');
+    assert.deepEqual(f.creator.state.pending, pending);
+    f.config.post = async () => response(200, await receipt(input));
+    await f.creator.confirm(); assert.equal(f.creator.hasUnsavedChanges, false);
+    assert.equal(f.calls.filter(call => call.init.method === 'POST').length, 2);
+  } finally { f.creator.destroy(); f.client.destroy(); }
+});
 test('creation transport and receipt agree with the actual core contract and retain current settings on handoff', async () => {
   assert.equal(await creationHash(input), await projectCreationHash(parseProjectCreation(input)));
   const f = fixture(); await f.creator.create();
