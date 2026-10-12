@@ -149,21 +149,23 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const validVersion = Number.isInteger(version) && version >= 1 && version <= MAX_SCHEMA_VERSION;
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
-  const confirmDraftExit = useCallback((includeConnection = false) => !client || draftExit.canLeave(client, activeProjectId, () =>
+  const confirmDraftExit = useCallback((includeConnection = false) => !client || draftExit.canLeave(client, projectId, () =>
     window.confirm('저장하지 않은 입력이나 확인하지 못한 저장 결과가 있어요. 초안을 버리고 계속할까요? 이미 서버에 저장된 값은 되돌리지 않아요.'), includeConnection),
-  [client, activeProjectId, draftExit]);
+  [client, projectId, draftExit]);
   useEffect(() => registerExitCheck?.(() => confirmDraftExit(true)), [registerExitCheck, confirmDraftExit]);
-  const settingsScopeRetained = retainedSettings?.client === client && retainedSettings?.projectId === activeProjectId;
-  // Retain only the current session/project while moving between analysis views.
-  // The transition keys, not the retained-state update, trigger a fresh permission check.
+  const settingsScopeRetained = retainedSettings?.client === client && retainedSettings?.projectId === projectId;
+  const settingsProjectId = settingsScopeRetained ? retainedSettings.projectId : view === 'settings' ? activeProjectId : null;
+  const settingsVisible = view === 'settings' && projects.status === 'ready' && settingsProjectId === activeProjectId;
+  // Retain selection-scoped editors while the project list is unavailable.
+  // Returning to settings rechecks server state; list data grants no edit authority.
   useEffect(() => {
     if (view === 'settings' && client && activeProjectId) {
       if (retainedSettings?.client === client && retainedSettings.projectId === activeProjectId)
         setSettingsRefreshTick(tick => tick + 1);
       setRetainedSettings({ client, projectId: activeProjectId });
-    } else if (retainedSettings?.client !== client || retainedSettings?.projectId !== activeProjectId)
+    } else if (retainedSettings?.client !== client || retainedSettings?.projectId !== projectId)
       setRetainedSettings(null);
-  }, [view, client, activeProjectId]);
+  }, [view, client, activeProjectId, projectId]);
   const activeTimeZone = activeProject?.timeZone ?? null;
   const deniedRead = readDenial?.client === client && readDenial.projectId === activeProjectId && readDenial.revision === refreshTick ? readDenial.error : null;
   readDenialHandler.current = (requestClient, requestProject, error) => {
@@ -474,11 +476,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && (view !== 'goals' || !!data?.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
     {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
+    {projects.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>프로젝트 목록을 확인하는 중이에요</h2></section>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
     {!showCreate && projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>생성 권한이 있다면 프로젝트 추가로 시작할 수 있어요. 기존 프로젝트를 조회하려면 운영자에게 해당 프로젝트 권한을 확인해 주세요.</p></section>}
-    {(view === 'settings' || settingsScopeRetained) && activeProjectId && <div hidden={view !== 'settings'} inert={view !== 'settings'}><DeferredPanel key={activeProjectId} label="프로젝트 설정">
-      <LiveSettingsWorkspace client={client} projectId={activeProjectId} version={validVersion ? version : null}
-        registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} newlyCreated={newProjectId === activeProjectId}
+    {settingsProjectId && <div hidden={!settingsVisible} inert={!settingsVisible}><DeferredPanel key={settingsProjectId} label="프로젝트 설정">
+      <LiveSettingsWorkspace client={client} projectId={settingsProjectId} version={validVersion ? version : null}
+        registry={settingsRegistry?.project.id === settingsProjectId ? settingsRegistry : null} newlyCreated={newProjectId === settingsProjectId}
         refreshTick={settingsRefreshTick} setupRefreshTick={setupRefreshTick} diagnosticsRevision={diagnosticsRevision}
         onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} registerDraft={registerDraft} />
     </DeferredPanel></div>}

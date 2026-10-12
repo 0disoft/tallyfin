@@ -46,6 +46,26 @@ The new D1 project row must exist exactly once and `apiWrites` must remain one
 after the accepted reopen. This flag can be combined with `--check-unload`.
 It does not grant authority to an existing profile or real identity provider.
 
+Add `--check-analysis-refresh` to hold one actual authenticated project-list GET
+after reading local D1, then return a synthetic 503 instead of its response:
+
+```text
+npm run verify:admin-settings-navigation -- --channel chromium --check-analysis-refresh --check-unload --check-created-exit
+```
+
+While the GET is held and after its failure, hidden settings/schema and raw
+grant/publisher drafts must remain mounted and unchanged. Disconnect must still
+ask for disposal and cancellation must preserve the workspace. Entering settings
+during the failed list must keep its controls hidden. Explicit retry must restore
+the same selected project and drafts after current settings/schema reads and
+the existing comparison choices. Raw authority drafts must also survive and are
+cleared by the test before the ordinary navigation checks. No settings or
+authority write is permitted. This flag adds no recurring collector or CI run.
+The directly intercepted GET is counted in `interceptedProjectReads`, separately
+from fixture `apiReads`; the combined read count is their sum. The watchdog and
+final cleanup release the held response before closing services. This tests list
+read failure, not a successful response removing the selected project.
+
 The fixture revokes the owner grant while analysis is visible. Returning must
 retain both drafts but lock them under the current reader role. Project switching
 must dispose the old drafts and returning to that project must show server data.

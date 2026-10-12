@@ -9,13 +9,14 @@ import { adminLoginFixture } from './admin-login-fixture.mjs';
 import { answerConfirm } from './answer-confirm.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-let local, server, browser, page, directory, watchdog, unloadProbe, stage = 'arguments';
+const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+let local, server, browser, page, directory, watchdog, unloadProbe, heldProjectRead, stage = 'arguments';
 try {
-  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, 'check-unload': { type: 'boolean' }, 'check-created-exit': { type: 'boolean' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, 'check-unload': { type: 'boolean' }, 'check-created-exit': { type: 'boolean' }, 'check-analysis-refresh': { type: 'boolean' }, help: { type: 'boolean' } } });
   assert.ok(['chromium', 'chrome', 'msedge'].includes(values.channel));
-  if (values.help) console.log('npm run verify:admin-settings-navigation -- [--channel chromium|chrome|msedge] [--check-unload] [--check-created-exit]\nLocal signed settings/schema drafts across navigation and permission refresh; no remote service.');
+  if (values.help) console.log('npm run verify:admin-settings-navigation -- [--channel chromium|chrome|msedge] [--check-unload] [--check-created-exit] [--check-analysis-refresh]\nLocal signed settings/schema drafts across navigation and permission refresh; no remote service.');
   else {
-    watchdog = setTimeout(() => { void browser?.close(); }, 90000);
+    watchdog = setTimeout(() => { heldProjectRead?.release.resolve(); void browser?.close(); }, 90000);
     await mkdir(resolve(root, '.tmp'), { recursive: true }); directory = await mkdtemp(resolve(root, '.tmp/admin-settings-navigation-'));
     stage = 'fixture'; local = await adminLoginFixture(directory, { profile: 'access', allowCreation: Boolean(values['check-created-exit']) });
     const expectedWrites = values['check-created-exit'] ? 1 : 0;
@@ -33,9 +34,20 @@ try {
     await server.listen(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`; local.configure(origin);
     browser = await chromium.launch({ channel: values.channel, headless: true });
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
-    let pageErrors = 0, routeError = false;
+    let pageErrors = 0, routeError = false, interceptedProjectReads = 0;
     await context.route('**/*', async route => {
-      try { await local.route(route); }
+      const request = route.request(), url = new URL(request.url());
+      const holding = heldProjectRead && !heldProjectRead.used && url.origin === origin && request.method() === 'GET' && url.pathname === '/v1/projects' ? heldProjectRead : null;
+      try {
+        if (holding) {
+          holding.used = true; interceptedProjectReads++;
+          const response = await route.fetch({ maxRedirects: 0, timeout: 15000 });
+          try {
+            assert.ok(response.ok()); holding.observed.resolve(); await holding.release.promise;
+            await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'storage_unavailable', message: 'Synthetic read failure' } }) });
+          } finally { await response.dispose(); }
+        } else await local.route(route);
+      }
       catch { routeError = true; await route.abort().catch(() => {}); }
     });
     page = await context.newPage(); page.setDefaultTimeout(15000); page.on('pageerror', () => pageErrors++);
@@ -79,6 +91,42 @@ try {
     };
     await name.fill('Retained navigation settings');
     const projectSelect = page.getByRole('combobox', { name: '프로젝트 선택', exact: true });
+    if (values['check-analysis-refresh']) {
+      await label.fill('Retained navigation schema');
+      for (const [kind, disclosure] of [['grant', '계정 권한 추가'], ['publisher', '발행자 추가']]) {
+        await page.getByText(disclosure, { exact: true }).click();
+        await page.locator(`#${kind}-add-subject`).fill(`retained-${kind}`);
+      }
+      await leave();
+      heldProjectRead = { used: false, observed: deferred(), release: deferred() };
+      stage = 'analysis-refresh-loading'; await page.getByRole('button', { name: '새로고침', exact: true }).click();
+      let timer;
+      try { await Promise.race([heldProjectRead.observed.promise, new Promise((_, reject) => { timer = setTimeout(() => reject(Error('project_read_not_observed')), 5000); })]); }
+      finally { clearTimeout(timer); }
+      assert.equal(await name.count(), 1); assert.equal(await name.inputValue(), 'Retained navigation settings');
+      assert.equal(await label.inputValue(), 'Retained navigation schema'); assert.equal(await name.isVisible(), false);
+      await answerConfirm(page, () => page.getByRole('button', { name: '연결 끊기', exact: true }).click(), false);
+      heldProjectRead.release.resolve();
+      stage = 'analysis-refresh-failed';
+      const failure = page.getByRole('heading', { name: '저장소를 사용할 수 없어요', exact: true }); await failure.waitFor();
+      assert.equal(await name.inputValue(), 'Retained navigation settings'); assert.equal(await label.inputValue(), 'Retained navigation schema');
+      await navigation.getByRole('button', { name: '설정', exact: true }).click();
+      assert.equal(await name.isVisible(), false);
+      for (const kind of ['grant', 'publisher']) assert.equal(await page.locator(`#${kind}-add-subject`).inputValue(), `retained-${kind}`);
+      await answerConfirm(page, () => page.getByRole('button', { name: '연결 끊기', exact: true }).click(), false);
+      stage = 'analysis-refresh-recovered';
+      await failure.locator('..').getByRole('button', { name: '다시 시도', exact: true }).click();
+      await name.waitFor();
+      await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
+      await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
+      assert.equal(await projectSelect.inputValue(), 'sembom'); assert.equal(await name.inputValue(), 'Retained navigation settings');
+      assert.equal(await label.inputValue(), 'Retained navigation schema');
+      for (const kind of ['grant', 'publisher']) {
+        const subject = page.locator(`#${kind}-add-subject`);
+        assert.equal(await subject.inputValue(), `retained-${kind}`); await subject.fill('');
+      }
+      assert.equal(local.counts.apiWrites, 0); assert.equal(interceptedProjectReads, 1);
+    }
     if (values['check-unload']) {
       stage = 'dirty-settings-reload'; await cancelReload();
       assert.equal(await name.inputValue(), 'Retained navigation settings');
@@ -184,6 +232,7 @@ try {
       canceledProjectSwitchRetainsDrafts: true, canceledDisconnectRetainsSession: true,
       independentEditorExitChecked: Boolean(values['check-unload']),
       createdProjectExitChecked: Boolean(values['check-created-exit']),
+      analysisRefreshChecked: Boolean(values['check-analysis-refresh']), interceptedProjectReads,
       unloadChecked: Boolean(values['check-unload']), tabCloseCanceled: Boolean(values['check-unload']), unloadWarnings, pageErrors, routeError, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
   }
@@ -194,5 +243,5 @@ try {
   }
   process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, code: 'admin_settings_navigation_failed' }));
 } finally {
-  clearTimeout(watchdog); await browser?.close(); await server?.close(); await local?.mf.dispose();
+  clearTimeout(watchdog); heldProjectRead?.release.resolve(); await browser?.close(); await server?.close(); await local?.mf.dispose();
 }

@@ -1,5 +1,44 @@
 # 검증
 
+## 분석 새로고침의 숨긴 작업 공간 보존 (2026-10-12)
+
+분석 화면의 새로고침이 프로젝트 목록을 loading으로 바꾸며 data를 비울 때
+`activeProjectId=null`이 되어 숨긴 설정 작업 공간도 해제됐다. 새 선택 검사
+`--check-analysis-refresh`는 수정 전 `analysis-refresh-loading` exit 1이었다
+(`.tmp/admin-settings-navigation-1eJa96/failure.json`). 실제 목록 GET을 로컬 D1에서 읽은
+뒤 응답을 보류한 상태에서 기존 설정/스키마 DOM이 사라지는 경로를 재현했다.
+
+작업 공간을 현재 client와 선택 projectId에 묶고 loading/error에서는 hidden/inert로
+유지한다. 이탈 guard도 선택 ID를 사용하며 이전 목록으로 분석/CSV/편집 권한을 복구하지
+않는다. 성공 재시도 뒤 설정/스키마 권한·값을 다시 읽고 명시적 비교 선택을 따른다.
+실제 프로젝트/연결 변경은 기존 폐기 경로다. 첫 수정 후 도구는 실패 중에도 숨긴 입력의
+표시를 기다려 `analysis-refresh-failed`에서 실패했다
+(`.tmp/admin-settings-navigation-oGQoA0/failure.json`). 도구의 해당 단계는 탐색 클릭 후
+hidden 상태를 확인하도록 고쳤고 제품의 숨김을 제거하지 않았다.
+
+최종 `verify:admin-settings-navigation -- --channel chromium --check-analysis-refresh --check-unload --check-created-exit`
+는 Chromium 156.0.8078.4·합성 서명 HTTP·격리 Miniflare D1에서 exit 0·verified=true,
+apiReads 177와 별도 interceptedProjectReads 1(합계 178)·writes 1·pageErrors 0·
+routeError=false였다(`.tmp/admin-settings-navigation-DlfJLw/report.json`). 목록 보류/503/
+재시도에서 설정·스키마·권한·발행자 입력을 보존하고, 로딩/실패 중 연결 해제 취소,
+실패 중 편집기 숨김, 복구 뒤 같은 프로젝트·명시적 비교를 확인했다. 기존 owner 회수/
+reader 잠금·폐기 승인·생성 POST/행 1회/1개·native unload 4회 취소도 통과했다.
+실행 중 workerd WSASend 10054/10053·WSARecv 64 진단은 원인 미확인으로 남긴다.
+일반 UI 성공과 pageErrors 0을 네이티브 런타임 전체 정상 증거로 확대하지 않는다.
+
+생성/권한/발행자 입력 이탈·commit 응답 유실 회귀도 verified=true·reads 159·writes 6·
+pageErrors 0·routeError=false로 통과했다(`.tmp/admin-mode-exit-8SGDU0/report.json`).
+집중 컨트롤러/Guard 43/43·타입·빌드(5231
+modules)·번들 2/2·Sites 9/9·help·diff 검사를 확인했다. Frontend 설계·검증·선택 도구
+안내를 갱신했으며 문서 초안은 CommandCode DeepSeek 4.1 Flash high로 받아 실행 근거와
+대조했다. 모델이 검증을 수행하지 않았다. 서비스는 도구가 종료했다.
+
+HTTP API·DB·SDK·의존성·버전·CI/러너·위생 정책 변경과 푸시·게시·배포는 없다.
+관련 없는 관리자/SDK/backend 전체는 반복하지 않았고 일반 lint 명령은 없다. 성공한
+목록에서 선택 프로젝트 제거·pending 쓰기 중 목록 실패·원격 OIDC/D1·모바일/타 브라우저·
+승인한 종료 뒤 복구와 전체 저장소/72개 질문 점검은 미검증/미완료다. 이 수정이 이전 권한
+이탈 검사의 중간 실패 원인까지 설명한다고 주장하지 않는다.
+
 ## 권한·발행자 입력과 변경 확인의 이탈 보호 (2026-10-12)
 
 `LiveGrants`/`LivePublishers`의 원시 입력과 검토/저장/결과 불명 요청은 기존 프로젝트
