@@ -81,7 +81,7 @@ function workflowRecords(load: WorkflowLoad): DailyRecord[] {
   }));
 }
 
-export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void }) {
+export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate, registerExitCheck }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void; registerExitCheck?: (check: () => boolean) => () => void }) {
   const currentOrigin = useMemo(() => window.location.origin, []);
   const [session, setSession] = useState<Session | null>(null);
   const [token, setToken] = useState('');
@@ -152,6 +152,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const confirmDraftExit = useCallback(() => !client || draftExit.canLeave(client, activeProjectId, () =>
     window.confirm('저장하지 않은 설정이나 스키마가 있어요. 초안을 버리고 계속할까요? 이미 서버에 저장된 값은 되돌리지 않아요.')),
   [client, activeProjectId, draftExit]);
+  useEffect(() => registerExitCheck?.(confirmDraftExit), [registerExitCheck, confirmDraftExit]);
   const settingsScopeRetained = retainedSettings?.client === client && retainedSettings?.projectId === activeProjectId;
   // Retain only the current session/project while moving between analysis views.
   // The transition keys, not the retained-state update, trigger a fresh permission check.

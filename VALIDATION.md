@@ -1,5 +1,34 @@
 # 검증
 
+## 데모 API 모드 이탈의 미저장 초안 확인 (2026-10-12)
+
+Tallyfin `/demo`에서 API 연결을 Sample로 바꾸면 숨긴 미저장 설정·스키마가 확인 없이
+사라지던 경로를 실브라우저로 재현했다. 부모 모드 버튼이 기존 폐기 확인을 호출하도록
+고쳤다. 취소하면 선택 프로젝트·초안·연결이 남고, 승인하면 API 작업 공간이 해제돼
+재진입에 새 연결이 필요하다. 같은 모드 버튼과 깨끗한 이탈은 경고하지 않는다. 등록 수명은
+고유 entry로 관리해 늦은 정리가 새 등록을 지우지 않는다. 실제 `/demo`·임시 서명 bearer·
+로컬 HTTP·격리 Miniflare D1로 확인했다. 테스트 토큰은 메모리에서만 직접 연결에 사용하고
+보고서·저장소·쿠키·로그에 남기지 않는다. 외부 실제 인증 제공자 검증은 아니다.
+
+새 `verify:admin-mode-exit`는 구현 전 `hidden-mode-cancel` exit 1이었다
+(`.tmp/admin-mode-exit-4dCkcM/failure.json`). 구현 후 Chromium 156.0.8078.4에서
+exit 0·verified=true·reads 60·writes 0·pageErrors 0·routeError=false,
+`.tmp/admin-mode-exit-8ZRaCL/report.json`이었다. 이탈 취소 후 같은 프로젝트·두 초안,
+설정 복귀의 명시적 비교/편집 복구, 승인 후 기존 DOM 제거와 재진입의 빈 토큰·연결 화면,
+동일 모드/깨끗한 이탈 무경고, D1 이름 불변·storage/cookie 부재를 확인했다.
+실제 사용자 엔트리를 쓰고 App props나 인증/bridge를 대역으로 교체하지 않았다.
+구현 전 실패 실행에서는 workerd WSARecv 64 연결 중단 로그도 관측했다. 원인 미확인
+로그이며 최종 성공 실행에서 보이지 않았다는 이유로 해당 원인을 해결했다고 주장하지 않는다.
+
+새 WorkspaceExit·기존 DraftExitGuard 집중 4/4·관리자 전체 251/251·타입·빌드·번들 2/2·
+Sites 9/9·실행 없는 help·diff 검사가 통과했다. 부모에 credentials/draft state를 저장하지
+않고 초기 API 화면 지연 로딩 경계는 번들 검사로 유지했다. 문서 초안은 지정 CommandCode
+DeepSeek 4.1 Flash high에서 받아 실제 근거와 대조했으며 모델이 검증을 실행한 것은 아니다.
+HTTP API·DB·SDK·의존성·버전·CI/러너·위생 정책 변경과 푸시·게시·배포는 없다. 변경 없는
+backend/SDK 전체 검사는 반복하지 않았고 일반 lint 명령은 없다. 운영 OIDC 세션의 모드
+이탈·pending 쓰기·나머지 폼·모바일·승인한 종료 뒤 복구·힙 메모리 zeroing은 미검증이다.
+기존 서버 SDK의 다른 수정은 건드리지 않았다. 전체 저장소/72개 질문 점검은 계속 미완료다.
+
 ## 새 프로젝트 생성 후 화면 이동 취소 (2026-10-12)
 
 Tallyfin에서 새 프로젝트 생성 뒤 자동 이동이 기존 설정·스키마 초안을 확인 없이 버리는

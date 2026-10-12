@@ -47,6 +47,7 @@
     "verify:admin-access": "node tools/browser-bench/admin-access.mjs",
     "verify:admin-settings-recovery": "node tools/browser-bench/admin-settings-recovery.mjs",
     "verify:admin-settings-navigation": "node tools/browser-bench/admin-settings-navigation.mjs",
+    "verify:admin-mode-exit": "node tools/browser-bench/admin-mode-exit.mjs",
     "verify:admin-analysis-access": "node tools/browser-bench/admin-analysis-access.mjs",
     "verify:admin-goal-access": "node tools/browser-bench/admin-goal-access.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",

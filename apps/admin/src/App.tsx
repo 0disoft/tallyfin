@@ -8,6 +8,7 @@ import Settings from './Settings';
 import DeferredPanel from './DeferredPanel';
 import './styles.css';
 import { initialCallback } from './auth/bootstrap';
+import { WorkspaceExit } from './api/workspace-exit';
 
 const navigation = [
   { id: 'overview' as const, title: '개요', icon: House },
@@ -22,6 +23,8 @@ const LiveDashboard = lazy(() => import('./LiveDashboard').then(module => ({ def
 
 export function App({ demo = false }: { demo?: boolean }) {
   const [mode, setMode] = useState<Mode>(() => initialCallback() || !demo ? 'api' : 'sample');
+  const [apiExit] = useState(() => new WorkspaceExit());
+  const registerApiExit = useCallback((check: () => boolean) => apiExit.register(check), [apiExit]);
   const [liveProject, setLiveProject] = useState<{ name: string; timeZone: string } | null>(null);
   const [projectId, setProjectId] = useState<ProjectId>('modufile');
   const [view, setView] = useState<View>('overview');
@@ -63,6 +66,10 @@ export function App({ demo = false }: { demo?: boolean }) {
   }, [drawerOpen, mobile]);
   function navigate(next: View) { setView(next); setDrawerOpen(false); mainRef.current?.focus(); }
   function switchProject(next: ProjectId) { setProjectId(next); setDisplayState('normal'); setDrawerOpen(false); mainRef.current?.focus(); }
+  function switchMode(next: Mode) {
+    if (next === mode || mode === 'api' && !apiExit.canLeave()) return;
+    setMode(next);
+  }
   function closeDrawer() { setDrawerOpen(false); menuRef.current?.focus(); }
 
   return <div className="app-shell">
@@ -79,10 +86,10 @@ export function App({ demo = false }: { demo?: boolean }) {
     </aside>
     <main ref={mainRef} id="main-content" className="workspace" tabIndex={-1} inert={mobile && drawerOpen}>
       <div className="mobile-bar"><button ref={menuRef} type="button" className="menu-trigger" aria-label="탐색 메뉴 열기" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}><List size={25} /></button><span>Tallyfin</span><span className="sample-badge">{mode === 'api' ? 'API' : '샘플'}</span></div>
-      <header className="page-header"><div className="title-group"><h1>{titles[view]}</h1><div className="project-subtitle">{mode === 'api' ? (liveProject?.name ?? '—') : names[projectId]}</div></div><div className="header-controls">{demo && <div className="mode-switch" role="group" aria-label="데이터 모드"><button type="button" className={mode === 'sample' ? 'active' : ''} aria-pressed={mode === 'sample'} onClick={() => setMode('sample')}>Sample</button><button type="button" className={mode === 'api' ? 'active' : ''} aria-pressed={mode === 'api'} onClick={() => setMode('api')}>API 연결</button></div>}<div className="period-control"><CalendarBlank size={22} /><label className="sr-only" htmlFor="period">조회 기간</label><select id="period" value={mode === 'api' && customPeriod ? 'custom' : period} onChange={event => { const custom = event.target.value === 'custom'; setCustomPeriod(custom); if (!custom) setPeriod(Number(event.target.value) as Period); }}>{([7, 14, 30] as const).map(days => <option key={days} value={days}>{mode === 'api' ? `최근 ${days}일` : periodLabel(days)}</option>)}{mode === 'api' && <option value="custom">직접 선택</option>}</select><CaretDown size={16} /></div><span className="timezone">{mode === 'api' ? (liveProject?.timeZone ?? '—') : 'Asia/Seoul (KST)'}</span></div></header>
+      <header className="page-header"><div className="title-group"><h1>{titles[view]}</h1><div className="project-subtitle">{mode === 'api' ? (liveProject?.name ?? '—') : names[projectId]}</div></div><div className="header-controls">{demo && <div className="mode-switch" role="group" aria-label="데이터 모드"><button type="button" className={mode === 'sample' ? 'active' : ''} aria-pressed={mode === 'sample'} onClick={() => switchMode('sample')}>Sample</button><button type="button" className={mode === 'api' ? 'active' : ''} aria-pressed={mode === 'api'} onClick={() => switchMode('api')}>API 연결</button></div>}<div className="period-control"><CalendarBlank size={22} /><label className="sr-only" htmlFor="period">조회 기간</label><select id="period" value={mode === 'api' && customPeriod ? 'custom' : period} onChange={event => { const custom = event.target.value === 'custom'; setCustomPeriod(custom); if (!custom) setPeriod(Number(event.target.value) as Period); }}>{([7, 14, 30] as const).map(days => <option key={days} value={days}>{mode === 'api' ? `최근 ${days}일` : periodLabel(days)}</option>)}{mode === 'api' && <option value="custom">직접 선택</option>}</select><CaretDown size={16} /></div><span className="timezone">{mode === 'api' ? (liveProject?.timeZone ?? '—') : 'Asia/Seoul (KST)'}</span></div></header>
       {mode === 'sample' && <p className="context-note" role="status">샘플 데이터로 체험 중이에요. 변경은 이 화면에서만 적용돼요. <a href="/">관리자 로그인으로 돌아가기</a></p>}
       <div className="view-content" key={mode === 'api' ? 'api-workspace' : `${projectId}-${view}`}>
-        {mode === 'api' ? <DeferredPanel label="API 관리"><LiveDashboard view={view} period={period} customPeriod={customPeriod} onActiveProjectChange={setLiveProjectLabel} onNavigate={navigate} /></DeferredPanel> : displayState === 'unauthorized' ? <section className="state-panel" role="status"><WarningCircle size={32} /><h2>이 프로젝트를 볼 권한이 없어요</h2><p>관리자에게 프로젝트 접근 권한을 확인해 주세요.</p><button className="secondary-button" onClick={() => setDisplayState('normal')}>샘플 화면으로 돌아가기</button></section> : displayState === 'error' ? <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>데이터를 불러오지 못했어요</h2><p>잠시 후 다시 시도해 주세요.</p><button className="primary-button" onClick={() => setDisplayState('normal')}>다시 시도</button></section> : displayState === 'loading' ? <section className="state-panel" role="status" aria-busy="true"><h2>데이터를 불러오는 중이에요</h2><p>선택한 프로젝트의 집계를 준비하고 있어요.</p><button className="secondary-button" onClick={() => setDisplayState('normal')}>샘플 로딩 완료</button></section> : <>
+        {mode === 'api' ? <DeferredPanel label="API 관리"><LiveDashboard view={view} period={period} customPeriod={customPeriod} onActiveProjectChange={setLiveProjectLabel} onNavigate={navigate} registerExitCheck={registerApiExit} /></DeferredPanel> : displayState === 'unauthorized' ? <section className="state-panel" role="status"><WarningCircle size={32} /><h2>이 프로젝트를 볼 권한이 없어요</h2><p>관리자에게 프로젝트 접근 권한을 확인해 주세요.</p><button className="secondary-button" onClick={() => setDisplayState('normal')}>샘플 화면으로 돌아가기</button></section> : displayState === 'error' ? <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>데이터를 불러오지 못했어요</h2><p>잠시 후 다시 시도해 주세요.</p><button className="primary-button" onClick={() => setDisplayState('normal')}>다시 시도</button></section> : displayState === 'loading' ? <section className="state-panel" role="status" aria-busy="true"><h2>데이터를 불러오는 중이에요</h2><p>선택한 프로젝트의 집계를 준비하고 있어요.</p><button className="secondary-button" onClick={() => setDisplayState('normal')}>샘플 로딩 완료</button></section> : <>
           {displayState === 'stale' && <p className="notice" role="status"><WarningCircle size={20} />오래된 샘플 데이터예요. 마지막 집계: {dateAt(-1)} 23:00 KST <button className="text-button" onClick={() => setDisplayState('normal')}>새로고침</button></p>}
           {displayState === 'empty' && <p className="notice" role="status">선택한 기간에 기록된 이벤트가 없어요. 완료율을 계산할 수 없어요.</p>}
           {view === 'overview' && <Overview project={project} records={records} summary={summary} onAnalyze={() => navigate('events')} />}
