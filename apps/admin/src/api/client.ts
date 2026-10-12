@@ -503,6 +503,13 @@ export class ApiClient {
       else signal.addEventListener('abort', forward, { once: true });
     }
     this.#controllers.add(controller);
+    const deadline = performance.now() + this.#requestTimeoutMs;
+    // A blocked event loop can settle a credential/body promise before its timer runs.
+    const enforceDeadline = () => {
+      if (!controller.signal.aborted && performance.now() >= deadline)
+        controller.abort(new ApiError('timeout', KIND_MESSAGE.timeout));
+    };
+    const checkRequest = () => { enforceDeadline(); controller.signal.throwIfAborted(); };
     const timeout = setTimeout(() => controller.abort(new ApiError('timeout', KIND_MESSAGE.timeout)), this.#requestTimeoutMs);
     let observedStatus: number | undefined;
     let notified = false;
@@ -514,7 +521,7 @@ export class ApiClient {
       this.#onAnalyticsAccessDenied?.(match[1]!, error);
     };
     try {
-      controller.signal.throwIfAborted();
+      checkRequest();
       let bearer = this.#token;
       if (this.#getBearer) {
         try {
@@ -524,11 +531,11 @@ export class ApiClient {
           if (!bearer) throw new Error();
         }
         catch {
-          controller.signal.throwIfAborted();
+          checkRequest();
           throw new ApiError('unauthorized', KIND_MESSAGE.unauthorized, { status: 401 });
         }
       }
-      controller.signal.throwIfAborted();
+      checkRequest();
       if (bearer) headers.Authorization = `Bearer ${bearer}`;
       let response: { ok: boolean; status: number; json: () => Promise<unknown> };
       try {
@@ -547,8 +554,8 @@ export class ApiClient {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
         throw new ApiError('network', KIND_MESSAGE.network);
       }
-      controller.signal.throwIfAborted();
       observedStatus = response.status;
+      checkRequest();
       // The status alone confirms denial; do not retain data while its body stalls.
       if (observedStatus === 401 || observedStatus === 403) {
         const kind = STATUS_KIND[observedStatus]!;
@@ -556,18 +563,23 @@ export class ApiClient {
       }
       if (!response.ok) throw await awaitRequest(controller.signal, () => this.#toApiError(response));
       try {
-        return await awaitRequest(controller.signal, () => response.json());
+        const result = await awaitRequest(controller.signal, () => response.json());
+        checkRequest();
+        return result;
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
         throw new ApiError('contract', 'API 응답을 JSON으로 읽지 못했어요.');
       }
     } catch (error) {
+      enforceDeadline();
       // A stalled error body must not turn an observed access denial into a
       // recoverable network error that leaves privileged data on screen.
       if (controller.signal.reason instanceof ApiError && controller.signal.reason.kind === 'timeout' &&
         (observedStatus === 401 || observedStatus === 403)) {
         const kind = STATUS_KIND[observedStatus]!;
-        throw new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus });
+        const denial = new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus });
+        notifyDenial(denial);
+        throw denial;
       }
       controller.signal.throwIfAborted();
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) notifyDenial(error);

@@ -72,6 +72,78 @@ test('one request deadline covers credentials, headers, success body and error b
   }
 });
 
+test('elapsed deadlines remain enforced when synchronous work delays the timeout callback', async t => {
+  for (const phase of ['credential', 'headers', 'success-body', 'error-body']) await t.test(phase, async t => {
+    let now = 0, calls = 0, jsonCalls = 0, signal;
+    t.mock.method(performance, 'now', () => now);
+    const client = new ApiClient({ requestTimeoutMs: 100,
+      getBearer: async () => { if (phase === 'credential') now = 100; return 'test-only-header'; },
+      fetchImpl: async (_url, init) => {
+        calls++; signal = init.signal;
+        if (phase === 'headers') now = 100;
+        return { ok: phase !== 'error-body', status: phase === 'error-body' ? 500 : 200,
+          json: async () => { jsonCalls++; now = 100; return page; } };
+      },
+    });
+    t.after(() => client.destroy());
+    await assert.rejects(client.listProjects(), error => error instanceof ApiError && error.kind === 'timeout');
+    assert.equal(calls, phase === 'credential' ? 0 : 1);
+    assert.equal(jsonCalls, ['credential', 'headers'].includes(phase) ? 0 : 1);
+    if (signal) assert.equal(signal.aborted, true);
+  });
+});
+
+test('expired credential acquisition never dispatches a native settings mutation and permits explicit recovery', async t => {
+  const initial = { project: { id: 'sample', name: 'Sample', status: 'active', timeZone: 'UTC' },
+    allowedOrigins: [], limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: true };
+  const committed = { ...initial, project: { ...initial.project, name: 'Changed' }, settingsHash: 'b'.repeat(64) };
+  let stored = initial, block = false, dispatches = 0;
+  const methods = [], server = createServer((request, reply) => {
+    methods.push(request.method); request.resume();
+    if (request.method === 'PATCH') stored = committed;
+    reply.writeHead(200, { 'Content-Type': 'application/json' }); reply.end(JSON.stringify(stored));
+  });
+  t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const client = new ApiClient({ requestTimeoutMs: 100,
+    getBearer: async () => {
+      if (block) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+      return 'test-only-header';
+    },
+    fetchImpl: (url, init) => { dispatches++; return fetch(new URL(url, origin), init); },
+  });
+  const editor = new SettingsEditor(client, 'sample');
+  t.after(() => { editor.destroy(); client.destroy(); });
+  await editor.load(); editor.edit('name', 'Changed'); block = true;
+  await editor.save();
+  assert.equal(dispatches, 1, 'expired credentials must not dispatch PATCH');
+  assert.deepEqual(methods, ['GET']); assert.equal(stored, initial);
+  assert.equal(editor.state.phase, 'review'); assert.equal(editor.state.draft.name, 'Changed');
+  await editor.save(); assert.equal(dispatches, 1, 'uncertain writes must not repeat automatically');
+  block = false; await editor.checkLatest(); editor.keepChanges(); await editor.save();
+  assert.deepEqual(methods, ['GET', 'GET', 'PATCH']);
+  assert.equal(editor.state.phase, 'ready'); assert.equal(editor.hasUnsavedChanges, false);
+  assert.equal(stored, committed);
+});
+
+test('confirmed denial still clears analytics when headers or body synchronously consume the deadline', async t => {
+  for (const status of [401, 403]) for (const phase of ['headers', 'body']) await t.test(`${status}-${phase}`, async t => {
+    let now = 0, notifications = 0;
+    t.mock.method(performance, 'now', () => now);
+    const client = new ApiClient({ requestTimeoutMs: 100, onAnalyticsAccessDenied: () => notifications++,
+      fetchImpl: async () => {
+        if (phase === 'headers') now = 100;
+        return { ok: false, status, json: async () => { now = 100; return {}; } };
+      },
+    });
+    t.after(() => client.destroy());
+    await assert.rejects(client.getSummary('sample', { schemaVersion: 1, from: '2026-10-01', to: '2026-10-02' }),
+      error => error instanceof ApiError && error.status === status && error.kind === (status === 401 ? 'unauthorized' : 'forbidden'));
+    assert.equal(notifications, 1);
+  });
+});
+
 test('deadline does not restart between token acquisition and body reading; successful requests clear their timer', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const token = deferred(), body = deferred(); let signal, calls = 0;

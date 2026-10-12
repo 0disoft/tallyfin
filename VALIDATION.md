@@ -1,5 +1,43 @@
 # 검증
 
+## 관리자 요청 제한의 동기 지연 강제 (2026-10-12)
+
+`ApiClient`가 제한 시간을 `setTimeout` 콜백에만 맡겨, `getBearer`가 동기로 이벤트 루프를
+막으면 콜백이 늦게 돌아 마감이 지난 뒤에도 PATCH를 전송할 수 있었다. 요청 시작 시
+`performance.now()` 단조 시계로 요청 종료 시각을 잡고 자격증명 직후·전송 직전·헤더
+수신·JSON 성공/오류 완료에서 마감을 검사하도록 고쳤다. 호출자 abort는 timeout으로
+덮지 않고, 이미 관찰한 401·403은 권한 오류로 유지하며 분석 접근 취소 알림을 전달한다.
+공유 로그인 갱신은 취소하지 않고 저장을 자동 재시도하지 않는다.
+
+새 회귀 검사는 수정 전 credential·headers·success-body·error-body 4개와 native HTTP
+mutation 1개가 실패했고(러너 그룹 실패 포함 fail 6), 수정 뒤 `apps/admin/src/api/`의
+request-lifecycle·client·settings-editor·analytics-access Node 검사가 71/71 통과했다.
+`typecheck:admin`·`build:admin`과 번들 분리 2/2·Sites Worker 9/9(합계 11/11)도 통과했다.
+native Node HTTP 확인은 `requestTimeoutMs` 100ms에 async `getBearer` 내부 `Atomics.wait`
+150ms 동기 block을 주면 fetch dispatch 0·PATCH 0(사전 GET 1)·초안 review 유지였고, block
+해제 뒤 checkLatest→keepChanges→save로 GET·PATCH가 완료됐다.
+
+커밋·CI에 연결하지 않은 일회성 `.tmp/admin-sync-deadline.mjs`로 실제 Vite 원본
+`ApiClient`·`SettingsEditor`를 Chromium 156.0.8078.4에서 import하고 로컬 HTTP middleware로
+새 동기 credential 경로를 확인했다. verified true, 만료 단계는 review·draft `Changed`·
+dispatches 1(사전 GET만)·미저장 true였고 같은 save 재호출에도 dispatches 1이었다. block
+해제 뒤 checkLatest→keepChanges→save로 ready·이름 Changed·미저장 false·dispatches 3,
+서버 요청 [GET, GET, PATCH]·pageErrors 0이었다. 임시 스크립트 초기 두 실행은 fixture
+문제(module playwright 위치 해석, middleware가 Vite 404 뒤 등록돼 초기 settings 응답 실패)로
+실패했으며 제품 결함으로 분류하지 않는다.
+
+`npm run verify:admin-settings-recovery` 최종 실행도 Chromium 156.0.8078.4에서 verified
+true였다. preCommitFailurePreservesDraft·committedLostResponseRecovered·
+readbackPreventsDuplicateWrite·nativeDeadlinePreservesCommittedDraft·
+lateTimedOutResponseIgnored·readOnlyRecoveryRemainsLocked·explicitOwnerRecovery·
+disconnectedUiCleared가 모두 true였고 attemptedWrites 5·preCommitFailures 1·droppedWrites
+2·timedOutWrites 1·pageErrors 0·routeError false·authorizations 1·exchanges 1·refreshes 0·
+apiReads 93·apiWrites 4·browserBatches 0이었다. 이 명령은 기존 비동기 timeout/recovery UI를
+확인하는 검사이고, 새 동기 credential block은 위 일회성 `.tmp` 스크립트와 native Node HTTP
+회귀 검사로 확인했다. 원격 운영 OIDC/DB와 타 브라우저는 미검증이며 일반 lint 명령은 없다.
+변경 없는 backend/SDK 전체 검사는 반복하지 않았고 API·DB·의존성·CI·위생 정책 변경과
+push·배포는 없다.
+
 ## 분석 새로고침의 숨긴 작업 공간 보존 (2026-10-12)
 
 분석 화면의 새로고침이 프로젝트 목록을 loading으로 바꾸며 data를 비울 때
