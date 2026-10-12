@@ -135,8 +135,10 @@ await client.send([completed]);
 - 재시도하지 않는다: `getToken` 실패나 토큰 형식 오류는 그 시도에서 바로
   `authentication_unavailable`로 끝나고 SDK가 자동으로 다시 부르지 않는다. 401·403·409·422
   같은 나머지 4xx는 `rejected`/`http_error`다.
-- 대기는 `Retry-After`(초 또는 HTTP-date, 1초 하한)를 쓰고 없으면 지수 백오프다. 기본
-  `maxAttempts` 3이면 시도 사이 대기는 1s·2s 두 번이다.
+- 대기는 `Retry-After`(초 또는 HTTP-date, 1초 하한)를 쓰고 없으면 지수 백오프다. HTTP-date는
+  `Sun, 01 Nov 2026 10:00:00 GMT` 같은 29자 GMT 표준형만 받고, 없는 날짜·24:00·요일 불일치처럼
+  `Date.parse`가 자동 보정하는 값이나 ISO 형식은 받지 않는다. 헤더가 잘못됐으면 지수 백오프로
+  돌아간다. 기본 `maxAttempts` 3이면 시도 사이 대기는 1s·2s 두 번이다.
 - 대기나 다음 시도가 `retryBudgetMs`를 넘으면 `unavailable`/`retry_deferred`로 미루고
   `retryable: true`로 알린다.
 
@@ -192,4 +194,16 @@ OIDC·프로세스 재시작은 이 실험의 범위 밖이다. 최종 검사는
 
 관련: [서버 발행 이벤트](./server-events.md), [이벤트·집계 계약](./event-contract.md),
 [검증](../../VALIDATION.md).
+
+## 재시도 규칙 검증 — 2026-10-12
+
+`retryDelay`의 HTTP-date 판정(`packages/server/src/index.ts`)과 새 회귀 테스트
+`packages/server/test/retry-after.test.ts`를 로컬에서 확인했다. 잘못된 요일·없는 날짜(11월
+31일·2월 30일)·`24:00`·ISO 형식 헤더 5종을 429·503에 대해 source와 minified SDK로 돌려
+`Retry-After`를 무시하고 1s·2s 지수 백오프로 돌아가며 재전송 본문이 같은지 봤다. 수정 전
+source·minified 회귀 2개가 실패했고 수정 뒤 `npm run test:server` 31/31이 통과했다. native
+`fetch`로 임시 포트의 로컬 HTTP 서버에서 503을 받은 뒤 같은 본문을 다시 보내 중복 영수증까지
+확인했고, `npm run build:server`(server SDK 8957 bytes·gzip 3678·런타임 의존성 0, 선언 `tsc`)도
+통과했다. 범위는 단위 테스트와 로컬 HTTP 실험이고 실제 운영 OIDC·원격 D1 검사는 하지 않았다.
+public API·DB·CI·의존성 변경은 없고 push·배포도 하지 않았다.
 

@@ -201,9 +201,9 @@ async function receipt(response: Response, count: number, signal: AbortSignal): 
 function retryDelay(header: string | null, attempt: number, now: number): number {
   if (header !== null && header.length <= 128) {
     if (/^\d+$/.test(header)) return Math.max(1000, Number(header) * 1000);
-    if (/^[A-Za-z]{3}, \d{2} [A-Za-z]{3} \d{4} \d{2}:\d{2}:\d{2} GMT$/.test(header)) {
-      const date = Date.parse(header); if (Number.isFinite(date)) return Math.max(1000, date - now);
-    }
+    // Date.parse normalizes nonexistent days and ignores mismatched weekdays.
+    if (header.length === 29 && new Date(header).toUTCString() === header)
+      return Math.max(1000, Date.parse(header) - now);
   }
   return 1000 * 2 ** (attempt - 1);
 }
