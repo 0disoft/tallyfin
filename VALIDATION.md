@@ -1,5 +1,34 @@
 # 검증
 
+## 이벤트 상세 시간대 불일치 차단 — 2026-10-12
+
+`LiveDashboard`가 상세 응답의 프로젝트 시간대를 대조하지 않아, CSV에서는 거부하는
+응답을 일별 차트에는 표시하던 경로를 수정했다. 기존 `assertMeta`를 값 분석 전에
+호출해 현재 레지스트리·요청 기간·출처·coverage와 일치하는 상세만 표시한다.
+API 클라이언트가 보장하는 프로젝트·버전·기간·출처 검사는 그대로 유지한다.
+
+`verify:admin-analysis-access`에 로컬 서명 API의 정상 상세 응답을 다른 유효 시간대
+(`America/New_York`)로 바꾸는 브라우저 회귀를 추가했다. 수정 전 실행은
+`mismatched-event-time-zone`에서 종료 1이었고, 실패 화면에는 Asia/Seoul 프로젝트의
+일별 차트와 활성 CSV 버튼이 남았다. 수정 후 Chromium 156.0.8078.4 실행은 종료 0·
+verified=true로 계약 오류·차트 없음·CSV 잠금, 정상 응답 재시도 뒤 차트와 실제 다운로드
+CSV의 Asia/Seoul·선택 이벤트 행을 확인했다. 권한 회수·다른 프로젝트 CSV·늦은 거부
+응답·연결 해제 회귀도 통과했다. reads 29·writes 0·browserBatches 0·pageErrors 0·
+routeError=false였고 리포트는 `.tmp/admin-analysis-access-Uj9soi/report.json`이다.
+로컬 Vite·Miniflare·브라우저는 종료했다. 응답 변경은 합성 route 주입이며 실제 운영
+서버에서 시간대 불일치가 발생했다는 증거는 아니다.
+
+관리자 타입 검사·빌드, 번들 분리·Sites 11/11, `git diff --check`는 통과했다.
+관리자 전체 검사는 242개 중 241개 통과·1개 실패였다. 실패한 기존
+`funnel-setup.test.mjs` 크기 검사는 관리자 UI가 아닌 `packages/browser/src/funnels.ts`
+생성 통합 코드를 직접 번들링하며, gzip 3,099바이트로 3,072바이트 예산을 넘었다.
+이 결과를 전체 통과로 취급하지 않고 별도 SDK 크기 후속으로 남긴다.
+
+설계 기준 문서 `docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록만 갱신했다.
+API·DB·SDK·의존성·CI·러너·위생 정책은 변경하지 않았다. 변경 없는 전체 백엔드 검사와
+일반 소스 lint(명령 없음)는 생략했다. 실제 운영 OIDC·원격 DB는 미검증이고
+푸시·게시·배포는 하지 않았다. 전체 목표의 완료로 표시하지 않는다.
+
 ## 서버 SDK 배치 빈 항목 검증 — 2026-10-12
 
 `send`가 `Array.map`으로 이벤트를 검사하면서 희소 배열의 빈 칸을 건너뛰고, 이를 JSON의

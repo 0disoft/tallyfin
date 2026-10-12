@@ -29,8 +29,8 @@ try {
   await server.listen(); const origin = `http://127.0.0.1:${server.httpServer.address().port}`; local.configure(origin);
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
-  let routeError = false, pageErrors = 0, deniedReads = 0, heldReads = 0, invalidZoneReads = 0;
-  let invalidProjectZone = true;
+  let routeError = false, pageErrors = 0, deniedReads = 0, heldReads = 0, invalidZoneReads = 0, mismatchedEventZoneReads = 0;
+  let invalidProjectZone = true, mismatchedEventZone = true;
   await context.route('**/*', async route => {
     const holding = held && !held.used && route.request().url().startsWith(`${origin}/v1/projects/sembom/events/tool_view/daily`) ? held : null;
     try {
@@ -39,6 +39,14 @@ try {
         try {
           assert.equal(response.status(), 200);
           const body = await response.json(); body.data[0].timeZone = 'Mars/Olympus'; invalidZoneReads++;
+          return await route.fulfill({ response, json: body });
+        } finally { await response.dispose(); }
+      }
+      if (mismatchedEventZone && route.request().url().startsWith(`${origin}/v1/projects/sembom/events/tool_view/daily`)) {
+        const response = await route.fetch({ maxRedirects: 0, timeout: 10000 });
+        try {
+          assert.equal(response.status(), 200);
+          const body = await response.json(); body.meta.timeZone = 'America/New_York'; mismatchedEventZoneReads++;
           return await route.fulfill({ response, json: body });
         } finally { await response.dispose(); }
       }
@@ -68,6 +76,23 @@ try {
   await page.getByRole('button', { name: '이벤트 분석', exact: true }).click();
   const csv = page.getByRole('button', { name: 'CSV 내려받기', exact: true });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  stage = 'mismatched-event-time-zone';
+  await page.getByRole('button', { name: 'tool_view', exact: true }).click();
+  const detail = page.locator('.event-detail');
+  await detail.getByRole('heading', { name: '응답이 계약과 맞지 않아요', exact: true }).waitFor();
+  assert.equal(await detail.locator('.recharts-wrapper').count(), 0);
+  assert.equal(await csv.isDisabled(), true);
+  stage = 'event-time-zone-recovery'; mismatchedEventZone = false;
+  await detail.getByRole('button', { name: '다시 시도', exact: true }).click();
+  await detail.locator('.recharts-wrapper').waitFor();
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  const recoveryDownloadPromise = page.waitForEvent('download'); await csv.click();
+  const recoveryDownload = await recoveryDownloadPromise;
+  const recoveredCsv = await readFile(await recoveryDownload.path(), 'utf8');
+  assert.ok(recoveredCsv.includes('"selected_event_total"'));
+  assert.ok(recoveredCsv.includes('"Asia/Seoul"'));
+  assert.equal(recoveredCsv.includes('"America/New_York"'), false);
+  await page.getByRole('button', { name: '상세 닫기', exact: true }).click();
   stage = 'revoke'; const provisioner = new Provisioner(local.db);
   await provisioner.apply(await provisioner.plan('revoke', { projectId: 'sembom', issuer: local.issuer, subject: 'synthetic-login-operator' }));
   await page.getByRole('button', { name: 'tool_view', exact: true }).click();
@@ -105,7 +130,8 @@ try {
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   assert.equal(await csv.count(), 0); assert.equal(await page.locator('.event-table').count(), 0);
   assert.equal(routeError, false); assert.equal(pageErrors, 0);
-  const report = { verified: true, browser: browser.version(), invalidZoneReads, invalidZoneRecovery: true, deniedReads, deniedSummaryCleared: true, deniedCsvDisabled: true,
+  const report = { verified: true, browser: browser.version(), invalidZoneReads, invalidZoneRecovery: true,
+    mismatchedEventZoneReads, mismatchedEventZoneBlocked: true, eventTimeZoneRecovery: true, deniedReads, deniedSummaryCleared: true, deniedCsvDisabled: true,
     otherProjectExportIsolated: true, recovery: true, lateDeniedReadIgnored: true, heldReads, disconnectClears: true, routeError, pageErrors, ...local.counts };
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
 } catch {

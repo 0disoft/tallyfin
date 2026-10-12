@@ -13,7 +13,7 @@ import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpo
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
-import { loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
+import { assertMeta, loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import EventPropertyComparison from './EventPropertyComparison';
 import useEventPropertyComparison from './useEventPropertyComparison';
@@ -319,6 +319,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     client.getEventDaily(analysisRegistry.project.id, analysisEvent.name, { schemaVersion: version, from: currentRange.from, to: currentRange.to, source, groupBy: groupBy || undefined, signal: controller.signal })
       .then(next => {
         if (controller.signal.aborted) return;
+        assertMeta(next.meta, analysisRegistry, currentRange, source);
         const analysis = analyzeEventSeries(next, analysisEvent);
         setSeries({ status: 'ready', key: seriesKey, data: next, analysis });
       })
