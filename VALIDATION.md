@@ -1,5 +1,37 @@
 # 검증
 
+## 설정 화면 왕복의 초안 보존 (2026-10-12)
+
+실제 Chromium의 새 `verify:admin-settings-navigation`은 수정 전 `draft-return`에서
+exit 1이었다. 설정·스키마 입력을 바꾸고 이벤트 분석으로 이동한 뒤 돌아오면 편집기
+해제로 입력이 서버 값으로 바뀌었다. 실패 사진
+`.tmp/admin-settings-navigation-Myfkj6/failure.png`에서도 프로젝트 이름의 복귀를 확인했다.
+
+`LiveDashboard`는 같은 client/project의 설정 작업 공간을 하나만 유지한다. 다른 분석
+화면에서는 hidden/inert로 숨기고, 돌아올 때 기존 refresh로 권한·서버 상태를 확인한다.
+변경된 설정·스키마 입력은 비교 상태에 유지하며 명시적 선택 없이 저장하지 않는다.
+프로젝트 전환·연결 해제·활성 프로젝트 부재에서는 기존처럼 작업 공간을 폐기한다.
+브라우저 reload/종료 복구·다중 프로젝트 저장·새 폴링은 추가하지 않았다.
+
+수정 뒤 최종 Chromium 156.0.8078.4 실행은 exit 0·verified=true,
+reads 137·writes 0·pageErrors 0·routeError=false·로그인 1이었다. 보고서는
+`.tmp/admin-settings-navigation-iPVevm/report.json`이다. 실제 서명 HTTP/새 Miniflare
+D1의 설정·스키마 초안 왕복, 화면 밖의 편집기 숨김, 이탈 중 owner→reader 변경 뒤
+재조회/편집 잠금, 프로젝트 전환의 초안 폐기와 분석 화면의 연결 해제 후 숨은 DOM 제거,
+storage/cookie 부재와 서버 이름 불변을 확인했다. 테스트 grant 변경은 로컬 fixture다.
+
+관리자 타입·빌드·전체 Node 242/242·번들 분리 2/2·Sites 9/9가 통과했다. 공유 access
+실브라우저 회귀도 exit 0·verified=true, 실제 거부 2·heldWrites 2·reads 128·writes 5,
+pageErrors 0·routeError=false(`.tmp/admin-access-FaZdQ0/report.json`)로 통과했다.
+프로젝트 전환·연결 해제 중 이미 commit한 쓰기의 늦은 응답 격리는 유지했다.
+새 도구 구문·실행 없는 help·diff 검사도 통과했다.
+
+설계·검증 기록과 선택 실행 도구를 추가했다. 관리자 렌더링/메모리 수명과 package script만
+변경했고 API·DB·SDK·버전·의존성·위생 정책·CI는 불변이다. backend/SDK 전체 검사는
+변경이 없어 반복하지 않았고 일반 lint 명령은 없다. 실제 운영 제공자·원격 D1·새로고침/
+종료 입력 복구·모바일·전체 접근성·숨은 작업 공간의 메모리 측정은 미검증이며 푸시·게시·
+배포는 없다. 전체 저장소와 72항목은 계속 진행 중이다.
+
 ## 설정 저장 전 실패·저장 후 응답 유실 실브라우저 검증 (2026-10-12)
 
 옵트인 `verify:admin-settings-recovery`를 추가했다. 실제 관리자 컴포넌트·API client·

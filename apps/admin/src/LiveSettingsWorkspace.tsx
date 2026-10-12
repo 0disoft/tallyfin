@@ -11,7 +11,7 @@ type Props = {
   onSaved: (settings: ProjectSettings) => void; onAccessLost: () => void; onVersionChange: (version: number) => void;
 };
 
-/** Settings controllers mount together only while the settings view is selected. */
+/** Controllers remain scoped to the current session/project across analysis navigation. */
 export default function LiveSettingsWorkspace({ client, projectId, version, registry, newlyCreated, refreshTick,
   setupRefreshTick, diagnosticsRevision, onSaved, onAccessLost, onVersionChange }: Props) {
   return <>

@@ -96,6 +96,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const [refreshTick, setRefreshTick] = useState(0);
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
+  const [retainedSettings, setRetainedSettings] = useState<{ client: ApiClient; projectId: string } | null>(null);
   const [more, setMore] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -144,6 +145,17 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const validVersion = Number.isInteger(version) && version >= 1 && version <= MAX_SCHEMA_VERSION;
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
+  const settingsScopeRetained = retainedSettings?.client === client && retainedSettings?.projectId === activeProjectId;
+  // Retain only the current session/project while moving between analysis views.
+  // The transition keys, not the retained-state update, trigger a fresh permission check.
+  useEffect(() => {
+    if (view === 'settings' && client && activeProjectId) {
+      if (retainedSettings?.client === client && retainedSettings.projectId === activeProjectId)
+        setSettingsRefreshTick(tick => tick + 1);
+      setRetainedSettings({ client, projectId: activeProjectId });
+    } else if (retainedSettings?.client !== client || retainedSettings?.projectId !== activeProjectId)
+      setRetainedSettings(null);
+  }, [view, client, activeProjectId]);
   const activeTimeZone = activeProject?.timeZone ?? null;
   const deniedRead = readDenial?.client === client && readDenial.projectId === activeProjectId && readDenial.revision === refreshTick ? readDenial.error : null;
   readDenialHandler.current = (requestClient, requestProject, error) => {
@@ -449,12 +461,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
     {!showCreate && projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>생성 권한이 있다면 프로젝트 추가로 시작할 수 있어요. 기존 프로젝트를 조회하려면 운영자에게 해당 프로젝트 권한을 확인해 주세요.</p></section>}
-    {view === 'settings' && activeProjectId && <DeferredPanel key={activeProjectId} label="프로젝트 설정">
+    {(view === 'settings' || settingsScopeRetained) && activeProjectId && <div hidden={view !== 'settings'} inert={view !== 'settings'}><DeferredPanel key={activeProjectId} label="프로젝트 설정">
       <LiveSettingsWorkspace client={client} projectId={activeProjectId} version={validVersion ? version : null}
         registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} newlyCreated={newProjectId === activeProjectId}
         refreshTick={settingsRefreshTick} setupRefreshTick={setupRefreshTick} diagnosticsRevision={diagnosticsRevision}
         onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} />
-    </DeferredPanel>}
+    </DeferredPanel></div>}
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
