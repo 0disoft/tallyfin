@@ -1,5 +1,39 @@
 # 검증
 
+## 설정 저장 전 실패·저장 후 응답 유실 실브라우저 검증 (2026-10-12)
+
+옵트인 `verify:admin-settings-recovery`를 추가했다. 실제 관리자 컴포넌트·API client·
+서명된 수집기 HTTP·새 Miniflare D1로 네 경로를 확인했다. 저장 전 합성 503은 DB에
+전달하지 않고 초안을 보존한 뒤 재조회·명시적 변경 유지·한 번의 저장으로 복구했다.
+실제 D1 commit 후 응답을 버린 경우는 저장 결과 불명·초안 잠금에서 현재 서버 값을
+비교하고 채택해 추가 PATCH 없이 끝났다. 별도 실제 commit 응답을 client의 기존
+15초 제한을 넘겨 보류하고, 재조회·변경 유지 뒤 늦게 해제해 화면과 쓰기 수가 유지됨을
+확인했다. 가짜 시계나 client 제한 시간 변경은 없다.
+
+마지막은 commit 응답 유실 뒤 로컬 owner grant를 reader로 바꾸고 readback해 편집
+잠금을 확인했다. 서버 설정을 사용해도 저장은 잠겼으며, owner 복원·명시적 새로고침
+이후에만 다시 편집됐다. 연결 해제 후 설정 UI와 storage/cookie 제거도 확인했다.
+제품 코드의 새 결함은 관측하지 않았고 런타임을 바꾸지 않았다. 공유 fixture는 access
+프로필의 두 테스트 프로젝트 PATCH만 응답 유실 대상으로 허용하며 onboarding의
+기존 POST/PUT 제한과 access의 afterCommit 검증을 유지한다.
+
+최종 Chromium 156.0.8078.4는 exit 0·verified=true, browser PATCH 시도 5,
+전달 전 실패 1·버린 성공 응답 2·대기 초과 1·forwarded API 쓰기 4·읽기 93,
+로그인 1·pageErrors 0·routeError=false였다. 보고서는
+`.tmp/admin-settings-recovery-UCZVNv/report.json`이다. 앞선 중간 실행도 통과했으나
+최종 보고서는 제한된 barrier 대기와 쓰기 수 assertion까지 포함한다.
+
+공유 fixture 회귀 `verify:admin-access`도 exit 0·verified=true, deniedValidation 1·
+deniedSettings 1·heldWrites 2·reads 126·writes 5·pageErrors 0·routeError=false였다.
+보고서 `.tmp/admin-access-mx79JO/report.json`에 프로젝트 전환·연결 해제의 늦은 응답
+폐기와 이미 commit된 DB 보존을 기록했다. 설정/요청 수명 Node 검사 19/19도 통과했다.
+
+새 도구/공유 fixture 구문 검사·실행 없는 help·diff 검사와 선택 실행 안내를 추가했다.
+제품 런타임·API·DB 스키마·SDK·버전·의존성·위생 정책·CI는 변경하지 않았다. 실행 도구와
+package script만 변경했다. 타입/빌드·번들·전체 backend/admin은 제품 소스가 불변이라
+반복하지 않았고 일반 소스 lint 명령은 없다. 실제 운영 제공자·원격 DB·다른 브라우저와
+여러 운영자 동시 수정은 미검증이며 푸시·게시·배포는 없다. 전체 72항목 목표는 진행 중이다.
+
 ## 목표·퍼널 분석 권한 회수 실브라우저 검증 (2026-10-12)
 
 옵트인 `verify:admin-goal-access`를 추가했다. 공유 로그인 fixture의 goals 프로필만

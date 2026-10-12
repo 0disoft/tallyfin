@@ -85,9 +85,13 @@ export async function adminLoginFixture(directory, { profile = 'login' } = {}) {
           if (dropResponse || afterCommit) {
             // Test only: execute the authenticated write against real local D1,
             // then lose its successful response before the page can observe it.
-            assert.equal(profile, dropResponse ? 'onboarding' : 'access');
+            assert.ok(dropResponse ? ['onboarding', 'access'].includes(profile) : profile === 'access');
             assert.ok(url.pathname.startsWith('/v1/'));
-            assert.ok((dropResponse ? ['POST', 'PUT'] : ['PATCH']).includes(request.method()));
+            if (dropResponse && profile === 'onboarding') assert.ok(['POST', 'PUT'].includes(request.method()));
+            else {
+              assert.equal(request.method(), 'PATCH');
+              assert.ok(['/v1/projects/sembom', '/v1/projects/access-other'].includes(url.pathname));
+            }
             const committed = await route.fetch({ maxRedirects: 0, timeout: 15000 });
             try {
               assert.ok(committed.ok());
