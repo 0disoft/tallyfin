@@ -43,11 +43,12 @@ export function createTallyfin(options: BrowserOptions, host?: BrowserPlatform):
         let ended = false;
         const end = (name: string | undefined, values: Properties = {}) => {
           try {
+            if (ended || !name || !values || typeof values !== 'object' || Array.isArray(values)) return false;
             const now = platform.now();
-            const copied = Object.fromEntries(Object.entries(values));
-            if (ended || !name || now < started || now - started > 86400000 ||
-              workflow.dimensions.some(key => own(copied, key) && copied[key] !== dimensions[key])) return false;
-            if (!enqueue(name, { ...dimensions, ...copied }, now, { attempt })) return false;
+            const copied = { ...dimensions, ...values };
+            if (now < started || now - started > 86400000 ||
+              workflow.dimensions.some(key => copied[key] !== dimensions[key])) return false;
+            if (!enqueue(name, copied, now, { attempt })) return false;
             ended = true; return true;
           } catch { return false; }
         };

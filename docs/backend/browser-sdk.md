@@ -17,7 +17,7 @@
 ## 클라이언트 API
 - `track(name, properties?)`: 일반 이벤트만 버퍼에 넣는다. 워크플로 단계 이름은 거부한다.
 - `start(workflow, properties?)`: 시작 이벤트와 attemptId·startedAt을 만들고 `AttemptHandle`을 돌려준다. 시작을 넣지 못하면 핸들도 만들지 않는다.
-- `AttemptHandle.succeed/fail(properties?)`: 24시간 안에 한 번만 종료를 넣는다. dimensions 값이 바뀌면 거부하고, 실패 단계가 없는 흐름은 `fail`이 `false`다.
+- `AttemptHandle.succeed/fail(properties?)`: 24시간 안에 한 번만 종료를 넣는다. 속성은 객체만 받으며 배열·null·원시값·함수는 `false`로 거부한다. 속성을 생략하거나 빈 객체를 넣으면 시작할 때의 dimensions를 사용한다. 잘못된 호출은 핸들을 소진하지 않아 올바른 속성으로 다시 호출할 수 있다. dimensions 값이 바뀌면 거부하고, 실패 단계가 없는 흐름은 `fail`이 `false`다.
 - `AttemptHandle.cancel()`: 이후 종료 이벤트를 막는다. 이미 버퍼에 넣은 시작 이벤트는 유지한다.
 - `flush()`: 다음 기회에 전송하도록 예약한다. 네트워크 완료를 기다리게 하지 않는다.
 - `destroy()`: 리스너·타이머를 지우고 진행 중 I/O를 중단하며 메모리를 비운다. 늦은 응답은 반영하지 않고 두 번 호출해도 안전하다.
