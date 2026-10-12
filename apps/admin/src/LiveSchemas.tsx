@@ -11,6 +11,7 @@ import SchemaWorkflowForm from './SchemaWorkflowForm.tsx';
 import { workflowIssueTarget } from './api/schema-workflow-form.ts';
 import SchemaFunnelForm from './SchemaFunnelForm.tsx';
 import { funnelIssueTarget } from './api/schema-funnel-form.ts';
+import useUnloadWarning from './useUnloadWarning.ts';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름·퍼널 각각 최대 10개, 퍼널 단계 2~10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -23,6 +24,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   const [state, setState] = useState<SchemaState | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
+  useUnloadWarning(Boolean(editorRef.current?.hasUnsavedChanges));
   const previousVersion = useRef<number | null | undefined>(undefined);
   const activeScope = useRef({ client, projectId }); activeScope.current = { client, projectId };
   const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;

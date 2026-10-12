@@ -13,6 +13,7 @@ import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState }
 import LiveGrants from './LiveGrants.tsx';
 import LivePublishers from './LivePublishers.tsx';
 import LiveAdminChanges from './LiveAdminChanges.tsx';
+import useUnloadWarning from './useUnloadWarning.ts';
 
 export type LiveSettingsProps = {
   client: ApiClient;
@@ -56,6 +57,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   const [snapshotState, setSnapshotState] = useState<{ client: ApiClient; projectId: string; state: SettingsState } | null>(null);
   const state = snapshotState?.client === client && snapshotState.projectId === projectId ? snapshotState.state : null;
   const editorRef = useRef<SettingsEditor | null>(null);
+  useUnloadWarning(Boolean(editorRef.current?.hasUnsavedChanges));
   const activeScope = useRef({ client, projectId });
   activeScope.current = { client, projectId };
   const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;

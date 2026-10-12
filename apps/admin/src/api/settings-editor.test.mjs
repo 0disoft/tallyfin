@@ -10,6 +10,25 @@ const settings = (name = 'Original', canEdit = true) => ({
 });
 const brokenNotification = () => { throw new Error('private UI detail'); };
 
+test('unload protection follows raw draft changes, pending saves, readback and disposal', async () => {
+  let finish, current = settings();
+  const editor = new SettingsEditor({ getSettings: async () => current,
+    updateSettings: () => new Promise(resolve => { finish = resolve; }) }, 'example');
+  assert.equal(editor.hasUnsavedChanges, false);
+  await editor.load(); assert.equal(editor.hasUnsavedChanges, false);
+  editor.edit('name', 'Draft'); assert.equal(editor.hasUnsavedChanges, true);
+  editor.edit('name', 'Original'); assert.equal(editor.hasUnsavedChanges, false);
+  editor.edit('name', 'Saved'); const saving = editor.save();
+  assert.equal(editor.state.phase, 'saving'); assert.equal(editor.hasUnsavedChanges, true);
+  finish(current = settings('Saved')); await saving;
+  assert.equal(editor.hasUnsavedChanges, false);
+  editor.edit('name', 'Later'); await editor.checkLatest();
+  assert.equal(editor.hasUnsavedChanges, true);
+  editor.useServer(); assert.equal(editor.hasUnsavedChanges, false);
+  editor.edit('name', 'Disposed draft'); editor.destroy();
+  assert.equal(editor.hasUnsavedChanges, false);
+});
+
 test('a failed saved notification cannot invalidate a confirmed write or replay it', async () => {
   let writes = 0, notifications = 0;
   const saved = settings('Saved');

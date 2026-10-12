@@ -56,6 +56,11 @@ export class SchemaEditor {
   #current(g: number) { return !this.#destroyed && g === this.#generation && !this.#controller?.signal.aborted; }
   get canEdit() { return !this.state.blocked && (this.state.latest ?? this.state.snapshot)?.settings.canEdit === true; }
   get hasDraftChanges() { return this.state.draft !== this.#draftBaseline; }
+  get hasUnsavedChanges(): boolean {
+    return !this.#destroyed && Boolean(this.state.snapshot && (this.hasDraftChanges ||
+      this.state.target !== nextVersion(this.state.snapshot.page.latestVersion) || this.state.pending ||
+      this.state.phase === 'publishing'));
+  }
   #key() { return this.state.target + '\n' + this.state.draft; }
   #input(): { draft: SchemaDraft; version: number } | null {
     try {

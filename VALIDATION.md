@@ -1,5 +1,31 @@
 # 검증
 
+## 미저장 설정·스키마 이탈 경고 (2026-10-12)
+
+설정·스키마 컨트롤러에 `hasUnsavedChanges`를 추가하고 해당 상태일 때만 브라우저의
+`beforeunload` 경고를 설치한다. 원시 입력·잘못된 초안·발행 번호 변경·저장 중·발행 결과
+불명을 보호한다. 기준선 복귀·확인된 저장/발행·서버 값 채택·destroy는 경고를 해제한다.
+두 편집기의 리스너가 서로를 제거하지 않으며 저장·발행을 자동 재시도하지 않는다.
+새 getter 회귀 두 개는 구현 전 undefined/false 비교로 실패했고 구현 후 통과했다.
+
+실제 Chromium 156.0.8078.4의 `verify:admin-settings-navigation -- --channel chromium
+--check-unload`는 verified=true·네이티브 경고 4회·탭 닫기 취소 true였다. 설정만 편집,
+스키마만 편집, 분석 화면에 숨긴 두 초안의 reload 및 tab close를 취소해 입력/창 유지와
+깨끗한 연결 해제 후 경고 없는 reload를 확인했다. 기존 권한 재확인·reader 잠금·프로젝트
+격리도 통과했다. reads 140·writes 0·pageErrors 0·routeError=false·storage/cookie 없음,
+보고서는 `.tmp/admin-settings-navigation-2uHfFm/report.json`이다. 앞선 두 실행은 경고를
+취소한 reload Promise의 타임아웃을 실패로 처리했다. 최종 도구는 실제 dialog 관측/취소가
+있을 때만 취소된 reload의 ERR_ABORTED/TimeoutError를 허용한다. 경고 없이 멈추면 실패다.
+
+관리자 전체 Node 246/246·타입·빌드·번들 2/2·Sites 9/9가 통과했다. 컨트롤러·리스너
+집중 검사 40/40도 통과했다. 공유 `verify:admin-access`는 Chromium에서 verified=true,
+거부 2·보류 쓰기 2·reads 127·writes 5·pageErrors 0·routeError=false였다. 보고서는
+`.tmp/admin-access-ugMj0u/report.json`이며 실제 commit의 늦은 응답 격리와 권한 복구가
+유지됐다. 도구의 실행 없는 help와 diff 검사도 통과했다. backend/SDK 전체 검사는 해당
+코드를 바꾸지 않아 반복하지 않았고 일반 lint 명령은 없다. API·DB·SDK·의존성·버전·
+CI/러너·위생 정책은 불변이다. 입력 영속화·승인한 이탈 후 복구·프로젝트 전환 확인·원격 인증/D1·
+다른 브라우저/모바일/강제 종료는 미검증이다. 푸시·게시·배포는 하지 않았다.
+
 ## 설정 화면 왕복의 초안 보존 (2026-10-12)
 
 실제 Chromium의 새 `verify:admin-settings-navigation`은 수정 전 `draft-return`에서

@@ -8,11 +8,11 @@ import { chromium } from 'playwright';
 import { adminLoginFixture } from './admin-login-fixture.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-let local, server, browser, page, directory, watchdog, stage = 'arguments';
+let local, server, browser, page, directory, watchdog, unloadProbe, stage = 'arguments';
 try {
-  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, help: { type: 'boolean' } } });
+  const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, 'check-unload': { type: 'boolean' }, help: { type: 'boolean' } } });
   assert.ok(['chromium', 'chrome', 'msedge'].includes(values.channel));
-  if (values.help) console.log('npm run verify:admin-settings-navigation -- [--channel chromium|chrome|msedge]\nLocal signed settings/schema drafts across navigation and permission refresh; no remote service.');
+  if (values.help) console.log('npm run verify:admin-settings-navigation -- [--channel chromium|chrome|msedge] [--check-unload]\nLocal signed settings/schema drafts across navigation and permission refresh; no remote service.');
   else {
     watchdog = setTimeout(() => { void browser?.close(); }, 90000);
     await mkdir(resolve(root, '.tmp'), { recursive: true }); directory = await mkdtemp(resolve(root, '.tmp/admin-settings-navigation-'));
@@ -46,8 +46,51 @@ try {
     const name = page.locator('#settings-name'), label = page.locator('#schema-event-0-label');
     await enter(); await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false && document.getElementById('schema-event-0-label')?.disabled === false);
     const initialName = (await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name;
-    stage = 'draft-return'; await name.fill('Retained navigation settings'); await label.fill('Retained navigation schema');
+    let unloadWarnings = 0;
+    const cancelReload = async () => {
+      let observed = false;
+      unloadProbe = { installed: await page.evaluate(() => !window.dispatchEvent(new Event('beforeunload', { cancelable: true }))), dialogs: 0, aborted: false, timedOut: false };
+      const dismiss = async dialog => { assert.equal(dialog.type(), 'beforeunload'); observed = true; unloadProbe.dialogs++; unloadWarnings++; await dialog.dismiss(); };
+      page.once('dialog', dismiss);
+      try {
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 1500 }).catch(error => {
+          unloadProbe.aborted = /ERR_ABORTED/.test(error.message);
+          unloadProbe.timedOut = error.name === 'TimeoutError';
+          if (!observed || !(unloadProbe.aborted || unloadProbe.timedOut)) throw error;
+        });
+        assert.equal(observed, true);
+      } finally { page.off('dialog', dismiss); }
+    };
+    const cancelTabClose = async () => {
+      let finish, fail, timer;
+      const handled = new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+      const dismiss = async dialog => {
+        try { assert.equal(dialog.type(), 'beforeunload'); unloadWarnings++; await dialog.dismiss(); finish(); }
+        catch (error) { fail(error); }
+      };
+      page.once('dialog', dismiss);
+      try {
+        timer = setTimeout(() => fail(Error('tab_close_dialog_missing')), 5000);
+        await Promise.all([page.close({ runBeforeUnload: true }), handled]);
+        assert.equal(page.isClosed(), false);
+      } finally { clearTimeout(timer); page.off('dialog', dismiss); }
+    };
+    await name.fill('Retained navigation settings');
+    if (values['check-unload']) {
+      stage = 'dirty-settings-reload'; await cancelReload();
+      assert.equal(await name.inputValue(), 'Retained navigation settings');
+      await name.fill(initialName); await label.fill('Retained navigation schema');
+      stage = 'dirty-schema-reload'; await cancelReload();
+      assert.equal(await label.inputValue(), 'Retained navigation schema');
+      await name.fill('Retained navigation settings');
+    }
+    stage = 'draft-return'; await label.fill('Retained navigation schema');
     await leave(); assert.equal(await name.isVisible(), false); assert.equal(await label.isVisible(), false);
+    if (values['check-unload']) {
+      stage = 'hidden-drafts-reload'; await cancelReload();
+      stage = 'hidden-drafts-tab-close'; await cancelTabClose();
+    }
+    stage = 'draft-return';
     await enter();
     await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false || document.querySelector('.settings-recovery'));
     assert.equal(await name.inputValue(), 'Retained navigation settings');
@@ -78,15 +121,23 @@ try {
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);
     assert.equal((await context.cookies()).length, 0);
     assert.equal(local.counts.apiWrites, 0); assert.equal(pageErrors, 0); assert.equal(routeError, false);
+    if (values['check-unload']) {
+      stage = 'clean-disconnect-reload';
+      const unexpected = async dialog => { unloadWarnings++; await dialog.dismiss(); };
+      page.on('dialog', unexpected);
+      try { await page.reload(); await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor(); }
+      finally { page.off('dialog', unexpected); }
+      assert.equal(unloadWarnings, 4);
+    }
     const report = { verified: true, browser: browser.version(), settingsDraftRetained: true, schemaDraftRetained: true,
       hiddenControlsNotVisible: true, permissionRecheckedOnReturn: true, revokedDraftsRemainLocked: true,
       projectSwitchDisposesDrafts: true, disconnectDisposesHiddenWorkspace: true, noStorageOrCookie: true,
-      pageErrors, routeError, ...local.counts };
+      unloadChecked: Boolean(values['check-unload']), tabCloseCanceled: Boolean(values['check-unload']), unloadWarnings, pageErrors, routeError, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
   }
 } catch {
   if (directory) {
-    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, code: 'admin_settings_navigation_failed', counts: local?.counts }) + '\n');
+    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, code: 'admin_settings_navigation_failed', counts: local?.counts, unloadProbe }) + '\n');
     await page?.screenshot({ path: resolve(directory, 'failure.png'), fullPage: true }).catch(() => {});
   }
   process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, code: 'admin_settings_navigation_failed' }));

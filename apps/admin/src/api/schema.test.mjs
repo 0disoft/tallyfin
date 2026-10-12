@@ -43,6 +43,32 @@ function fixture(onAccessLost) {
 }
 const ready = async editor => { await editor.load(); await editor.validate(); editor.setPrivacy(true); };
 
+test('unload protection covers target edits and unconfirmed publication without warning after confirmation', async () => {
+  const f = fixture();
+  try {
+    assert.equal(f.editor.hasUnsavedChanges, false);
+    await f.editor.load(); assert.equal(f.editor.hasUnsavedChanges, false);
+    f.editor.edit('target', '3'); assert.equal(f.editor.hasUnsavedChanges, true);
+    f.editor.edit('target', '2'); assert.equal(f.editor.hasUnsavedChanges, false);
+    const original = f.editor.state.draft;
+    f.editor.edit('draft', '{invalid'); assert.equal(f.editor.hasUnsavedChanges, true);
+    f.editor.edit('draft', original); assert.equal(f.editor.hasUnsavedChanges, false);
+    await f.editor.validate(); f.editor.setPrivacy(true);
+    f.config.write = () => { throw new TypeError('offline'); };
+    await f.editor.publish();
+    assert.equal(f.editor.state.phase, 'review'); assert.equal(f.editor.hasDraftChanges, false);
+    assert.equal(f.editor.hasUnsavedChanges, true);
+    await f.editor.checkLatest(); f.editor.useServer();
+    assert.equal(f.editor.hasUnsavedChanges, false);
+    await f.editor.validate(); f.editor.setPrivacy(true); f.config.write = null;
+    const publication = f.editor.publish();
+    assert.equal(f.editor.state.phase, 'publishing'); assert.equal(f.editor.hasUnsavedChanges, true);
+    await publication; assert.equal(f.editor.hasUnsavedChanges, false);
+    f.editor.edit('target', '4'); f.editor.destroy();
+    assert.equal(f.editor.hasUnsavedChanges, false);
+  } finally { f.editor.destroy(); f.client.destroy(); }
+});
+
 test('loading another version requires explicit consent to replace an edited draft', async () => {
   const f = fixture(); await f.editor.load();
   const mine = definitions(); mine.events[0].label = 'My unpublished changes';

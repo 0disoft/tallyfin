@@ -60,6 +60,10 @@ export class SettingsEditor {
   constructor(client: ApiClient, projectId: string, onSaved?: (settings: ProjectSettings) => void, onAccessLost?: () => void) {
     this.#client = client; this.#projectId = projectId; this.#onSaved = onSaved; this.#onAccessLost = onAccessLost;
   }
+  get hasUnsavedChanges(): boolean {
+    return !this.#destroyed && (this.state.phase === 'saving' || Boolean(this.state.snapshot &&
+      this.state.draft && differs(this.state.draft, this.state.snapshot)));
+  }
   subscribe(listener: (state: SettingsState) => void): () => void {
     this.#listeners.add(listener); return () => { this.#listeners.delete(listener); };
   }
