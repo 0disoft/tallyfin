@@ -42,6 +42,7 @@ import { parseFunnelBreakdown, type FunnelBreakdown } from './funnel-breakdown.t
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
 import { parseAdminHealth, type AdminHealth } from './admin-health-contract.ts';
 import { awaitRequest } from './request-lifecycle.ts';
+import { readResponseJson } from './response-body.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -153,11 +154,12 @@ export type FetchLike = (
   init?: FetchOption,
 ) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
 
-function defaultFetch(input: string, init?: FetchOption): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
+async function defaultFetch(input: string, init?: FetchOption): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
   // Invoke fetch as a property of globalThis so the receiver is the global
   // object, not this ApiClient instance (browsers reject that with
   // "Illegal invocation").
-  return globalThis.fetch(input, init as RequestInit) as unknown as Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+  const response = await globalThis.fetch(input, init as RequestInit);
+  return { ok: response.ok, status: response.status, json: () => readResponseJson(response, init?.signal) };
 }
 
 export class ApiClient {

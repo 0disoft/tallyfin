@@ -504,7 +504,7 @@ test('project-local dates follow the project time zone and 7/14/30 periods', () 
 test('the default fetch keeps the global receiver instead of the client', async () => {
   const original = globalThis.fetch;
   let receiver = null;
-  globalThis.fetch = async function () { receiver = this; return jsonResponse(200, { data: [], page: { limit: 25, nextCursor: null } }); };
+  globalThis.fetch = async function () { receiver = this; return Response.json({ data: [], page: { limit: 25, nextCursor: null } }); };
   try {
     await new ApiClient({ token: TOKEN }).listProjects();
     assert.equal(receiver, globalThis);

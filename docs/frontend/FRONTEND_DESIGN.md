@@ -1,5 +1,23 @@
 # Tallyfin 프론트엔드 설계
 
+## 관리자 API native fetch 응답 메모리 보호 — 2026-10-12
+
+`apps/admin/src/api/response-body.ts`의 `readResponseJson`은 기본 native fetch 경로에서만
+관리자 API 응답 본문을 파싱 전에 바이트 수로 막는다. 성공 응답은 4MiB
+(`MAX_ADMIN_RESPONSE_BYTES`), 오류 응답은 16KiB(`MAX_ADMIN_ERROR_BYTES`)까지 허용하고,
+`Content-Length`가 숫자가 아니거나 상한을 넘으면 본문을 읽기 전에 즉시 거부한다. 헤더가
+없으면 스트림을 읽으면서 누적 바이트가 상한을 넘는 순간 중단한다. 받은 바이트는 4KiB에서
+시작해 상한까지 두 배씩 키우는 단일 버퍼에 모으고, 청크마다 문자열을 따로 쌓지 않는다.
+UTF-8은 마지막에 `fatal` 디코더로 한 번에 읽어 잘못된 바이트를 조용히 바꾸지 않고 계약
+오류로 처리한다. 호출자가 요청을 취소하면 `reader.cancel()`로 읽기를 멈추고, 이 정리는
+결과를 지연시키거나 대체하지 않는다. 주입된 `fetchImpl`는 기존 json-only 테스트·전송
+계약을 그대로 유지하며 이 상한을 직접 적용하지 않는다.
+
+`client.ts`는 401·403을 본문을 읽기 전에 상태만으로 확정해 권한 잠금과 분석 접근 취소
+전달을 유지한다. 성공 본문을 JSON으로 읽지 못하면 `contract` 오류로 끝나고, 오류 응답
+본문 파싱이 실패하면 기존 HTTP 상태 메시지를 그대로 쓴다. 화면은 명시적 `다시 시도`를
+보여주며 UI 변화는 없다. API·DB·public SDK 계약은 그대로다. 검증 결과는 VALIDATION.md에 둔다.
+
 ## 관리자 요청 제한의 동기 지연 강제 — 2026-10-12
 
 `ApiClient`의 15초 요청 제한이 `setTimeout` 콜백에만 기대던 탓에, `getBearer` 콜백이

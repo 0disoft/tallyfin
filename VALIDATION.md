@@ -1,5 +1,35 @@
 # 검증
 
+## 관리자 API 응답 본문 크기 제한 (2026-10-12)
+
+기본 native fetch 경로가 관리자 API 응답을 파싱할 때 크기 상한 없이 본문 전체를 메모리에
+올렸다. `apps/admin/src/api/response-body.ts`의 `readResponseJson`이 성공 4MiB·오류 16KiB
+상한(31일·32버킷·10단계 퍼널 분류 응답에 여유)을 두고, `Content-Length`가 숫자가 아니거나
+상한을 넘으면 읽기 전에 즉시 거부하며 스트림 누적 바이트가 상한을 넘으면 중단한다.
+401·403은 본문을 읽기 전에 상태만으로 확정해 알림·권한 잠금을 유지하고, 성공 본문을 JSON
+으로 읽지 못하면 `contract`, 오류 본문 파싱이 실패하면 기존 HTTP 상태 메시지를 그대로 쓴다.
+
+재현은 수정 전 새 `response-body.test.mjs` 2개가 2/2 실패한 것이다. bounded read 수정 뒤
+생명주기·접근·응답 본문 focused 실행이 31/31 통과했고, 이어서 `check:admin` 타입검사·
+`test:admin` 274/274·`build:admin`·번들 분리 2/2·Sites Worker 9/9가 통과했다. 이
+274·번들2·sites9 실행은 마지막 스트리밍 버퍼 최적화 전이다. 첫 실행은 273/274로
+native-fetch receiver 검사가 json-only mock 탓에 실패했고, 그 검사를 `Response.json` mock
+으로 고친 재실행 로그가 `.tmp/admin-response-check.log`다.
+
+마지막 스트리밍 버퍼 최적화(4KiB에서 시작하는 단일 `Uint8Array`, 상한까지 지수 성장, 청크별
+문자열 배열 제거) 뒤 같은 변경을 다시 좁혀 확인했다. focused 34/34
+(`.tmp/admin-response-focused.log`), 관리자 타입검사와 `build:admin` 통과
+(`.tmp/admin-response-final-build.log`)이며, `npm run verify:admin-analysis-access`도
+Chromium 156.0.8078.4·격리 D1·로컬 RS256에서 verified true, oversizedReads 1, recovery true,
+pageErrors 0, routeError false, apiReads 31, apiWrites 0, authorizations 1이었다
+(`.tmp/admin-analysis-access-v5erlm/report.json`). 버퍼 최적화 뒤 이 러너에서 취소된 소켓의
+`workerd` WSASend 10053 진단이 한 번 찍혔지만 검사는 통과했다. runner `node --check`와
+`git diff --check`도 통과했다. 이 러너는 기존 opt-in 검증을 넓힌 것이며 UI·API·DB 계약은
+그대로다.
+
+API·DB·public SDK·의존성·CI 계약은 바꾸지 않았다. 원격 환경은 생략했고 변경 없는 backend·
+SDK 검사는 건너뛰었다. 소스 lint 명령은 없다. 푸시·배포는 하지 않았다.
+
 ## 서버 SDK 응답 기한 검사 (2026-10-12)
 
 전송 전 자격증명 기한 검사는 있었지만 응답 헤더·영수증 처리의 동기 지연은 타이머에만
