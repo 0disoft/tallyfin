@@ -1,5 +1,34 @@
 # 검증
 
+## 프로젝트 선택·연결 해제 초안 확인 (2026-10-12)
+
+현재 프로젝트의 설정·스키마 초안을 버리는 두 명시적 버튼에 native confirm을 추가했다.
+실브라우저 회귀는 구현 전 `hidden-project-switch-cancel`에서 exit 1이었다
+(`.tmp/admin-settings-navigation-GvYwr2/failure.json`). 확인창 없이 프로젝트가 바뀌었다.
+구현 뒤 취소는 선택·세션·입력을 유지하고 승인한 전환은 기존 scope를 폐기한다.
+이미 commit한 서버 값은 되돌리지 않는다. `DraftExitGuard`는 live getter만 보관하고
+scope/client가 다른 getter는 조회하지 않으며, 각 정리 함수는 자신의 등록만 해제한다.
+
+Chromium 156.0.8078.4의 최종 `verify:admin-settings-navigation -- --channel chromium
+--check-unload`는 exit 0·verified=true·reads 148·writes 0·pageErrors 0·routeError=false였다.
+설정만/스키마만 편집한 전환 취소, 숨긴 초안의 전환·연결 해제 취소, reader 잠금과 승인한
+전환의 폐기, 깨끗한 전환/연결 해제와 reload, native beforeunload 경고 4회 취소를 확인했다.
+storage/cookie는 없었다. 보고서는 `.tmp/admin-settings-navigation-jG0A96/report.json`이다.
+이 성공 실행에서 workerd WSASend 10053/WSARecv 64 연결 중단 로그를 관측했다.
+도구 종료 코드는 0이나 해당 로그의 원인은 미확인이며 운영 장애/복구 증거로 확대하지 않는다.
+reload 없는 기본 명령도 exit 0·verified=true·reads 137·writes 0·pageErrors 0·routeError=false,
+`.tmp/admin-settings-navigation-2uALpn/report.json`으로 통과했고 연결 중단 로그는 관측하지 않았다.
+두 실행의 차이만으로 native reload를 해당 로그의 원인으로 단정하지 않는다.
+
+공유 실제 서명 API/D1 `verify:admin-access`는 pending 쓰기 중 전환/연결 해제를 명시적으로
+승인하고 이전 commit 응답 격리·권한 복구를 유지했다. exit 0·verified=true·거부 2·
+보류 쓰기 2·reads 124·writes 5·pageErrors 0·routeError=false,
+`.tmp/admin-access-xwu58z/report.json`이다. 새 Guard 검사 2/2·관리자 전체 248/248·
+타입·빌드·번들 2/2·Sites 9/9·diff가 통과했다. 일반 lint 명령은 없고 변경 없는 backend/SDK
+전체 검사는 반복하지 않았다. API·DB·SDK·의존성·버전·CI/러너·위생 정책은 불변이다.
+새 프로젝트 생성 후 자동 전환·데모/API 모드 전환·나머지 폼·운영 인증/D1·모바일·
+승인한 종료 후 초안 복구는 미검증이다. 푸시·게시·배포는 하지 않았고 전체 목표는 진행 중이다.
+
 ## 미저장 설정·스키마 이탈 경고 (2026-10-12)
 
 설정·스키마 컨트롤러에 `hasUnsavedChanges`를 추가하고 해당 상태일 때만 브라우저의

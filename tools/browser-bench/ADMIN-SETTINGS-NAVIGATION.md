@@ -30,6 +30,14 @@ back, and verifies both drafts survive without an API write. Hidden controls
 must not be visible. Return navigation must refresh permissions and offer the
 existing explicit draft-comparison choices, not save automatically.
 
+While drafts are hidden, it cancels native confirmation for project switching
+and disconnect, requiring the selected project, both drafts and session to stay.
+It then accepts project switching and verifies disposal. Clean switching and
+disconnect must proceed without a dialog. With `--check-unload`, settings-only
+and schema-only edits each also require a cancelable project-switch confirmation.
+The separate `verify:admin-access` accepts both confirmations while real settings
+commits await a held response and still checks late-response isolation.
+
 The fixture revokes the owner grant while analysis is visible. Returning must
 retain both drafts but lock them under the current reader role. Project switching
 must dispose the old drafts and returning to that project must show server data.

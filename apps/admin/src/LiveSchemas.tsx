@@ -12,6 +12,7 @@ import { workflowIssueTarget } from './api/schema-workflow-form.ts';
 import SchemaFunnelForm from './SchemaFunnelForm.tsx';
 import { funnelIssueTarget } from './api/schema-funnel-form.ts';
 import useUnloadWarning from './useUnloadWarning.ts';
+import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름·퍼널 각각 최대 10개, 퍼널 단계 2~10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -20,7 +21,7 @@ const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   dimension_mismatch: '비교 기준은 모든 단계에 같은 자료형과 허용 값을 가진 필수 속성으로 있어야 해요.',
 };
 
-export default function LiveSchemas({ client, projectId, refreshTick, onVersionChange, onAccessLost }: { client: ApiClient; projectId: string; refreshTick: number; onVersionChange?: (version: number) => void; onAccessLost?: () => void }) {
+export default function LiveSchemas({ client, projectId, refreshTick, onVersionChange, onAccessLost, registerDraft }: { client: ApiClient; projectId: string; refreshTick: number; onVersionChange?: (version: number) => void; onAccessLost?: () => void; registerDraft?: DraftExitRegistration<ApiClient> }) {
   const [state, setState] = useState<SchemaState | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
@@ -38,9 +39,10 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     const editor = new SchemaEditor(client, projectId, () => {
       if (activeScope.current.client === client && activeScope.current.projectId === projectId) accessCallbackRef.current?.();
     }); editorRef.current = editor;
+    const removeExitCheck = registerDraft?.(client, projectId, () => editor.hasUnsavedChanges);
     const unsubscribe = editor.subscribe(setState); void editor.load();
-    return () => { unsubscribe(); editor.destroy(); if (editorRef.current === editor) editorRef.current = null; };
-  }, [client, projectId]);
+    return () => { unsubscribe(); editor.destroy(); removeExitCheck?.(); if (editorRef.current === editor) editorRef.current = null; };
+  }, [client, projectId, registerDraft]);
   useEffect(() => { if (tick.current !== refreshTick) { tick.current = refreshTick; void editorRef.current?.refresh(); } }, [refreshTick]);
   const issue = state?.report?.issues[0];
   useEffect(() => {

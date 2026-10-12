@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { adminLoginFixture } from './admin-login-fixture.mjs';
+import { answerConfirm } from './answer-confirm.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 let local, server, browser, page, directory, watchdog, unloadProbe, stage = 'arguments';
@@ -76,11 +77,20 @@ try {
       } finally { clearTimeout(timer); page.off('dialog', dismiss); }
     };
     await name.fill('Retained navigation settings');
+    const projectSelect = page.getByRole('combobox', { name: '프로젝트 선택', exact: true });
     if (values['check-unload']) {
       stage = 'dirty-settings-reload'; await cancelReload();
       assert.equal(await name.inputValue(), 'Retained navigation settings');
+      stage = 'settings-project-switch-cancel';
+      await answerConfirm(page, () => projectSelect.selectOption('access-other'), false);
+      assert.equal(await projectSelect.inputValue(), 'sembom');
+      assert.equal(await name.inputValue(), 'Retained navigation settings');
       await name.fill(initialName); await label.fill('Retained navigation schema');
       stage = 'dirty-schema-reload'; await cancelReload();
+      assert.equal(await label.inputValue(), 'Retained navigation schema');
+      stage = 'schema-project-switch-cancel';
+      await answerConfirm(page, () => projectSelect.selectOption('access-other'), false);
+      assert.equal(await projectSelect.inputValue(), 'sembom');
       assert.equal(await label.inputValue(), 'Retained navigation schema');
       await name.fill('Retained navigation settings');
     }
@@ -90,6 +100,17 @@ try {
       stage = 'hidden-drafts-reload'; await cancelReload();
       stage = 'hidden-drafts-tab-close'; await cancelTabClose();
     }
+    stage = 'hidden-project-switch-cancel';
+    await answerConfirm(page, () => projectSelect.selectOption('access-other'), false);
+    assert.equal(await projectSelect.inputValue(), 'sembom');
+    assert.equal(await name.inputValue(), 'Retained navigation settings');
+    assert.equal(await label.inputValue(), 'Retained navigation schema');
+    stage = 'hidden-disconnect-cancel';
+    await answerConfirm(page, () => page.getByRole('button', { name: '연결 끊기', exact: true }).click(), false);
+    assert.equal(await projectSelect.inputValue(), 'sembom');
+    assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
+    assert.equal(await name.inputValue(), 'Retained navigation settings');
+    assert.equal(await label.inputValue(), 'Retained navigation schema');
     stage = 'draft-return';
     await enter();
     await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false || document.querySelector('.settings-recovery'));
@@ -109,7 +130,7 @@ try {
     assert.equal(await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).isDisabled(), true);
     assert.equal(await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).isDisabled(), true);
     stage = 'scope-disposal'; await leave();
-    await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
+    await answerConfirm(page, () => projectSelect.selectOption('access-other'), true);
     await enter(); await page.waitForFunction(() => document.getElementById('settings-name')?.value === 'Other access fixture');
     assert.notEqual(await label.inputValue(), 'Retained navigation schema');
     await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
@@ -132,6 +153,8 @@ try {
     const report = { verified: true, browser: browser.version(), settingsDraftRetained: true, schemaDraftRetained: true,
       hiddenControlsNotVisible: true, permissionRecheckedOnReturn: true, revokedDraftsRemainLocked: true,
       projectSwitchDisposesDrafts: true, disconnectDisposesHiddenWorkspace: true, noStorageOrCookie: true,
+      canceledProjectSwitchRetainsDrafts: true, canceledDisconnectRetainsSession: true,
+      independentEditorExitChecked: Boolean(values['check-unload']),
       unloadChecked: Boolean(values['check-unload']), tabCloseCanceled: Boolean(values['check-unload']), unloadWarnings, pageErrors, routeError, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
   }

@@ -22,6 +22,7 @@ import type { EventGrouping, PropertyAnalysis } from './api/event-analysis';
 import { appendPage, shouldApplyPage } from './api/pagination';
 import { comparisonRangeError, periodRange, rangeError, rangeLabel, todayInZone, type DateRange } from './api/dates';
 import type { EventSource, EventSeriesResponse, Project, ProjectSettings, Registry } from './api/types';
+import { DraftExitGuard } from './api/draft-exit-guard';
 
 type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
 type MainData = PeriodSnapshot & { registry: Registry };
@@ -134,6 +135,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const moreControllerRef = useRef<AbortController | null>(null);
   const projectsControllerRef = useRef<AbortController | null>(null);
   clientRef.current = client;
+  const draftExit = useMemo(() => new DraftExitGuard<ApiClient>(), []);
+  const registerDraft = useCallback((scope: ApiClient, project: string, check: () => boolean) =>
+    draftExit.register(scope, project, check), [draftExit]);
   const cancelMore = useCallback(() => {
     moreControllerRef.current?.abort();
     moreControllerRef.current = null;
@@ -231,7 +235,16 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     setShowCreate(false); setNewProjectId(null);
     setToken('');
   }
+  function confirmDraftExit(): boolean {
+    return !client || draftExit.canLeave(client, activeProjectId, () =>
+      window.confirm('저장하지 않은 설정이나 스키마가 있어요. 초안을 버리고 계속할까요? 이미 서버에 저장된 값은 되돌리지 않아요.'));
+  }
+  function switchProject(next: string | null) {
+    if (next === projectId || !confirmDraftExit()) return;
+    setProjectId(next); setSelectedEvent(null); setGrouping(null);
+  }
   function disconnect() {
+    if (!confirmDraftExit()) return;
     sessionRef.current += 1;
     moreControllerRef.current?.abort();
     moreControllerRef.current = null;
@@ -434,7 +447,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
 
   return <>
     <div className="toolbar api-toolbar">
-      <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => { setProjectId(event.target.value || null); setSelectedEvent(null); setGrouping(null); }} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
+      <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => switchProject(event.target.value || null)} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
       <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       {(view === 'overview' || view === 'events') && <label className="api-field"><span>발행 출처</span>
         <select className="text-input" aria-label="발행 출처" value={source} onChange={event => {
@@ -465,7 +478,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       <LiveSettingsWorkspace client={client} projectId={activeProjectId} version={validVersion ? version : null}
         registry={settingsRegistry?.project.id === activeProjectId ? settingsRegistry : null} newlyCreated={newProjectId === activeProjectId}
         refreshTick={settingsRefreshTick} setupRefreshTick={setupRefreshTick} diagnosticsRevision={diagnosticsRevision}
-        onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} />
+        onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} registerDraft={registerDraft} />
     </DeferredPanel></div>}
     {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}

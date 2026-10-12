@@ -6,6 +6,7 @@ import { parseArgs } from 'node:util';
 import { createServer } from 'vite';
 import { chromium } from 'playwright';
 import { adminLoginFixture } from './admin-login-fixture.mjs';
+import { answerConfirm } from './answer-confirm.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
@@ -108,14 +109,14 @@ try {
       return held;
     };
     stage = 'project-switch'; const first = await beginHeldWrite('sembom', 'Committed old project'); first.cancelExpected = true;
-    await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
+    await answerConfirm(page, () => page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other'), true);
     await page.waitForFunction(() => document.getElementById('settings-name')?.value === 'Other access fixture');
     first.release.resolve(); await first.finished.promise;
     assert.equal(await page.locator('#settings-name').inputValue(), 'Other access fixture');
     assert.notEqual(await label.inputValue(), 'Preserved permission draft');
     assert.equal((await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name, 'Committed old project');
     stage = 'disconnect'; const second = await beginHeldWrite('access-other', 'Committed before disconnect'); second.cancelExpected = true;
-    await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
+    await answerConfirm(page, () => page.getByRole('button', { name: '연결 끊기', exact: true }).click(), true);
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
     second.release.resolve(); await second.finished.promise;
     assert.equal(await page.locator('#settings-name').count(), 0); assert.equal(await label.count(), 0);

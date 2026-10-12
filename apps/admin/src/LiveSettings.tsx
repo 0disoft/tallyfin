@@ -14,6 +14,7 @@ import LiveGrants from './LiveGrants.tsx';
 import LivePublishers from './LivePublishers.tsx';
 import LiveAdminChanges from './LiveAdminChanges.tsx';
 import useUnloadWarning from './useUnloadWarning.ts';
+import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
 
 export type LiveSettingsProps = {
   client: ApiClient;
@@ -22,6 +23,7 @@ export type LiveSettingsProps = {
   refreshTick: number;
   registry?: Registry | null;
   onAccessLost?: () => void;
+  registerDraft?: DraftExitRegistration<ApiClient>;
 };
 
 const FIELD_ORDER: (keyof SettingsDraft)[] = ['name', 'status', 'origins', 'requestsPerMinute', 'newReceiptsPerUtcDay'];
@@ -53,7 +55,7 @@ function displayValue(value: string): string {
   return value.length > 0 ? value : '—';
 }
 
-export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null, onAccessLost }: LiveSettingsProps) {
+export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null, onAccessLost, registerDraft }: LiveSettingsProps) {
   const [snapshotState, setSnapshotState] = useState<{ client: ApiClient; projectId: string; state: SettingsState } | null>(null);
   const state = snapshotState?.client === client && snapshotState.projectId === projectId ? snapshotState.state : null;
   const editorRef = useRef<SettingsEditor | null>(null);
@@ -99,14 +101,16 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
       if (activeScope.current.client === client && activeScope.current.projectId === projectId) accessCallbackRef.current?.();
     });
     editorRef.current = editor;
+    const removeExitCheck = registerDraft?.(client, projectId, () => editor.hasUnsavedChanges);
     const unsubscribe = editor.subscribe(state => setSnapshotState({ client, projectId, state }));
     void editor.load();
     return () => {
       unsubscribe();
       editor.destroy();
+      removeExitCheck?.();
       if (editorRef.current === editor) editorRef.current = null;
     };
-  }, [client, projectId, settingsSaved]);
+  }, [client, projectId, settingsSaved, registerDraft]);
 
   // A refreshTick bump re-reads the settings. The first render is skipped so
   // mounting does not fire a second request on top of load().
