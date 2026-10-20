@@ -1,5 +1,23 @@
 # 검증
 
+## 현재 SDK 온보딩과 로컬 복구 확인 (2026-10-21)
+
+- `npm run build:browser` 및 `npm run verify:admin-onboarding -- --channel chromium --lost-responses`
+  통과. Chromium 156.0.8078.4에서 격리된 서명 로그인·빈 프로젝트 생성·첫 스키마 발행·
+  생성된 SDK 실행·첫 이벤트 1건·관리자 표 표시를 확인했다. 생성/발행 성공 응답을 각각
+  한 번 끊은 뒤 명시적 복구, 초안 교체, SDK 연결 단계도 통과했다. API read 31·write 5·
+  browser batch 1, route/page 오류 0이다. 실제 서비스·제공자 요청은 없다.
+- `npm run verify:restore` 통과. 새 합성 DB의 0001~0009 마이그레이션·16개 테이블을
+  실제 로컬 Wrangler SQL export/import로 복원했다. 스키마/행 fingerprint 일치,
+  quick_check ok·외래 키 위반 0·보호 쓰기 거부 5건을 확인했다. 복원 뒤 browser 재전송은
+  accepted 0/duplicates 2, server는 accepted 0/duplicates 1이다. 발행자 회수·같은 밀리초
+  재부여·stale 회수 거부·no-op 감사 보존도 통과했다. 백업 28,398 bytes, 총 약 18.3초다.
+  보고서는 `.tmp/restore-drill/run-tlQofv/report.json`에 있다.
+
+각 실행이 만든 브라우저·Vite·Miniflare는 종료했다. 합성 보고서/백업은 Git 제외 경로에
+남겼다. 원격·기존 DB·운영 계정은 사용하지 않았으며 실제 RTO/RPO·서비스 파일럿·
+모바일 검증으로 확대하지 않는다. 이 기록은 실행 코드·API·DB·의존성·runner를 바꾸지 않는다.
+
 ## 인증 접근 반복 점검 명령 (2026-10-21)
 
 `monitor:access`를 추가했다. 기존 접근 검사 세 GET을 재사용하고 명시한 실패/복구 횟수·
