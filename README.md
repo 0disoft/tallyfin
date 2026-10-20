@@ -43,6 +43,10 @@ npm run dev -- --local --state-dir .tmp/collector-db
 
 저장소 검사는 루트 `npm run check`로 실행한다(타입 검사·테스트·브라우저 SDK 크기 예산).
 
+SDK의 로컬 배포 파일은 선택 명령 `npm run verify:sdk-packages`로 확인한다. 두 SDK를
+tarball로 묶어 작업공간 밖에 오프라인 설치하고 파일 목록·타입·ESM 진입점을 검사한다.
+게시·버전 변경은 없으며 [패키지 확인 안내](tools/sdk/README.md)를 따른다.
+
 서버 SDK의 실패 후 재전송·중복 제거·발행자 회수는 `npm run verify:server-recovery`로 로컬에서 확인할 수 있다. 실제 `fetch`로 보낸 같은 본문이 재시도되고 수집기가 중복을 정리하는지, 발행자 회수 뒤 `403`이 나는지까지 Miniflare 루프백에서 종료 코드 0과 `verified: true`로 통과했다. 최종 검사는 이벤트별 `SUM(count)` 2와 `funnel_runs` 2건·두 run의 4단계 `step_times_json`까지 D1 SQL로 직접 확인한다. 원격 D1·실제 발행자 로그인은 범위 밖이다. 안내는 [서버 SDK 복구 확인](tools/runtime/SERVER-RECOVERY.md)에 있다.
 
 ## 운영 설치와 검사

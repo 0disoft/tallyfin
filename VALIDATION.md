@@ -1,5 +1,32 @@
 # 검증
 
+## SDK tarball과 외부 소비 프로젝트 (2026-10-21)
+
+`npm pack --dry-run --json --ignore-scripts`에서 browser tarball에 현재 빌드가 생성하지
+않는 `dist/src/index.d.ts`(1,999 bytes)가 포함되는 것을 확인했다. 두 SDK 빌드가 출력
+폴더를 정리하지 않아 예전 산출물이 섞일 수 있었다. SDK 실제 경로가 checkout 안에
+있는지 확인한 뒤 해당 `dist`만 지우도록 공통 출력 정리를 추가했다.
+
+선택 명령 `npm run verify:sdk-packages`는 오래된 파일 회귀 probe를 넣고 두 SDK를
+빌드·오프라인 pack한다. 정확한 파일 목록을 검사하고 작업공간 밖의 새 npm 프로젝트에
+tarball을 오프라인·ignore-scripts·no-save로 설치한다. 그곳에서 세 ESM 진입점과 선언을
+TypeScript NodeNext로 컴파일하고 비활성 browser/funnel 생성·해제와 server 이벤트
+생성을 실행했다. 네트워크/토큰 콜백 호출 0, 실제 설치가 workspace symlink가 아님을 확인했다.
+
+- 최종 `verify:sdk-packages`: 통과. browser 7파일/6,222 bytes, server 3파일/4,995 bytes.
+  SHA-256·파일 목록·타입/실행 결과는 `.tmp/sdk-packages/run-IIxWCx/report.json`과 tarball에 있다.
+- 초기 격리 설치는 상위 npm run이 재전달한 allow-scripts 설정 때문에 EALLOWSCRIPTS로
+  실패했다. 설치된 npm의 정책 코드를 확인해 자식 환경의 재전달 값만 지웠다. 사용자
+  .npmrc 정책과 ignore-scripts는 유지한다. 검증용 잘못된 프로젝트 ID도 수정한 뒤 최종 통과했다.
+- `npm run check:browser-size`: 통과. Sembom 포함 gzip 3,067 bytes, 퍼널 예제 3,046,
+  생성 퍼널 코드 3,068로 모두 3,072 bytes 이하이며 기존 값과 같다.
+- CLI `--help`, 문서 상대 링크, `git diff --check` 통과. 실행 중 만든 외부 소비 프로젝트는
+  정리했고 Git 제외 경로에 tarball과 보고서만 남겼다.
+
+SDK 실행 소스·공개 API·DB·의존성·runner는 변경하지 않았다. 변경 없는 기능 테스트와
+브라우저 온보딩 재실행은 생략했다. 버전 0.0.0·private true를 유지하며 registry 로그인·
+게시·원격 변경은 없다. 라이선스·공개 scope·실제 서비스 설치는 미결정/미실행이다.
+
 ## 공개 제공자 검사 대기 제한 (2026-10-21)
 
 공개 OIDC discovery/JWKS 검사에도 취소를 무시하는 전송과 끝나지 않는 body.cancel이

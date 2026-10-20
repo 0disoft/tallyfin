@@ -1,6 +1,6 @@
 # 패키지 소유권
 
-상태: 부분 구현. core·storage-d1·collector·browser·server 로컬 구현·검증 완료(Sembom 예제 포함), admin 계획. 현재 `@tallyfin` 로컬 스코프로만 쓰고 공개 npm 스코프·릴리스 방식은 미결정.
+상태: core·storage-d1·collector·browser·server와 React/Vite admin을 로컬 구현·검증했다(Sembom 예제 포함). 현재 `@tallyfin` 로컬 스코프로만 쓰고 공개 npm 스코프·릴리스 방식은 미결정.
 
 ## 책임
 - core: 프로젝트별 이벤트/속성 등록 정의, 검증, 정규화, 목표·집계 기준. 특정 서비스 이벤트명을 전역 요구사항으로 두지 않는다. 로컬 구현·검증 완료.
@@ -21,3 +21,7 @@
 
 ## 버전 계획
 이벤트에 스키마 버전을 포함한다. 패키지 버전/배포 방식은 미결정.
+
+SDK tarball의 파일 목록·외부 프로젝트 설치·타입·ESM 진입점은 선택 명령
+`npm run verify:sdk-packages`로 로컬 확인한다. 공개 게시와 버전 변경은 하지 않으며
+[패키지 확인 안내](../../tools/sdk/README.md)를 따른다.
