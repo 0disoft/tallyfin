@@ -6,6 +6,7 @@ import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import adminWorker from '../../../apps/admin/worker/index.js';
 import { checkInstallationAccess, readAccessToken, runInstallAccessCheckCli } from '../install-access-check.ts';
+import { runAccessMonitorCli } from '../monitor-access.ts';
 import { collectorHarness } from '../collector-harness.ts';
 import { installation } from '../installation.ts';
 import { initialize } from '../../provision/local.ts';
@@ -193,6 +194,52 @@ test('cancellation bounds ignored transport aborts and stalled response cleanup'
       assert.ok(result instanceof Error || result.accessChecksPassed === false);
     } finally { clearTimeout(timer); }
   }
+});
+
+test('monitor CLI persists failure and recovery against signed OIDC, the real admin proxy and a broken/restored D1 table', async () => {
+  const output = join(directory, 'monitor-installation'); await mkdir(output);
+  const plan = installation(input(), root, output), statePath = join(output, 'monitor-state.json');
+  const artifacts = [['installation.json', plan.manifest], ['admin.wrangler.json', plan.admin], ['collector.wrangler.json', plan.collector],
+    ['admin-login.json', plan.loginSettings], ['oidc-registration.json', plan.registration]] as const;
+  for (const [name, value] of artifacts) await writeFile(join(output, name), JSON.stringify(value));
+  const originals = await Promise.all(artifacts.map(([name]) => readFile(join(output, name), 'utf8')));
+  const db = await local.mf.getD1Database('DB'), transport = proxy(plan); let tokens = 0, now = Date.now();
+  const args = ['--dir', output, '--state', statePath, '--failure-threshold', '2', '--recovery-threshold', '2', '--max-gap-seconds', '60', '--token-stdin'];
+  const options = { readToken: async () => { tokens++; return local.adminToken; }, fetchImpl: transport.fetchImpl, now: () => now += 1000 };
+  const reports: Record<string, unknown>[] = [];
+  const run = () => runAccessMonitorCli(args, line => { reports.push(JSON.parse(line)); }, options);
+  assert.equal(await run(), 0);
+  await db.prepare('ALTER TABLE project_grants RENAME TO monitor_unavailable_grants').run();
+  try { assert.equal(await run(), 1); assert.equal(await run(), 1); assert.equal(await run(), 1); }
+  finally { await db.prepare('ALTER TABLE monitor_unavailable_grants RENAME TO project_grants').run(); }
+  assert.equal(await run(), 1); assert.equal(await run(), 0);
+  assert.deepEqual(reports.map(report => report.event), ['healthy', 'failure_pending', 'incident_opened', 'incident_ongoing', 'recovery_pending', 'incident_resolved']);
+  assert.deepEqual(reports.map(report => report.notify), [false, false, true, false, false, true]);
+  assert.equal(transport.calls.length, 15); assert.equal(tokens, 6);
+  for (const report of reports) { assert.equal(report.serviceHealth, 'unknown'); assert.equal(report.remoteChanges, false); assert.equal(report.notificationsSent, false); }
+  const saved = await readFile(statePath, 'utf8'), serialized = JSON.stringify(reports) + saved;
+  for (const privateValue of [local.adminToken, local.principal.issuer, local.principal.subject, plan.registration.browserOrigin, 'monitor_unavailable_grants'])
+    assert.ok(!serialized.includes(privateValue));
+  const differentPolicy = [...args]; differentPolicy[5] = '3';
+  await assert.rejects(runAccessMonitorCli(differentPolicy, () => {}, options));
+  assert.equal(tokens, 6); assert.equal(await readFile(statePath, 'utf8'), saved);
+  await assert.rejects(runAccessMonitorCli(args, () => {}, { ...options, now: () => 0 })); assert.equal(tokens, 6);
+  await writeFile(statePath, JSON.stringify({ ...JSON.parse(saved), targetFingerprint: '0'.repeat(64) }));
+  await assert.rejects(run()); assert.equal(tokens, 6);
+  await writeFile(statePath, '{'); await assert.rejects(run()); assert.equal(tokens, 6);
+  await writeFile(statePath, saved);
+  const canceledState = join(output, 'canceled-state.json'), cancelArgs = [...args]; cancelArgs[3] = canceledState;
+  const abort = new AbortController(); let reading!: () => void;
+  const started = new Promise<void>(resolve => { reading = resolve; });
+  const pending = runAccessMonitorCli(cancelArgs, () => {}, { ...options, signal: abort.signal,
+    readToken: () => { reading(); return new Promise(() => {}); } });
+  await started; abort.abort(); await assert.rejects(pending);
+  await assert.rejects(readFile(canceledState), { code: 'ENOENT' });
+  await assert.rejects(readFile(canceledState + '.lock'), { code: 'ENOENT' });
+  for (const invalid of [[], [...args, '--token-stdin'], [...args, '--token', 'private-marker']])
+    await assert.rejects(runAccessMonitorCli(invalid, () => {}, options));
+  assert.equal(await runAccessMonitorCli(['--help'], () => {}, options), 0); assert.equal(tokens, 6);
+  assert.deepEqual(await Promise.all(artifacts.map(([name]) => readFile(join(output, name), 'utf8'))), originals);
 });
 
 test('CLI validates the unchanged installation before reading stdin and emits only redacted access facts', async () => {

@@ -1,5 +1,27 @@
 # 검증
 
+## 인증 접근 반복 점검 명령 (2026-10-21)
+
+`monitor:access`를 추가했다. 기존 접근 검사 세 GET을 재사용하고 명시한 실패/복구 횟수·
+최대 관측 간격으로 연속 실패·복구를 판단한다. 설치 공개 설정의 fingerprint와 정책을
+상태에 묶으며 다른 대상·정책·시계 역행·손상 상태는 토큰을 읽기 전에 거부한다.
+상태에는 고정 메타데이터만 쓰며 독점 잠금·sync/rename으로 교체한다. 취소 시 토큰 입력·
+검사 대기를 끝내고 잠금을 정리한다. 알림 의도만 출력하며 실제 발송·주기 등록은 없다.
+
+- `node --test tools/runtime/test/access-monitor.test.ts tools/runtime/test/install-access-check.test.ts`:
+  14/14 통과. 실패/복구 임계값·간격 경계·정책/대상 불일치·손상/초과 파일·중첩 실행·
+  토큰 입력 중 취소·이전 파일 보존을 확인했다.
+- 실제 관리자 Worker 프록시·서명 OIDC·로컬 D1에서 정상 → 테이블 읽기 불가 3회 →
+  복구 2회, 총 6회/GET 15건을 실행했다. event는 healthy·failure_pending·incident_opened·
+  incident_ongoing·recovery_pending·incident_resolved였고 알림 의도는 열림/복구 두 번뿐이다.
+  설치 파일 불변과 출력/상태의 토큰·issuer·subject·URL·테이블명 미포함도 확인했다.
+- 루트 타입 검사·CLI `--help`·문서 상대 링크·`git diff --check` 통과.
+
+workerd의 기존 Windows WSARecv #64 경고가 있었지만 집중 검사는 종료 코드 0이다.
+실제 OIDC·원격 DB·스케줄러·알림 수신자는 미연결이다. 상태 교체와 stdout 전달은
+별도이므로 알림 전달 보장은 없다. 변경 없는 관리자/SDK 빌드·전체 검사는 생략했다.
+API·DB·의존성·runner·저장소 위생 설정 변경과 푸시·배포·게시는 없다.
+
 ## 설치 접근 검사 대기 제한 (2026-10-21)
 
 취소를 무시하는 전송이나 끝나지 않는 응답 정리가 `install:access-check`를 붙잡던 경로를
