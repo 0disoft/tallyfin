@@ -2,6 +2,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as oauth from 'oauth4webapi';
 import { importJWK } from 'jose';
 import { secureEndpoint } from '../../apps/admin/src/auth/config.ts';
+import { awaitRequest } from '../../apps/admin/src/api/request-lifecycle.ts';
 import { preparedInstallation } from './prepared-installation.ts';
 import type { installation } from './installation.ts';
 
@@ -9,24 +10,25 @@ type Plan = ReturnType<typeof installation>;
 type Check = { id: string; status: 'pass' | 'fail' | 'unknown'; required: boolean; code: string };
 const PRIVATE_KEY_FIELDS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'];
 const MAX_BYTES = 65536;
+function discard(response: Response) { void response.body?.cancel().catch(() => {}); }
 
 async function bounded(response: Response, signal: AbortSignal) {
-  if (response.status !== 200 || !response.body) { await response.body?.cancel(); throw Error(); }
+  if (response.status !== 200 || !response.body) { discard(response); throw Error(); }
   const length = response.headers.get('Content-Length');
-  if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_BYTES)) { await response.body.cancel(); throw Error(); }
+  if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_BYTES)) { discard(response); throw Error(); }
   const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
   const abort = () => { void reader.cancel().catch(() => {}); };
   signal.addEventListener('abort', abort, { once: true });
   try {
     signal.throwIfAborted();
     while (true) {
-      const part = await reader.read(); signal.throwIfAborted(); if (part.done) break;
+      const part = await awaitRequest(signal, () => reader.read()); if (part.done) break;
       size += part.value.byteLength; if (size > MAX_BYTES) throw Error(); chunks.push(part.value);
     }
     const bytes = new Uint8Array(size); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-  } finally { signal.removeEventListener('abort', abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  } finally { signal.removeEventListener('abort', abort); void reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 function browserAllowed(response: Response, origin: string, endpoint: string) {
   if (new URL(endpoint).origin === origin) return true;
@@ -68,10 +70,14 @@ export async function checkInstallationProvider(plan: Plan, fetchImpl: typeof fe
     const endpoint = String(input); secureEndpoint(endpoint);
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(5000), ...(init?.signal ? [init.signal] : [])]);
     deadline.throwIfAborted();
-    const response = await fetchImpl(endpoint, { method: init?.method ?? 'GET', ...(init?.headers === undefined ? {} : { headers: init.headers }),
-      signal: deadline, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+    const response = await awaitRequest(deadline, async () => {
+      const value = await fetchImpl(endpoint, { method: init?.method ?? 'GET', ...(init?.headers === undefined ? {} : { headers: init.headers }),
+        signal: deadline, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+      if (deadline.aborted) { discard(value); deadline.throwIfAborted(); }
+      return value;
+    });
     // Do not consume OPTIONS bodies. This probe sends no authorization code/client secret/token.
-    if (init?.method === 'OPTIONS') { await response.body?.cancel(); return response; }
+    if (init?.method === 'OPTIONS') { discard(response); return response; }
     return new Response(await bounded(response, deadline), { status: response.status, headers: response.headers });
   };
   const jwks = async (id: string, url: string, algorithms: string[], browser: boolean) => {

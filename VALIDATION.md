@@ -1,5 +1,18 @@
 # 검증
 
+## 공개 제공자 검사 대기 제한 (2026-10-21)
+
+공개 OIDC discovery/JWKS 검사에도 취소를 무시하는 전송과 끝나지 않는 body.cancel이
+대기를 붙잡는 문제가 있었다. 새 회귀 검사는 수정 전 1초 제한으로 취소됐다. 기존 요청
+생명주기 함수로 헤더·본문 대기를 취소와 경합하고, 실패/OPTIONS 응답과 reader 정리는
+결과를 기다리지 않도록 고쳤다. 늦은 응답은 정리하고 검사 결과로 채택하지 않는다.
+
+`node --test tools/runtime/test/install-check.test.ts` 5/5·루트 타입 검사·`git diff --check`
+통과. 초기 수정 후 회귀 검사의 “모두 reject” 기대는 즉시 실패 보고서를 반환하는 정상
+거부 경로와 맞지 않아, 제한 안에 reject하거나 실패 보고서를 내는지 확인하도록 수정했다.
+공개 설정·키 fixture만 사용했으며 실제 제공자·원격 요청은 없다. API·DB·SDK·의존성·
+runner 변경은 없고 변경 없는 관리자/SDK 빌드와 전체 검사는 생략했다.
+
 ## 현재 SDK 온보딩과 로컬 복구 확인 (2026-10-21)
 
 - `npm run build:browser` 및 `npm run verify:admin-onboarding -- --channel chromium --lost-responses`

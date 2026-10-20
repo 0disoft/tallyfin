@@ -102,6 +102,23 @@ test('private, wrong-use or oversized key sets fail without leaking response bod
   try { await assert.rejects(waiting); assert.equal(cancelled, true); } finally { clearTimeout(timer); }
 });
 
+test('provider cancellation does not await ignored transport aborts or unfinished body cleanup', { timeout: 1000 }, async () => {
+  const plan = installation(input(), root);
+  for (const transport of [
+    () => new Promise<Response>(() => {}),
+    async () => new Response(new ReadableStream({ cancel: () => new Promise(() => {}) }), { status: 503 }),
+    async () => new Response(new ReadableStream({ cancel: () => new Promise(() => {}) })),
+  ]) {
+    const abort = new AbortController();
+    const pending = checkInstallationProvider(plan, transport, abort.signal);
+    const timer = setTimeout(() => abort.abort(), 10);
+    try {
+      const result = await pending.then(report => report, error => error);
+      assert.ok(result instanceof Error || result.publicChecksPassed === false);
+    } finally { clearTimeout(timer); }
+  }
+});
+
 test('CLI revalidates prepared files before network activity and rejects extra remote/target options', async () => {
   const parent = join(root, '.tmp/install-check-tests'); await mkdir(parent, { recursive: true });
   const directory = await mkdtemp(join(parent, 'run-')), config = input(), plan = installation(config, root, directory);
