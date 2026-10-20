@@ -177,6 +177,24 @@ test('non-interactive bounded stdin rejects unsafe credentials and closes cancel
   assert.equal(requests, 0);
 });
 
+test('cancellation bounds ignored transport aborts and stalled response cleanup', { timeout: 2000 }, async () => {
+  const plan = installation(input(), root);
+  for (const transport of [
+    () => new Promise<Response>(() => {}),
+    async () => new Response(new ReadableStream({ cancel: () => new Promise(() => {}) }), { status: 401 }),
+    async () => new Response(new ReadableStream({ cancel: () => new Promise(() => {}) }), { headers: { 'Content-Type': 'text/html' } }),
+    async () => new Response(new ReadableStream({ cancel: () => new Promise(() => {}) }), { headers: { 'Content-Type': 'application/json' } }),
+  ]) {
+    const abort = new AbortController();
+    const pending = checkInstallationAccess(plan, local.adminToken, transport, abort.signal);
+    const timer = setTimeout(() => abort.abort(), 10);
+    try {
+      const result = await pending.then(report => report, error => error);
+      assert.ok(result instanceof Error || result.accessChecksPassed === false);
+    } finally { clearTimeout(timer); }
+  }
+});
+
 test('CLI validates the unchanged installation before reading stdin and emits only redacted access facts', async () => {
   const output = join(directory, 'installation'); await mkdir(output);
   const plan = installation(input(), root, output);

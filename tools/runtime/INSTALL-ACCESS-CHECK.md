@@ -20,7 +20,8 @@ npm run install:access-check -- --dir <prepared-installation> --token-stdin
 `GET /v1/health`가 `{status:'ok', scope:'administrator_storage_read'}`인지 확인한 뒤,
 마지막으로 `GET /v1/projects?limit=1`을 읽는다. 앞 검사가 실패하면 뒤 검사는 요청하지 않는다.
 같은 출처·HTTPS·리다이렉트 거부·자격 증명 생략·no-referrer·no-store·재시도 없음을 적용한다.
-요청당 5초·토큰 입력 후 검사 15초·본문 16KiB 상한이다.
+요청당 5초·토큰 입력 후 검사 15초·본문 16KiB 상한이다. 전송이 취소를 무시해도
+대기를 끝내고, 응답 스트림 정리는 HTTP 판정이나 취소 완료를 지연시키지 않는다.
 
 CLI는 자체적으로 DB에 접근하지 않는다. `admin-storage-read`는 관리자 Worker에 HTTP로 물어본
 결과이고, 서버 쪽이 `projects`·`project_grants` 두 제어면 테이블을 읽기 전용으로 확인한다는

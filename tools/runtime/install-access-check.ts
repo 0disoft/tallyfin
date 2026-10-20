@@ -2,6 +2,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Readable } from 'node:stream';
 import { closed, PROJECT_ID } from '@tallyfin/core';
 import { parseAdminIdentity } from '../../apps/admin/src/api/admin-identity-contract.ts';
+import { awaitRequest } from '../../apps/admin/src/api/request-lifecycle.ts';
 import { secureEndpoint } from '../../apps/admin/src/auth/config.ts';
 import { preparedInstallation } from './prepared-installation.ts';
 import type { installation } from './installation.ts';
@@ -9,6 +10,7 @@ import type { installation } from './installation.ts';
 type Plan = ReturnType<typeof installation>;
 type Check = { id: string; status: 'pass' | 'fail' | 'unknown'; code: string };
 const MAX_BYTES = 16384, MAX_TOKEN_BYTES = 8192;
+function discard(response: Response) { void response.body?.cancel().catch(() => {}); }
 class AccessResponseError extends Error {
   readonly status: Check['status'];
   constructor(status: Check['status'], code: string) { super(code); this.status = status; }
@@ -38,23 +40,23 @@ function projectObserved(value: unknown): boolean {
 async function json(response: Response, signal: AbortSignal): Promise<unknown> {
   const invalid = () => new AccessResponseError('fail', 'api-response-invalid');
   if (!response.body || response.headers.get('Content-Type')?.split(';')[0]?.trim().toLowerCase() !== 'application/json') {
-    await response.body?.cancel(); throw invalid();
+    discard(response); throw invalid();
   }
   const length = response.headers.get('Content-Length');
-  if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_BYTES)) { await response.body.cancel(); throw invalid(); }
+  if (length !== null && (!/^\d+$/.test(length) || Number(length) > MAX_BYTES)) { discard(response); throw invalid(); }
   const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
   const abort = () => { void reader.cancel().catch(() => {}); };
   signal.addEventListener('abort', abort, { once: true });
   try {
     signal.throwIfAborted();
     while (true) {
-      const part = await reader.read(); signal.throwIfAborted(); if (part.done) break;
+      const part = await awaitRequest(signal, () => reader.read()); if (part.done) break;
       size += part.value.byteLength; if (size > MAX_BYTES) throw invalid(); chunks.push(part.value);
     }
     const bytes = new Uint8Array(size); let offset = 0;
     for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)); } catch { throw invalid(); }
-  } finally { signal.removeEventListener('abort', abort); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  } finally { signal.removeEventListener('abort', abort); void reader.cancel().catch(() => {}); reader.releaseLock(); }
 }
 
 /** Sends an existing administrator access token only to the reviewed admin origin. Three gated reads, no writes or retries. */
@@ -72,11 +74,15 @@ export async function checkInstallationAccess(plan: Plan, bearer: string, fetchI
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(5000)]);
     try {
       deadline.throwIfAborted();
-      const response = await fetchImpl(`${origin}${path}`, { method: 'GET',
-        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }, signal: deadline,
-        redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+      const response = await awaitRequest(deadline, async () => {
+        const value = await fetchImpl(`${origin}${path}`, { method: 'GET',
+          headers: { Accept: 'application/json', Authorization: `Bearer ${token}` }, signal: deadline,
+          redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+        if (deadline.aborted) { discard(value); deadline.throwIfAborted(); }
+        return value;
+      });
       if (response.status !== 200) {
-        await response.body?.cancel();
+        discard(response);
         throw new AccessResponseError(response.status === 401 || response.status === 403 ? 'fail' : 'unknown',
           response.status === 401 ? 'administrator-authentication-rejected' : response.status === 403 ? 'administrator-access-rejected' : 'api-http-response-unverified');
       }
