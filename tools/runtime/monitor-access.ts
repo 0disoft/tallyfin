@@ -5,11 +5,13 @@ import { preparedInstallation } from './prepared-installation.ts';
 import { checkInstallationAccess, readAccessToken } from './install-access-check.ts';
 import { advanceAccessMonitor, monitorPolicy, monitorState } from './access-monitor.ts';
 import { withMonitorFile } from './access-monitor-file.ts';
+import type { MonitorFileOptions } from './access-monitor-file.ts';
 import { awaitRequest } from '../../apps/admin/src/api/request-lifecycle.ts';
 
 const HELP = 'npm run monitor:access -- --dir <prepared-installation> --state <local-state.json> --failure-threshold <1..100> --recovery-threshold <1..100> --max-gap-seconds <1..86400> --token-stdin\nOne authenticated read check per invocation. Validates installation and monitor state before reading a fresh existing token from non-interactive stdin. Emits fixed diagnostics and notification intent only. No token issuance, scheduler, notification delivery or remote writes. Exit 0: verified access with no open incident; 1: attention required; 2: input/state/tool failure.';
 export async function runAccessMonitorCli(argv: string[], write = (line: string) => { process.stdout.write(line + '\n'); },
-  options: { readToken?: () => Promise<string>; fetchImpl?: typeof fetch; now?: () => number; signal?: AbortSignal } = {}): Promise<number> {
+  options: { readToken?: () => Promise<string>; fetchImpl?: typeof fetch; now?: () => number; signal?: AbortSignal;
+    files?: MonitorFileOptions['files']; uuid?: () => string; timeoutSignal?: (milliseconds: number) => AbortSignal } = {}): Promise<number> {
   if (argv.length === 1 && argv[0] === '--help') { write(HELP); return 0; }
   const signal = options.signal ?? new AbortController().signal;
   signal.throwIfAborted();
@@ -34,10 +36,10 @@ export async function runAccessMonitorCli(argv: string[], write = (line: string)
   const report = await withMonitorFile(statePath, async previous => {
     const before = monitorState(previous, target, policy);
     if (before && (options.now ?? Date.now)() <= Date.parse(before.checkedAt)) throw Error('invalid-monitor-clock');
-    const tokenDeadline = AbortSignal.any([signal, AbortSignal.timeout(30000)]);
+    const tokenDeadline = AbortSignal.any([signal, (options.timeoutSignal ?? AbortSignal.timeout)(30000)]);
     let token = await awaitRequest(tokenDeadline, () => options.readToken ? options.readToken() : readAccessToken(process.stdin, tokenDeadline));
     try {
-      const access = await checkInstallationAccess(plan, token, options.fetchImpl, AbortSignal.any([signal, AbortSignal.timeout(15000)]));
+      const access = await checkInstallationAccess(plan, token, options.fetchImpl, AbortSignal.any([signal, (options.timeoutSignal ?? AbortSignal.timeout)(15000)]));
       const next = advanceAccessMonitor(previous, target, policy, access.accessChecksPassed, (options.now ?? Date.now)());
       return { nextState: next.nextState, result: {
         schemaVersion: 'tallyfin.access-monitor/v1', checkedAt: next.nextState.checkedAt, targetFingerprint: target,
@@ -47,7 +49,7 @@ export async function runAccessMonitorCli(argv: string[], write = (line: string)
         sampleGapExceeded: next.sampleGapExceeded, checks: access.checks, remoteChanges: false, notificationsSent: false,
       } };
     } finally { token = ''; }
-  });
+  }, { signal, ...(options.files ? { files: options.files } : {}), ...(options.uuid ? { uuid: options.uuid } : {}) });
   write(JSON.stringify(report));
   return report.accessVerified && !report.incidentOpen ? 0 : 1;
 }
