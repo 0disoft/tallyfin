@@ -86,7 +86,7 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
           if (sequence > applied) { publicBody = body; applied = sequence; generation++; }
           return new Response(body, { headers: { 'Content-Type': 'application/jwk-set+json' } });
         } catch {
-          retryAfter = elapsed() + COOLDOWN_MS;
+          if (sequence >= applied) retryAfter = elapsed() + COOLDOWN_MS;
           throw new Error('OIDC key endpoint unavailable');
         }
       });

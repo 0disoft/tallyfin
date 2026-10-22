@@ -1,5 +1,23 @@
 # 검증
 
+## 자원 수명·경합 개선 최종 검증 (2026-10-23)
+
+전체 테스트를 `node --test --test-concurrency=2 --test-timeout=30000`과 기존
+package script의 테스트 경로로 실행해 489/489를 통과했다. 관리자 테스트 276/276,
+최종 OIDC/인증 테스트 18/18도 통과했다. 실제 Worker에서 인증 요청 12개를 동시에
+실행했을 때 모두 성공했고 JWKS 조회는 총 2회, 최대 동시 2개, 종료 후 활성 0개였다.
+역순으로 끝난 이전 조회의 실패가 최신 성공 이후 cooldown을 덮지 않도록 보호했다.
+관리자 빌드, 계약 검사 63개, 최종 루트 TypeScript 검사도 통과했다.
+
+기본 전체 병렬 실행에서는 로컬 Wrangler/Miniflare 부하로 30초 timeout이 발생했다.
+동시 실행 수 2에서는 전체 통과했으며 package script·CI 설정은 변경하지 않았다.
+관리자 브라우저 권한 초안/모드 이탈 검사도 pageErrors=0, routeError=false로 통과했다.
+
+API 목록의 grantRevision과 쓰기의 expectedRevision, DB 0010의 컬럼 및 세 트리거는
+함께 반영해야 한다. 원격에는 0010을 먼저 적용하고 Collector와 갱신된 관리자 UI를
+함께 배포한다. JWKS 제한은 verifier 인스턴스별이며 분산 전역 한도는 아니다.
+원격 DB 적용·푸시·배포·게시·의존성·CI 변경은 수행하지 않았다.
+
 ## 관리자 fallback 응답 수명 (2026-10-23)
 
 SPA fallback에서 버리는 404 본문은 관리자 Worker의 finally에서 즉시 취소한다.
