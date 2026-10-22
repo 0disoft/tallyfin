@@ -14,8 +14,9 @@ export function workflowBreakdown(registry: Registry, input: AdminQuery, meta: Q
   const rules = Object.fromEntries(definition.dimensions.map(name => [name, start.properties[name]!])) as typeof start.properties;
   const values = new Map<string, { value: string | number | boolean; total: Counts; days: Map<string, Counts> }>();
   const totals = empty(); const hasFailure = definition.failureEvent !== null;
+  const validDates = new Set(dates);
   for (const row of rows) {
-    if (!dates.includes(row.cohort_date)) throw new CollectionError('storage_unavailable', 503);
+    if (!validDates.has(row.cohort_date)) throw new CollectionError('storage_unavailable', 503);
     const properties = readDimensions(row.dimension_key, rules);
     const value = properties[input.groupBy];
     if (value === undefined) throw new CollectionError('storage_unavailable', 503);

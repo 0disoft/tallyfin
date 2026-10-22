@@ -39,8 +39,13 @@ export function funnelStatements(db: SqlDatabase, projectId: string, version: nu
       step_times_json=excluded.step_times_json, expires_at=excluded.expires_at`);
   // Advance earlier steps before later ones, including across different runs in one batch.
   // Batch only one step index per statement so row visitation order cannot break the invariant.
+  const byStep = new Map<number, typeof plan.funnels>();
+  for (const delta of plan.funnels) {
+    const group = byStep.get(delta.stepIndex);
+    if (group) group.push(delta); else byStep.set(delta.stepIndex, [delta]);
+  }
   for (let index = 0; index < 10; index++) {
-    const deltas = plan.funnels.filter(delta => delta.stepIndex === index);
+    const deltas = byStep.get(index) ?? [];
     statements.push(...bulk(db, 'funnel_daily_counts', ['project_id', 'schema_version', 'cohort_date', 'funnel_id',
       'dimension_key', 'step_index', 'reached_count', 'updated_at'], deltas.map(delta => [projectId, version,
         delta.cohortDate, delta.funnelId, delta.dimensionKey, delta.stepIndex, delta.reachedCount, now]),

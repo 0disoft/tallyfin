@@ -62,9 +62,20 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
   if (registry.project.status !== 'active') throw new CollectionError('project_unavailable', 403);
   if (registry.schemaStatus !== 'active' || registry.schemaVersion !== batch.schemaVersion) throw new CollectionError('unknown_schema', 422);
   const events: PreparedEvent[] = [];
+  const definitions = new Map<string, Registry['events'][number]>();
+  for (const definition of registry.events) {
+    const key = `${definition.source}:${definition.name}`;
+    // Preserve find()'s first-match behavior; registry validation owns duplicate rejection.
+    if (!definitions.has(key)) definitions.set(key, definition);
+  }
+  const workflows = new Map<string, Registry['workflows'][number]>();
+  for (const workflow of registry.workflows) {
+    for (const name of [workflow.startEvent, workflow.successEvent, workflow.failureEvent])
+      if (name !== null && !workflows.has(name)) workflows.set(name, workflow);
+  }
   for (const input of batch.events) {
     if (batch.source === 'server' && has(input, 'attempt')) throw new CollectionError('invalid_event', 422);
-    const definition = registry.events.find(e => e.name === input.name && e.source === batch.source);
+    const definition = definitions.get(`${batch.source}:${input.name}`);
     if (!definition) throw new CollectionError('invalid_event', 422);
     for (const [key, value] of Object.entries(input.properties)) {
       const property = has(definition.properties, key) ? definition.properties[key] : undefined;
@@ -78,7 +89,7 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
     const prepared: PreparedEvent = { event, occurredAt, eventDate: localDate(occurredAt, registry.project.timeZone),
       dimensionKey: dimensionKey(input.properties, Object.keys(definition.properties)), payloadHash: '' };
     if (has(input, 'attempt') && has(input, 'funnel')) throw new CollectionError('invalid_event', 422);
-    const workflow = batch.source === 'browser' && !has(input, 'funnel') ? registry.workflows.find(w => [w.startEvent, w.successEvent, w.failureEvent].includes(input.name)) : undefined;
+    const workflow = batch.source === 'browser' && !has(input, 'funnel') ? workflows.get(input.name) : undefined;
     if (workflow) {
       if (!input.attempt || input.attempt.workflowId !== workflow.id) throw new CollectionError('invalid_event', 422);
       const startedAt = utcMillis(input.attempt.startedAt);

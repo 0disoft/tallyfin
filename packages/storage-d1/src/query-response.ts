@@ -45,16 +45,21 @@ export function eventSeries(registry: Registry, input: AdminQuery, meta: QueryMe
   if (input.groupBy && !Object.hasOwn(definition.properties, input.groupBy)) throw new CollectionError('invalid_request', 400);
   if (rows.length > ANALYTICS_ROW_LIMITS.dailyDimensions) throw new CollectionError('storage_unavailable', 503);
   const days = dates.map(date => ({ date, count: 0, breakdown: [] as { value: string | number | boolean | null; count: number }[] }));
-  const byDate = new Map(days.map(d => [d.date, d]));
+  type Bucket = typeof days[number]['breakdown'][number];
+  const byDate = new Map(days.map(day => [day.date, { day, buckets: new Map<Bucket['value'], Bucket>() }]));
   for (const row of rows) {
-    const day = byDate.get(row.event_date); if (!day) throw new CollectionError('storage_unavailable', 503);
+    const indexed = byDate.get(row.event_date); if (!indexed) throw new CollectionError('storage_unavailable', 503);
+    const { day, buckets } = indexed;
     day.count = addCounts(day.count, row.count);
     if (input.groupBy) {
       const props = readDimensions(row.dimension_key, definition.properties);
       const value = Object.hasOwn(props, input.groupBy) ? props[input.groupBy]! : null;
-      const existing = day.breakdown.find(b => b.value === value);
+      const existing = buckets.get(value);
       if (existing) existing.count = addCounts(existing.count, row.count);
-      else day.breakdown.push({ value, count: count(row.count) });
+      else {
+        const bucket = { value, count: count(row.count) };
+        buckets.set(value, bucket); day.breakdown.push(bucket);
+      }
     }
   }
   for (const day of days) day.breakdown.sort((a, b) => JSON.stringify(a.value).localeCompare(JSON.stringify(b.value)));
