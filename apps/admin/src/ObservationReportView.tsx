@@ -155,6 +155,13 @@ export default function ObservationReportView({ report }: { report: ObservationR
         <div><dt>성공 처리 횟수</dt><dd>{report.cleanup.reportedRuns ? `${formatCount(report.cleanup.completedProjects)}회` : '—'}</dd></div>
         <div><dt>실패 처리 횟수</dt><dd>{report.cleanup.reportedRuns ? `${formatCount(report.cleanup.failedProjects)}회` : '—'}</dd></div>
       </dl>
+      {report.cleanup.metrics && <dl className="metric-list">
+        <div><dt>삭제한 행</dt><dd>{formatCount(report.cleanup.metrics.deletedRows)}</dd></div>
+        <div><dt>삭제 한도에 도달한 테이블 처리 횟수</dt><dd>{formatCount(report.cleanup.metrics.saturatedTables)}</dd></div>
+        <div><dt>관측한 만료 영수증 최장 지연</dt><dd>{report.cleanup.metrics.oldestExpiredReceiptAgeMs === null ? '남은 만료 영수증 없음' : `${Math.ceil(report.cleanup.metrics.oldestExpiredReceiptAgeMs / 60000)}분`}</dd></div>
+        <div><dt>설정된 수신량 대비 정리 한도 부족</dt><dd>{formatCount(report.cleanup.metrics.capacityLimitedProjects)}회</dd></div>
+      </dl>}
+      {report.cleanup.metrics && <p className="context-note">성공적으로 측정한 프로젝트 {formatCount(report.cleanup.metrics.measuredProjects)}회 기준이에요. 전체 DB의 만료 잔량이나 실제 처리 속도를 뜻하지 않아요.</p>}
       {report.cleanup.reportedRuns === 0 && <p className="context-note">{report.cleanup.observedRuns === 0
         ? '정리 로그를 관측하지 못했어요. 처리 횟수는 알 수 없어요.'
         : '실패 표시만 있고 상세 보고가 없어요. 처리 횟수는 알 수 없어요.'}</p>}

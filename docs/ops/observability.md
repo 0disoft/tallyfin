@@ -146,3 +146,11 @@ UTC 날짜 동안 보존하고 거부율 분모를 제공하지 않는다. 장�
 - 필수 검증 이름: [VALIDATION.md](../../VALIDATION.md)
 - 릴리스 차단 여부: UNDECIDED
 - 남은 운영 위험: UNDECIDED
+
+## 정리 처리량 관측 — 2026-10-23
+
+정리 로그와 보고서의 선택적 `metrics`에 deletedRows, saturatedTables,
+oldestExpiredReceiptAgeMs, measuredProjects, capacityLimitedProjects를 담는다.
+중복 로그는 한 번만 합산하고 최장 지연은 최댓값을 유지한다. 측정하지 않은 과거 로그는
+0으로 만들지 않는다. 지연은 성공적으로 처리한 프로젝트에 남은 만료 영수증만 나타내며
+삭제 한도 도달은 적체의 확정 판정이 아니다. 이전 최대 20개 프로젝트 로그도 계속 읽는다.

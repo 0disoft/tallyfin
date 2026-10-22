@@ -1,6 +1,6 @@
 import type { ErrorCode } from '@tallyfin/core';
 import type { RequestOperation, LatencyBucket } from '../../../../apps/collector/src/request-observation.ts';
-import { CLEANUP_RUN_PROJECT_LIMIT } from '../../../../apps/collector/src/cleanup.ts';
+import { CLEANUP_LOG_PROJECT_LIMIT as CLEANUP_RUN_PROJECT_LIMIT, validCleanupMetrics, type CleanupMetrics } from '../../../../tools/runtime/cleanup-metrics.ts';
 import { SUMMARY_LIMITS, OPERATIONS, BUCKETS, CODES } from '../../../../tools/runtime/observation-values.ts';
 import { diagnoseObservations } from '../../../../tools/runtime/observation-diagnostics.ts';
 
@@ -9,7 +9,7 @@ type Counts = { observedResponses: number; weightedRequestsEstimate: number };
 type Operation = Counts & { operation: RequestOperation; responses: (Counts & { status: number; code: ErrorCode | 'ok' })[];
   latencyBuckets: (Counts & { bucket: LatencyBucket })[] };
 type Cleanup = { observedRuns: number; reportedRuns: number; failureMarkerRuns: number; reportlessFailureRuns: number;
-  attemptedProjects: number; completedProjects: number; failedProjects: number; cursorAdvancedReports: number; cursorNotAdvancedReports: number };
+  attemptedProjects: number; completedProjects: number; failedProjects: number; cursorAdvancedReports: number; cursorNotAdvancedReports: number; metrics?: CleanupMetrics };
 export type ObservationReport = Counts & { schemaVersion: 'tallyfin.observation-summary/v2'; coverage: 'provided-app-log-lines-only';
   exactRequestCounts: false; latencyPercentilesAvailable: false; timeWindowAvailable: false;
   input: { lines: number; blankLines: number; ignoredOtherLogLines: number; duplicateLogLines: number };
@@ -47,7 +47,8 @@ const COUNT_KEYS = ['observedResponses', 'weightedRequestsEstimate'];
 const CLEANUP_KEYS = ['observedRuns', 'reportedRuns', 'failureMarkerRuns', 'reportlessFailureRuns', 'attemptedProjects',
   'completedProjects', 'failedProjects', 'cursorAdvancedReports', 'cursorNotAdvancedReports'] as const;
 function cleanup(value: unknown): Cleanup {
-  const row = object(value, CLEANUP_KEYS), result = Object.fromEntries(CLEANUP_KEYS.map(key => [key, count(row[key])])) as Cleanup;
+  const row = object(value, CLEANUP_KEYS, ['metrics']), result: Cleanup = Object.fromEntries(CLEANUP_KEYS.map(key => [key, count(row[key])])) as Record<typeof CLEANUP_KEYS[number], number>;
+  if (Object.hasOwn(row, 'metrics')) { require(validCleanupMetrics(row.metrics, result.completedProjects)); result.metrics = row.metrics; }
   require(result.observedRuns === result.reportedRuns + result.reportlessFailureRuns &&
     result.failureMarkerRuns >= result.reportlessFailureRuns && result.failureMarkerRuns <= result.observedRuns &&
     result.completedProjects + result.failedProjects === result.attemptedProjects &&

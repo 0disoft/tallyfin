@@ -1043,3 +1043,11 @@ CSV 마지막 열 `query_source`는 사용자가 조회한 출처(browser/server
 분석은 최신 과거 버전을 선택하고, SDK 안내는 활성 스키마 발행을 안내한다.
 버전 확인 중·실패 상태를 표시하고 새로고침으로 다시 확인한다. 목록은 내림차순 페이지를
 순회하며 취소와 원본 오류를 전파한다.
+
+## 정리 처리량 관측 — 2026-10-23
+
+정리 로그와 보고서의 선택적 `metrics`에 deletedRows, saturatedTables,
+oldestExpiredReceiptAgeMs, measuredProjects, capacityLimitedProjects를 담는다.
+중복 로그는 한 번만 합산하고 최장 지연은 최댓값을 유지한다. 측정하지 않은 과거 로그는
+0으로 만들지 않는다. 지연은 성공적으로 처리한 프로젝트에 남은 만료 영수증만 나타내며
+삭제 한도 도달은 적체의 확정 판정이 아니다. 이전 최대 20개 프로젝트 로그도 계속 읽는다.

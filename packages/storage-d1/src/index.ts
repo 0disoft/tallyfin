@@ -1,4 +1,6 @@
-import { COLLECTION_POLICY, RETENTION_POLICY, ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity, validateRegistry } from '@tallyfin/core';
+import { cleanupRows, type CleanupMetrics } from './retention.ts';
+export type { CleanupMetrics } from './retention.ts';
+import { COLLECTION_POLICY, canonicalJson, closed, CollectionError, integer, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity, validateRegistry } from '@tallyfin/core';
 import type { PreparedBatch, PreparedServerBatch, Registry, RejectionReason, ServerCollectionStore, ServerPrincipal } from '@tallyfin/core';
 import { ingestStatements } from './ingest-statements.ts';
 import { readIngestSnapshot } from './ingest-snapshot.ts';
@@ -127,21 +129,9 @@ export class D1Store implements ServerCollectionStore {
     throw new CollectionError('storage_unavailable', 503);
   }
   async cleanup(projectId: string, timeZone: string, now: number, limit: number = D1_POLICY.cleanupRows): Promise<void> {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > D1_POLICY.maxCleanupRows) throw Error('invalid cleanup limit');
-    const today = localDate(now, timeZone);
-    const oldest = new Date(Date.parse(`${today}T00:00:00Z`) - (RETENTION_POLICY.analyticsDays - 1) * DAY).toISOString().slice(0, 10);
-    const statements = ['event_receipts', 'workflow_attempts', 'funnel_runs', 'ingest_daily_usage'].map(table => this.db.prepare(
-      `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND expires_at <= ? LIMIT ?)`
-    ).bind(projectId, now, limit));
-    statements.push(this.db.prepare(`DELETE FROM ingest_minute_usage WHERE rowid IN (SELECT rowid FROM ingest_minute_usage WHERE project_id = ?
-      AND (minute_start < ? OR (rejections_json = '{}' AND minute_start < ?)) LIMIT ?)`).bind(projectId,
-        Math.floor(now / DAY) * DAY - (RETENTION_POLICY.rejectionDays - 1) * DAY, Math.floor(now / 60_000) * 60_000 - RETENTION_POLICY.idleMinuteGraceMs, limit));
-    for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date'], ['funnel_daily_counts', 'cohort_date']])
-      statements.push(this.db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND ${column} < ? LIMIT ?)`).bind(projectId, oldest, limit));
-    statements.push(this.db.prepare(`DELETE FROM admin_changes WHERE id IN
-      (SELECT id FROM admin_changes WHERE project_id = ? AND occurred_at < ? ORDER BY occurred_at, id LIMIT ?)`)
-      .bind(projectId, now - ADMIN_CHANGE_RETENTION_DAYS * DAY, limit));
-    const result = await this.db.batch(statements);
-    if (result.length !== statements.length || result.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
+    await cleanupRows(this.db, projectId, timeZone, now, limit, false);
+  }
+  cleanupReport(projectId: string, timeZone: string, now: number, limit: number): Promise<CleanupMetrics> {
+    return cleanupRows(this.db, projectId, timeZone, now, limit, true);
   }
 }

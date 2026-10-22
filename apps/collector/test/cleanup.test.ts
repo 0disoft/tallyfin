@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { Miniflare, Log, LogLevel } from 'miniflare';
-import { runCleanup, CLEANUP_ROW_LIMIT, CLEANUP_BUDGET_MS, CLEANUP_RUN_PROJECT_LIMIT } from '../src/cleanup.ts';
+import { runCleanup, CLEANUP_ROW_LIMIT, CLEANUP_BUDGET_MS, CLEANUP_RUN_PROJECT_LIMIT, CLEANUP_PROJECT_LIMIT } from '../src/cleanup.ts';
 import { D1Maintenance } from '@tallyfin/storage-d1';
 import { createWorker } from '../src/index.ts';
 import { migrationStatements, seed, now } from '../../../packages/storage-d1/test/helpers.ts';
@@ -12,7 +12,7 @@ test('failed projects do not block later cleanup or cursor progress', async () =
   const page = { revision: 0, projects: [{ id: 'bad', timeZone: 'Invalid/Zone' }, { id: 'good', timeZone: 'UTC' }] };
   const seen: string[] = [];
   const report = await runCleanup({
-    nextCleanupPage: async limit => { assert.equal(limit, 5); return page; },
+    nextCleanupPage: async limit => { assert.equal(limit, CLEANUP_PROJECT_LIMIT); return page; },
     cleanup: async (id, zone, time, limit) => {
       seen.push(id); assert.equal(time, now); assert.equal(limit, CLEANUP_ROW_LIMIT);
       if (zone === 'Invalid/Zone') throw Error('private DB detail');
@@ -82,7 +82,7 @@ test('budget boundaries persist only the attempted prefix and leave the next pro
 
 test('cursor conflict stops before the next page; cancellation preserves its cause without advancing', async () => {
   const f = paged(7), report = await runCleanup({ ...f.store, advanceCleanupCursor: async () => false }, now, { maxPages: 4 });
-  assert.equal(report.attempted, 5); assert.equal(report.cursorAdvanced, false); assert.equal(f.reads(), 1);
+  assert.equal(report.attempted, CLEANUP_PROJECT_LIMIT); assert.equal(report.cursorAdvanced, false); assert.equal(f.reads(), 1);
   const aborted = paged(7), controller = new AbortController(), reason = new Error('scheduled lifetime ended');
   const store = { ...aborted.store, async cleanup() { controller.abort(reason); throw reason; } };
   await assert.rejects(runCleanup(store, now, { signal: controller.signal }), error => error === reason);
@@ -93,12 +93,12 @@ test('cursor conflict stops before the next page; cancellation preserves its cau
 
 test('default query budget is one page; elapsed budget and invalid options never start another page', async () => {
   const f = paged(21), report = await runCleanup(f.store, now, { clock: () => 0 });
-  assert.equal(report.attempted, 5); assert.equal(f.reads(), 1);
+  assert.equal(report.attempted, CLEANUP_PROJECT_LIMIT); assert.equal(f.reads(), 1);
   let time = 0; const timed = paged(21);
   const timedReport = await runCleanup({ ...timed.store, async cleanup(id) {
-    await timed.store.cleanup(id); if (timed.seen.length === 5) time = CLEANUP_BUDGET_MS;
+    await timed.store.cleanup(id); if (timed.seen.length === CLEANUP_PROJECT_LIMIT) time = CLEANUP_BUDGET_MS;
   } }, now, { clock: () => time, maxPages: 4 });
-  assert.equal(timedReport.attempted, 5); assert.equal(timedReport.cursorAdvanced, true); assert.equal(timed.reads(), 1);
+  assert.equal(timedReport.attempted, CLEANUP_PROJECT_LIMIT); assert.equal(timedReport.cursorAdvanced, true); assert.equal(timed.reads(), 1);
   for (const maxPages of [0, 5, 1.5, NaN]) {
     await assert.rejects(runCleanup(f.store, now, { maxPages }), TypeError);
     assert.throws(() => createWorker(undefined, undefined, { cleanupMaxPages: maxPages }), TypeError);
@@ -138,6 +138,15 @@ test('real scheduled Worker cleans bounded expired rows and preserves live data'
     await worker.scheduled({ scheduledTime: now, cron: '* * * * *' });
     assert.equal(await db.prepare('SELECT event_id FROM event_receipts').first('event_id'), 'live');
     assert.equal(await db.prepare('SELECT ingest_revision FROM projects').first('ingest_revision'), 0);
+    const maintenanceMetrics = new D1Maintenance(db);
+    await db.prepare(`WITH RECURSIVE nums(n) AS (SELECT 1 UNION ALL SELECT n+1 FROM nums WHERE n < 1201)
+      INSERT INTO event_receipts SELECT 'sembom', 'browser', 'backlog-' || n, 1, ?, ?, ? FROM nums`)
+      .bind('0'.repeat(64), now - 172800000 - 1234, now - 1234).run();
+    const metrics = await maintenanceMetrics.cleanupReport('sembom', 'Asia/Seoul', now, 500);
+    assert.deepEqual(metrics, { deletedRows: 500, saturatedTables: 1, oldestExpiredReceiptAgeMs: 1234 });
+    const drained = await maintenanceMetrics.cleanupReport('sembom', 'Asia/Seoul', now, 1000);
+    assert.deepEqual(drained, { deletedRows: 701, saturatedTables: 0, oldestExpiredReceiptAgeMs: null });
+    assert.equal(await db.prepare('SELECT event_id FROM event_receipts').first('event_id'), 'live');
     // A broken project's timezone fails this cron, but progress is still recorded.
     await db.prepare('DROP TRIGGER immutable_project_zone').run();
     await db.prepare("UPDATE projects SET time_zone = 'Invalid/Zone'").run();
@@ -151,14 +160,35 @@ test('real scheduled Worker cleans bounded expired rows and preserves live data'
         .bind(id, '0'.repeat(64), now - 172800000, now).run();
     }
     assert.equal((await worker.scheduled({ scheduledTime: now, cron: '* * * * *' })).outcome, 'ok');
-    assert.equal(await db.prepare("SELECT count(*) FROM event_receipts WHERE event_id='expired'").first('count(*)'), 1);
+    assert.equal(await db.prepare("SELECT count(*) FROM event_receipts WHERE event_id='expired'").first('count(*)'), 2);
     assert.equal((await maintenance.nextCleanupPage()).revision, 4);
+    let defaultQueries = 0;
+    await createWorker().scheduled({ scheduledTime: now }, { DB: {
+      prepare: sql => db.prepare(sql),
+      async batch(statements) { defaultQueries += statements.length; return db.batch(statements as Parameters<typeof db.batch>[0]); },
+    } });
+    assert.ok(defaultQueries <= 50);
     let queries = 0;
     await createWorker(undefined, undefined, { cleanupMaxPages: 4 }).scheduled({ scheduledTime: now }, { DB: {
       prepare: sql => db.prepare(sql),
       async batch(statements) { queries += statements.length; return db.batch(statements as Parameters<typeof db.batch>[0]); },
     } });
     assert.equal(await db.prepare("SELECT count(*) FROM event_receipts WHERE event_id='expired'").first('count(*)'), 0);
-    assert.equal((await maintenance.nextCleanupPage()).revision, 6); assert.ok(queries <= 200);
+    assert.equal((await maintenance.nextCleanupPage()).revision, 7); assert.ok(queries <= 200);
   } finally { await mf.dispose(); }
+});
+
+
+test('cleanup scales bounded row budgets with project count and reports insufficient capacity', async () => {
+  for (const [projectCount, dailyLimit, expected, capped] of [[100, 100000, 3473, 0], [200, 100000, 6945, 0], [200, 1000000, 10000, 1]]) {
+    let used;
+    const report = await runCleanup({
+      nextCleanupPage: async () => ({ revision: 0, projectCount, projects: [{ id: 'sample', timeZone: 'UTC', dailyLimit }] }),
+      cleanup: async () => { throw Error('legacy cleanup must not run'); },
+      cleanupReport: async (_id, _zone, _now, limit) => { used = limit; return { deletedRows: limit, saturatedTables: 1, oldestExpiredReceiptAgeMs: 123 }; },
+      advanceCleanupCursor: async () => true,
+    }, now);
+    assert.equal(used, expected);
+    assert.deepEqual(report.metrics, { deletedRows: expected, saturatedTables: 1, oldestExpiredReceiptAgeMs: 123, measuredProjects: 1, capacityLimitedProjects: capped });
+  }
 });

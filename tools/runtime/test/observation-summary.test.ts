@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { ObservationSummary, ObservationSummaryError, SUMMARY_LIMITS } from '../observation-summary.ts';
 import { sampleRequestObservation } from '../../../apps/collector/src/request-observation.ts';
 import { runCleanup } from '../../../apps/collector/src/cleanup.ts';
-import { CLEANUP_RUN_PROJECT_LIMIT } from '../../../apps/collector/src/cleanup.ts';
+import { CLEANUP_LOG_PROJECT_LIMIT as CLEANUP_RUN_PROJECT_LIMIT } from '../cleanup-metrics.ts';
 
 const requestId = '01000000-0000-4000-8000-000000000001';
 function log(overrides = {}) {
@@ -161,4 +161,18 @@ test('empty and platform-envelope-only input cannot look like a healthy observat
   assert.throws(() => summary.report(), failed('no_observations'));
   summary.addLine(JSON.stringify({ logs: [{ message: [JSON.stringify(log())] }], secret: 'not-output' }));
   assert.throws(() => summary.report(), failed('no_observations'));
+});
+
+
+test('cleanup metrics survive aggregation, duplicates and browser validation without project identifiers', async () => {
+  const { parseObservationReport } = await import('../../../apps/admin/src/api/observation-report.ts');
+  const metrics = { deletedRows: 1500, saturatedTables: 1, oldestExpiredReceiptAgeMs: 12345, measuredProjects: 2, capacityLimitedProjects: 1 };
+  const row = cleanup({ metrics });
+  const summary = new ObservationSummary(); summary.addLine(JSON.stringify(row)); summary.addLine(JSON.stringify(row));
+  const report = summary.report();
+  assert.deepEqual(report.cleanup.metrics, metrics);
+  assert.deepEqual(parseObservationReport(report).cleanup.metrics, metrics);
+  for (const invalid of [{ ...metrics, measuredProjects: 3 }, { ...metrics, deletedRows: -1 }, { ...metrics, token: 'secret' }]) {
+    const bad = new ObservationSummary(); assert.throws(() => bad.addLine(JSON.stringify(cleanup({ metrics: invalid }))));
+  }
 });

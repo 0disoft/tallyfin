@@ -204,3 +204,11 @@ CLI 동작은 그대로다. 옵션·입력 상한·종료 코드가 바뀌지 �
   CI 워크플로와 의존성도 바뀌지 않았다. 원격 자동화는 돌리지 않았고 성능 수치를 주장하지 않는다.
 - 루트 기본 테스트 글롭은 이 도구의 검사 20개(집계기 9개·진단 4개·CLI 7개)를 포함한다.
 - 필드·표본 규칙은 [로그 경계](../../docs/backend/06-logging-and-observability.md)에 있다.
+
+## 정리 처리량 관측 — 2026-10-23
+
+정리 로그와 보고서의 선택적 `metrics`에 deletedRows, saturatedTables,
+oldestExpiredReceiptAgeMs, measuredProjects, capacityLimitedProjects를 담는다.
+중복 로그는 한 번만 합산하고 최장 지연은 최댓값을 유지한다. 측정하지 않은 과거 로그는
+0으로 만들지 않는다. 지연은 성공적으로 처리한 프로젝트에 남은 만료 영수증만 나타내며
+삭제 한도 도달은 적체의 확정 판정이 아니다. 이전 최대 20개 프로젝트 로그도 계속 읽는다.
