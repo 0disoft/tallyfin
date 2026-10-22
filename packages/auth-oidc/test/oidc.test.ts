@@ -251,3 +251,44 @@ test('Workers cache misses bound external fetches and queued requests reuse publ
   assert.ok(results.every(result => result?.subject === 'test-admin')); assert.equal(calls, 2);
   assert.deepEqual(await verify(token), { issuer, subject: 'test-admin' }); assert.equal(calls, 2);
 });
+
+test('key deadlines retain real transport capacity and late failures do not extend cooldown', { timeout: 2000 }, async t => {
+  const deadlines: AbortController[] = [], releases: ((response: Response) => void)[] = [];
+  let elapsed = 0, active = 0, peak = 0, calls = 0, canceled = 0;
+  const turn = () => new Promise<void>(resolve => setImmediate(resolve));
+  const { verify } = fixture({ monotonicNow: () => elapsed,
+    timeoutSignal: () => { const controller = new AbortController(); deadlines.push(controller); return controller.signal; },
+    fetchImpl: async () => {
+      calls++; active++; peak = Math.max(peak, active);
+      try {
+        if (calls === 3) return Response.json({ keys: [rsaJwk] });
+        return await new Promise<Response>(resolve => releases.push(resolve));
+      } finally { active--; }
+    },
+  });
+  t.after(async () => { deadlines.forEach(controller => controller.abort()); releases.forEach(release => release(new Response('{}'))); await turn(); });
+  const token = await signed();
+  for (let index = 0; index < 2; index++) {
+    elapsed = index * 31000;
+    const request = verify(token); await turn(); assert.equal(calls, index + 1);
+    deadlines[index]!.abort(); assert.equal(await request, null);
+  }
+  assert.equal(active, 2);
+  elapsed = 62000;
+  const third = verify(token); await turn(); assert.equal(calls, 2);
+  releases[0]!(new Response(new ReadableStream({ cancel() { canceled++; return new Promise<void>(() => {}); } })));
+  assert.deepEqual(await third, { issuer, subject: 'test-admin' });
+  assert.equal(calls, 3); assert.equal(peak, 2); assert.equal(canceled, 1);
+  releases[1]!(new Response('{}')); await turn(); assert.equal(active, 0);
+});
+
+test('Workers key-fetch failures publish cooldown before waking queued callers', async t => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'WebSocketPair');
+  Object.defineProperty(globalThis, 'WebSocketPair', { configurable: true, value: function () {} });
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'WebSocketPair', descriptor); else Reflect.deleteProperty(globalThis, 'WebSocketPair'); });
+  let calls = 0;
+  const { verify } = fixture({ monotonicNow: () => 0, fetchImpl: async () => { calls++; throw Error('fixture provider failure'); } });
+  const token = await signed();
+  assert.ok((await Promise.all(Array.from({ length: 12 }, () => verify(token)))).every(value => value === null));
+  assert.ok(calls > 0 && calls <= 2); assert.equal(await verify(token), null); assert.ok(calls <= 2);
+});

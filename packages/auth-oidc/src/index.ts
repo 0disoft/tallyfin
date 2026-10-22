@@ -63,20 +63,28 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
     [customFetch]: async (url, init) => {
       const observed = generation;
       const signal = options.timeoutSignal ? AbortSignal.any([init.signal, options.timeoutSignal(TIMEOUT_MS)]) : init.signal;
-      return keyFetch(signal, async () => {
+      let sequence: number | undefined, failed = false;
+      const failure = (cause: unknown) => {
+        // Record before releasing a failed operation's slot. A late settlement must
+        // neither extend its earlier deadline cooldown nor override a newer success.
+        if (!failed && sequence !== undefined) {
+          failed = true;
+          if (sequence >= applied) retryAfter = elapsed() + COOLDOWN_MS;
+        }
+        return cause instanceof OidcDependencyError ? cause : new OidcDependencyError({ cause });
+      };
+      return awaitSignal(signal, () => keyFetch(signal, async () => {
         // Cache only validated public bytes. Every request creates its own Response/stream.
         if (generation !== observed && publicBody !== undefined)
           return new Response(publicBody, { headers: { 'Content-Type': 'application/jwk-set+json' } });
         if (elapsed() < retryAfter) throw new Error('OIDC key endpoint cooling down');
-        const sequence = ++issued;
+        sequence = ++issued;
         try {
-          const response = await awaitSignal(signal, async () => {
-            const value = await transport(url, {
-              ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
-            });
-            if (signal.aborted) { discard(value.body); signal.throwIfAborted(); }
-            return value;
+          // The gate owns the real transport, not the caller's deadline race.
+          const response = await transport(url, {
+            ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
           });
+          if (signal.aborted) { discard(response.body); signal.throwIfAborted(); }
           if (response.status !== 200 || !response.body) {
             discard(response.body);
             throw new Error('OIDC key endpoint unavailable');
@@ -90,12 +98,9 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
           if (sequence > applied) { publicBody = body; applied = sequence; generation++; }
           return new Response(body, { headers: { 'Content-Type': 'application/jwk-set+json' } });
         } catch (cause) {
-          if (sequence >= applied) retryAfter = elapsed() + COOLDOWN_MS;
-          throw new OidcDependencyError({ cause });
+          throw failure(cause);
         }
-      }).catch(cause => {
-        throw cause instanceof OidcDependencyError ? cause : new OidcDependencyError({ cause });
-      });
+      })).catch(cause => { throw failure(cause); });
     },
   });
 
