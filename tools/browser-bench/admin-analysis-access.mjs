@@ -15,6 +15,10 @@ try {
   await mkdir(resolve(root, '.tmp'), { recursive: true });
   directory = await mkdtemp(resolve(root, '.tmp/admin-analysis-access-'));
   local = await adminLoginFixture(directory, { profile: 'access' });
+  await local.db.prepare(`INSERT INTO project_schemas (project_id, version, status, definitions_json, published_at, retired_at)
+    SELECT project_id, 2, 'active', definitions_json, published_at, NULL FROM project_schemas WHERE project_id='access-other' AND version=1`).run();
+  await local.db.prepare(`INSERT INTO project_schemas (project_id, version, status, definitions_json, published_at, retired_at)
+    SELECT project_id, 3, 'retired', definitions_json, published_at, published_at FROM project_schemas WHERE project_id='access-other' AND version=1`).run();
   const collector = new URL(await local.mf.ready).origin, previous = process.env.TALLYFIN_COLLECTOR_ORIGIN;
   delete process.env.TALLYFIN_COLLECTOR_ORIGIN;
   try {
@@ -30,8 +34,10 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' });
   let routeError = false, pageErrors = 0, deniedReads = 0, heldReads = 0, invalidZoneReads = 0, mismatchedEventZoneReads = 0, oversizedReads = 0;
+  let trackingEventReads = false, eventWorkflowReads = 0;
   let oversizedProjectPage = true, invalidProjectZone = true, mismatchedEventZone = true;
   await context.route('**/*', async route => {
+    if (trackingEventReads && new URL(route.request().url()).pathname.includes('/workflows/')) eventWorkflowReads++;
     const holding = held && !held.used && route.request().url().startsWith(`${origin}/v1/projects/sembom/events/tool_view/daily`) ? held : null;
     try {
       if (oversizedProjectPage && new URL(route.request().url()).origin === origin && new URL(route.request().url()).pathname === '/v1/projects') {
@@ -85,6 +91,7 @@ try {
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
+  trackingEventReads = true;
   await page.getByRole('button', { name: '이벤트 분석', exact: true }).click();
   const csv = page.getByRole('button', { name: 'CSV 내려받기', exact: true });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
@@ -116,6 +123,7 @@ try {
   assert.equal(await page.locator('.event-table').count(), 0);
   stage = 'other-project'; await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '2');
   const downloadPromise = page.waitForEvent('download'); await csv.click();
   const download = await downloadPromise; assert.ok(download.suggestedFilename().startsWith('tallyfin-access-other-'));
   const exported = await readFile(await download.path(), 'utf8');
@@ -123,6 +131,15 @@ try {
   assert.ok(exported.includes('"access-other"')); assert.equal(exported.includes('"sembom"'), false);
   stage = 'restore'; await local.setRole('owner');
   await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '1');
+  await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
+  await page.getByRole('textbox', { name: '스키마 버전', exact: true }).fill('1');
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
+  await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
+  assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '1');
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
   stage = 'late-denial';
@@ -142,7 +159,8 @@ try {
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   assert.equal(await csv.count(), 0); assert.equal(await page.locator('.event-table').count(), 0);
   assert.equal(routeError, false); assert.equal(pageErrors, 0);
-  const report = { verified: true, browser: browser.version(), oversizedReads, oversizedResponseRecovery: true, invalidZoneReads, invalidZoneRecovery: true,
+  assert.equal(eventWorkflowReads, 0);
+  const report = { latestActiveSchemaSelected: true, projectVersionSelectionsIsolated: true, eventWorkflowReads, verified: true, browser: browser.version(), oversizedReads, oversizedResponseRecovery: true, invalidZoneReads, invalidZoneRecovery: true,
     mismatchedEventZoneReads, mismatchedEventZoneBlocked: true, eventTimeZoneRecovery: true, deniedReads, deniedSummaryCleared: true, deniedCsvDisabled: true,
     otherProjectExportIsolated: true, recovery: true, lateDeniedReadIgnored: true, heldReads, disconnectClears: true, routeError, pageErrors, ...local.counts };
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));

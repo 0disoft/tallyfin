@@ -4914,3 +4914,60 @@ pageErrors 0·routeError false·apiReads 27·apiWrites 4·browserBatches 1·firs
 원격 OIDC 제공자와 운영 DB는 검증하지 않았다. 변경 없는 백엔드 전체와 SDK 전체 검사는
 반복하지 않았고 일반 소스 lint 명령은 없다. API·DB 계약·의존성·위생 정책·CI 러너 변경은
 없고, 기존 옵트인 browser runner만 확장해 기본 CI에는 추가하지 않았다. 푸시·배포도 없다.
+
+## 외부 평가 후속: 조회 범위·버전·정리·공개 수집 보호 — 2026-10-23
+
+로컬 커밋 86dabbd는 이벤트/개요/목표 화면의 조회 범위를 분리한다. 브라우저 이벤트 화면은
+요약만, 개요는 첫 workflow만, 목표는 전체 workflow를 읽으며 직전 기간과 CSV도 같은
+범위를 검증한다. 기존 전체 스냅샷 호출과 권한 상실 후 결과 제거를 유지한다.
+README의 마이그레이션 수는 실제 0011까지 11개로 수정했다.
+4c319a2는 최신 활성 스키마를 기본 선택하고, 수동 선택은 연결·프로젝트별로 보관한다.
+SDK 안내도 retired 최신 버전을 건너뛰며 활성 버전이 없으면 코드를 제공하지 않는다.
+
+cb9dd29는 매분 정리의 행 예산을 프로젝트 수·프로젝트별 일일 수신 한도에 맞춰
+500~10,000행으로 조절한다. 2배 여유를 둔 계산값이며 실제 원격 처리량을 보장하지 않는다.
+기본은 4개 프로젝트·페이지당 최대 45개 SQL, 선택적 4페이지는 최대 180개 SQL이다.
+9개 삭제와 삭제 후 남은 만료 영수증 MIN 조회를 같은 batch에서 수행한다.
+삭제 행·한도 도달 테이블·관측 프로젝트·만료 영수증 지연·계산상 용량 부족을 선택적
+metrics로 로그/로컬 요약/관리자 보고서에 연결했다. 과거 20개 프로젝트 로그도 계속 읽는다.
+만료/집계 보존기간, 커서 CAS, 20초 실행 예산과 30초 DB 수명을 유지했다.
+
+139ce1e는 거부 Origin을 분당 DB 한도 쓰기 전에 반환한다. 따라서 admission 전 거부는
+DB 거부 진단에 더하지 않고 기존 HTTP 관측 로그로 확인한다. 과거 원인 enum/저장값은
+유지한다. 선택적 BROWSER_INGEST_LIMITER 호스트 포트는 브라우저 경로에서 DB/본문 전에
+동작하며 429·Retry-After 60 또는 장애/취소/기한의 503을 반환한다. 기존 실제 I/O 동시성
+제한을 공유하고 재시도하지 않는다. 서버 인증/발행 권한 순서는 유지한다.
+
+최종 로컬 검증:
+- 관리자 전체 `npm run test:admin`: 295/295. 신규 범위/CSV 회귀와 최신 활성 버전,
+  빈/retired-only 목록, 페이지 순서, 취소·원본 오류 검사를 포함한다.
+- 정리/로그 요약/진단/CLI 29/29; 수집/공개 admission/거부 진단 25/25;
+  저장·거부·서버 발행·요청 수명 회귀 35/35. 직접 Node test runner로 순차 실행했다.
+  마지막 admission 파일 3/3은 제한기 기한 검사를 추가한 뒤 다시 통과했다.
+- 실제 임시 Miniflare D1: 1,201개 만료 영수증을 500개 삭제한 뒤 701개 잔량의
+  만료 지연 1,234ms, 추가 삭제 후 null, 미만료 영수증 유지, 기본 SQL 50개 이하 확인.
+- `npm run typecheck`(생성된 Collector/Admin 호스트 타입 포함), 관리자 최종 타입 검사,
+  `npm run build:admin`, bundle 2/2·Sites 11/11, `git diff --check` 통과.
+- 강화한 `npm run verify:admin-analysis-access`: Chromium 156.0.8078.4,
+  latestActiveSchemaSelected/projectVersionSelectionsIsolated true, 이벤트 화면 workflow
+  요청 0회, API 읽기 36·쓰기 0, pageErrors 0·routeError false. 합성 로컬 OIDC와 실제 D1로
+  최신 v3 retired를 건너뛰고 v2 선택, 프로젝트별 수동 v1 유지, CSV 격리, 권한 회수/복구,
+  늦은 403 폐기, 연결 해제, 기존 시간대/응답 크기 경계를 확인했다.
+  증거는 `.tmp/admin-analysis-access-zLgePr/report.json`이다. runner는 자기 프로세스를 정리한다.
+
+미실행/남은 범위:
+- 루트 전체 테스트와 변경하지 않은 SDK 검사는 반복하지 않았다. 이번 실행은 변경한
+  관리자/저장 정리/수집 보호와 연결 회귀에 한정한다. 일반 소스 lint 명령은 없다.
+- 실제 OIDC 제공자·원격 D1 처리량/비용·운영 Cron·제한기 바인딩 활성화는 하지 않았다.
+  운영 설정 묶음과 실제 트래픽이 없어 원격 정확도·용량을 주장하지 않는다.
+- 앞단 제한기는 호스트가 연결해야 동작하고 위치별 근사 제한이므로 기존 DB 한도를
+  대체하지 않는다. Origin 위조 자체를 인증으로 차단하지 않는다.
+- SDK 진단 훅·공개 릴리스/라이선스, 통합 서비스 화면과 소요시간/장기 집계는 이번
+  결함 수정 묶음에 포함하지 않았다.
+
+소유 문서: OpenAPI 수집 동작 설명, backend collector/event-contract/retention-cleanup/
+logging 문서, frontend 설계, ops observability, LOG-SUMMARY, README와 이 기록을 갱신했다.
+API 요청·응답 형태와 DB 스키마/마이그레이션은 그대로다. 저장 내부 cleanup 한도와
+공개 수집 거부 순서/DB 진단 포함 범위는 변경됐다. 선택적 로그 metrics는 이전 형식과
+함께 읽는다. 의존성·저장소 위생·CI 러너 설정은 바꾸지 않았으며 기존 옵트인 브라우저
+검사만 확장했다. 푸시·배포·SDK 게시는 하지 않았다.
