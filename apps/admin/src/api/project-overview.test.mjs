@@ -63,6 +63,21 @@ test('cancellation keeps the original reason and ignores a late response', async
     assert.equal(calls, 1);
   } finally { client.destroy(); }
 });
+test('no active schema still accepts receipt history, rejected totals and isolated rejection failure', async () => {
+  for (const diagnostics of [{ rejected: 3, latestReceivedAt: now.toISOString() },
+    { latestReceivedAt: now.toISOString(), rejectionUnavailable: true }]) {
+    const body = payload(); body.data[0] = { ...empty(projects[0].id), ...diagnostics };
+    const f = fixture(body);
+    try {
+      const rows = await projectOverview(f.client, projects, 'browser', new AbortController().signal);
+      assert.equal(rows[0].version, null); assert.equal(rows[0].events, null);
+      assert.equal(rows[0].latestReceivedAt, now.toISOString()); assert.equal(rows[0].rejected, diagnostics.rejected ?? null);
+      for (const mutate of [r => r.events = 0, r => r.workflowLabel = 'job', r => r.workflowUnavailable = true, r => r.error = true]) {
+        const changed = structuredClone(body); mutate(changed.data[0]); assert.throws(() => parseOverview(changed));
+      }
+    } finally { f.client.destroy(); }
+  }
+});
 test('a stalled 401 body revokes all requested analytics immediately on headers', async () => {
   let release; const wait = new Promise(resolve => { release = resolve; }), denials = [];
   const client = new ApiClient({ requestTimeoutMs: 100, onAnalyticsAccessDenied: id => denials.push(id),

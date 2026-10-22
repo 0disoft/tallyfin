@@ -3,6 +3,7 @@ import { PROJECT_ID } from './value.ts';
 
 export const OVERVIEW_PROJECT_LIMIT = 5;
 export interface OverviewRow {
+  /** Null version means no schema-based metrics; project diagnostics remain available. */
   projectId: string; version: number | null; latestReceivedAt: string | null;
   events: number | null; previousEvents: number | null; workflowLabel: string | null;
   completion: number | null; previousCompletion: number | null; workflowUnavailable: boolean;

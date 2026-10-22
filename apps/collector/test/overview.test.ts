@@ -72,7 +72,7 @@ test('missing and foreign projects are identical denials; empty active schemas r
   const body = parseOverview(await (await handler()(request('projectIds=sembom,service-b,missing,service-c'))).json());
   assert.equal(body.data[0]!.error, false);
   for (const row of body.data.slice(1, 3)) assert.deepEqual(row, { ...emptyOverviewRow(row.projectId), error: true, accessDenied: true });
-  assert.deepEqual(body.data[3], emptyOverviewRow('service-c'));
+  assert.deepEqual(body.data[3], { ...emptyOverviewRow('service-c'), rejected: 0 });
 });
 test('revocation and schema changes between batches cannot expose stale metrics', async () => {
   for (const sql of ["DELETE FROM project_grants WHERE project_id='sembom'",
@@ -146,13 +146,13 @@ test('cancellation after metadata preserves its reason and prevents aggregate re
   await assert.rejects(new D1Queries(m.db).overview(principal, ids, 'browser', now, { signal: controller.signal }), error => error === reason);
   assert.deepEqual(m.totals(), { batches: 1, statements: 1 });
 });
-test('retired newest versions use the earlier active version and all-retired projects need one metadata read', async () => {
+test('retired newest versions use the earlier active version; all-retired projects still read project diagnostics', async () => {
   await fixture.db.prepare("INSERT INTO project_schemas(project_id,version,status,definitions_json,published_at) SELECT project_id,2,'retired',definitions_json,published_at FROM project_schemas WHERE project_id='sembom'").run();
   assert.equal((await new D1Queries(fixture.db).overview(principal, ['sembom'], 'browser', now)).data[0]!.version, 1);
   await fixture.db.prepare("UPDATE project_schemas SET status='retired'").run();
   const m = measured(), response = await new D1Queries(m.db).overview(principal, ids, 'browser', now);
   assert.ok(response.data.every(row => row.version === null && !row.error));
-  assert.deepEqual(m.totals(), { batches: 1, statements: 1 });
+  assert.deepEqual(m.totals(), { batches: 6, statements: 11 });
 });
 test('invalid aggregate counts fail only the affected service', async () => {
   const m = measured(undefined, (index, result) => {
@@ -161,4 +161,47 @@ test('invalid aggregate counts fail only the affected service', async () => {
   const body = parseOverview(await (await handler(m.db)(request('projectIds=sembom,service-b'))).json());
   assert.equal(body.data[0]!.error, true); assert.equal(body.data[0]!.accessDenied, false); assert.equal(body.data[0]!.events, null);
   assert.equal(body.data[1]!.events, 0);
+});
+test('retired and never-published schemas preserve independent receipt and rejection diagnostics', async () => {
+  const minute = Math.floor(now / 60000) * 60000;
+  await fixture.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='sembom'").run();
+  await fixture.db.prepare("DELETE FROM project_schemas WHERE project_id='service-b'").run();
+  for (const id of ['sembom', 'service-b']) {
+    await fixture.db.prepare('UPDATE projects SET latest_received_at=? WHERE id=?').bind(now, id).run();
+    await fixture.db.prepare('INSERT INTO ingest_minute_usage(project_id,minute_start,request_count,rejections_json) VALUES(?,?,?,?)')
+      .bind(id, minute, 1, JSON.stringify({ unknown_schema: { count: 3, lastRejectedAt: now } })).run();
+  }
+  for (const source of ['browser', 'server'] as const) {
+    const m = measured(), response = await new D1Queries(m.db).overview(principal, ['sembom', 'service-b'], source, now);
+    const body = parseOverview(response);
+    for (const row of body.data) assert.deepEqual(row, { ...emptyOverviewRow(row.projectId), rejected: 3, latestReceivedAt: new Date(now).toISOString() });
+    assert.deepEqual(m.totals(), { batches: 3, statements: 5 });
+  }
+  await fixture.db.prepare("DELETE FROM project_grants WHERE project_id='sembom'").run();
+  const body = await new D1Queries(fixture.db).overview(principal, ['sembom'], 'browser', now);
+  assert.deepEqual(body.data[0], { ...emptyOverviewRow('sembom'), error: true, accessDenied: true });
+});
+test('schema-free rejection failure preserves receipt time and never invents a zero total', async () => {
+  await fixture.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='sembom'").run();
+  await fixture.db.prepare("UPDATE projects SET latest_received_at=? WHERE id='sembom'").bind(now).run();
+  const m = measured(async index => { if (index === 2) throw Error('private storage failure'); });
+  const response = await handler(m.db)(request()); assert.equal(response.status, 200);
+  const body = parseOverview(await response.json());
+  assert.deepEqual(body.data[0], { ...emptyOverviewRow('sembom'), latestReceivedAt: new Date(now).toISOString(), rejectionUnavailable: true });
+});
+test('schema-free diagnostics recheck grants before disclosing receipt history', async () => {
+  await fixture.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='sembom'").run();
+  await fixture.db.prepare("UPDATE projects SET latest_received_at=? WHERE id='sembom'").bind(now).run();
+  const m = measured(async index => { if (index === 2) await fixture.db.prepare("DELETE FROM project_grants WHERE project_id='sembom'").run(); });
+  const body = parseOverview(await (await handler(m.db)(request())).json());
+  assert.deepEqual(body.data[0], { ...emptyOverviewRow('sembom'), error: true, accessDenied: true });
+});
+test('a rejection read failure retains the newer receipt time from the analytics snapshot', async () => {
+  const m = measured(async index => {
+    if (index === 2) await fixture.db.prepare("UPDATE projects SET latest_received_at=? WHERE id='sembom'").bind(now).run();
+    if (index === 3) throw Error('rejection unavailable');
+  });
+  const body = parseOverview(await (await handler(m.db)(request())).json()), row = body.data[0]!;
+  assert.equal(row.latestReceivedAt, new Date(now).toISOString()); assert.equal(row.events, 0);
+  assert.equal(row.rejectionUnavailable, true); assert.equal(row.rejected, null);
 });

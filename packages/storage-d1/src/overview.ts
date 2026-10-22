@@ -60,10 +60,9 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
       plans.set(p.id, { state: p, registry, from, split, to, offset });
     } catch { row.error = true; }
   }
-  if (!plans.size) return { source, generatedAt: new Date(now).toISOString(), data: rows };
   check();
-  const results = checked(await db.batch<State | EventRow | WorkflowRow>(statements), statements.length); check();
-  const current = new Map((results[0]!.results as State[]).map(p => [p.id, p]));
+  const results = plans.size ? checked(await db.batch<State | EventRow | WorkflowRow>(statements), statements.length) : []; check();
+  const current = new Map(((results[0]?.results ?? []) as State[]).map(p => [p.id, p]));
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!, plan = plans.get(row.projectId); if (!plan) continue;
     const p = current.get(row.projectId);
@@ -74,7 +73,16 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
     try { fillEvents(row, plan, p, results[plan.offset]!.results as (EventRow & { period: number })[], source); }
     catch { rows[i] = { ...emptyOverviewRow(row.projectId), error: true }; continue; }
     fillWorkflow(row, plan, results[plan.offset + 1]!.results as WorkflowRow[], source, now);
-    try { row.rejected = (await overviewRejections(db, principal, p.id, utcFrom, utcTo, now, options.signal)).rejected; }
+  }
+  // Receipt and rejection diagnostics belong to the project, independently of any active schema.
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]!, p = states.get(row.projectId);
+    if (!p || row.error) continue;
+    try {
+      if (row.version === null) row.latestReceivedAt = receivedAt(p.latest_received_at);
+      const diagnostics = await overviewRejections(db, principal, p.id, utcFrom, utcTo, now, options.signal);
+      row.rejected = diagnostics.rejected; row.latestReceivedAt = receivedAt(diagnostics.latestReceivedAt);
+    }
     catch (cause) {
       check();
       if (cause instanceof CollectionError && cause.code === 'forbidden') rows[i] = { ...emptyOverviewRow(row.projectId), error: true, accessDenied: true };
@@ -93,9 +101,12 @@ function fillEvents(row: OverviewRow, plan: Plan, state: State, entries: (EventR
     seen.add(key);
     if (entry.period === 1) current = addCounts(current, entry.count); else previous = addCounts(previous, entry.count);
   }
-  if (state.latest_received_at !== null && !integer(state.latest_received_at, 0, 8_640_000_000_000_000)) invalid();
   row.version = state.version; row.events = current; row.previousEvents = previous;
-  row.latestReceivedAt = state.latest_received_at === null ? null : new Date(state.latest_received_at).toISOString();
+  row.latestReceivedAt = receivedAt(state.latest_received_at);
+}
+function receivedAt(value: number | null): string | null {
+  if (value !== null && !integer(value, 0, 8_640_000_000_000_000)) return invalid();
+  return value === null ? null : new Date(value).toISOString();
 }
 function fillWorkflow(row: OverviewRow, plan: Plan, entries: WorkflowRow[], source: 'browser' | 'server', now: number) {
   const definition = source === 'browser' ? plan.registry.workflows[0] : undefined; if (!definition) return;

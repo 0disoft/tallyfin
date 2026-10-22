@@ -27,7 +27,7 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
     <div className="settings-head"><h2 id="project-overview-heading">서비스 통합 현황</h2>
       <button className="secondary-button" onClick={() => setOpen(value => !value)}>{open ? '통합 현황 닫기' : '통합 현황 불러오기'}</button></div>
     {open && <>
-      <p className="context-note">{source === 'browser' ? '브라우저' : '서버'} 이벤트 · 서비스별 시간대의 최근 7일과 직전 7일이에요. 오늘은 집계 중이며, 완료율은 첫 등록 작업 흐름을 따로 표시해요. 거부 요청은 프로젝트 전체의 최근 UTC 7일 수집 거부 기록이에요.</p>
+      <p className="context-note">{source === 'browser' ? '브라우저' : '서버'} 이벤트 · 서비스별 시간대의 최근 7일과 직전 7일이에요. 오늘은 집계 중이며, 완료율은 첫 등록 작업 흐름을 따로 표시해요. 거부 요청은 프로젝트 전체의 최근 UTC 7일 수집 거부 기록이에요. 최근 수신과 거부 기록은 활성 스키마가 없어도 조회해요.</p>
       <div className="toolbar"><button className="secondary-button" disabled={index === 0} onClick={() => setPage(index - 1)}>이전 서비스</button>
         <span>{index + 1} / {Math.max(1, Math.ceil(projects.length / OVERVIEW_PAGE_SIZE))} 페이지</span>
         <button className="secondary-button" disabled={(index + 1) * OVERVIEW_PAGE_SIZE >= projects.length} onClick={() => setPage(index + 1)}>다음 서비스</button>
@@ -45,7 +45,7 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
           {row.error ? <td colSpan={4}>조회하지 못했어요. 권한과 연결을 확인한 뒤 다시 조회해 주세요.</td> : <>
             <td>{row.latestReceivedAt ? new Date(row.latestReceivedAt).toLocaleString('ko-KR', { timeZone: row.project.timeZone }) : '수신 기록 없음 또는 미조회'}</td>
             <td>{row.events === null ? '—' : formatCount(row.events)} / {change === null ? '비교 불가' : `${change.toFixed(1)}%`}</td>
-            <td>{row.workflowUnavailable ? '완료율 조회 실패' : <>{row.workflowLabel ?? '작업 흐름 없음'}<div>{formatRate(row.completion)} / {delta === null ? '비교 불가' : `${delta.toFixed(1)}%p`}</div></>}</td>
+            <td>{row.workflowUnavailable ? '완료율 조회 실패' : <>{row.version === null ? '활성 스키마 없음' : row.workflowLabel ?? '작업 흐름 없음'}<div>{formatRate(row.completion)} / {delta === null ? '비교 불가' : `${delta.toFixed(1)}%p`}</div></>}</td>
             <td>{row.rejectionUnavailable ? '조회 실패' : row.rejected === null ? '—' : formatCount(row.rejected)}</td>
           </>}</tr>;
       })}</tbody></table></div>}

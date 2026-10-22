@@ -31,9 +31,10 @@ export function parseOverview(value: unknown): OverviewResponse {
       ['completion', 'previousCompletion'].some(k => row[k] !== null && (typeof row[k] !== 'number' || !Number.isFinite(row[k]) || row[k] < 0 || row[k] > 100)) ||
       row.workflowLabel !== null && (typeof row.workflowLabel !== 'string' || row.workflowLabel.length < 1 || row.workflowLabel.length > 80) ||
       ['workflowUnavailable', 'rejectionUnavailable', 'error', 'accessDenied'].some(k => typeof row[k] !== 'boolean')) fail();
-    if (row.accessDenied && !row.error || (row.error || row.version === null) &&
+    if (row.accessDenied && !row.error || row.error &&
       ['version', 'latestReceivedAt', 'events', 'previousEvents', 'workflowLabel', 'completion', 'previousCompletion', 'rejected'].some(k => row[k] !== null) ||
-      (row.error || row.version === null) && (row.workflowUnavailable || row.rejectionUnavailable) ||
+      row.error && (row.workflowUnavailable || row.rejectionUnavailable) ||
+      row.version === null && (row.workflowUnavailable || ['events', 'previousEvents', 'workflowLabel', 'completion', 'previousCompletion'].some(k => row[k] !== null)) ||
       row.version !== null && !row.error && (row.events === null || row.previousEvents === null) ||
       row.workflowUnavailable && (row.workflowLabel === null || row.completion !== null || row.previousCompletion !== null) ||
       row.workflowLabel === null && (row.completion !== null || row.previousCompletion !== null) ||

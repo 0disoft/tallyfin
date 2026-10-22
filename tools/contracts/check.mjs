@@ -427,6 +427,8 @@ check('service overview is authenticated, bounded, ordered and aggregate-only', 
     completion: null, previousCompletion: null, workflowUnavailable: false, rejected: 0, rejectionUnavailable: false, error: false, accessDenied: false };
   const body = { source: 'browser', generatedAt: '2026-10-23T00:00:00.000Z', data: [row] };
   assert.ok(validate('OverviewResponse', body));
+  assert.ok(validate('OverviewResponse', { ...body, data: [{ ...row, version: null, events: null, previousEvents: null,
+    latestReceivedAt: body.generatedAt, rejected: 3 }] }));
   for (const mutate of [v => v.data = [], v => v.data = Array(6).fill(row), v => v.data[0].events = -1,
     v => v.data[0].completion = 101, v => v.data[0].private = 'body', v => v.source = 'unknown']) {
     const value = structuredClone(body); mutate(value); assert.equal(validate('OverviewResponse', value), false);

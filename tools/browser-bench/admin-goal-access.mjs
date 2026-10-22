@@ -93,6 +93,20 @@ try {
   assert.equal(overviewRequests, 1);
   await expect(overview).not.toContainText('조회하지 못했어요');
   scenarios.push(stage);
+  stage = 'schema-free-overview-diagnostics';
+  await local.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='access-other'").run();
+  const rejectedAt = Date.now(), rejectionMinute = Math.floor(rejectedAt / 60000) * 60000;
+  await local.db.prepare(`INSERT INTO ingest_minute_usage(project_id,minute_start,request_count,rejections_json) VALUES(?,?,1,?)
+    ON CONFLICT(project_id,minute_start) DO UPDATE SET rejections_json=excluded.rejections_json`)
+    .bind('access-other', rejectionMinute, JSON.stringify({ unknown_schema: { count: 3, lastRejectedAt: rejectedAt } })).run();
+  await page.getByRole('button', { name: '통합 현황 새로고침', exact: true }).click();
+  const retiredRow = overview.locator('tbody tr').filter({ hasText: 'Other access fixture' });
+  await expect(retiredRow).toContainText('활성 스키마 없음');
+  await expect(retiredRow.locator('td').nth(0)).not.toContainText('수신 기록 없음');
+  await expect(retiredRow.locator('td').nth(1)).toContainText('비교 불가');
+  await expect(retiredRow.locator('td').nth(3)).toHaveText('3');
+  assert.equal(overviewRequests, 2); scenarios.push(stage);
+  await local.db.prepare("UPDATE project_schemas SET status='active' WHERE project_id='access-other'").run();
   await page.getByRole('button', { name: '통합 현황 닫기', exact: true }).click();
   await page.getByRole('button', { name: '목표', exact: true }).click();
   const workflowCsv = page.getByRole('button', { name: '작업 흐름 CSV 내려받기', exact: true });
@@ -199,7 +213,7 @@ try {
   await expect(overview.locator('tbody tr')).toHaveCount(2);
   await expect(overview).toContainText('조회하지 못했어요');
   for (const button of await page.getByRole('button', { name: /CSV 내려받기/ }).all()) await expect(button).toBeDisabled();
-  assert.equal(overviewRequests, 2); scenarios.push(stage);
+  assert.equal(overviewRequests, 3); scenarios.push(stage);
   stage = 'disconnect'; await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   await expect(page.locator('.event-table, .goal-section, .funnel-section')).toHaveCount(0);

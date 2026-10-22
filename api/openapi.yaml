@@ -2015,7 +2015,8 @@ paths:
         the latest seven UTC dates across the project. Browser completion uses the first registered workflow.
         Missing and inaccessible projects are indistinguishable error rows with accessDenied true and null metrics.
         Corrupt project analytics fail only that row; corrupt workflow/rejection data fail only that panel.
-        No active schema produces null metrics. Shared metadata/analytics database failures return 503.
+        No active schema produces null event/workflow metrics but still reads project-wide receipt time and rejections.
+        Shared metadata/analytics database failures return 503.
         Rejection reads use sequential pages of at most 4096 minutes with authorization on every page;
         corruption or storage failure discards that panel's partial total, and denial clears the entire service row.
         Rejection totals are best-effort across page snapshots, not a single point-in-time snapshot. Metadata and aggregate reads
