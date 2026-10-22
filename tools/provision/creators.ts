@@ -33,7 +33,7 @@ export class CreatorProvisioner {
     const op = creatorOperation(kind, input);
     let snapshot: Snapshot;
     try { snapshot = await this.#read(op); }
-    catch { throw new ProvisionError('database_unavailable', '생성 권한을 읽지 못했어요. init과 DB 경로를 확인해 주세요.'); }
+    catch (cause) { throw new ProvisionError('database_unavailable', '생성 권한을 읽지 못했어요. init과 DB 경로를 확인해 주세요.', { cause }); }
     const plan: CreatorPlan = { operation: op.kind, principalHash: await sha256(canonicalJson([op.issuer, op.subject])),
       ...snapshot, changes: snapshot.maxProjects === op.maxProjects ? [] : [{ target: 'creator', field: 'maxProjects', before: snapshot.maxProjects, after: op.maxProjects }],
       planHash: await sha256(canonicalJson({ op, snapshot })) };
@@ -47,7 +47,8 @@ export class CreatorProvisioner {
     const { op, snapshot } = pending;
     try {
       if (snapshot.maxProjects === op.maxProjects) {
-        if (canonicalJson(await this.#read(op)) !== canonicalJson(snapshot)) throw Error();
+        if (canonicalJson(await this.#read(op)) !== canonicalJson(snapshot))
+          throw new ProvisionError('apply_conflict', '생성 권한이나 사용량이 달라졌어요. 새 미리보기를 확인해 주세요.');
         return { applied: false, changes: 0 };
       }
       const count = '(SELECT count(*) FROM project_creations WHERE issuer = ? AND subject = ?) = ?';
@@ -60,8 +61,13 @@ export class CreatorProvisioner {
       else statement = this.#db.prepare(`UPDATE project_creators SET max_projects = ? WHERE issuer = ? AND subject = ? AND max_projects = ? AND ${count}`)
         .bind(op.maxProjects, op.issuer, op.subject, snapshot.maxProjects, op.issuer, op.subject, snapshot.createdProjects);
       const result = await this.#db.batch([statement]);
-      if (result.length !== 1 || !result[0]?.success || result[0].meta.changes !== 1) throw Error();
+      if (result.length !== 1 || !result[0]?.success || !integer(result[0].meta.changes, 0, 1)) throw Error('Invalid database response');
+      if (result[0].meta.changes === 0)
+        throw new ProvisionError('apply_conflict', '생성 권한이나 사용량이 달라졌어요. 새 미리보기를 확인해 주세요.');
       return { applied: true, changes: 1 };
-    } catch { throw new ProvisionError('apply_conflict', '생성 권한이나 사용량이 달라졌어요. 새 미리보기를 확인해 주세요.'); }
+    } catch (cause) {
+      if (cause instanceof ProvisionError) throw cause;
+      throw new ProvisionError('database_unavailable', '적용 결과를 확인하지 못했어요. DB 반영 여부를 확인하고 새 미리보기를 실행해 주세요.', { cause });
+    }
   }
 }

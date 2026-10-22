@@ -64,8 +64,8 @@ export type ErrorCode = 'invalid_request' | 'invalid_event' | 'unknown_schema' |
 export class CollectionError extends Error {
   readonly code: ErrorCode;
   readonly status: number;
-  constructor(code: ErrorCode, status: number) {
+  constructor(code: ErrorCode, status: number, options?: ErrorOptions) {
     // Never include user input or database messages in public errors.
-    super(code); this.name = 'CollectionError'; this.code = code; this.status = status;
+    super(code, options); this.name = 'CollectionError'; this.code = code; this.status = status;
   }
 }

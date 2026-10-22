@@ -121,7 +121,7 @@ export class D1Store implements ServerCollectionStore {
       } catch (error) {
         // Only this named constraint denotes a stale revision. Every other database failure is fatal.
         const message = error instanceof Error ? `${error.message} ${error.cause instanceof Error ? error.cause.message : ''}` : '';
-        if (!message.includes('tallyfin_ingest_revision')) throw new CollectionError('storage_unavailable', 503);
+        if (!message.includes('tallyfin_ingest_revision')) throw new CollectionError('storage_unavailable', 503, { cause: error });
       }
     }
     throw new CollectionError('storage_unavailable', 503);

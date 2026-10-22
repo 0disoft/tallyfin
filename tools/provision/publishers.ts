@@ -83,7 +83,7 @@ export class PublisherProvisioner {
     } catch (error) {
       if (error instanceof ProvisionError && error.code === 'apply_conflict') throw error;
       if (error instanceof ProvisionError && error.code === 'project_not_found') throw conflict();
-      throw new ProvisionError('database_unavailable', '발행 권한 적용 결과를 확인하지 못했어요. DB 상태를 확인하고 새 미리보기를 실행해 주세요.');
+      throw new ProvisionError('database_unavailable', '발행 권한 적용 결과를 확인하지 못했어요. DB 상태를 확인하고 새 미리보기를 실행해 주세요.', { cause: error });
     }
   }
 }

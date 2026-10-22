@@ -9,11 +9,13 @@ import type { CreatorQuery, RemoteCreatorTarget } from './remote-creators.ts';
 type Execute = (file: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv; windowsHide: boolean; maxBuffer: number; timeout: number }) => Promise<{ stdout: string }>;
 
 /** Uses the installed CLI and its existing authentication; never forwards arbitrary config or SQL from a user. */
-export function remoteCreatorQuery(root: string, target: RemoteCreatorTarget, execute: Execute = promisify(execFile)): CreatorQuery {
+export function remoteCreatorQuery(root: string, target: RemoteCreatorTarget, execute: Execute = promisify(execFile),
+  cleanup: (directory: string) => Promise<void> = directory => rm(directory, { recursive: true, force: true, maxRetries: 2 })): CreatorQuery {
   const destination = Object.freeze({ ...target });
   return async sql => {
     const directory = await mkdtemp(join(tmpdir(), 'tallyfin-creator-query-'));
     const config = join(directory, 'wrangler.json'), envFile = join(directory, 'empty.env');
+    let failure: ProvisionError | undefined;
     try {
       await writeFile(config, JSON.stringify({ name: 'tallyfin-creator-operator', account_id: destination.accountId, send_metrics: false,
         d1_databases: [{ binding: 'DB', database_name: destination.databaseName, database_id: destination.databaseId }] }), { flag: 'wx', mode: 0o600 });
@@ -27,14 +29,21 @@ export function remoteCreatorQuery(root: string, target: RemoteCreatorTarget, ex
         'd1', 'execute', 'DB', '--config', config, '--env-file', envFile, '--remote', '--json', '--command', sql],
       { cwd: directory, env, windowsHide: true, maxBuffer: 2 * 1024 * 1024, timeout: 30000 });
       return JSON.parse(result.stdout);
-    } catch { throw new ProvisionError('database_unavailable', '원격 DB 호출 결과를 확인하지 못했어요. 인증·마이그레이션·반영 여부를 확인해 주세요.'); }
+    } catch (cause) {
+      failure = new ProvisionError('database_unavailable', '원격 DB 호출 결과를 확인하지 못했어요. 인증·마이그레이션·반영 여부를 확인해 주세요.', { cause });
+      throw failure;
+    }
     finally {
       // Wrangler can create .wrangler caches. Verify this newly-created scratch path before deleting it.
       const child = relative(resolve(tmpdir()), resolve(directory));
-      if (!child.startsWith('tallyfin-creator-query-') || child.includes('..') || isAbsolute(child))
-        throw new ProvisionError('cleanup_failed', '임시 디렉터리 경로를 확인하지 못했어요. DB 반영 여부와 별도로 정리가 필요해요.');
-      try { await rm(directory, { recursive: true, force: true, maxRetries: 2 }); }
-      catch { throw new ProvisionError('cleanup_failed', '임시 파일을 정리하지 못했어요. DB 반영 여부와 별도로 정리가 필요해요.'); }
+      try {
+        if (!child.startsWith('tallyfin-creator-query-') || child.includes('..') || isAbsolute(child)) throw Error('Invalid scratch path');
+        await cleanup(directory);
+      } catch (cause) {
+        // Keep the primary failure authoritative. Neither cause is serialized by the CLI.
+        if (failure) Object.defineProperty(failure, 'cleanupCause', { value: cause });
+        else throw new ProvisionError('cleanup_failed', 'DB 호출은 완료됐지만 임시 파일을 정리하지 못했어요. 명령을 재전송하지 말고 반영 여부와 정리를 확인해 주세요.', { cause });
+      }
     }
   };
 }

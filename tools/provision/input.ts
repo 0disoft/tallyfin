@@ -5,7 +5,7 @@ export type Operation = { kind: 'register'; registry: Registry } |
   { kind: 'grant' | 'revoke'; projectId: string; issuer: string; subject: string; role: 'reader' | 'owner' | null };
 export class ProvisionError extends Error {
   readonly code: string;
-  constructor(code: string, message: string) { super(message); this.code = code; }
+  constructor(code: string, message: string, options?: ErrorOptions) { super(message, options); this.code = code; }
 }
 export function operation(kind: string, input: unknown, allowLocalHttp = false): Operation {
   try {

@@ -106,7 +106,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       if (result.accepted + result.duplicates !== batch.events.length) throw new CollectionError('storage_unavailable', 503);
       return finish(Response.json(result, { status: 200, headers }));
     } catch (error) {
-      const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503);
+      const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503, { cause: error });
       const responseHeaders = failureHeaders(failure, request.url, receivedAt, retryAfter, headers);
       // A diagnostic sink failure must not change the outcome or disclose its exception.
       try { options.log?.({ requestId, code: failure.code }); } catch { /* best effort */ }

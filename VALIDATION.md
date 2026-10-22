@@ -1,5 +1,14 @@
 # 검증
 
+## DB 오류 분류와 운영 정리 실패 보존 (2026-10-23)
+
+CollectionError/ProvisionError에 선택적 cause를 추가했다. 운영 도구는 확정된 CAS
+충돌만 apply_conflict로 분류하고 전송·잘못된 DB 응답은 database_unavailable로
+보존한다. 원격 쿼리의 정리 실패는 원래 오류를 덮지 않으며 쿼리 완료 뒤의 정리 실패는
+cleanup_failed로 별도 보고한다. 자동 쓰기 재시도는 추가하지 않았다. 운영 도구
+23/23(실제 로컬 D1/Wrangler 포함)과 루트 TypeScript 검사를 통과했다.
+공개 API·DB 구조·의존성·CI 변경 및 원격 호출·반영은 없다.
+
 ## 로그인 장애 대기와 원인 보존 (2026-10-23)
 
 로그인 fetch/본문은 취소 신호로 대기를 끝내며 늦은 응답을 폐기한다. 끝나지 않는

@@ -35,8 +35,8 @@ export class RemoteCreatorProvisioner {
     try { return creatorRows(await this.#query(sql)); }
     catch (error) {
       if (error instanceof ProvisionError && error.code === 'cleanup_failed')
-        throw new ProvisionError('cleanup_failed', '임시 파일을 정리하지 못했어요. DB 반영 여부도 확인해 주세요.');
-      throw new ProvisionError('database_unavailable', '원격 DB 응답을 확인하지 못했어요. 반영 여부를 확인한 뒤 새 미리보기를 실행해 주세요.');
+        throw new ProvisionError('cleanup_failed', '임시 파일을 정리하지 못했어요. DB 반영 여부도 확인해 주세요.', { cause: error });
+      throw new ProvisionError('database_unavailable', '원격 DB 응답을 확인하지 못했어요. 반영 여부를 확인한 뒤 새 미리보기를 실행해 주세요.', { cause: error });
     }
   }
   async #read(op: Operation): Promise<Snapshot> {

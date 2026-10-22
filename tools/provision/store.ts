@@ -10,7 +10,7 @@ interface Change { target: 'project' | 'schema' | 'grant'; field: string; before
 export interface Plan { operation: string; projectId: string; schemaVersion?: number; principalHash?: string; changes: Change[]; planHash: string }
 interface Snapshot { project: ProjectRow | null; schema: SchemaRow | null; maxVersion: number | null; role: string | null; owners: number }
 interface Pending { op: Operation; snapshot: Snapshot; changeCount: number }
-const fail = (code: string, message: string): never => { throw new ProvisionError(code, message); };
+const fail = (code: string, message: string, options?: ErrorOptions): never => { throw new ProvisionError(code, message, options); };
 const projectId = (op: Operation) => op.kind === 'register' ? op.registry.project.id : op.projectId;
 const definitions = (op: Extract<Operation, { kind: 'register' }>) => canonicalJson(schemaDefinitions(op.registry));
 
@@ -44,7 +44,7 @@ export class Provisioner {
     const op = operation(kind, input, this.#allowLocalHttp);
     let snapshot: Snapshot;
     try { snapshot = await this.#snapshot(op); }
-    catch { return fail('database_unavailable', '로컬 DB 상태를 읽지 못했어요. init과 DB 경로를 확인해 주세요.'); }
+    catch (cause) { return fail('database_unavailable', '로컬 DB 상태를 읽지 못했어요. init과 DB 경로를 확인해 주세요.', { cause }); }
     const changes: Change[] = [];
     const change = (target: Change['target'], field: string, before: Value, after: Value) => {
       if (canonicalJson(before) !== canonicalJson(after)) changes.push({ target, field, before, after });
@@ -152,8 +152,16 @@ export class Provisioner {
     }, now, 'always'));
     try {
       const result = await this.#db.batch(statements);
-      if (result.length !== statements.length || result.some(row => !row.success) || result[0]?.meta.changes !== 1) throw Error();
-    } catch { return fail('apply_conflict', 'DB 상태가 달라졌거나 쓰기에 실패했어요. 다시 미리보기를 확인해 주세요.'); }
+      if (result.length !== statements.length || result.some(row => !row.success)) throw Error('Invalid database response');
+      if (result[0]?.meta.changes !== 1) return fail('apply_conflict', 'DB 상태가 달라졌어요. 다시 미리보기를 확인해 주세요.');
+    } catch (cause) {
+      if (cause instanceof ProvisionError) throw cause;
+      const detail = cause instanceof Error ? `${cause.message} ${cause.cause instanceof Error ? cause.cause.message : ''}` : '';
+      // Only the guard's own CHECK (or a concurrently created project) proves a conflict.
+      if (detail.includes('CHECK constraint failed: tallyfin_ingest_revision') || detail.includes('UNIQUE constraint failed: projects.id'))
+        return fail('apply_conflict', 'DB 상태가 달라졌어요. 다시 미리보기를 확인해 주세요.', { cause });
+      return fail('database_unavailable', '적용 결과를 확인하지 못했어요. DB 반영 여부를 확인하고 새 미리보기를 실행해 주세요.', { cause });
+    }
     return { applied: true, changes: pending.changeCount };
   }
 }
