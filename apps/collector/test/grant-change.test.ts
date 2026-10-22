@@ -25,7 +25,9 @@ function request(value: unknown, method = 'PUT', path = '/v1/projects/sembom/gra
   return new Request(`https://collector.example.invalid${path}`, { method,
     headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' }, body: JSON.stringify(value) });
 }
+async function revision() { return await f.db.prepare("SELECT grant_revision FROM projects WHERE id='sembom'").first<number>('grant_revision') as number; }
 async function change(value: unknown, method = 'PUT', status = 200): Promise<any> {
+  if (value && typeof value === 'object' && !Object.hasOwn(value, 'expectedRevision')) value = { ...value, expectedRevision: await revision() };
   const response = await handler()(request(value, method));
   assert.equal(response.status, status); assert.equal(response.headers.get('Cache-Control'), 'no-store');
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), null); assert.equal(response.headers.get('Set-Cookie'), null);
@@ -92,15 +94,17 @@ test('owner revocation between preflight and mutation is checked again inside th
 test('concurrent self-demotions preserve at least one owner and concurrent opposite updates report conflict', async () => {
   await grant(target, 'owner');
   const queries = new D1Queries(f.db);
-  const outcomes = await Promise.allSettled([owner, target].map(principal => queries.changeGrant(principal, 'sembom', { ...principal, role: 'reader', expectedRole: 'owner' }, now)));
+  const expectedRevision = await revision();
+  const outcomes = await Promise.allSettled([owner, target].map(principal => queries.changeGrant(principal, 'sembom', { ...principal, role: 'reader', expectedRole: 'owner', expectedRevision }, now)));
   assert.equal(outcomes.filter(r => r.status === 'fulfilled').length, 1);
   assert.equal(await f.db.prepare("SELECT COUNT(*) AS n FROM project_grants WHERE role='owner'").first('n'), 1);
   const remaining = await f.db.prepare("SELECT issuer,subject FROM project_grants WHERE role='owner'").first<AdminPrincipal>();
   assert.ok(remaining);
   const third = { issuer: owner.issuer, subject: 'third' }; await grant(third, 'reader');
+  const thirdRevision = await revision();
   const results = await Promise.allSettled([
-    queries.changeGrant(remaining, 'sembom', { ...third, role: 'owner', expectedRole: 'reader' }, now),
-    queries.changeGrant(remaining, 'sembom', { ...third, role: null, expectedRole: 'reader' }, now),
+    queries.changeGrant(remaining, 'sembom', { ...third, role: 'owner', expectedRole: 'reader', expectedRevision: thirdRevision }, now),
+    queries.changeGrant(remaining, 'sembom', { ...third, role: null, expectedRole: 'reader', expectedRevision: thirdRevision }, now),
   ]);
   assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
   assert.equal(results.filter(r => r.status === 'rejected' && r.reason.code === 'grant_conflict').length, 1);
@@ -124,8 +128,28 @@ test('closed and bounded requests reject malformed bodies, extra parameters and 
 test('storage write failure exposes no database details and leaves the target unchanged', async () => {
   await f.db.prepare("CREATE TRIGGER reject_grant BEFORE INSERT ON project_grants BEGIN SELECT RAISE(ABORT,'private database detail'); END").run();
   try {
-    const response = await handler()(request({ ...target, role: 'reader', expectedRole: null }));
+    const response = await handler()(request({ ...target, role: 'reader', expectedRole: null, expectedRevision: await revision() }));
     assert.equal(response.status, 503); assert.ok(!(await response.text()).includes('private database detail'));
     assert.equal(await f.db.prepare('SELECT COUNT(*) AS n FROM project_grants WHERE subject=?').bind(target.subject).first('n'), 0);
   } finally { await f.db.prepare('DROP TRIGGER reject_grant').run(); }
+});
+
+test('grant revision rejects stale delete/regrant, role ABA and absent/create/delete cycles', async () => {
+  await change({ ...target, role: 'reader', expectedRole: null });
+  const stale = await revision();
+  await change({ ...target, expectedRole: 'reader' }, 'DELETE');
+  await change({ ...target, role: 'reader', expectedRole: null });
+  const query = new D1Queries(f.db);
+  await assert.rejects(query.changeGrant(owner, 'sembom', { ...target, role: null, expectedRole: 'reader', expectedRevision: stale }, now), { code: 'grant_conflict' });
+  const readerRevision = await revision();
+  await change({ ...target, role: 'owner', expectedRole: 'reader' });
+  await change({ ...target, role: 'reader', expectedRole: 'owner' });
+  await assert.rejects(query.changeGrant(owner, 'sembom', { ...target, role: null, expectedRole: 'reader', expectedRevision: readerRevision }, now), { code: 'grant_conflict' });
+  await change({ ...target, expectedRole: 'reader' }, 'DELETE');
+  const absent = await revision();
+  await change({ ...target, role: 'reader', expectedRole: null });
+  await change({ ...target, expectedRole: 'reader' }, 'DELETE');
+  await assert.rejects(query.changeGrant(owner, 'sembom', { ...target, role: 'reader', expectedRole: null, expectedRevision: absent }, now), { code: 'grant_conflict' });
+  await assert.rejects(query.changeGrant(owner, 'sembom', { ...target, role: 'reader', expectedRole: null }, now), { code: 'grant_conflict' });
+  assert.equal(await f.db.prepare('SELECT count(*) FROM project_grants WHERE subject=?').bind(target.subject).first('count(*)'), 0);
 });

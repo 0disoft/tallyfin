@@ -9,7 +9,7 @@ export interface SqlDatabase {
 }
 export interface ProjectRow {
   id: string; name: string; status: 'active' | 'paused'; time_zone: string; allowed_origins_json: string;
-  requests_per_minute: number; new_receipts_per_utc_day: number; ingest_revision: number;
+  requests_per_minute: number; new_receipts_per_utc_day: number; ingest_revision: number; grant_revision: number;
 }
 export interface SchemaRow { version: number; status: 'active' | 'retired'; definitions_json: string }
 

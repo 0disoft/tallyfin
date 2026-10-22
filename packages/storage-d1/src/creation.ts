@@ -41,7 +41,7 @@ export async function createProject(db: SqlDatabase, principal: AdminPrincipal, 
     db.prepare(permission).bind(principal.issuer, principal.subject),
   ]);
   if (result.length !== 6 || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
-  if (!integer(result[0]!.meta.changes, 0, 1) || result.slice(1, 4).some(r => r.meta.changes !== result[0]!.meta.changes))
+  if (!integer(result[0]!.meta.changes, 0, 1) || [result[1]!, result[3]!].some(r => r.meta.changes !== result[0]!.meta.changes) || !integer(result[2]!.meta.changes, result[0]!.meta.changes, 2 * result[0]!.meta.changes))
     throw new CollectionError('storage_unavailable', 503);
   const allowed = access(result[5]!.results[0] as AccessRow | undefined);
   const receipt = result[4]!.results[0] as { request_hash: string; created_at: number; role: string | null } | undefined;

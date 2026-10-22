@@ -27,13 +27,13 @@ const rows = async () => (await f.db.prepare('SELECT * FROM admin_changes ORDER 
 
 test('API writes atomically record minimal metadata; retries, same values and denied changes add no rows', async () => {
   const q = new D1Queries(f.db);
-  const add = { ...target, role: 'reader' as const, expectedRole: null };
+  const add = { ...target, role: 'reader' as const, expectedRole: null, expectedRevision: (await q.grants(owner, 'sembom', 25, '')).grantRevision };
   await q.changeGrant(owner, 'sembom', add, now);
   await q.changeGrant(owner, 'sembom', add, now + 1);
-  await q.changeGrant(owner, 'sembom', { ...target, role: 'owner', expectedRole: 'reader' }, now + 2);
-  await q.changeGrant(owner, 'sembom', { ...target, role: null, expectedRole: 'owner' }, now + 3);
-  await q.changeGrant(owner, 'sembom', { ...target, role: null, expectedRole: 'owner' }, now + 4);
-  await assert.rejects(q.changeGrant(owner, 'sembom', { ...owner, role: null, expectedRole: 'owner' }, now), { code: 'last_owner' });
+  await q.changeGrant(owner, 'sembom', { ...target, role: 'owner', expectedRole: 'reader', expectedRevision: (await q.grants(owner, 'sembom', 25, '')).grantRevision }, now + 2);
+  await q.changeGrant(owner, 'sembom', { ...target, role: null, expectedRole: 'owner', expectedRevision: (await q.grants(owner, 'sembom', 25, '')).grantRevision }, now + 3);
+  await q.changeGrant(owner, 'sembom', { ...target, role: null, expectedRole: 'owner', expectedRevision: (await q.grants(owner, 'sembom', 25, '')).grantRevision }, now + 4);
+  await assert.rejects(q.changeGrant(owner, 'sembom', { ...owner, role: null, expectedRole: 'owner', expectedRevision: (await q.grants(owner, 'sembom', 25, '')).grantRevision }, now), { code: 'last_owner' });
   await assert.rejects(q.changeGrant(target, 'sembom', add, now), { code: 'forbidden' });
   const current = await q.settings(owner, 'sembom');
   await q.updateSettings(owner, 'sembom', { expectedSettingsHash: current.settingsHash, name: current.project.name }, now);
@@ -61,7 +61,7 @@ test('history failure rolls back grant, settings, schema and project creation wr
   const current = await q.settings(owner, 'sembom');
   await f.db.prepare("CREATE TRIGGER reject_history BEFORE INSERT ON admin_changes BEGIN SELECT RAISE(ABORT, 'test-history-failure'); END").run();
   try {
-    await assert.rejects(q.changeGrant(owner, 'sembom', { ...target, role: 'reader', expectedRole: null }, now));
+    await assert.rejects(q.changeGrant(owner, 'sembom', { ...target, role: 'reader', expectedRole: null, expectedRevision: (await q.grants(owner, 'sembom', 25, '')).grantRevision }, now));
     await assert.rejects(q.updateSettings(owner, 'sembom', { expectedSettingsHash: current.settingsHash, name: 'rollback' }, now));
     await assert.rejects(q.publishSchema(owner, 'sembom', 2, publication, now));
     await assert.rejects(q.createProject(owner, creation, now));

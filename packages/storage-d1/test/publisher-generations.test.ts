@@ -16,10 +16,10 @@ test('0009 preserves permissions, backfills unique generations, and rejects inco
     for (const subject of ['a', 'b'])
       await db.prepare('INSERT INTO project_publishers VALUES (?,?,?,?)').bind('sembom', issuer, subject, now).run();
     const before = (await db.prepare('SELECT project_id,issuer,subject,created_at FROM project_publishers ORDER BY subject').all()).results;
-    assert.deepEqual(await initialize(db, false), { migrations: ['0009_publisher_generations.sql'], applied: false });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0009_publisher_generations.sql', '0010_grant_revision.sql'], applied: false });
     assert.deepEqual((await db.prepare('PRAGMA table_info(project_publishers)').all()).results.map(row => row.name),
       ['project_id', 'issuer', 'subject', 'created_at']);
-    assert.deepEqual(await initialize(db, true), { migrations: ['0009_publisher_generations.sql'], applied: true });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0009_publisher_generations.sql', '0010_grant_revision.sql'], applied: true });
     assert.deepEqual((await db.prepare('SELECT project_id,issuer,subject,created_at FROM project_publishers ORDER BY subject').all()).results, before);
     const ids = (await db.prepare('SELECT grant_id FROM project_publishers').all()).results.map(row => row.grant_id);
     assert.equal(new Set(ids).size, 2); assert.ok(ids.every(id => typeof id === 'string' && /^[0-9a-f]{32}$/.test(id)));

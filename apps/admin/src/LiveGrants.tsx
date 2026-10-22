@@ -87,7 +87,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
     if (actionsLocked) return;
     setForm({ client, projectId, ...values, [key]: value } as NonNullable<typeof form>);
   };
-  const prepare = (change: GrantChange) => { if (!actionsLocked) editorRef.current?.prepare(change); };
+  const prepare = (change: GrantChange) => { if (!actionsLocked && state?.data) editorRef.current?.prepare({ ...change, expectedRevision: state.data.grantRevision }); };
   const submit = (event: FormEvent) => { event.preventDefault(); prepare({ issuer: values.issuer, subject: values.subject, role: values.role, expectedRole: null }); };
   const reload = () => {
     if (saving || uncertain || locked) return;

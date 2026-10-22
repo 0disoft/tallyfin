@@ -266,3 +266,13 @@ upgraded 경로를 나눠 기존 행 보존과 ID 생성을 확인한다.
 롤백은 이전 코드로 되돌리고 새 열·트리거는 남겨도 된다. 다만 예전 CLI 코드는 다시 생성 시각
 CAS를 쓰므로 같은 밀리초 재부여에서 stale 회수가 다시 가능해진다. 되돌리는 대신 `grant_id`
 기준 코드를 유지하고 앞으로 고치는 편을 우선한다.
+
+## 0010 administrator grant revision
+
+Apply `0010_grant_revision.sql` atomically before updating the Collector and admin.
+Existing grant rows remain unchanged. Grant insert/delete/role-update triggers advance
+`projects.grant_revision`, independently of ingestion. Reviewed writes send the list's
+`grantRevision` as `expectedRevision`; missing or stale revisions cannot change state
+and return `grant_conflict`. No-op readback remains available for exact retries.
+Older admin builds must be upgraded to edit grants. Offline plans also compare this
+revision. Local initialization refuses a revision column without all three triggers.

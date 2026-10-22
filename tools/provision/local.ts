@@ -14,12 +14,12 @@ export async function openLocal(stateDir: string) {
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
   const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql']) {
+  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql']) {
     const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
     // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
     const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
     // Rebuilt tables already existed; only the stable publisher table marks migration 0006.
-    const tables = name === '0006_server_collection.sql' ? ['project_publishers'] : ['0008_publisher_history.sql', '0009_publisher_generations.sql'].includes(name) ? [] :
+    const tables = name === '0006_server_collection.sql' ? ['project_publishers'] : ['0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql'].includes(name) ? [] :
       [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
     const columns = [...sql.matchAll(/ALTER TABLE ([a-z_]+) ADD COLUMN ([a-z_]+)/g)].map(match => ({ table: match[1]!, name: match[2]! }));
     migrations.push({ name, statements, tables, columns });
@@ -69,6 +69,12 @@ export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ mig
     const columns = await db.batch<{ name: string }>([db.prepare(`PRAGMA table_info(${table})`)]);
     if (!columns[0]?.success) throw Error();
     for (const column of columns[0].results) existingColumns.add(`${table}.${column.name}`);
+  }
+  if (existingColumns.has('projects.grant_revision')) {
+    const guards = await db.batch<{ name: string; sql: string }>([db.prepare("SELECT name,sql FROM sqlite_master WHERE type='trigger' AND tbl_name='project_grants'")]);
+    const required = ['grant_revision_insert', 'grant_revision_update', 'grant_revision_delete'];
+    if (!guards[0]?.success || required.some(name => !guards[0]!.results.some(row => row.name === name && row.sql.includes('grant_revision = grant_revision + 1'))))
+      throw new ProvisionError('partial_database', '권한 revision 트리거가 빠져 초기화를 중단했어요. DB 상태를 확인해 주세요.');
   }
   const missing = migrations.filter(migration => {
     if (migration.name === '0008_publisher_history.sql') return !expandedHistory;

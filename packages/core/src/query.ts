@@ -15,7 +15,7 @@ export interface AdminPrincipal { issuer: string; subject: string }
 export type Project = Registry['project'];
 export interface ProjectGrant { issuer: string; subject: string; role: 'reader' | 'owner'; createdAt: string }
 export interface ProjectGrantPage {
-  projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null };
+  projectId: string; grantRevision: number; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null };
 }
 export interface ProjectPublisher { issuer: string; subject: string; createdAt: string; grantId: string }
 export interface ProjectPublisherPage {

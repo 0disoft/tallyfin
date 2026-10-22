@@ -129,3 +129,17 @@ test('dispose aborts an in-flight write and ignores its late response and access
   assert.equal(signal.aborted, true); pending.resolve(response(result(change, { canManage: false }))); await writing;
   assert.equal(calls, 0); assert.equal(editor.state.change, null); assert.equal(editor.prepare(change), false);
 });
+
+test('client preserves the reviewed revision in both grant methods and exact retries', async () => {
+  const bodies = [];
+  const client = new ApiClient({ fetchImpl: async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    return response(result({ ...change, role: init.method === 'DELETE' ? null : 'reader', createdAt: init.method === 'DELETE' ? null : '2026-10-11T00:00:00.000Z' }));
+  } });
+  const reviewed = { ...change, expectedRevision: 42 };
+  await client.changeGrant('sembom', reviewed);
+  await client.changeGrant('sembom', { ...reviewed, role: null });
+  assert.equal(bodies[0].expectedRevision, 42); assert.equal(bodies[1].expectedRevision, 42);
+  assert.equal(Object.hasOwn(bodies[1], 'role'), false);
+  client.destroy();
+});

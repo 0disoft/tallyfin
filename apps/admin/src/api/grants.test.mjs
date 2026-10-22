@@ -5,7 +5,7 @@ import { GrantList } from './grant-list.ts';
 import { parseProjectGrantPage } from './grants-contract.ts';
 
 const row = (subject = 'test-owner', role = 'owner') => ({ issuer: 'https://identity.example.invalid', subject, role, createdAt: '2026-10-11T00:00:00.000Z' });
-const page = (subjects = ['test-owner'], nextCursor = null) => ({ projectId: 'sembom', data: subjects.map(subject => row(subject)), page: { limit: 25, nextCursor } });
+const page = (subjects = ['test-owner'], nextCursor = null) => ({ projectId: 'sembom', grantRevision: 0, data: subjects.map(subject => row(subject)), page: { limit: 25, nextCursor } });
 const response = value => ({ ok: true, status: 200, json: async () => value });
 const denied = status => ({ ok: false, status, json: async () => ({ error: { message: 'private server details' } }) });
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -14,7 +14,7 @@ const defer = () => { let resolve; const promise = new Promise(r => { resolve = 
 test('grant page parser validates closed shape, roles, IDs, time, bounds and duplicate identities', () => {
   assert.deepEqual(parseProjectGrantPage(page()), page());
   assert.deepEqual(parseProjectGrantPage(page([])), page([]));
-  for (const mutate of [v => v.data[0].role = 'admin', v => v.data[0].subject = '', v => v.data[0].subject = 'x'.repeat(513),
+  for (const mutate of [v => delete v.grantRevision, v => v.grantRevision = -1, v => v.grantRevision = 0.5, v => v.grantRevision = Number.MAX_SAFE_INTEGER + 1, v => v.data[0].role = 'admin', v => v.data[0].subject = '', v => v.data[0].subject = 'x'.repeat(513),
     v => v.data[0].subject = '\n', v => v.data[0].issuer = 'http://identity.example.invalid', v => v.data[0].issuer += '?private=1',
     v => v.data[0].createdAt = '2026-02-30T00:00:00.000Z', v => v.data[0].createdAt = 'yesterday', v => v.data[0].email = 'extra',
     v => v.page.limit = 101, v => v.page.nextCursor = 'bad cursor', v => v.page.nextCursor = 'x'.repeat(12289),

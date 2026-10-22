@@ -105,6 +105,7 @@ export class Provisioner {
         }
         conditions.push('(SELECT max(version) FROM project_schemas WHERE project_id = ?) IS ?'); args.push(id, snapshot.maxVersion);
       } else {
+        conditions.push('grant_revision = ?'); args.push(p.grant_revision);
         conditions.push('(SELECT role FROM project_grants WHERE project_id = ? AND issuer = ? AND subject = ?) IS ?');
         args.push(id, op.issuer, op.subject, snapshot.role);
         conditions.push("(SELECT count(*) FROM project_grants WHERE project_id = ? AND role = 'owner') = ?"); args.push(id, snapshot.owners);

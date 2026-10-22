@@ -312,8 +312,8 @@ export class ApiClient {
     try { change = parseGrantChangeInput(input); }
     catch { throw new ApiError('invalid_request', '발급자·계정 식별자와 권한을 확인해 주세요.'); }
     if (!/^[a-z][a-z0-9-]{0,47}$/.test(projectId)) throw new ApiError('invalid_request', '프로젝트 ID를 확인해 주세요.');
-    const { issuer, subject, role, expectedRole } = change;
-    const body = JSON.stringify(role === null ? { issuer, subject, expectedRole } : change);
+    const { issuer, subject, role, expectedRole, expectedRevision } = change;
+    const body = JSON.stringify(role === null ? { issuer, subject, expectedRole, ...(expectedRevision !== undefined ? { expectedRevision } : {}) } : change);
     if (new TextEncoder().encode(body).byteLength > 16384) throw new ApiError('invalid_request', '권한 요청은 16KiB 이하여야 해요.');
     const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/grants`, {}, options.signal,
       body, role === null ? 'DELETE' : 'PUT'), parseGrantMutationResult);

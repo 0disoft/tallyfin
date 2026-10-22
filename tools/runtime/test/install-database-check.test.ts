@@ -17,7 +17,7 @@ const response = (rows: unknown[]) => [{ success: true, results: rows }];
 
 test('current migrations match all metadata and missing/changed/extra objects fail without exposing SQL', async () => {
   const expected = await expectedDatabaseSchema();
-  assert.equal(expected.migrations.length, 9);
+  assert.equal(expected.migrations.length, 10);
   assert.equal(expected.rows.filter(row => row.type === 'table').length, 16);
   const good = await compareDatabaseSchema(expected.rows, response([...expected.rows].reverse()));
   assert.equal(good.databaseSchemaMatches, true); assert.equal(good.expectedSchemaHash, good.observedSchemaHash);

@@ -6,7 +6,7 @@ export type Project = { id: string; name: string; status: 'active' | 'paused'; t
 
 export type ProjectPage = { data: Project[]; page: { limit: number; nextCursor: string | null } };
 export type ProjectGrant = { issuer: string; subject: string; role: 'reader' | 'owner'; createdAt: string };
-export type ProjectGrantPage = { projectId: string; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null } };
+export type ProjectGrantPage = { projectId: string; grantRevision: number; data: ProjectGrant[]; page: { limit: number; nextCursor: string | null } };
 // Server publisher permission is separate from administrator grants: the row
 // carries no role, only the verified identity, its grant generation and its
 // creation stamp. grantId is non-secret concurrency metadata, never authority.

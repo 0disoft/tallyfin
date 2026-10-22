@@ -294,12 +294,12 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
       [{ issuer: principal.issuer, subject: 'z-reader', role: 'reader', createdAt: new Date(now).toISOString() }]);
     const grantUpdate = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/grants', {
       method: 'PUT', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', role: 'owner', expectedRole: 'reader' }),
+      body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', role: 'owner', expectedRole: 'reader', expectedRevision: await db.prepare("SELECT grant_revision FROM projects WHERE id='worker-created'").first('grant_revision') }),
     });
     assert.equal(grantUpdate.status, 200); assert.equal((await grantUpdate.json() as { role: string }).role, 'owner');
     const grantDelete = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/grants', {
       method: 'DELETE', headers: { Authorization: 'Bearer not-a-credential', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', expectedRole: 'owner' }),
+      body: JSON.stringify({ issuer: principal.issuer, subject: 'z-reader', expectedRole: 'owner', expectedRevision: await db.prepare("SELECT grant_revision FROM projects WHERE id='worker-created'").first('grant_revision') }),
     });
     assert.equal(grantDelete.status, 200); assert.equal((await grantDelete.json() as { role: string | null }).role, null);
     const history = await runtime.dispatchFetch('https://collector.example.invalid/v1/projects/worker-created/changes?limit=2',

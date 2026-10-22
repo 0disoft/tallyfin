@@ -30,18 +30,20 @@ export async function listProjectGrants(db: SqlDatabase, principal: AdminPrincip
   const after = decode(id, cursor);
   const caller = [principal.issuer, principal.subject];
   // Permission and rows share one transactional snapshot. The cursor is only a position, never authority.
-  const result = await db.batch<{ id: string } | GrantRow>([
-    db.prepare(`SELECT p.id FROM projects p WHERE p.id = ? AND ${owner}`).bind(id, ...caller),
+  const result = await db.batch<{ id: string; grant_revision: number } | GrantRow>([
+    db.prepare(`SELECT p.id, p.grant_revision FROM projects p WHERE p.id = ? AND ${owner}`).bind(id, ...caller),
     db.prepare(`SELECT g.issuer, g.subject, g.role, g.created_at FROM project_grants g JOIN projects p ON p.id = g.project_id
       WHERE p.id = ? AND ${owner} ${after ? 'AND (g.issuer, g.subject) > (?, ?)' : ''}
       ORDER BY g.issuer, g.subject LIMIT ?`).bind(id, ...caller, ...(after ?? []), limit + 1),
   ]);
   if (result.length !== 2 || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
   if (!result[0]!.results.length) throw new CollectionError('forbidden', 403);
+  const revision = (result[0]!.results[0] as { grant_revision: number }).grant_revision;
+  if (!integer(revision, 0, Number.MAX_SAFE_INTEGER)) throw new CollectionError('storage_unavailable', 503);
   const rows = result[1]!.results as GrantRow[];
   if (rows.length > limit + 1) throw new CollectionError('storage_unavailable', 503);
   const data = rows.map(metadata);
   const last = data[limit - 1];
-  return { projectId: id, data: data.slice(0, limit), page: { limit,
+  return { projectId: id, grantRevision: revision, data: data.slice(0, limit), page: { limit,
     nextCursor: rows.length > limit && last ? encode(id, last.issuer, last.subject) : null } };
 }

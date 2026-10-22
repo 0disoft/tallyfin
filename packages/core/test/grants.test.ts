@@ -16,3 +16,10 @@ test('grant changes are closed, bounded and keep expected and requested role sep
   assert.throws(() => parseGrantChange(input, 'DELETE'), { code: 'invalid_request' });
   assert.equal(validGrantIdentity(input.issuer, '한😀'.repeat(170)), true);
 });
+
+test('grant revisions are optional for compatibility but closed safe integers when supplied', () => {
+  for (const expectedRevision of [0, Number.MAX_SAFE_INTEGER])
+    assert.equal(validateGrantChange({ ...input, expectedRevision }).expectedRevision, expectedRevision);
+  for (const expectedRevision of [undefined, null, -1, 0.5, '1', Number.MAX_SAFE_INTEGER + 1])
+    assert.throws(() => validateGrantChange({ ...input, expectedRevision }), { code: 'invalid_request' });
+});

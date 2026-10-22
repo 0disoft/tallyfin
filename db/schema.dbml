@@ -38,6 +38,7 @@ Table retention_cleanup_state {
 }
 
 Table projects {
+  grant_revision bigint [not null, default: 0, note: 'Safe nonnegative integer, incremented by grant insert/delete/role-update triggers; independent of ingest traffic']
   id text [pk, not null, note: 'Public routing ID, never a credential']
   name text [not null]
   status text [not null, note: 'active | paused']

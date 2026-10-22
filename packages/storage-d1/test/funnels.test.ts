@@ -143,9 +143,9 @@ test('0007 adds only empty funnel tables/guards and rejects missing guards on su
     const db = await mf.getD1Database('DB'), statements = migrationStatements(), boundary = statements.findIndex(sql => sql.startsWith('CREATE TABLE funnel_runs'));
     assert.ok(boundary > 0); for (const sql of statements.slice(0, boundary)) await db.prepare(sql).run(); await seed(db);
     const before = (await db.prepare('SELECT * FROM projects').all()).results;
-    assert.deepEqual(await initialize(db, false), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql'], applied: true });
-    assert.deepEqual((await db.prepare('SELECT * FROM projects').all()).results, before);
+    assert.deepEqual(await initialize(db, false), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql'], applied: true });
+    assert.deepEqual((await db.prepare('SELECT * FROM projects').all()).results, before.map(row => ({ ...row, grant_revision: 0 })));
     assert.equal(await db.prepare('SELECT count(*) AS n FROM funnel_runs').first('n'), 0);
     assert.equal((await db.prepare('PRAGMA foreign_key_check').all()).results.length, 0);
     assert.deepEqual(await initialize(db, true), { migrations: [], applied: false });

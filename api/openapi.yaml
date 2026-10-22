@@ -597,8 +597,13 @@ components:
     ProjectGrantPage:
       type: object
       additionalProperties: false
-      required: [projectId, data, page]
+      required: [projectId, grantRevision, data, page]
       properties:
+        grantRevision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: Project grant revision at this list snapshot; use as expectedRevision when changing grants.
         projectId:
           $ref: "#/components/schemas/ProjectId"
         data:
@@ -860,6 +865,12 @@ components:
       additionalProperties: false
       required: [issuer, subject, role, expectedRole]
       properties:
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: grantRevision from the reviewed project grant page. Required for a state-changing write;
+            missing or stale values yield grant_conflict. A no-op may still return changed=false without writing.
         issuer:
           $ref: "#/components/schemas/GrantIssuer"
         subject:
@@ -881,6 +892,12 @@ components:
       additionalProperties: false
       required: [issuer, subject, expectedRole]
       properties:
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+          description: grantRevision from the reviewed project grant page. Required for a state-changing write;
+            missing or stale values yield grant_conflict. A no-op may still return changed=false without writing.
         issuer:
           $ref: "#/components/schemas/GrantIssuer"
         subject:
@@ -2953,7 +2970,7 @@ paths:
       summary: Add or change a reader or owner grant as owner
       description: Requires a current owner grant. Ownership is checked before the body is read and rechecked inside one atomic
         database batch with the write, so a revoked owner cannot mutate. The closed body holds only issuer, subject, role and
-        expectedRole with the same identity constraints as the provisioning CLI. expectedRole is the role the caller last
+        expectedRole with the same identity constraints as the provisioning CLI. expectedRevision is the grantRevision read with the reviewed page and is required for changes. expectedRole is the role the caller last
         observed; null registers a new grant, reader or owner is a compare-and-swap guard. When the target already holds the
         requested role the request succeeds with changed=false and writes nothing, including an exact retry of an earlier
         success. A different stored role returns grant_conflict (409). Moving the last remaining owner down to reader returns
@@ -3034,7 +3051,7 @@ paths:
       operationId: deleteProjectGrant
       summary: Revoke a reader or owner grant as owner
       description: Requires a current owner grant, checked before the body is read and rechecked inside one atomic database
-        batch with the delete. The closed body holds only issuer, subject and expectedRole. expectedRole is the role the caller
+        batch with the delete. The closed body holds issuer, subject, expectedRole and optional expectedRevision. State changes require the current grantRevision as expectedRevision. expectedRole is the role the caller
         last observed; null states the caller saw no grant and the revoke of an absent grant is an idempotent success,
         reader or owner is a compare-and-swap guard. A stored role that differs from expectedRole returns grant_conflict
         (409). Revoking the last remaining owner returns last_owner (409). A caller may revoke their own grant while another

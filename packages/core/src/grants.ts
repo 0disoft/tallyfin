@@ -1,8 +1,8 @@
 import { CollectionError } from './types.ts';
-import { closed, text } from './value.ts';
+import { closed, integer, text } from './value.ts';
 
 export type GrantRole = 'reader' | 'owner';
-export interface GrantChange { issuer: string; subject: string; role: GrantRole | null; expectedRole: GrantRole | null }
+export interface GrantChange { issuer: string; subject: string; role: GrantRole | null; expectedRole: GrantRole | null; expectedRevision?: number }
 export interface GrantChangeResult {
   projectId: string; issuer: string; subject: string; role: GrantRole | null; createdAt: string | null;
   canManage: boolean; changed: boolean;
@@ -17,12 +17,14 @@ export function validGrantIdentity(issuer: unknown, subject: unknown): boolean {
 }
 function role(value: unknown): value is GrantRole | null { return value === null || value === 'reader' || value === 'owner'; }
 export function validateGrantChange(value: unknown): GrantChange {
-  if (!closed(value, ['issuer', 'subject', 'role', 'expectedRole']) || !validGrantIdentity(value.issuer, value.subject) ||
-    !role(value.role) || !role(value.expectedRole)) throw new CollectionError('invalid_request', 400);
-  return { issuer: value.issuer as string, subject: value.subject as string, role: value.role, expectedRole: value.expectedRole };
+  if (!closed(value, ['issuer', 'subject', 'role', 'expectedRole'], ['expectedRevision']) || !validGrantIdentity(value.issuer, value.subject) ||
+    !role(value.role) || !role(value.expectedRole) ||
+    (Object.hasOwn(value, 'expectedRevision') && !integer(value.expectedRevision, 0, Number.MAX_SAFE_INTEGER))) throw new CollectionError('invalid_request', 400);
+  return { issuer: value.issuer as string, subject: value.subject as string, role: value.role, expectedRole: value.expectedRole,
+    ...(Object.hasOwn(value, 'expectedRevision') ? { expectedRevision: value.expectedRevision as number } : {}) };
 }
 export function parseGrantChange(value: unknown, method: 'PUT' | 'DELETE'): GrantChange {
-  if (!closed(value, method === 'PUT' ? ['issuer', 'subject', 'role', 'expectedRole'] : ['issuer', 'subject', 'expectedRole']) ||
+  if (!closed(value, method === 'PUT' ? ['issuer', 'subject', 'role', 'expectedRole'] : ['issuer', 'subject', 'expectedRole'], ['expectedRevision']) ||
     (method === 'PUT' && value.role === null)) throw new CollectionError('invalid_request', 400);
   return validateGrantChange({ ...value, role: method === 'DELETE' ? null : value.role });
 }
