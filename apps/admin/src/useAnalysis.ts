@@ -45,7 +45,7 @@ export function usePeriodComparison({ client, compare, aggregateComparisonAvaila
       .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
       .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
     return () => controller.abort();
-  }, [client, compare, mainData, comparisonKey, view, comparisonError, aggregateComparisonAvailable]);
+  }, [client, compare, mainData?.registry, mainData?.range.from, mainData?.range.to, comparisonKey, view, comparisonError, aggregateComparisonAvailable]);
   return [comparison, setComparison] as const;
 }
 

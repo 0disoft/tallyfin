@@ -16,7 +16,7 @@ import { API_BASE_PATH, ApiClient, ApiError, resolveApiEndpoint } from './api/cl
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
-import { previousRange, type WorkflowLoad } from './api/period-comparison';
+import { previousRange, recoverWorkflow, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import EventPropertyComparison from './EventPropertyComparison';
 import useEventPropertyComparison from './useEventPropertyComparison';
@@ -257,8 +257,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [activeProject, onActiveProjectChange]);
 
   const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
-  const comparisonAvailable = view !== 'goals' || !!mainData?.workflows.length || !!mainData?.registry.funnels?.length;
-  const aggregateComparisonAvailable = view !== 'goals' || !!mainData?.workflows.length;
+  const comparisonAvailable = view !== 'goals' || !!mainData?.registry.workflows.length || !!mainData?.registry.funnels?.length;
+  const aggregateComparisonAvailable = view !== 'goals' || !!mainData?.registry.workflows.length;
   const comparisonError = mainData && projectToday ? comparisonRangeError(mainData.range, projectToday) : null;
   const propertyComparison = useEventPropertyComparison(client, analysisRegistry, seriesData,
     compare && view === 'events' && !!groupBy && !comparisonError && !!seriesData, seriesKey);
@@ -319,6 +319,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const successLabel = successDefinition?.label ?? '성공 시도';
   const currentWorkflowDetails = view === 'goals' ? Object.values(workflowDetails).filter(detail => detail.context === mainKey && detail.groupBy) : [];
   const exportUnavailable = !data || !validVersion ? '현재 기간 조회를 마쳐야 CSV를 내려받을 수 있어요.'
+    : data.workflowErrors?.length ? '실패한 작업 흐름 조회를 복구해야 전체 CSV를 내려받을 수 있어요.'
+    : compare && currentComparison?.data?.workflowErrors?.length ? '직전 기간의 실패한 작업 흐름을 다시 조회해 주세요.'
     : compare && comparisonError ? '직전 기간이 보존 범위를 벗어나요. 비교를 끄면 현재 기간 CSV를 내려받을 수 있어요.'
     : compare && (currentComparison?.status !== 'ready' || !currentComparison.data) ? '직전 기간 비교를 마치거나 비교를 꺼 주세요.'
     : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.'
@@ -359,7 +361,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view === 'settings' && <DeferredPanel label="운영 로그 보고서"><ObservationReportPanel client={client} /></DeferredPanel>}
     {view !== 'settings' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 작업 흐름은 브라우저 기준이며, 퍼널은 등록된 단계의 출처를 함께 조회해요.'}</p>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
-    {view !== 'settings' && (view !== 'goals' || !!data?.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
+    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
     {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
     {projects.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>프로젝트 목록을 확인하는 중이에요</h2></section>}
@@ -419,7 +421,11 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           </>}
         </section>}
       </>}
-      {view === 'goals' && <DeferredPanel key={activeProjectId} label="목표"><LiveGoals client={client} registry={registry} workflows={data.workflows} range={data.range}
+      {currentComparison?.data?.workflowErrors?.length ? <p role="alert">직전 기간의 일부 작업 흐름을 불러오지 못했어요. 확인할 수 없는 비교 값은 비워 두며 전체 CSV는 잠겨 있어요. <button className="secondary-button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></p> : null}
+      {view === 'goals' && <DeferredPanel key={activeProjectId} label="목표"><LiveGoals client={client} registry={registry} workflows={data.workflows} workflowErrors={data.workflowErrors ?? []} onRecovered={load => setMain(previous => {
+        if (previous.key !== mainKey || previous.status !== 'ready' || !previous.data) return previous;
+        return { ...previous, data: { ...previous.data, ...recoverWorkflow(previous.data, previous.data.registry, load) } };
+      })} range={data.range}
         previous={compare && !comparisonError ? previousRange(data.range) : null} compare={compare} comparisonError={comparisonError} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
 
     </>}

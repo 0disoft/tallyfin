@@ -1,3 +1,5 @@
+import { ApiError } from './client.ts';
+import { toApiError } from './load-state.ts';
 import type { ApiClient } from './client.ts';
 import { shiftDate } from './dates.ts';
 import type { EventSource, QueryMeta, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse, WorkflowSummary } from './types.ts';
@@ -6,7 +8,8 @@ import { ContractError } from './validate.ts';
 export type DateRange = { from: string; to: string };
 export type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
 export type AnalysisView = 'overview' | 'events' | 'goals';
-export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad[]; range: DateRange; view?: AnalysisView };
+export type WorkflowFailure = { definition: WorkflowDefinition; error: ApiError };
+export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad[]; range: DateRange; view?: AnalysisView; workflowErrors?: WorkflowFailure[] };
 
 export function periodWorkflows(registry: Registry, source: EventSource, view: AnalysisView = 'goals'): WorkflowDefinition[] {
   if (source !== 'browser' || view === 'events') return [];
@@ -75,7 +78,7 @@ export function validateWorkflowLoad({ definition, response }: WorkflowLoad, reg
   for (const key of ['startedAttempts', 'succeededAttempts', 'pendingAttempts', 'failedAttempts'] as const)
     if (totals[key] !== (response.summary[key] ?? 0)) invalid();
 }
-export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry, source: EventSource = 'browser'): void {
+export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry, source: EventSource = 'browser', allowPartial = false): void {
   const { summary, workflows, range } = snapshot;
   assertMeta(summary.meta, registry, range, source);
   days(range);
@@ -84,19 +87,47 @@ export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry, s
     summary.events.some(event => !expected.includes(event.name)) ||
     summary.events.reduce((total, event) => count(total + count(event.count)), 0) !== count(summary.totalEvents)) invalid();
   if (snapshot.view !== undefined && !['overview', 'events', 'goals'].includes(snapshot.view)) invalid();
-  const expectedFlows = periodWorkflows(registry, source, snapshot.view);
+  const failures = snapshot.workflowErrors ?? [];
+  if (failures.length && (!allowPartial || snapshot.view !== 'goals')) invalid();
+  const allFlows = periodWorkflows(registry, source, snapshot.view);
+  const failedIds = new Set(failures.map(failure => failure.definition.id));
+  if (failedIds.size !== failures.length || failures.some(failure => !allFlows.some(flow => flow.id === failure.definition.id))) invalid();
+  const expectedFlows = allFlows.filter(flow => !failedIds.has(flow.id));
   if (workflows.length !== expectedFlows.length || workflows.some((load, index) => load.definition.id !== expectedFlows[index]!.id)) invalid();
   for (const workflow of workflows) validateWorkflowLoad(workflow, registry, range);
 }
 /** Separate requests keep each window within the API's 31-day limit. */
 export async function loadPeriod(client: ApiClient, registry: Registry, range: DateRange, signal: AbortSignal, source: EventSource = 'browser', view?: AnalysisView): Promise<PeriodSnapshot> {
   const options = { schemaVersion: registry.schemaVersion, ...range, signal };
-  const [summary, workflows] = await Promise.all([
+  const [summary, results] = await Promise.all([
     client.getSummary(registry.project.id, { ...options, source }),
-    Promise.all(periodWorkflows(registry, source, view).map(async definition => ({ definition,
-      response: await client.getWorkflowDaily(registry.project.id, definition.id, options) }))),
+    Promise.all(periodWorkflows(registry, source, view).map(async definition => {
+      try {
+        const load = { definition, response: await client.getWorkflowDaily(registry.project.id, definition.id, options) };
+        validateWorkflowLoad(load, registry, range);
+        return { load };
+      } catch (error) {
+        signal.throwIfAborted();
+        if (view !== 'goals' || (error instanceof ApiError && ['unauthorized', 'forbidden'].includes(error.kind))) throw error;
+        return { failure: { definition, error: toApiError(error) } };
+      }
+    })),
   ]);
-  const snapshot = { summary, workflows, range, ...(view ? { view } : {}) };
-  validateSnapshot(snapshot, registry, source);
+  const workflows = results.flatMap(result => result.load ? [result.load] : []);
+  const workflowErrors = results.flatMap(result => result.failure ? [result.failure] : []);
+  const snapshot = { summary, workflows, range, ...(view ? { view } : {}), ...(workflowErrors.length ? { workflowErrors } : {}) };
+  validateSnapshot(snapshot, registry, source, view === 'goals');
   return snapshot;
+}
+
+/** Replace one recovered panel, preserving registry order and all other failures. */
+export function recoverWorkflow(snapshot: PeriodSnapshot, registry: Registry, load: WorkflowLoad): PeriodSnapshot {
+  validateWorkflowLoad(load, registry, snapshot.range);
+  const loaded = new Map(snapshot.workflows.map(item => [item.definition.id, item]));
+  loaded.set(load.definition.id, load);
+  const next = { ...snapshot, workflows: periodWorkflows(registry, snapshot.summary.meta.source, snapshot.view).flatMap(definition => {
+    const value = loaded.get(definition.id); return value ? [value] : [];
+  }), workflowErrors: snapshot.workflowErrors?.filter(failure => failure.definition.id !== load.definition.id) };
+  validateSnapshot(next, registry, snapshot.summary.meta.source, true);
+  return next;
 }

@@ -6,7 +6,7 @@ import { appendPage, shouldApplyPage } from './pagination.ts';
 import { periodRange, todayInZone } from './dates.ts';
 import { SettingsEditor } from './settings-editor.ts';
 import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './event-analysis.ts';
-import { previousRange, countChange, rateChange, validateSnapshot, loadPeriod } from './period-comparison.ts';
+import { previousRange, countChange, rateChange, validateSnapshot, loadPeriod, recoverWorkflow } from './period-comparison.ts';
 import { analyticsCsv, csvCell, serializeCsv, CSV_COLUMNS } from './csv-export.ts';
 
 test('transport errors retain their cause and caller cancellation retains its exact reason', async () => {
@@ -601,7 +601,15 @@ test('screen-scoped periods skip unrelated workflows and CSV rejects missing goa
   const overview = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'overview');
   assert.deepEqual(calls, ['convert']); assert.equal(overview.workflows.length, 1);
   assert.ok(analyticsCsv({ registry, current: overview, view: 'overview' }).text.includes('workflow_total'));
-  await assert.rejects(loadPeriod(client, registry, snapshot.range, signal, 'browser', 'goals'), /unrelated workflow/);
+  const partial = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'goals');
+  assert.equal(partial.workflows.length, 1); assert.equal(partial.workflowErrors[0].definition.id, 'other');
+  assert.throws(() => analyticsCsv({ registry, current: partial, view: 'goals' }));
+  const repaired = recoverWorkflow(partial, registry, { definition: second, response: { ...snapshot.workflows[0].response, workflowId: second.id } });
+  assert.equal(repaired.workflows.length, 2); assert.equal(repaired.workflowErrors.length, 0);
+  assert.ok(analyticsCsv({ registry, current: repaired, view: 'goals' }).text.includes('workflow_total'));
+  for (const kind of ['unauthorized', 'forbidden']) {
+    await assert.rejects(loadPeriod({ ...client, getWorkflowDaily: async () => { throw new ApiError(kind, 'denied', 403); } }, registry, snapshot.range, signal, 'browser', 'goals'), error => error.kind === kind);
+  }
   assert.throws(() => validateSnapshot({ ...events, view: 'goals' }, registry));
   assert.throws(() => validateSnapshot({ ...overview, workflows: [{ ...overview.workflows[0], definition: second }] }, registry));
 });

@@ -15,6 +15,7 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 const subject = 'synthetic-login-operator';
 let local, server, browser, page, directory, watchdog, fault, stage = 'fixture', routeError = false, pageErrors = 0;
 const scenarios = [], observed = [];
+let workflowDailyUnavailable = true;
 const tableCells = rows => rows.map(row => [...row.querySelectorAll('th,td')].map(cell => cell.textContent.trim()));
 try {
   const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, help: { type: 'boolean' } } });
@@ -61,6 +62,8 @@ try {
   await context.route('**/*', async route => {
     const url = new URL(route.request().url()), active = fault && !fault.used && url.origin === origin && fault.matches(url) ? fault : null;
     try {
+      if (workflowDailyUnavailable && url.pathname === '/v1/projects/sembom/workflows/calculation/daily')
+        return await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'storage_unavailable' } }) });
       if (!active) return await local.route(route);
       active.used = true;
       await provisioner.apply(await provisioner.plan('revoke', { projectId: 'sembom', issuer: local.issuer, subject }));
@@ -111,7 +114,13 @@ try {
         && (url.searchParams.get('to') < today) === prior };
     return fault;
   };
-  await ready();
+  stage = 'workflow-panel-failure';
+  await page.getByRole('button', { name: '계산 완료 다시 시도', exact: true }).waitFor();
+  await expect(workflowCsv).toBeDisabled();
+  await selectedFunnel(); await expect(funnelCsv).toBeEnabled();
+  workflowDailyUnavailable = false;
+  await page.getByRole('button', { name: '계산 완료 다시 시도', exact: true }).click();
+  await ready(); await expect(funnelCsv).toBeEnabled(); scenarios.push('workflow-panel-failure-recovery');
   arm('workflow-current-breakdown', 'workflows', 'breakdown', false);
   await workflowGroup.selectOption('tool'); await blocked(); scenarios.push(stage);
 
