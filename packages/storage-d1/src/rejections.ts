@@ -20,9 +20,10 @@ function summarize(counts: RejectionCounts): RejectionSummary {
     lastRejectedAt: timestamps.length ? new Date(Math.max(...timestamps)).toISOString() : null, reasons };
 }
 function decode(json: string, minute: number): RejectionCounts {
+  if (typeof json !== 'string' || new TextEncoder().encode(json).length > 2048) return invalid();
   let value: unknown;
   try { value = JSON.parse(json); } catch { return invalid(); }
-  if (typeof json !== 'string' || new TextEncoder().encode(json).length > 2048 || !closed(value, [], [...REJECTION_REASONS])) return invalid();
+  if (!closed(value, [], [...REJECTION_REASONS])) return invalid();
   const output: RejectionCounts = {};
   for (const reason of REJECTION_REASONS) {
     const entry = value[reason]; if (entry === undefined) continue;
@@ -52,17 +53,21 @@ export async function collectionRejections(db: SqlDatabase, principal: AdminPrin
 }
 
 export interface RejectionMinuteRow { minute_start: number; rejections_json: string }
+export function rejectionMinuteCounts(row: RejectionMinuteRow, start: number, end: number): RejectionCounts {
+  if (!integer(row.minute_start, start, end - 1) || row.minute_start % 60_000 !== 0) return invalid();
+  return decode(row.rejections_json, row.minute_start);
+}
 /** Shared bounded decoder for detailed and overview reads. */
 export function rejectionResponse(projectId: string, from: string, to: string, now: number, rows: RejectionMinuteRow[]): RejectionResponse {
   const dates = rejectionRange(projectId, from, to, now), start = dateMillis(from), end = dateMillis(to) + DAY;
   if (rows.length > 10080) return invalid();
   const daily = new Map(dates.map(date => [date, empty()])), total = empty(), seen = new Set<number>();
   for (const row of rows) {
-    if (!integer(row.minute_start, start, end - 1) || row.minute_start % 60_000 !== 0 || seen.has(row.minute_start)) return invalid();
+    if (seen.has(row.minute_start)) return invalid();
+    const counts = rejectionMinuteCounts(row, start, end);
     seen.add(row.minute_start);
     const date = new Date(row.minute_start).toISOString().slice(0, 10), target = daily.get(date);
     if (!target) return invalid();
-    const counts = decode(row.rejections_json, row.minute_start);
     merge(target, counts); merge(total, counts);
   }
   return { meta: { projectId, from, to, timeZone: 'UTC', dateBasis: 'receivedAt', generatedAt: new Date(now).toISOString(), retentionDays: 7, coverage: 'best-effort' },

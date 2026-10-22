@@ -3,8 +3,7 @@ import { addCounts, closed, CollectionError, dateMillis, DAY, emptyOverviewRow, 
 import type { AdminPrincipal, OverviewResponse, OverviewRow, Registry } from '@tallyfin/core';
 import { queryResponse } from './query-response.ts';
 import type { EventRow, WorkflowRow } from './query-response.ts';
-import { rejectionResponse } from './rejections.ts';
-import type { RejectionMinuteRow } from './rejections.ts';
+import { overviewRejections } from './overview-rejections.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlResult, SqlStatement } from './sql.ts';
 
 type State = ProjectRow & { version: number | null; status_schema: SchemaRow['status'] | null;
@@ -30,7 +29,7 @@ function registryFor(p: State, options: { allowLocalHttp?: boolean }): Registry 
     schemaVersion: p.version, schemaStatus: p.status_schema, allowedOrigins: JSON.parse(p.allowed_origins_json),
     limits: { requestsPerMinute: p.requests_per_minute, newReceiptsPerUtcDay: p.new_receipts_per_utc_day } }, options);
 }
-/** At most two database round trips and 17 SQL statements for five projects. */
+/** One aggregate snapshot, then sequential bounded rejection pages; at most 42 SQL statements. */
 export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal, ids: readonly string[], source: 'browser' | 'server',
   now: number, options: { allowLocalHttp?: boolean; signal?: AbortSignal } = {}): Promise<OverviewResponse> {
   validateOverviewInput(ids, source);
@@ -58,16 +57,12 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
         SUM(failed_count) AS failed_count FROM workflow_daily_counts WHERE project_id = ? AND schema_version = ? AND source = 'browser'
         AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ? AND ${access})
         GROUP BY cohort_date LIMIT 15`).bind(p.id, p.version, workflow?.id ?? '', from, to, ...grant));
-      statements.push(db.prepare(`SELECT minute_start, rejections_json FROM ingest_minute_usage WHERE project_id = ?
-        AND minute_start >= ? AND minute_start < ? AND rejections_json != '{}'
-        AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ? AND ${access}) ORDER BY minute_start LIMIT 10081`)
-        .bind(p.id, dateMillis(utcFrom), dateMillis(utcTo) + DAY, ...grant));
       plans.set(p.id, { state: p, registry, from, split, to, offset });
     } catch { row.error = true; }
   }
   if (!plans.size) return { source, generatedAt: new Date(now).toISOString(), data: rows };
   check();
-  const results = checked(await db.batch<State | EventRow | WorkflowRow | RejectionMinuteRow>(statements), statements.length); check();
+  const results = checked(await db.batch<State | EventRow | WorkflowRow>(statements), statements.length); check();
   const current = new Map((results[0]!.results as State[]).map(p => [p.id, p]));
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!, plan = plans.get(row.projectId); if (!plan) continue;
@@ -79,8 +74,12 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
     try { fillEvents(row, plan, p, results[plan.offset]!.results as (EventRow & { period: number })[], source); }
     catch { rows[i] = { ...emptyOverviewRow(row.projectId), error: true }; continue; }
     fillWorkflow(row, plan, results[plan.offset + 1]!.results as WorkflowRow[], source, now);
-    try { row.rejected = rejectionResponse(p.id, utcFrom, utcTo, now, results[plan.offset + 2]!.results as RejectionMinuteRow[]).summary.rejectedRequests; }
-    catch { row.rejectionUnavailable = true; }
+    try { row.rejected = (await overviewRejections(db, principal, p.id, utcFrom, utcTo, now, options.signal)).rejected; }
+    catch (cause) {
+      check();
+      if (cause instanceof CollectionError && cause.code === 'forbidden') rows[i] = { ...emptyOverviewRow(row.projectId), error: true, accessDenied: true };
+      else row.rejectionUnavailable = true;
+    }
   }
   return { source, generatedAt: new Date(now).toISOString(), data: rows };
 }

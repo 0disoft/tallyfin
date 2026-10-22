@@ -35,14 +35,14 @@ function measured(beforeBatch?: (index: number) => Promise<void>, alter?: (index
   } };
   return { db, totals: () => ({ batches, statements }) };
 }
-test('five services use one HTTP read, two DB batches and 17 statements in requested order', async () => {
+test('five services use one HTTP read and bounded sequential rejection scans in requested order', async () => {
   const m = measured(), response = await handler(m.db)(request(`projectIds=${[...ids].reverse().join(',')}`));
   assert.equal(response.status, 200); assert.equal(response.headers.get('Cache-Control'), 'no-store');
   assert.equal(response.headers.get('Vary'), 'Authorization');
   const body = parseOverview(await response.json());
   assert.deepEqual(body.data.map(r => r.projectId), [...ids].reverse());
   assert.ok(body.data.every(r => r.events === 0 && r.rejected === 0 && !r.error));
-  assert.deepEqual(m.totals(), { batches: 2, statements: 17 });
+  assert.deepEqual(m.totals(), { batches: 7, statements: 22 });
 });
 test('period totals and workflow rates match existing reads across local midnight and source boundaries', async () => {
   const date = localDate(now, registry.project.timeZone), prior = new Date(Date.parse(date) - 7 * DAY).toISOString().slice(0, 10);
@@ -86,9 +86,9 @@ test('revocation and schema changes between batches cannot expose stale metrics'
   }
 });
 test('corrupt workflow/rejection data preserve event totals and other rows; shared storage failure is 503', async () => {
-  const m = measured(undefined, (index, result) => { if (index !== 2) return;
-    result[2].results = [{ cohort_date: localDate(now, registry.project.timeZone), started_count: 1, succeeded_count: 2, failed_count: 0 }];
-    result[3].results = [{ minute_start: Math.floor(now / 60000) * 60000, rejections_json: 'broken' }];
+  const m = measured(undefined, (index, result) => {
+    if (index === 2) result[2].results = [{ cohort_date: localDate(now, registry.project.timeZone), started_count: 1, succeeded_count: 2, failed_count: 0 }];
+    if (index === 3) result[1].results = [{ minute_start: Math.floor(now / 60000) * 60000, rejections_json: 'broken' }];
   });
   const body = parseOverview(await (await handler(m.db)(request('projectIds=sembom,service-b'))).json());
   assert.equal(body.data[0]!.events, 0); assert.equal(body.data[0]!.workflowUnavailable, true); assert.equal(body.data[0]!.rejectionUnavailable, true);
@@ -96,6 +96,40 @@ test('corrupt workflow/rejection data preserve event totals and other rows; shar
   const failed = measured(async () => { throw Error('private database detail'); });
   const response = await handler(failed.db)(request()); assert.equal(response.status, 503);
   assert.ok(!(await response.text()).includes('private database detail'));
+});
+test('real D1 rejection pages sum exactly once across the page boundary', async () => {
+  const to = new Date(now).toISOString().slice(0, 10), from = new Date(Date.parse(to) - 6 * DAY).toISOString().slice(0, 10), start = Date.parse(from);
+  await fixture.db.prepare(`WITH RECURSIVE seq(n) AS (SELECT 0 UNION ALL SELECT n+1 FROM seq WHERE n < 4096)
+    INSERT INTO ingest_minute_usage(project_id,minute_start,request_count,rejections_json)
+    SELECT 'sembom', ? + n*60000, 1, json_object('invalid_event', json_object('count',1,'lastRejectedAt',? + n*60000)) FROM seq`)
+    .bind(start, start).run();
+  const m = measured(), store = new D1Queries(m.db);
+  const result = await store.overview(principal, ['sembom'], 'browser', now);
+  assert.equal(result.data[0]!.rejected, 4097); assert.equal(result.data[0]!.rejectionUnavailable, false);
+  assert.deepEqual(m.totals(), { batches: 4, statements: 8 });
+  assert.equal(result.data[0]!.rejected, (await new D1Queries(fixture.db).rejections(principal, 'sembom', from, to, now)).summary.rejectedRequests);
+});
+test('five full rejection ranges stay within 42 SQL statements and only one raw page at a time', async () => {
+  let maxRows = 0;
+  const start = Date.parse(new Date(now - 6 * DAY).toISOString().slice(0, 10));
+  const m = measured(undefined, (index, result) => {
+    if (index < 3) return;
+    const offset = (index - 3) % 3 * 4096;
+    const rows = Array.from({ length: Math.min(4096, 10080 - offset) }, (_, i) => {
+      const minute = start + (offset + i) * 60000;
+      return { minute_start: minute, rejections_json: JSON.stringify({ invalid_event: { count: 1, lastRejectedAt: minute } }) };
+    });
+    result[1].results = rows; maxRows = Math.max(maxRows, rows.length);
+  });
+  const result = await new D1Queries(m.db).overview(principal, ids, 'browser', now);
+  assert.ok(result.data.every(row => row.rejected === 10080 && !row.rejectionUnavailable));
+  assert.equal(maxRows, 4096); assert.deepEqual(m.totals(), { batches: 17, statements: 42 });
+});
+test('permission loss during rejection scan clears all previously loaded service metrics', async () => {
+  const m = measured(async index => { if (index === 3) await fixture.db.prepare("DELETE FROM project_grants WHERE project_id='sembom'").run(); });
+  const result = parseOverview(await (await handler(m.db)(request('projectIds=sembom,service-b'))).json());
+  assert.deepEqual(result.data[0], { ...emptyOverviewRow('sembom'), error: true, accessDenied: true });
+  assert.equal(result.data[1]!.events, 0);
 });
 test('authentication precedes input validation; invalid input performs no DB reads', async () => {
   const m = measured(), run = handler(m.db);
