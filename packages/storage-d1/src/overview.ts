@@ -24,7 +24,7 @@ function checked<T>(result: SqlResult<T>[], length: number): SqlResult<T>[] {
 }
 function registryFor(p: State, options: { allowLocalHttp?: boolean }): Registry {
   const definitions: unknown = JSON.parse(p.definitions_json!);
-  if (!closed(definitions, ['events', 'workflows'], ['funnels'])) return invalid();
+  if (!closed(definitions, ['events', 'workflows'], ['funnels', 'representativeWorkflowId'])) return invalid();
   return validateRegistry({ ...definitions, project: { id: p.id, name: p.name, status: p.status, timeZone: p.time_zone },
     schemaVersion: p.version, schemaStatus: p.status_schema, allowedOrigins: JSON.parse(p.allowed_origins_json),
     limits: { requestsPerMinute: p.requests_per_minute, newReceiptsPerUtcDay: p.new_receipts_per_utc_day } }, options);
@@ -55,7 +55,7 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
         FROM event_daily_counts WHERE project_id = ? AND schema_version = ? AND source = ? AND event_date BETWEEN ? AND ?
         AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ? AND ${access}) GROUP BY period, event_name LIMIT ${2 * SCHEMA_LIMITS.events + 1}`)
         .bind(split, p.id, p.version, source, from, to, ...grant));
-      const workflow = source === 'browser' ? registry.workflows[0] : undefined;
+      const workflow = source === 'browser' ? registry.workflows.find(w => w.id === registry.representativeWorkflowId) : undefined;
       statements.push(db.prepare(`SELECT cohort_date, SUM(started_count) AS started_count, SUM(succeeded_count) AS succeeded_count,
         SUM(failed_count) AS failed_count FROM workflow_daily_counts WHERE project_id = ? AND schema_version = ? AND source = 'browser'
         AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ? AND ${access})
@@ -112,7 +112,7 @@ function receivedAt(value: number | null): string | null {
   return value === null ? null : new Date(value).toISOString();
 }
 function fillWorkflow(row: OverviewRow, plan: Plan, entries: WorkflowRow[], source: 'browser' | 'server', now: number) {
-  const definition = source === 'browser' ? plan.registry.workflows[0] : undefined; if (!definition) return;
+  const definition = source === 'browser' ? plan.registry.workflows.find(w => w.id === plan.registry.representativeWorkflowId) : undefined; if (!definition) return;
   row.workflowLabel = definition.label;
   try {
     const dates = new Set(queryDates(plan.from, plan.to, plan.state.time_zone, now));

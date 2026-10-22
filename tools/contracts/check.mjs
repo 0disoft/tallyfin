@@ -19,6 +19,19 @@ const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
 
+check('representative workflow is optional schema metadata with bounded publication and registry IDs', () => {
+  const registry = example('registry'), draft = { events: registry.events, workflows: registry.workflows };
+  for (const representativeWorkflowId of ['w', 'w'.repeat(48)]) {
+    assert.ok(validate('Registry', { ...registry, representativeWorkflowId }));
+    assert.ok(validate('SchemaPublication', { ...draft, representativeWorkflowId, expectedLatestVersion: 1, privacyReviewed: true }));
+  }
+  for (const representativeWorkflowId of ['', null, 1, 'w'.repeat(49)]) {
+    assert.equal(validate('Registry', { ...registry, representativeWorkflowId }), false);
+    assert.equal(validate('SchemaPublication', { ...draft, representativeWorkflowId, expectedLatestVersion: 1, privacyReviewed: true }), false);
+    assert.ok(validate('SchemaDraft', { ...draft, representativeWorkflowId })); // Semantic validation reports a pointer.
+  }
+});
+
 for (const [file, schema] of Object.entries({ registry:'Registry', 'job-registry':'Registry', 'browser-batch':'BrowserBatch', 'server-batch':'ServerBatch',
   'success-response':'BatchResult', 'error-response':'ErrorResponse', 'paginated-response':'ProjectPage',
   'summary-response':'SummaryResponse', 'event-series-response':'EventSeriesResponse', 'workflow-response':'WorkflowResponse',

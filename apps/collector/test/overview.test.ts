@@ -18,7 +18,7 @@ beforeEach(async () => {
   for (const table of ['workflow_daily_counts', 'event_daily_counts', 'ingest_minute_usage', 'project_grants', 'project_schemas', 'projects'])
     await fixture.db.prepare(`DELETE FROM ${table}`).run();
   for (const id of ids) {
-    await seed(fixture.db, id);
+    await seed(fixture.db, id, { events: registry.events, workflows: registry.workflows, representativeWorkflowId: registry.workflows[0]!.id });
     await fixture.db.prepare('INSERT INTO project_grants(project_id,issuer,subject,role,created_at) VALUES(?,?,?,?,?)')
       .bind(id, principal.issuer, principal.subject, 'reader', now).run();
   }
@@ -37,6 +37,35 @@ function measured(beforeBatch?: (index: number) => Promise<void>, alter?: (index
   } };
   return { db, totals: () => ({ batches, statements }) };
 }
+
+test('explicit second workflow wins independently of registration order; unset versions never fall back', async () => {
+  const first = registry.workflows[0]!, second = { ...first, id: 'chosen', label: 'Chosen workflow',
+    startEvent: 'chosen_start', successEvent: 'chosen_success', failureEvent: null };
+  const events = [...registry.events, ...[second.startEvent, second.successEvent].map(name =>
+    ({ ...registry.events.find(event => event.name === first.startEvent)!, name }))];
+  const store = new D1Queries(fixture.db);
+  for (const version of [2, 3, 4]) {
+    const definitions = { events, workflows: version === 3 ? [second, first] : [first, second],
+      ...(version === 4 ? {} : { representativeWorkflowId: second.id }) };
+    await fixture.db.prepare('INSERT INTO project_schemas(project_id,version,status,definitions_json,published_at) VALUES(?,?,?,?,?)')
+      .bind('sembom', version, 'active', JSON.stringify(definitions), now).run();
+    for (const [id, starts, successes] of [[first.id, 4, 4], [second.id, 8, 2]] as const)
+      await fixture.db.prepare('INSERT INTO workflow_daily_counts VALUES(?,?,?,?,?,?,?,?,?,?)')
+        .bind('sembom', version, 'browser', day, id, '{}', starts, successes, 0, now).run();
+    const row = parseOverview(await (await handler()(request())).json()).data[0]!;
+    assert.equal(row.version, version); assert.equal(row.error, false);
+    assert.equal(row.completion, version === 4 ? null : 25);
+    assert.equal(row.workflowLabel, version === 4 ? null : second.label);
+    if (version === 4) assert.equal(row.workflowStats, null);
+    else assert.equal(row.workflowStats!.current.startedAttempts, 8);
+    assert.equal((await store.overview(principal, ['sembom'], 'server', now)).data[0]!.completion, null);
+  }
+  // A corrupt stored reference is rejected, rather than displaying another workflow's metric.
+  await fixture.db.prepare('INSERT INTO project_schemas(project_id,version,status,definitions_json,published_at) VALUES(?,?,?,?,?)')
+    .bind('sembom', 5, 'active', JSON.stringify({ events, workflows: [first, second], representativeWorkflowId: 'foreign' }), now).run();
+  const invalid = (await store.overview(principal, ['sembom'], 'browser', now)).data[0]!;
+  assert.equal(invalid.error, true); assert.equal(invalid.completion, null);
+});
 test('five services use one HTTP read and bounded sequential rejection scans in requested order', async () => {
   const m = measured(), response = await handler(m.db)(request(`projectIds=${[...ids].reverse().join(',')}`));
   assert.equal(response.status, 200); assert.equal(response.headers.get('Cache-Control'), 'no-store');

@@ -14,10 +14,11 @@ export interface SchemaPage {
   page: { limit: number; beforeVersion: number | null };
 }
 export function parseSchemaPublication(value: unknown): SchemaPublication {
-  if (!closed(value, ['expectedLatestVersion', 'privacyReviewed', 'events', 'workflows'], ['funnels']) || value.privacyReviewed !== true ||
+  if (!closed(value, ['expectedLatestVersion', 'privacyReviewed', 'events', 'workflows'], ['funnels', 'representativeWorkflowId']) || value.privacyReviewed !== true ||
     (value.expectedLatestVersion !== null && !integer(value.expectedLatestVersion, 1, 2147483647)))
     throw new CollectionError('invalid_request', 400);
-  const definitions = { events: value.events, workflows: value.workflows, ...(has(value, 'funnels') ? { funnels: value.funnels } : {}) };
+  const definitions = { events: value.events, workflows: value.workflows, ...(has(value, 'funnels') ? { funnels: value.funnels } : {}),
+    ...(has(value, 'representativeWorkflowId') ? { representativeWorkflowId: value.representativeWorkflowId } : {}) };
   try { validateSchemaDefinitions(definitions); }
   catch (error) {
     if (!(error instanceof SchemaDefinitionError)) throw error;

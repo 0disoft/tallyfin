@@ -1,5 +1,25 @@
 # 검증
 
+## 대표 작업 흐름 백엔드 단계 (2026-10-23)
+
+스키마 정의에 선택 필드 `representativeWorkflowId`를 추가했다. ID 문법과 같은 버전의
+browser workflow 소속을 검사하며, 생략하면 대표 작업 흐름 없음으로 유지하고 첫 workflow로
+대체하지 않는다. 서비스 통합 현황과 개별 서비스 개요는 이 값을 명시적으로 선택하고,
+목표 화면은 계속 전체 workflow를 조회한다. 저장·해시·재요청 비교에는 필드가 있을 때만
+포함해 기존 발행 스키마와 해시는 바이트 단위로 유지한다. 선택 변경은 새 버전 발행으로만
+한다.
+
+`node --test --test-concurrency=2 --test-timeout=30000
+packages/core/test/schema.test.ts apps/collector/test/schema-publication.test.ts
+apps/collector/test/schema.test.ts apps/collector/test/overview.test.ts`는 39/39를 통과했다.
+`npm run check --prefix tools/contracts`는 65/65를 통과했고 `npm run lint --prefix
+tools/contracts`와 `npx tsc --noEmit`도 통과했다.
+
+스키마 JSON 기존 저장만 사용하며 `db/schema.dbml` 설명을 갱신했을 뿐 컬럼·마이그레이션은
+없다. API에는 선택 필드를 추가했고 `settingsHash`와 SQL 예산은 그대로다. CI·의존성·
+저장소 위생 설정 변경은 없다. 프론트엔드 검증은 다음 커밋에서 진행한다. 전체 루트 검사와
+원격 D1·부하는 실행하지 않았고 푸시·배포·게시도 하지 않았다.
+
 ## 통합 현황의 조회 기준·실제 기간·날짜 변경 안내 (2026-10-23)
 
 서버가 생성한 서비스별 period(timeZone·from/to·previousFrom/previousTo)와 generatedAt을

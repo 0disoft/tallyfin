@@ -50,7 +50,7 @@ export async function draftRoute({ request, url, access, principal }: AdminConte
   const project = await access.store.settings(principal, id);
   if (!project.canEdit) throw new CollectionError('forbidden', 403);
   const value = await readJsonBody(request, MAX_SCHEMA_BYTES);
-  if (!closed(value, ['events', 'workflows'], ['funnels']) || !Array.isArray(value.events) || !Array.isArray(value.workflows) ||
+  if (!closed(value, ['events', 'workflows'], ['funnels', 'representativeWorkflowId']) || !Array.isArray(value.events) || !Array.isArray(value.workflows) ||
     (has(value, 'funnels') && !Array.isArray(value.funnels)))
     throw new CollectionError('invalid_request', 400);
   return validateSchemaDraft(value);

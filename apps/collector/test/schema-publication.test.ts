@@ -28,6 +28,28 @@ function request(value: unknown = input(), path = '/v1/projects/sembom/schemas/2
 }
 const revision = async () => (await fixture.db.prepare('SELECT ingest_revision FROM projects WHERE id=?').bind('sembom').first<{ ingest_revision: number }>())!.ingest_revision;
 
+test('representative selection survives publication and retries without changing legacy schemas or settings hashes', async () => {
+  const store = new D1Queries(fixture.db), api = handler(store);
+  const settings = await store.settings(principal, 'sembom');
+  const original = await fixture.db.prepare('SELECT definitions_json FROM project_schemas WHERE version=1').first('definitions_json');
+  const value = { ...input(), representativeWorkflowId: registry.workflows[0]!.id };
+  const response = await api(request(value)); assert.equal(response.status, 200);
+  const meta = await response.json() as any, savedRevision = await revision();
+  assert.equal(meta.definitionHash, await sha256(canonicalJson(schemaDefinitions(value))));
+  assert.deepEqual(await (await api(request(value))).json(), meta); assert.equal(await revision(), savedRevision);
+  assert.equal((await fixture.store.loadRegistry('sembom', 2))!.representativeWorkflowId, value.representativeWorkflowId);
+  const read = await api(request(null, '/v1/projects/sembom/schemas/2', 'GET'));
+  assert.equal((await read.json() as any).representativeWorkflowId, value.representativeWorkflowId);
+  assert.equal((await store.settings(principal, 'sembom')).settingsHash, settings.settingsHash);
+  assert.equal(await fixture.db.prepare('SELECT definitions_json FROM project_schemas WHERE version=1').first('definitions_json'), original);
+  assert.equal((await api(request(input()))).status, 409); // Dropping a selection changes retry identity.
+  const invalid = { ...value, representativeWorkflowId: 'not_registered' };
+  assert.deepEqual(await (await api(request(schemaDefinitions(invalid), '/v1/projects/sembom/schemas/validate', 'POST'))).json(),
+    { valid: false, issues: [{ path: '/representativeWorkflowId', code: 'invalid_reference' }], privacyReviewRequired: true });
+  assert.equal((await api(request({ ...invalid, expectedLatestVersion: 2 }, '/v1/projects/sembom/schemas/3'))).status, 400);
+  assert.equal(await revision(), savedRevision);
+});
+
 test('owner validates, publishes and reads source-bound funnels; retries retain definitions and legacy versions', async () => {
   const definitions = schemaDefinitions(example('funnel-registry'));
   const original = await fixture.db.prepare("SELECT definitions_json FROM project_schemas WHERE version=1").first('definitions_json');

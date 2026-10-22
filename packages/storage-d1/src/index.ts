@@ -68,7 +68,7 @@ export class D1Store implements ServerCollectionStore {
   }
   private registry(project: ProjectRow, schema: SchemaRow): Registry {
     const definitions: unknown = JSON.parse(schema.definitions_json);
-    if (!closed(definitions, ['events', 'workflows'], ['funnels'])) throw Error('invalid registry');
+    if (!closed(definitions, ['events', 'workflows'], ['funnels', 'representativeWorkflowId'])) throw Error('invalid registry');
     return validateRegistry({ ...definitions, project: { id: project.id, name: project.name, status: project.status, timeZone: project.time_zone },
       allowedOrigins: JSON.parse(project.allowed_origins_json), schemaVersion: schema.version, schemaStatus: schema.status,
       limits: { requestsPerMinute: project.requests_per_minute, newReceiptsPerUtcDay: project.new_receipts_per_utc_day } }, { allowLocalHttp: this.allowLocalHttp });

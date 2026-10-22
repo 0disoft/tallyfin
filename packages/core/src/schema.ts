@@ -8,7 +8,7 @@ export type SchemaIssueCode = 'invalid_definition' | 'definition_limit' | 'dupli
   'browser_event_required' | 'invalid_reference' | 'dimension_mismatch';
 export interface SchemaIssue { path: string; code: SchemaIssueCode }
 export interface SchemaValidation { valid: boolean; issues: SchemaIssue[]; privacyReviewRequired: true }
-export type SchemaDefinitions = Pick<Registry, 'events' | 'workflows' | 'funnels'>;
+export type SchemaDefinitions = Pick<Registry, 'events' | 'workflows' | 'funnels' | 'representativeWorkflowId'>;
 type Borrowed<T> = T extends readonly (infer Item)[] ? readonly Borrowed<Item>[] :
   T extends object ? { readonly [Key in keyof T]: Borrowed<T[Key]> } : T;
 export class SchemaDefinitionError extends Error {
@@ -37,7 +37,7 @@ function signature(definition: PropertyDefinition): string {
 }
 /** Shared by registration and draft validation: passing a draft never relaxes registry rules. */
 export function validateSchemaDefinitions(value: unknown): void {
-  if (!closed(value, ['events', 'workflows'], ['funnels'])) fail('');
+  if (!closed(value, ['events', 'workflows'], ['funnels', 'representativeWorkflowId'])) fail('');
   if (!Array.isArray(value.events)) fail('/events');
   if (!Array.isArray(value.workflows)) fail('/workflows');
   if (value.events.length < 1 || value.events.length > SCHEMA_LIMITS.events) fail('/events', 'definition_limit');
@@ -46,6 +46,9 @@ export function validateSchemaDefinitions(value: unknown): void {
   validateEvents(value.events);
   const definitions = value as unknown as SchemaDefinitions;
   validateWorkflows(definitions);
+  if (has(value, 'representativeWorkflowId') && (!matches(value.representativeWorkflowId, NAME) ||
+    !definitions.workflows.some(workflow => workflow.id === value.representativeWorkflowId)))
+    fail('/representativeWorkflowId', 'invalid_reference');
   if (has(value, 'funnels')) validateFunnels(value.funnels, definitions.events);
 }
 function validateEvents(events: EventDefinition[]): void {
@@ -146,5 +149,6 @@ export function validateFunnelDefinitions(value: unknown, events: EventDefinitio
 }
 /** Borrowed read-only view. Preserve absent fields and existing publication hashes without another deep copy. */
 export function schemaDefinitions(value: SchemaDefinitions): Borrowed<SchemaDefinitions> {
-  return { events: value.events, workflows: value.workflows, ...(has(value, 'funnels') ? { funnels: value.funnels! } : {}) };
+  return { events: value.events, workflows: value.workflows, ...(has(value, 'funnels') ? { funnels: value.funnels! } : {}),
+    ...(has(value, 'representativeWorkflowId') ? { representativeWorkflowId: value.representativeWorkflowId! } : {}) };
 }

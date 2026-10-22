@@ -89,7 +89,7 @@ export class D1Queries implements AdminStore {
     const schema = result[1]?.results[0] as SchemaRow | undefined;
     if (!schema) throw new CollectionError('not_found', 404);
     const definitions: unknown = JSON.parse(schema.definitions_json);
-    if (!closed(definitions, ['events', 'workflows'], ['funnels'])) throw new CollectionError('storage_unavailable', 503);
+    if (!closed(definitions, ['events', 'workflows'], ['funnels', 'representativeWorkflowId'])) throw new CollectionError('storage_unavailable', 503);
     const registry = validateRegistry({ ...definitions, project: { id: p.id, name: p.name, status: p.status, timeZone: p.time_zone },
       schemaVersion: schema.version, schemaStatus: schema.status, allowedOrigins: JSON.parse(p.allowed_origins_json),
       limits: { requestsPerMinute: p.requests_per_minute, newReceiptsPerUtcDay: p.new_receipts_per_utc_day } }, this.options);

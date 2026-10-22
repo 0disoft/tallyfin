@@ -20,7 +20,7 @@ export interface Registry {
   project: { id: string; name: string; status: 'active' | 'paused'; timeZone: string };
   schemaVersion: number; schemaStatus: 'active' | 'retired'; allowedOrigins: string[];
   limits: { requestsPerMinute: number; newReceiptsPerUtcDay: number };
-  events: EventDefinition[]; workflows: WorkflowDefinition[]; funnels?: FunnelDefinition[];
+  events: EventDefinition[]; workflows: WorkflowDefinition[]; funnels?: FunnelDefinition[]; representativeWorkflowId?: string;
 }
 export interface Attempt {
   workflowId: string; attemptId: string; startedAt: string;

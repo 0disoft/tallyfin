@@ -1243,6 +1243,11 @@ components:
           maxItems: 10
           items:
             $ref: "#/components/schemas/WorkflowDefinition"
+        representativeWorkflowId:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+          description: Explicit overview workflow ID from this version. Omit for no representative; never defaults to registration order.
         funnels:
           type: array
           maxItems: 10
@@ -1341,6 +1346,8 @@ components:
         workflows:
           type: array
           items: {}
+        representativeWorkflowId:
+          description: Optional representative ID, checked against workflows by semantic validation. Omit to leave unset.
         funnels:
           type: array
           items: {}
@@ -1425,6 +1432,11 @@ components:
           maxItems: 10
           items:
             $ref: "#/components/schemas/WorkflowDefinition"
+        representativeWorkflowId:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+          description: Explicit overview workflow ID from this version. Omit for no representative; never defaults to registration order.
         funnels:
           type: array
           maxItems: 10
@@ -2055,7 +2067,7 @@ paths:
       description: >
         One to five unique project IDs in request order. Each project uses its latest active schema,
         local recent seven days including today and the preceding seven days; rejection totals use
-        the latest seven UTC dates across the project. Browser completion uses the first registered workflow.
+        the latest seven UTC dates across the project. Browser completion uses the explicitly designated representative workflow of the selected schema version; absent designation yields null completion and label.
         Missing and inaccessible projects are indistinguishable error rows with accessDenied true and null metrics.
         Corrupt project analytics fail only that row; corrupt workflow/rejection data fail only that panel.
         No active schema produces null event/workflow metrics but still reads project-wide receipt time and rejections.

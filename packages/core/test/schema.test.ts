@@ -5,6 +5,28 @@ import { canonicalJson, parseSchemaPublication, schemaDefinitions, validateRegis
 
 const registry = () => JSON.parse(readFileSync(new URL('../../../api/examples/registry.json', import.meta.url), 'utf8'));
 const draft = () => { const r = registry(); return { events: r.events, workflows: r.workflows }; };
+
+test('representative workflow is explicit, version-local and preserves absent-field hashes', () => {
+  const legacy = draft(), selected = { ...legacy, representativeWorkflowId: legacy.workflows[0].id };
+  const freeze = (value: any): any => { if (value && typeof value === 'object') { Object.values(value).forEach(freeze); Object.freeze(value); } return value; };
+  freeze(selected);
+  assert.equal(validateSchemaDraft(selected).valid, true);
+  assert.equal(validateRegistry({ ...registry(), ...selected }).representativeWorkflowId, selected.representativeWorkflowId);
+  const published = parseSchemaPublication({ ...selected, expectedLatestVersion: 1, privacyReviewed: true });
+  assert.equal(canonicalJson(schemaDefinitions(published)), canonicalJson(selected));
+  assert.equal(Object.hasOwn(schemaDefinitions(legacy), 'representativeWorkflowId'), false);
+  assert.equal(canonicalJson(schemaDefinitions(legacy)), canonicalJson(legacy));
+  for (const id of ['', null, undefined, 1, {}, 'missing', 'x'.repeat(49)]) {
+    const invalid = { ...legacy, representativeWorkflowId: id };
+    assert.deepEqual(validateSchemaDraft(invalid).issues, [{ path: '/representativeWorkflowId', code: 'invalid_reference' }]);
+    assert.throws(() => parseSchemaPublication({ ...invalid, expectedLatestVersion: 1, privacyReviewed: true }));
+  }
+  assert.equal(validateSchemaDraft({ ...selected, workflows: [] }).valid, false);
+  for (const length of [1, 48]) {
+    const id = 'w'.repeat(length), workflows = [{ ...legacy.workflows[0], id }];
+    assert.equal(validateSchemaDraft({ ...legacy, workflows, representativeWorkflowId: id }).valid, true);
+  }
+});
 test('draft validation shares registration rules and leaves definitions unchanged', () => {
   const input = draft(), before = structuredClone(input);
   assert.deepEqual(validateSchemaDraft(input), { valid: true, issues: [], privacyReviewRequired: true });

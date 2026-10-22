@@ -113,7 +113,7 @@ Table project_schemas {
   project_id text [not null, ref: > projects.id]
   version integer [not null]
   status text [not null, note: 'active | retired; definitions immutable']
-  definitions_json text [not null, note: 'Validated events/workflows and optional ordered funnels snapshot <=32 KiB; absent funnels stays absent for legacy hashes']
+  definitions_json text [not null, note: 'Validated events/workflows, optional ordered funnels and representativeWorkflowId snapshot <=32 KiB; absent optional fields stay absent for legacy hashes']
   published_at bigint [not null]
   retired_at bigint
   indexes {
