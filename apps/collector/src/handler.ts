@@ -24,6 +24,7 @@ const messages: Record<ErrorCode, string> = {
 };
 export interface CollectorOptions {
   now?: () => number;
+  uuid?: () => string;
   log?: (entry: { requestId: string; code: ErrorCode }) => void;
   observe?: (entry: RequestObservation) => void;
   monotonicNow?: () => number;
@@ -41,7 +42,7 @@ export function allowedOrigin(origin: string | null, allowed: string[]): origin 
 
 export function createCollector(store: CollectionStore, options: CollectorOptions = {}) {
   return async (request: Request): Promise<Response> => {
-    const requestId = crypto.randomUUID();
+    const requestId = (options.uuid ?? (() => crypto.randomUUID()))();
     const clock = options.monotonicNow ?? (() => performance.now());
     const started = options.observe ? observationClock(clock) : null;
     let operation: RequestOperation = 'other';

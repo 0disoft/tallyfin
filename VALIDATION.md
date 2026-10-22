@@ -1,5 +1,13 @@
 # 검증
 
+## 수집 본문 취소와 요청 ID 주입 (2026-10-22)
+
+`readBody`는 요청/선택적 caller signal과 기본 10초 읽기 기한을 처리한다. 초과 본문과
+취소 시 reader 정리를 기다리지 않아 끝나지 않는 cancel promise가 오류 반환을 막지
+않는다. 기존 필수 인자·반환 타입을 유지하고 CollectorOptions에 선택적 uuid를 추가했다.
+본문·요청 ID·실제 Worker/D1 수집 검사 24/24를 통과했다. 16KiB 전후·멈춘 정리·
+읽기 중 취소·읽기 기한을 확인했다. API 응답 형식·DB·의존성·CI 변경은 없다.
+
 ## SDK tarball과 외부 소비 프로젝트 (2026-10-21)
 
 `npm pack --dry-run --json --ignore-scripts`에서 browser tarball에 현재 빌드가 생성하지
