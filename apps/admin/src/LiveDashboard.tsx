@@ -1,3 +1,5 @@
+import useProjectPages from './useProjectPages';
+import { useMainAnalysis, usePeriodComparison, useEventSeries } from './useAnalysis';
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserLogin } from './auth/client';
 import { CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
@@ -9,23 +11,20 @@ import DateRangePicker from './DateRangePicker';
 import LiveIdentity from './LiveIdentity';
 import LiveHealth from './LiveHealth';
 import { formatCount, type DailyRecord, type Period, type View } from './data';
-import { API_BASE_PATH, ApiClient, ApiError, DEFAULT_PAGE_LIMIT, resolveApiEndpoint } from './api/client';
+import { API_BASE_PATH, ApiClient, ApiError, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
-import { assertMeta, loadPeriod, previousRange, type PeriodSnapshot, type WorkflowLoad } from './api/period-comparison';
+import { previousRange, type WorkflowLoad } from './api/period-comparison';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import EventPropertyComparison from './EventPropertyComparison';
 import useEventPropertyComparison from './useEventPropertyComparison';
-import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
-import type { EventGrouping, PropertyAnalysis } from './api/event-analysis';
-import { appendPage, shouldApplyPage } from './api/pagination';
+import { eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
+import type { EventGrouping } from './api/event-analysis';
 import { comparisonRangeError, periodRange, rangeError, rangeLabel, todayInZone, type DateRange } from './api/dates';
-import type { EventSource, EventSeriesResponse, Project, ProjectSettings, Registry } from './api/types';
+import type { EventSource, ProjectSettings, Registry } from './api/types';
 import { DraftExitGuard } from './api/draft-exit-guard';
 
-type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
-type MainData = PeriodSnapshot & { registry: Registry };
 type ActiveProject = { name: string; timeZone: string };
 type Session = { basePath: string; token?: string; login?: BrowserLogin };
 const OidcLogin = lazy(() => import('./auth/OidcLogin'));
@@ -35,12 +34,6 @@ const LiveGoals = lazy(() => import('./LiveGoals'));
 const ObservationReportPanel = lazy(() => import('./ObservationReportPanel'));
 
 const MAX_SCHEMA_VERSION = 2147483647;
-
-function toApiError(error: unknown): ApiError {
-  if (error instanceof ApiError) return error;
-  if (error instanceof Error) return new ApiError('contract', error.message);
-  return new ApiError('network', '알 수 없는 오류가 발생했어요.');
-}
 
 function describeError(error: ApiError): { title: string; detail: string } {
   switch (error.kind) {
@@ -98,17 +91,11 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
   const [retainedSettings, setRetainedSettings] = useState<{ client: ApiClient; projectId: string } | null>(null);
-  const [more, setMore] = useState(false);
-  const [pageError, setPageError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newProjectId, setNewProjectId] = useState<string | null>(null);
   const [setupRefreshTick, setSetupRefreshTick] = useState(0);
   const [diagnosticsRevision, setDiagnosticsRevision] = useState(0);
-  const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
-  const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [main, setMain] = useState<Load<MainData> & { key?: string }>({ status: 'idle' });
   const [compare, setCompare] = useState(false);
-  const [comparison, setComparison] = useState<Load<PeriodSnapshot> & { key?: string }>({ status: 'idle' });
   const [comparisonRetry, setComparisonRetry] = useState(0);
   const [workflowDetails, setWorkflowDetails] = useState<Record<string, WorkflowGroupingState>>({});
   const workflowContext = useRef('');
@@ -116,7 +103,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     if (state.context !== workflowContext.current) return;
     setWorkflowDetails(previous => ({ ...Object.fromEntries(Object.entries(previous).filter(([, value]) => value.context === state.context)), [id]: state }));
   }, []);
-  const [series, setSeries] = useState<Load<EventSeriesResponse> & { key?: string; analysis?: PropertyAnalysis | null }>({ status: 'idle' });
   const [customRange, setCustomRange] = useState<{ scope: string; range: DateRange } | null>(null);
   const [readDenial, setReadDenial] = useState<{ client: ApiClient; projectId: string; error: ApiError; revision: number } | null>(null);
   const readDenialHandler = useRef<(client: ApiClient, projectId: string, error: ApiError) => void>(() => {});
@@ -130,19 +116,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     });
     return next;
   }, [session]);
-  const sessionRef = useRef(0);
+  const { projects, nextCursor, more, pageError, loadMore, invalidatePages, resetProjects, updateProject, addProject } = useProjectPages(client, refreshTick);
   const clientRef = useRef<ApiClient | null>(null);
-  const moreControllerRef = useRef<AbortController | null>(null);
-  const projectsControllerRef = useRef<AbortController | null>(null);
   clientRef.current = client;
   const draftExit = useMemo(() => new DraftExitGuard<ApiClient>(), []);
   const registerDraft = useCallback((scope: ApiClient, project: string | null, check: () => boolean) =>
     draftExit.register(scope, project, check), [draftExit]);
-  const cancelMore = useCallback(() => {
-    moreControllerRef.current?.abort();
-    moreControllerRef.current = null;
-    setMore(false);
-  }, []);
 
   const versionText = versionInput.trim();
   const version = /^[0-9]+$/.test(versionText) ? Number(versionText) : Number.NaN;
@@ -180,6 +159,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const currentRange = projectToday ? customPeriod && customRange?.scope === dateScope ? customRange.range : periodRange(projectToday, period) : null;
   const dateError = currentRange && projectToday ? rangeError(currentRange, projectToday) : null;
   const mainKey = JSON.stringify([activeProjectId, activeTimeZone, versionText, currentRange?.from, currentRange?.to, refreshTick, view, source]);
+  const [main, setMain] = useMainAnalysis({ client, activeProjectId, activeTimeZone, version, validVersion, currentRange, dateError, deniedRead, period, refreshTick, view, mainKey, source });
   const currentMain = !deniedRead && main.key === mainKey ? main : null;
   workflowContext.current = mainKey;
   const analysisRegistry = currentMain?.status === 'ready' && main.data?.registry.project.id === activeProjectId &&
@@ -190,48 +170,44 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const propertyNames = eventPropertyNames(analysisEvent);
   const seriesKey = analysisRegistry && analysisEvent && currentRange
     ? JSON.stringify([eventContext(analysisRegistry, analysisEvent), groupBy, currentRange.from, currentRange.to, refreshTick]) : null;
+  const [series, setSeries] = useEventSeries({ client, view, analysisEvent, analysisRegistry, currentRange, seriesKey, version, source, groupBy });
   const currentSeries = seriesKey && series.key === seriesKey ? series : null;
   const seriesData = currentSeries?.status === 'ready' ? currentSeries.data ?? null : null;
   const retry = useCallback(() => {
     if (view === 'settings' && projects.status === 'ready') setSettingsRefreshTick(tick => tick + 1);
     else {
-      projectsControllerRef.current?.abort();
-      cancelMore();
-      setNextCursor(null);
+      invalidatePages();
       setRefreshTick(tick => tick + 1);
     }
-  }, [view, projects.status, cancelMore]);
+  }, [view, projects.status, invalidatePages]);
   const settingsSaved = useCallback((settings: ProjectSettings) => {
-    setProjects(previous => previous.data ? { ...previous, data: previous.data.map(project => project.id === settings.project.id ? settings.project : project) } : previous);
+    updateProject(settings.project);
     setDiagnosticsRevision(tick => tick + 1);
-  }, []);
+  }, [updateProject]);
   const projectCreated = useCallback((settings: ProjectSettings) => {
-    sessionRef.current += 1;
-    projectsControllerRef.current?.abort(); cancelMore();
-    setProjects(previous => ({ status: 'ready', data: [...(previous.data ?? []).filter(p => p.id !== settings.project.id), settings.project].sort((a, b) => a.id.localeCompare(b.id)) }));
+    addProject(settings.project);
     if (settings.project.id !== activeProjectId && !confirmDraftExit()) return false;
     setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setGrouping(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
-    setNewProjectId(settings.project.id); setShowCreate(false); setPageError(null);
+    setNewProjectId(settings.project.id); setShowCreate(false);
     onNavigate?.('settings');
     return true;
-  }, [onNavigate, cancelMore, activeProjectId, confirmDraftExit]);
+  }, [onNavigate, addProject, activeProjectId, confirmDraftExit]);
   const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, []);
   const connected = useCallback((login: BrowserLogin) => {
-    sessionRef.current += 1;
-    setToken(''); setProjectId(null); setSelectedEvent(null); setGrouping(null); setProjects({ status: 'idle' });
+    resetProjects();
+    setToken(''); setProjectId(null); setSelectedEvent(null); setGrouping(null);
     setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setCustomRange(null);
     setSession({ login, basePath: API_BASE_PATH });
     setShowCreate(false); setNewProjectId(null);
-  }, []);
+  }, [resetProjects]);
 
   function connect() {
     const resolved = resolveApiEndpoint(endpoint, currentOrigin);
     if ('error' in resolved) { setEndpointError(resolved.error); return; }
-    sessionRef.current += 1;
+    resetProjects();
     setEndpointError(null);
-    setProjects({ status: 'idle' });
-    setNextCursor(null);
+
     setMain({ status: 'idle' });
     setSeries({ status: 'idle' });
     setCustomRange(null);
@@ -249,51 +225,25 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }
   function disconnect() {
     if (!confirmDraftExit(true)) return;
-    sessionRef.current += 1;
-    moreControllerRef.current?.abort();
-    moreControllerRef.current = null;
-    setMore(false);
+    resetProjects(true);
     client?.destroy();
     setSession(null);
     setCustomRange(null);
     setCompare(false); setComparison({ status: 'idle' });
     setToken('');
-    setProjects({ status: 'idle' });
-    setNextCursor(null);
+
     setMain({ status: 'idle' });
     setSeries({ status: 'idle' });
     setProjectId(null);
     setSelectedEvent(null);
     setGrouping(null);
     setQuery('');
-    setPageError(null);
     setEndpointError(null);
     setRefreshTick(0);
     setShowCreate(false); setNewProjectId(null); setSetupRefreshTick(0);
   }
 
   useEffect(() => () => { clientRef.current?.destroy(); }, []);
-
-  useEffect(() => {
-    if (!client) return;
-    cancelMore();
-    setNextCursor(null);
-    const controller = new AbortController();
-    setProjects({ status: 'loading' });
-    projectsControllerRef.current = controller;
-    setPageError(null);
-    client.listProjects({ limit: DEFAULT_PAGE_LIMIT, signal: controller.signal })
-      .then(page => {
-        if (controller.signal.aborted) return;
-        setProjects({ status: 'ready', data: page.data });
-        setNextCursor(page.page.nextCursor);
-      })
-      .catch(error => {
-        if (controller.signal.aborted) return;
-        setProjects({ status: 'error', error: toApiError(error) });
-      });
-    return () => controller.abort();
-  }, [client, refreshTick, cancelMore]);
 
   useEffect(() => {
     if (projects.status !== 'ready' || !projects.data) return;
@@ -305,25 +255,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     onActiveProjectChange(activeProject ? { name: activeProject.name, timeZone: activeProject.timeZone } : null);
   }, [activeProject, onActiveProjectChange]);
 
-  useEffect(() => {
-    if (deniedRead || view === 'settings' || !client || !activeProjectId || !activeTimeZone || !validVersion || !currentRange || dateError) { setMain({ status: 'idle' }); return; }
-    const controller = new AbortController();
-    setMain({ status: 'loading', key: mainKey });
-    const range = currentRange;
-    (async () => {
-      try {
-        const registry = await client.getSchema(activeProjectId, version, { signal: controller.signal });
-        const snapshot = await loadPeriod(client, registry, range, controller.signal, source);
-        if (controller.signal.aborted) return;
-        setMain({ status: 'ready', key: mainKey, data: { registry, ...snapshot } });
-      } catch (error) {
-        if (controller.signal.aborted) return;
-        setMain({ status: 'error', key: mainKey, error: toApiError(error) });
-      }
-    })();
-    return () => controller.abort();
-  }, [client, activeProjectId, activeTimeZone, version, validVersion, period, refreshTick, view, mainKey, dateError, deniedRead]);
-
   const mainData = currentMain?.status === 'ready' ? currentMain.data : undefined;
   const comparisonAvailable = view !== 'goals' || !!mainData?.workflows.length || !!mainData?.registry.funnels?.length;
   const aggregateComparisonAvailable = view !== 'goals' || !!mainData?.workflows.length;
@@ -331,30 +262,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const propertyComparison = useEventPropertyComparison(client, analysisRegistry, seriesData,
     compare && view === 'events' && !!groupBy && !comparisonError && !!seriesData, seriesKey);
   const comparisonKey = JSON.stringify([mainKey, comparisonRetry]);
-  useEffect(() => {
-    if (!compare || !aggregateComparisonAvailable || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
-    const controller = new AbortController();
-    setComparison({ status: 'loading', key: comparisonKey });
-    loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal, source)
-      .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
-      .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
-    return () => controller.abort();
-  }, [client, compare, mainData, comparisonKey, view, comparisonError, aggregateComparisonAvailable]);
-
-  useEffect(() => {
-    if (view !== 'events' || !client || !analysisEvent || !analysisRegistry || !currentRange || !seriesKey) { setSeries({ status: 'idle' }); return; }
-    const controller = new AbortController();
-    setSeries({ status: 'loading', key: seriesKey });
-    client.getEventDaily(analysisRegistry.project.id, analysisEvent.name, { schemaVersion: version, from: currentRange.from, to: currentRange.to, source, groupBy: groupBy || undefined, signal: controller.signal })
-      .then(next => {
-        if (controller.signal.aborted) return;
-        assertMeta(next.meta, analysisRegistry, currentRange, source);
-        const analysis = analyzeEventSeries(next, analysisEvent);
-        setSeries({ status: 'ready', key: seriesKey, data: next, analysis });
-      })
-      .catch(error => { if (!controller.signal.aborted) setSeries({ status: 'error', key: seriesKey, error: toApiError(error) }); });
-    return () => controller.abort();
-  }, [client, analysisRegistry, analysisEvent, currentRange?.from, currentRange?.to, seriesKey, groupBy, version, view]);
+  const [comparison, setComparison] = usePeriodComparison({ client, compare, aggregateComparisonAvailable, view, mainData, comparisonError, comparisonKey, source });
 
   useEffect(() => {
     setSettingsRegistry(null);
@@ -365,31 +273,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       .catch(() => { /* Settings remain independent of optional schema definitions. */ });
     return () => controller.abort();
   }, [view, client, activeProjectId, version, validVersion, settingsRefreshTick, setupRefreshTick]);
-
-  async function loadMore() {
-    if (!client || projects.status !== 'ready' || !nextCursor || more || moreControllerRef.current) return;
-    const generation = sessionRef.current;
-    const controller = new AbortController();
-    moreControllerRef.current = controller;
-    setMore(true);
-    setPageError(null);
-    try {
-      const page = await client.listProjects({ limit: DEFAULT_PAGE_LIMIT, cursor: nextCursor, signal: controller.signal });
-      if (!shouldApplyPage({ generation, current: sessionRef.current, aborted: controller.signal.aborted })) return;
-      setProjects(previous => previous.status === 'ready' && previous.data
-        ? { status: 'ready', data: appendPage(previous.data, page).items }
-        : { status: 'ready', data: page.data });
-      setNextCursor(page.page.nextCursor);
-    } catch (error) {
-      if (generation !== sessionRef.current || controller.signal.aborted) return;
-      setPageError(toApiError(error).message);
-    } finally {
-      if (moreControllerRef.current === controller) {
-        moreControllerRef.current = null;
-        if (generation === sessionRef.current) setMore(false);
-      }
-    }
-  }
 
   if (!client) {
     return <>

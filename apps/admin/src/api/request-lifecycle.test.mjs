@@ -94,6 +94,8 @@ test('elapsed deadlines remain enforced when synchronous work delays the timeout
 });
 
 test('expired credential acquisition never dispatches a native settings mutation and permits explicit recovery', async t => {
+  let elapsed = 0;
+  t.mock.method(performance, 'now', () => elapsed);
   const initial = { project: { id: 'sample', name: 'Sample', status: 'active', timeZone: 'UTC' },
     allowedOrigins: [], limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: true };
   const committed = { ...initial, project: { ...initial.project, name: 'Changed' }, settingsHash: 'b'.repeat(64) };
@@ -106,9 +108,9 @@ test('expired credential acquisition never dispatches a native settings mutation
   t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const origin = `http://127.0.0.1:${server.address().port}`;
-  const client = new ApiClient({ requestTimeoutMs: 100,
+  const client = new ApiClient({ requestTimeoutMs: 5000,
     getBearer: async () => {
-      if (block) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 150);
+      if (block) elapsed += 5000;
       return 'test-only-header';
     },
     fetchImpl: (url, init) => { dispatches++; return fetch(new URL(url, origin), init); },

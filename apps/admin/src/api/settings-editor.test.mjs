@@ -41,7 +41,7 @@ test('a failed saved notification cannot invalidate a confirmed write or replay 
   editor.edit('name', 'Saved');
   await editor.save();
   assert.equal(editor.state.phase, 'ready');
-  assert.equal(editor.state.snapshot, saved);
+  assert.deepEqual(editor.state.snapshot, saved);
   assert.equal(editor.state.draft.name, 'Saved');
   assert.equal(editor.state.message, '프로젝트 설정을 저장했어요.');
   await editor.save();
@@ -55,7 +55,7 @@ test('a failed saved notification cannot invalidate a confirmed read', async () 
   const editor = new SettingsEditor({ getSettings: async () => current }, 'example', brokenNotification);
   await editor.load();
   assert.equal(editor.state.phase, 'ready');
-  assert.equal(editor.state.snapshot, current);
+  assert.deepEqual(editor.state.snapshot, current);
   assert.equal(editor.state.message, null);
   editor.destroy();
 });
@@ -71,7 +71,7 @@ test('explicit server adoption and rebasing keep their result when the notificat
     assert.equal(editor.state.phase, 'review');
     assert.doesNotThrow(() => editor[choice]());
     assert.equal(editor.state.phase, 'ready');
-    assert.equal(editor.state.snapshot, current);
+    assert.deepEqual(editor.state.snapshot, current);
     assert.equal(editor.state.latest, null);
     assert.equal(editor.state.draft.name, choice === 'useServer' ? 'Remote' : 'Draft');
     editor.destroy();
@@ -91,7 +91,7 @@ test('a failing subscriber does not block other subscribers or the revoked-owner
   current = settings('Remote', false);
   await editor.refresh();
   assert.equal(editor.state.phase, 'ready');
-  assert.equal(editor.state.snapshot, current);
+  assert.deepEqual(editor.state.snapshot, current);
   assert.equal(editor.state.blocked, true);
   assert.equal(loss, 1);
   assert.equal(delivered.at(-1), editor.state);
@@ -115,5 +115,32 @@ test('notification failure leaves denied saves locked with the original draft an
   await editor.save();
   assert.equal(writes, 1);
   assert.ok(!JSON.stringify(editor.state).includes('private UI detail'));
+  editor.destroy();
+});
+
+// State is an observer view. Neither API results nor observer callbacks own it.
+test('editor owns snapshots and rejects mutation through state, subscriptions and saved callbacks', async () => {
+  const source = settings(); source.allowedOrigins.push('https://example.invalid');
+  let notification;
+  const editor = new SettingsEditor({ getSettings: async () => source }, 'example', saved => {
+    saved.project.name = 'Callback mutation'; saved.allowedOrigins.length = 0;
+  });
+  editor.subscribe(state => { notification = state; });
+  await editor.load();
+  assert.notEqual(editor.state.snapshot, source);
+  assert.equal(Object.isFrozen(source), false);
+  assert.equal(Object.isFrozen(source.project), false);
+  source.project.name = 'External mutation'; source.limits.requestsPerMinute = 1; source.allowedOrigins.length = 0;
+  assert.equal(editor.state.snapshot.project.name, 'Original');
+  assert.equal(editor.state.snapshot.limits.requestsPerMinute, 120);
+  assert.deepEqual(editor.state.snapshot.allowedOrigins, ['https://example.invalid']);
+  assert.throws(() => { editor.state = {}; }, TypeError);
+  assert.throws(() => { notification.phase = 'saving'; }, TypeError);
+  assert.throws(() => { notification.snapshot.project.name = 'Observer mutation'; }, TypeError);
+  assert.throws(() => { notification.snapshot.allowedOrigins.push('https://other.invalid'); }, TypeError);
+  assert.throws(() => { notification.draft.name = 'Observer mutation'; }, TypeError);
+  assert.throws(() => { notification.errors.name = 'Observer mutation'; }, TypeError);
+  editor.edit('name', 'Draft'); assert.equal(editor.state.draft.name, 'Draft');
+  assert.equal(notification.draft.name, 'Draft');
   editor.destroy();
 });

@@ -3,19 +3,22 @@ import type { ProjectSettings, ProjectSettingsUpdate } from './types.ts';
 
 export type SettingsDraft = { name: string; status: 'active' | 'paused'; origins: string;
   requestsPerMinute: string; newReceiptsPerUtcDay: string };
-export type SettingsState = { phase: 'loading' | 'ready' | 'saving' | 'review' | 'error';
-  snapshot: ProjectSettings | null; draft: SettingsDraft | null; latest: ProjectSettings | null;
-  message: string | null; errors: Partial<Record<keyof SettingsDraft, string>>; blocked: boolean };
-export function settingsDraft(settings: ProjectSettings): SettingsDraft {
+export type SettingsSnapshot = Readonly<Omit<ProjectSettings, 'project' | 'allowedOrigins' | 'limits'> & {
+  project: Readonly<ProjectSettings['project']>; allowedOrigins: readonly string[]; limits: Readonly<ProjectSettings['limits']> }>;
+type SettingsErrors = Partial<Record<keyof SettingsDraft, string>>;
+export type SettingsState = Readonly<{ phase: 'loading' | 'ready' | 'saving' | 'review' | 'error';
+  snapshot: SettingsSnapshot | null; draft: Readonly<SettingsDraft> | null; latest: SettingsSnapshot | null;
+  message: string | null; errors: Readonly<SettingsErrors>; blocked: boolean }>;
+export function settingsDraft(settings: SettingsSnapshot): SettingsDraft {
   return { name: settings.project.name, status: settings.project.status, origins: settings.allowedOrigins.join('\n'),
     requestsPerMinute: String(settings.limits.requestsPerMinute), newReceiptsPerUtcDay: String(settings.limits.newReceiptsPerUtcDay) };
 }
-function differs(draft: SettingsDraft, snapshot: ProjectSettings): boolean {
+function differs(draft: SettingsDraft, snapshot: SettingsSnapshot): boolean {
   const original = settingsDraft(snapshot);
   return (Object.keys(original) as (keyof SettingsDraft)[]).some(key => original[key] !== draft[key]);
 }
-function buildUpdate(draft: SettingsDraft, snapshot: ProjectSettings): { update: ProjectSettingsUpdate; errors: SettingsState['errors'] } {
-  const errors: SettingsState['errors'] = {};
+function buildUpdate(draft: SettingsDraft, snapshot: SettingsSnapshot): { update: ProjectSettingsUpdate; errors: SettingsErrors } {
+  const errors: SettingsErrors = {};
   const name = draft.name.trim();
   if (!name || name.length > 80) errors.name = '프로젝트 이름을 1~80자로 입력해 주세요.';
   const origins = draft.origins.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
@@ -45,9 +48,24 @@ function buildUpdate(draft: SettingsDraft, snapshot: ProjectSettings): { update:
   return { update, errors };
 }
 
+/** Copy at the API boundary: freezing an observer view must never freeze caller data. */
+function copySettings(value: SettingsSnapshot): ProjectSettings {
+  return { ...value, project: { ...value.project }, allowedOrigins: [...value.allowedOrigins], limits: { ...value.limits } };
+}
+function ownSettings(value: SettingsSnapshot): SettingsSnapshot {
+  const copy = copySettings(value);
+  return Object.freeze({ ...copy, project: Object.freeze(copy.project),
+    allowedOrigins: Object.freeze(copy.allowedOrigins), limits: Object.freeze(copy.limits) });
+}
+function freezeState(state: SettingsState): SettingsState {
+  return Object.freeze({ ...state, draft: state.draft ? Object.freeze({ ...state.draft }) : null,
+    errors: Object.freeze({ ...state.errors }) });
+}
+
 /** Owns one project/editor lifetime. Writes are never retried automatically. */
 export class SettingsEditor {
-  state: SettingsState = { phase: 'loading', snapshot: null, draft: null, latest: null, message: null, errors: {}, blocked: false };
+  #state: SettingsState = freezeState({ phase: 'loading', snapshot: null, draft: null, latest: null, message: null, errors: {}, blocked: false });
+  get state(): SettingsState { return this.#state; }
   #listeners = new Set<(state: SettingsState) => void>();
   #controller: AbortController | null = null;
   #generation = 0;
@@ -69,7 +87,7 @@ export class SettingsEditor {
   }
   #set(state: SettingsState): void {
     if (this.#destroyed) return;
-    this.state = state;
+    state = this.#state = freezeState(state);
     for (const listener of this.#listeners) this.#notify(() => listener(state));
     // Old snapshots survive failed reads; they cannot restore a revoked role.
     const access = state.blocked ? false : state.phase === 'ready' ? state.snapshot?.canEdit : state.latest?.canEdit;
@@ -89,9 +107,10 @@ export class SettingsEditor {
     return { controller, generation: ++this.#generation };
   }
   #current(generation: number): boolean { return !this.#destroyed && generation === this.#generation && !this.#controller?.signal.aborted; }
-  #accept(snapshot: ProjectSettings, message: string | null): void {
+  #accept(snapshot: SettingsSnapshot, message: string | null): void {
+    snapshot = ownSettings(snapshot);
     this.#set({ phase: 'ready', snapshot, draft: settingsDraft(snapshot), latest: null, message, errors: {}, blocked: !snapshot.canEdit });
-    this.#notify(() => this.#onSaved?.(snapshot));
+    this.#notify(() => this.#onSaved?.(copySettings(snapshot)));
   }
   async load(): Promise<void> { await this.#read(false); }
   async refresh(): Promise<void> {
@@ -105,7 +124,7 @@ export class SettingsEditor {
     const previous = this.state;
     this.#set({ ...previous, phase: 'loading', latest: null, message: null, errors: {} });
     try {
-      const snapshot = await this.#client.getSettings(this.#projectId, { signal: controller.signal });
+      const snapshot = ownSettings(await this.#client.getSettings(this.#projectId, { signal: controller.signal }));
       if (!this.#current(generation)) return;
       if (preserve && previous.draft && previous.snapshot) {
         this.#set({ ...previous, phase: 'review', latest: snapshot, blocked: !snapshot.canEdit, errors: {},
@@ -163,7 +182,7 @@ export class SettingsEditor {
     }
     this.#set({ ...this.state, phase: 'ready', snapshot: latest, draft: next, latest: null, blocked: false, errors: {},
       message: '최신 설정에 내 변경을 적용했어요. 값을 검토한 뒤 저장해 주세요.' });
-    this.#notify(() => this.#onSaved?.(latest));
+    this.#notify(() => this.#onSaved?.(copySettings(latest)));
   }
   destroy(): void {
     this.#destroyed = true; ++this.#generation; this.#controller?.abort(); this.#listeners.clear();

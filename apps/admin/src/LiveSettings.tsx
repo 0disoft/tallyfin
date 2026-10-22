@@ -9,7 +9,7 @@ import type { FormEvent, RefObject } from 'react';
 import { WarningCircle } from '@phosphor-icons/react';
 import type { ApiClient } from './api/client.ts';
 import type { ProjectSettings, Registry } from './api/types.ts';
-import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState } from './api/settings-editor.ts';
+import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState, type SettingsSnapshot } from './api/settings-editor.ts';
 import LiveGrants from './LiveGrants.tsx';
 import LivePublishers from './LivePublishers.tsx';
 import LiveAdminChanges from './LiveAdminChanges.tsx';
@@ -63,7 +63,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   const activeScope = useRef({ client, projectId });
   activeScope.current = { client, projectId };
   const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;
-  const [grantLoss, setGrantLoss] = useState<{ client: ApiClient; projectId: string; snapshot: ProjectSettings | null } | null>(null);
+  const [grantLoss, setGrantLoss] = useState<{ client: ApiClient; projectId: string; snapshot: SettingsSnapshot | null } | null>(null);
   const [publisherBusy, setPublisherBusy] = useState<{ client: ApiClient; projectId: string } | null>(null);
   const [historyRevision, setHistoryRevision] = useState(0);
   const settingsSaved = useCallback((settings: ProjectSettings) => {
@@ -177,7 +177,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
     </section>;
   }
 
-  const activeSnapshot = snapshot as ProjectSettings;
+  const activeSnapshot = snapshot as SettingsSnapshot;
   const activeDraft = draft as SettingsDraft;
 
   return <section className="settings-section" aria-labelledby="live-settings-heading">
@@ -272,7 +272,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   </section>;
 }
 
-function ComparisonTable({ latest, draft }: { latest: ProjectSettings; draft: SettingsDraft }) {
+function ComparisonTable({ latest, draft }: { latest: SettingsSnapshot; draft: SettingsDraft }) {
   const server = settingsDraft(latest);
   const rows: { label: string; key: keyof SettingsDraft; format: (value: string) => string }[] = [
     { label: '이름', key: 'name', format: displayValue },
