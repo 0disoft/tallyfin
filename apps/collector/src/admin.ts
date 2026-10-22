@@ -1,4 +1,5 @@
 import { CollectionError } from '@tallyfin/core';
+import { awaitDependency } from './dependency-lifetime.ts';
 import type { AdminPrincipal, AdminStore } from '@tallyfin/core';
 import { healthRoute, identityRoute, changesRoute, rejectionsRoute, schemasRoute, listRoute, queryRoute } from './admin-read.ts';
 import { publishersRoute, grantsRoute, createRoute, draftRoute, publishRoute, settingsRoute } from './admin-write.ts';
@@ -41,7 +42,8 @@ async function authenticate(request: Request, access: AdministratorAccess | unde
   const header = request.headers.get('Authorization');
   if (!access || !header || header.length > 8192 || !/^Bearer [^\s,]+$/i.test(header)) throw new CollectionError('unauthorized', 401);
   let principal: AdminPrincipal | null;
-  try { principal = await access.verifyBearer(header.slice(7), { signal: request.signal }); } catch { throw new CollectionError('unauthorized', 401); }
+  try { principal = await awaitDependency(request.signal, () => access.verifyBearer(header.slice(7), { signal: request.signal })); }
+  catch (cause) { request.signal.throwIfAborted(); throw new CollectionError('unauthorized', 401, { cause }); }
   if (!principal || typeof principal.issuer !== 'string' || typeof principal.subject !== 'string' ||
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);

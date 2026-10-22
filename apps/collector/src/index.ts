@@ -11,30 +11,41 @@ import type { PublisherAccess } from './publisher.ts';
 import { runCleanup } from './cleanup.ts';
 import { logRequestObservation } from './request-observation.ts';
 import { checkAdministratorStorageRead } from './readiness.ts';
+import { databaseCapacity, requestDatabase } from './dependency-lifetime.ts';
 
 // Host supplies the D1 binding. No deployed resource ID or credential is committed.
 export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string }
-export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'], verifyPublisher?: PublisherAccess['verifyBearer']) { return {
+export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'], verifyPublisher?: PublisherAccess['verifyBearer'],
+  options: { requestTimeoutMs?: number; maxDatabaseOperations?: number } = {}) {
+  const capacity = databaseCapacity(options.maxDatabaseOperations);
+  const requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
+  if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 30_000) throw new TypeError('Invalid request timeout');
+  return {
   async fetch(request: Request, bindings: CollectorBindings, context?: { waitUntil(task: Promise<void>): void }): Promise<Response> {
-    const store = new D1Store(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' });
-    return createCollector(store, { observe: logRequestObservation,
+    const lifetime = requestDatabase(bindings.DB, request.signal, capacity, requestTimeoutMs);
+    const db = lifetime.db;
+    const store = new D1Store(db, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' });
+    try {
+    return await createCollector(store, { observe: logRequestObservation,
       ...(context ? { waitUntil: (task: Promise<void>) => context.waitUntil(task) } : {}),
-      ...(verifyBearer ? { admin: { store: new D1Queries(bindings.DB, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' }), verifyBearer,
-        checkReadiness: () => checkAdministratorStorageRead(bindings.DB) } } : {}),
-      ...(verifyPublisher ? { publisher: { store, verifyBearer: verifyPublisher } } : {}) })(request);
+      ...(verifyBearer ? { admin: { store: new D1Queries(db, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' }), verifyBearer,
+        checkReadiness: () => checkAdministratorStorageRead(db) } } : {}),
+      ...(verifyPublisher ? { publisher: { store, verifyBearer: verifyPublisher } } : {}) })(new Request(request, { signal: lifetime.signal }));
+    } finally { lifetime.close(); }
   },
   // Structural host port, matching Workers' ScheduledController. Await all work.
   async scheduled(controller: { scheduledTime: number }, bindings: CollectorBindings): Promise<void> {
     const runId = crypto.randomUUID();
+    const lifetime = requestDatabase(bindings.DB, new AbortController().signal, capacity, 30_000);
     try {
-      const report = await runCleanup(new D1Maintenance(bindings.DB), controller.scheduledTime);
+      const report = await runCleanup(new D1Maintenance(lifetime.db), controller.scheduledTime);
       console.log(JSON.stringify({ runId, code: 'retention_cleanup', ...report }));
       if (report.failed || !report.cursorAdvanced) throw Error('retention cleanup incomplete');
-    } catch {
+    } catch (cause) {
       // Do not log DB errors, IDs, content or configuration from rejected work.
       console.warn(JSON.stringify({ runId, code: 'retention_cleanup_failed' }));
-      throw Error('Retention cleanup failed.');
-    }
+      throw Error('Retention cleanup failed.', { cause });
+    } finally { lifetime.close(); }
   },
 }; }
 /** Explicit host opt-in; construction validates config but fetches no keys. */
