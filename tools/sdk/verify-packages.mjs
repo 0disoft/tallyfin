@@ -10,8 +10,8 @@ import { createHash } from 'node:crypto';
 const root = fileURLToPath(new URL('../../', import.meta.url)), execute = promisify(execFile);
 const npm = process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
 const expected = {
-  '@tallyfin/browser': ['dist/common.d.ts', 'dist/funnels.d.ts', 'dist/funnels.js', 'dist/index.d.ts', 'dist/index.js', 'dist/types.d.ts', 'package.json'],
-  '@tallyfin/server': ['dist/index.d.ts', 'dist/index.js', 'package.json'],
+  '@tallyfin/browser': ['dist/common.d.ts', 'dist/delivery-policy.d.ts', 'dist/funnels.d.ts', 'dist/funnels.js', 'dist/index.d.ts', 'dist/index.js', 'dist/types.d.ts', 'package.json'],
+  '@tallyfin/server': ['dist/index.d.ts', 'dist/index.js', 'dist/policy.d.ts', 'package.json'],
 };
 const consumerSource = `import { createTallyfin, type BrowserClient } from '@tallyfin/browser';
 import { createTallyfinFunnels, type FunnelClient } from '@tallyfin/browser/funnels';
