@@ -88,7 +88,7 @@ for (const denied of ['', 'null', 'https://sembom.example.invalid.evil.invalid',
     assert.equal(response.headers.get('Access-Control-Allow-Origin'), null);
     await checkError(response, 403, 'origin_denied');
     assert.equal(await db.prepare('SELECT count(*) AS count FROM event_receipts').first('count'), 0);
-    assert.equal(await db.prepare('SELECT request_count FROM ingest_minute_usage').first('request_count'), 1);
+    assert.equal(await db.prepare('SELECT count(*) FROM ingest_minute_usage').first('count(*)'), 0);
   });
 test('paused and unknown project are unavailable', async () => {
   await db.prepare("UPDATE projects SET status='paused'").run();

@@ -1,3 +1,4 @@
+import { awaitDependency } from './dependency-lifetime.ts';
 import { failureHeaders, messages, recordRejectedRequest } from './failure.ts';
 import { CollectionError, parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, PROJECT_ID } from '@tallyfin/core';
 import type { CollectionStore, ErrorCode } from '@tallyfin/core';
@@ -17,6 +18,7 @@ export interface CollectorOptions {
   monotonicNow?: () => number;
   admin?: AdministratorAccess;
   publisher?: PublisherAccess;
+  publicAdmission?: (projectId: string, signal: AbortSignal) => Promise<boolean>;
   waitUntil?: (task: Promise<void>) => void;
 }
 export function allowedOrigin(origin: string | null, allowed: string[]): origin is string {
@@ -66,6 +68,10 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       if (isServer) activeStore = options.publisher!.store;
       const projectId = route[1]!;
       if (!PROJECT_ID.test(projectId)) throw new CollectionError('invalid_request', 400);
+      if (!isServer && options.publicAdmission && !await awaitDependency(request.signal, () => options.publicAdmission!(projectId, request.signal))) {
+        retryAfter = 60;
+        throw new CollectionError('quota_exceeded', 429);
+      }
       if (principal) await options.publisher!.store.publisherAccess(projectId, principal);
       const project = await activeStore.loadProject(projectId);
       if (!project) throw new CollectionError(isServer ? 'forbidden' : 'not_found', isServer ? 403 : 404);
@@ -73,13 +79,14 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       const origin = request.headers.get('Origin');
       const permitted = isServer || allowedOrigin(origin, project.allowedOrigins);
       if (!isServer && permitted && origin) headers.set('Access-Control-Allow-Origin', origin);
-      // Denials, malformed requests and preflights consume admission, including repeated IDs.
+      // Untrusted origins cannot consume the quota used by permitted origins.
+      if (!permitted) throw new CollectionError('origin_denied', 403);
+      // Permitted-origin malformed requests and preflights still consume admission.
       if (!await activeStore.admit(projectId, receivedAt, project.limits.requestsPerMinute)) {
         retryAfter = Math.max(1, Math.ceil((60_000 - receivedAt % 60_000) / 1000));
         throw new CollectionError('quota_exceeded', 429);
       }
       admitted = true;
-      if (!permitted) throw new CollectionError('origin_denied', 403);
       if (project.status !== 'active') throw new CollectionError('project_unavailable', 403);
       if (!isServer && request.method === 'OPTIONS') {
         const method = request.headers.get('Access-Control-Request-Method');

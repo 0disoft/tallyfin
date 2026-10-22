@@ -59,9 +59,9 @@ paused 프로젝트는 두 경로 모두 `project_unavailable`(403)이다.
 
 1. `Origin`과 프로젝트를 먼저 읽어 허용 오리진이면 `Access-Control-Allow-Origin`을
    설정한다. 응답 헤더는 항상 `Cache-Control: no-store`, `Vary: Origin`을 둔다.
-2. 분당 admission을 확인한다(`admit`). 거부·preflight·잘못된 요청·중복도 여기서 센다.
-3. 오리진이 허용되지 않으면 `origin_denied`(403), 프로젝트가 active가 아니면
-   `project_unavailable`(403)이다.
+2. 허용되지 않은 오리진은 `origin_denied`(403)로 거부하고 분당 admission을 쓰지 않는다.
+3. 허용 오리진의 분당 admission을 확인한다(`admit`). preflight·잘못된 요청·중복도 센다.
+   이후 프로젝트가 active가 아니면 `project_unavailable`(403)이다.
 4. `OPTIONS`는 `Access-Control-Request-Method: POST`와
    `Access-Control-Request-Headers`가 `content-type`만일 때 204로 답한다. 그 밖은
    `invalid_request`(400)이다. `POST`가 아니면 `Allow: POST, OPTIONS`와 함께
@@ -151,7 +151,7 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 ## 할당량
 
 - 분당 admission: 프로젝트·UTC 고정 분(`minute_start`) 단위로 `ingest_minute_usage`에
-  요청 수를 센다. 중복·잘못된 요청·거부·preflight도 포함하며 전체 최대 한도+1인
+  요청 수를 센다. 허용 오리진의 중복·잘못된 요청·거부·preflight도 포함하며 전체 최대 한도+1인
   601에서 포화한다. 프로젝트 한도를 바꿔도 같은 분의 카운터는 줄지 않는다.
   고정 분이 바뀌면 새로 센다.
 - 일일 신규 영수증: `projects.new_receipts_per_utc_day`를 프로젝트·UTC 수신일 기준으로
@@ -215,3 +215,21 @@ CAS(compare-and-swap) 가드는 트랜잭션 시작 시 읽은 `ingest_revision`
 - 미측정: 프로젝트 수·등록 속성 조합 규모별 비용, 장기간·다중 프로세스/지역 Worker·원격/더 큰
   데이터셋·네 테이블 밖 대량 데이터의 부하, 운영 지연·비용.
 - 배포·활성화: 원격 D1·운영 Worker·도메인·인증 제공자는 설정하지 않았다.
+
+## 공개 수집 앞단 제한 — 2026-10-23
+
+호스트가 선택적 `BROWSER_INGEST_LIMITER` Rate Limiting 바인딩을 제공하면 브라우저
+경로에서 프로젝트 조회·DB 쓰기·본문 읽기 전에 프로젝트별 키로 제한한다. 초과는
+429와 Retry-After 60, 제한기 장애·취소·기한 초과는 503이며 재시도하지 않는다.
+요청 수명과 실제 I/O 동시성 한도를 공유한다. 이 단계는 프로젝트 존재와 허용 출처를
+읽기 전이므로 CORS 권한을 추가하지 않는다. 서버 경로는 기존 인증·발행 권한 순서를 유지한다.
+
+키는 프로젝트 ID만 포함하며 IP·UA·사용자 식별자를 새로 만들지 않는다. 바인딩이 없으면
+기존 DB admission을 사용한다. 운영 호스트는 Wrangler ratelimits 설정에서 바인딩명·
+namespace·한도를 구성해야 한다. 실제 호스트 설정과 원격 활성화는 아직 하지 않았다.
+Rate Limiting은 위치별 근사 제한이므로 DB의 원자적 한도 검사를 대체하지 않는다.
+[공식 바인딩 문서](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/)
+
+Origin 허용 목록은 인증이 아니다. 위조된 허용 Origin은 여전히 DB admission에 도달한다.
+거부 Origin과 앞단 제한은 HTTP 관측 로그로 확인하며, DB의 거부 진단에는 admission 전
+요청을 합산하지 않는다. 이미 저장한 과거 origin_denied 기록과 API 원인 enum은 유지한다.

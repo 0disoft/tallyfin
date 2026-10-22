@@ -43,7 +43,7 @@ test('real rejected requests distinguish minute/daily limits, exclude administra
     const result = await handler(request(path)); assert.equal(result.status, 200);
     assert.equal(result.headers.get('Cache-Control'), 'no-store'); assert.equal(result.headers.get('Set-Cookie'), null);
     const body = await result.json() as { summary: { rejectedRequests: number; reasons: { reason: string; count: number }[] } };
-    assert.equal(body.summary.rejectedRequests, 5);
+    assert.equal(body.summary.rejectedRequests, 4);
     assert.equal(body.summary.reasons.find(row => row.reason === 'daily_limit')?.count, 1);
     assert.equal(body.summary.reasons.find(row => row.reason === 'minute_limit')?.count, 1);
     assert.ok(!JSON.stringify(body).includes('never-store-this')); assert.ok(!JSON.stringify(body).includes('untrusted.example.invalid'));
@@ -82,18 +82,18 @@ test('background recording never delays or changes the rejection response, and s
   const store: CollectionStore = { loadProject: async () => ({ ...registry.project, allowedOrigins: registry.allowedOrigins, limits: registry.limits }),
     admit: async () => true, loadRegistry: async () => registry, commit: async () => ({ accepted: 0, duplicates: 0 }),
     recordRejection: async (_id: string, _now: number, reason: Exclude<RejectionReason, 'minute_limit'>) => {
-      assert.equal(reason, 'origin_denied'); calls++; await new Promise<void>(resolve => { release = resolve; }); throw Error('private-store-error');
+      assert.equal(reason, 'invalid_request'); calls++; await new Promise<void>(resolve => { release = resolve; }); throw Error('private-store-error');
     } };
   const logged: unknown[] = [];
   const handler = createCollector(store, { now: () => now, waitUntil: task => tasks.push(task), log: entry => logged.push(entry) });
-  const response = await handler(post('{}', 'https://untrusted.example.invalid'));
-  assert.equal(response.status, 403); assert.equal(calls, 1); assert.equal(tasks.length, 1);
+  const response = await handler(post('{}'));
+  assert.equal(response.status, 400); assert.equal(calls, 1); assert.equal(tasks.length, 1);
   release!(); await Promise.all(tasks);
   assert.equal(calls, 1); assert.ok(!JSON.stringify(logged).includes('private-store-error'));
   store.admit = async () => false;
   assert.equal((await handler(post('{}'))).status, 429); assert.equal(calls, 1);
   store.admit = async () => true; store.recordRejection = async () => { throw Error('private-store-error'); };
-  assert.equal((await createCollector(store, { now: () => now })(post('{}', 'https://untrusted.example.invalid'))).status, 403);
+  assert.equal((await createCollector(store, { now: () => now })(post('{}'))).status, 400);
 });
 test('native Worker forwards its execution context to record rejected requests in actual D1', async () => {
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../../', import.meta.url)), contents:

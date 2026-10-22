@@ -74,3 +74,6 @@ minute/daily는 HTTP quota_exceeded의 범위를 구분한다. 공개 수집 요
 없는 입력이며 이 수치는 그 요청의 거부 현황이지 진짜 방문자 수나 전달 완전성이 아니다.
 coverage best-effort로 누락 가능성을 명시하고, 알 수 없는 프로젝트·관리자 실패·
 admission DB 실패·기록 기능 도입 전 이력은 집계하지 않는다. 거부율 분모는 제공하지 않는다.
+
+2026-10-23부터 admission 전 거부 Origin과 선택적 앞단 제한은 DB 진단에 합산하지 않고
+HTTP 로그에 남긴다. 과거 origin_denied DB 기록은 보존기간까지 계속 조회할 수 있다.

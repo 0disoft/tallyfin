@@ -14,7 +14,8 @@ import { checkAdministratorStorageRead } from './readiness.ts';
 import { databaseCapacity, requestDatabase } from './dependency-lifetime.ts';
 
 // Host supplies the D1 binding. No deployed resource ID or credential is committed.
-export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string }
+export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string;
+  BROWSER_INGEST_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> } }
 export interface WorkerOptions { requestTimeoutMs?: number; maxDatabaseOperations?: number; cleanupMaxPages?: number }
 export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'], verifyPublisher?: PublisherAccess['verifyBearer'],
   options: WorkerOptions = {}) {
@@ -29,6 +30,11 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
     const store = new D1Store(db, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' });
     try {
     return await createCollector(store, { observe: logRequestObservation,
+      ...(bindings.BROWSER_INGEST_LIMITER ? { publicAdmission: async (projectId: string) => {
+        const result = await capacity(() => bindings.BROWSER_INGEST_LIMITER!.limit({ key: `tallyfin-browser:${projectId}` }));
+        if (typeof result.success !== 'boolean') throw new TypeError('Invalid admission response');
+        return result.success;
+      } } : {}),
       ...(context ? { waitUntil: (task: Promise<void>) => context.waitUntil(task) } : {}),
       ...(verifyBearer ? { admin: { store: new D1Queries(db, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true' }), verifyBearer,
         checkReadiness: () => checkAdministratorStorageRead(db) } } : {}),

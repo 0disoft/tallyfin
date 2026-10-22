@@ -2229,7 +2229,7 @@ paths:
         - Collection
       operationId: preflightBrowserBatch
       summary: Check exact origin and browser collection headers
-      description: Preflight consumes project admission quota. Only POST and the Content-Type header are allowed.
+      description: Allowed-origin preflight consumes project admission quota. Only POST and the Content-Type header are allowed.
         Replies have Cache-Control no-store and Vary Origin, with no credential permission.
       security: []
       parameters:
@@ -2317,7 +2317,8 @@ paths:
         idempotency without custom headers, including sendBeacon. Origin allowlisting is admission control,
         not authentication or proof that events are genuine. Responses include CORS headers only for an
         allowed origin; all responses use Cache-Control: no-store. Unknown origin receives no CORS
-        permission."
+        permission. Denied origins do not consume database admission quota. An optional host limiter
+        may reject before project lookup with 429 and Retry-After 60, without CORS permission."
       security: []
       parameters:
         - $ref: "#/components/parameters/ProjectId"
@@ -2480,7 +2481,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
           headers:
             Retry-After:
-              description: Seconds until the next fixed UTC minute for admission or UTC midnight for daily quota.
+              description: Seconds until the next fixed UTC minute for admission or UTC midnight for daily quota; 60 for the optional pre-database limiter.
                 SDK applies bounded retries and drops retries beyond its time budget.
               schema:
                 type: integer
