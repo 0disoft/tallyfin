@@ -6,6 +6,17 @@ export interface FunnelDimensionRow { cohort_date: string; dimension_key: string
 export const FUNNEL_DIMENSION_ROW_LIMIT = 31 * 256 * 10;
 function invalid(): never { throw new CollectionError('storage_unavailable', 503); }
 
+interface Dimension { value: string | number | boolean; key: string; bucketId: string }
+function readDimension(raw: string, rules: Registry['events'][number]['properties'], dimensions: readonly string[], groupBy: string): Dimension {
+  if (new TextEncoder().encode(raw).length > 512) invalid();
+  let props: ReturnType<typeof readDimensions>;
+  try { props = readDimensions(raw, rules); } catch { invalid(); }
+  const value = props[groupBy];
+  if (value === undefined) invalid();
+  return { value, key: JSON.stringify(dimensions.map(name => [name, typeof props[name], props[name]])),
+    bucketId: JSON.stringify([typeof value, value]) };
+}
+
 /** Read finite start-cohort dimensions already persisted alongside step counts.
  * Validate each full combination before collapsing other dimensions; corruption
  * in one combination cannot be hidden by valid counts in another.
@@ -22,15 +33,18 @@ export function funnelBreakdown(registry: Registry, input: AdminQuery, meta: Fun
   if (rows.length > dates.length * 256 * size || rows.length > FUNNEL_DIMENSION_ROW_LIMIT) invalid();
   const validDates = new Set(dates), groups = new Map<string, { value: string | number | boolean; total: number[]; days: Map<string, number[]> }>();
   const combinations = new Map<string, { counts: number[]; seen: Set<number> }>();
+  const dimensions = new Map<string, Dimension>();
   const combinationKeys = new Set<string>(), total = empty();
   for (const row of rows) {
     if (!validDates.has(row.cohort_date) || !integer(row.step_index, 0, size - 1) ||
-      typeof row.dimension_key !== 'string' || new TextEncoder().encode(row.dimension_key).length > 512) invalid();
-    let props: ReturnType<typeof readDimensions>;
-    try { props = readDimensions(row.dimension_key, rules); } catch { invalid(); }
-    const value = props[input.groupBy];
-    if (value === undefined) invalid();
-    const key = JSON.stringify(definition.dimensions.map(name => [name, typeof props[name], props[name]]));
+      typeof row.dimension_key !== 'string') invalid();
+    let dimension = dimensions.get(row.dimension_key);
+    if (!dimension) {
+      dimension = readDimension(row.dimension_key, rules, definition.dimensions, input.groupBy);
+      // Equivalent tuple orderings are valid, but must not grow this cache past its budget.
+      if (dimensions.size < 256) dimensions.set(row.dimension_key, dimension);
+    }
+    const { value, key, bucketId } = dimension;
     combinationKeys.add(key);
     if (combinationKeys.size > 256) invalid();
     const combinationId = JSON.stringify([row.cohort_date, key]);
@@ -38,7 +52,6 @@ export function funnelBreakdown(registry: Registry, input: AdminQuery, meta: Fun
     if (combination.seen.has(row.step_index)) invalid();
     combination.seen.add(row.step_index); combination.counts[row.step_index] = count(row.reached_count);
     combinations.set(combinationId, combination);
-    const bucketId = JSON.stringify([typeof value, value]);
     const bucket = groups.get(bucketId) ?? { value, total: empty(), days: new Map<string, number[]>() };
     if (!groups.has(bucketId) && groups.size >= 32) invalid();
     const day = bucket.days.get(row.cohort_date) ?? empty();
