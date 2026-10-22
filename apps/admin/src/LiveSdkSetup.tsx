@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { ApiClient } from './api/client.ts';
 import type { EventSource, FunnelDefinition, Registry } from './api/types.ts';
 import type { SdkProfile } from './api/sdk-setup.ts';
+import { latestSchema } from './api/latest-schema.ts';
 import { sdkFunnels, sdkSetup } from './api/sdk-setup.ts';
 
 /** Funnels with at least one step in this source. Unreadable definitions never offer an example. */
@@ -24,10 +25,10 @@ export default function LiveSdkSetup({ client, projectId, refreshTick }: { clien
     const controller = new AbortController(); setRead({ client, key, status: 'loading', registry: null }); setCopyStatus(null);
     void (async () => {
       try {
-        const list = await client.listSchemas(projectId, { signal: controller.signal });
+        const selected = await latestSchema(client, projectId, controller.signal);
         if (controller.signal.aborted) return;
-        if (list.latestVersion === null) { setRead({ client, key, status: 'empty', registry: null }); return; }
-        const definition = await client.getSchema(projectId, list.latestVersion, { signal: controller.signal });
+        if (selected.active === null) { setRead({ client, key, status: 'empty', registry: null }); return; }
+        const definition = await client.getSchema(projectId, selected.active, { signal: controller.signal });
         if (!controller.signal.aborted) setRead({ client, key, registry: definition, status: 'ready' });
       } catch { if (!controller.signal.aborted) setRead({ client, key, status: 'error', registry: null }); }
     })();
@@ -55,9 +56,9 @@ export default function LiveSdkSetup({ client, projectId, refreshTick }: { clien
     <div className="settings-head"><h2 id="sdk-setup-heading">SDK 연결 안내</h2><button className="secondary-button" onClick={() => setReload(r => r + 1)}>등록 스키마 다시 확인</button></div>
     {status === 'loading' && <p role="status">등록한 스키마를 확인하고 있어요.</p>}
     {status === 'error' && <p className="form-error" role="alert">등록한 스키마를 조회하지 못했어요. 다시 확인해 주세요.</p>}
-    {status === 'empty' && <p className="notice">첫 스키마를 발행하면 연결 코드를 만들 수 있어요. <a href="#schema-heading">이벤트 스키마 등록</a></p>}
+    {status === 'empty' && <p className="notice">활성 스키마를 발행하면 연결 코드를 만들 수 있어요. <a href="#schema-heading">이벤트 스키마 등록</a></p>}
     {registry && <>
-      <p className="context-note">프로젝트 {projectId} · 최신 스키마 v{registry.schemaVersion}.</p>
+      <p className="context-note">프로젝트 {projectId} · 최신 활성 스키마 v{registry.schemaVersion}.</p>
       <label className="field-label" htmlFor="sdk-source">SDK 발행 출처</label>
       <select className="text-input settings-select" id="sdk-source" value={source} onChange={event => {
         setChoice({ key: scope, source: event.target.value === 'server' ? 'server' : 'browser' }); setCopyStatus(null);

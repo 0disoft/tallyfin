@@ -1,3 +1,4 @@
+import useSchemaVersion from './useSchemaVersion';
 import useProjectPages from './useProjectPages';
 import { useMainAnalysis, usePeriodComparison, useEventSeries } from './useAnalysis';
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -81,7 +82,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const [endpoint, setEndpoint] = useState('');
   const [endpointError, setEndpointError] = useState<string | null>(null);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [versionInput, setVersionInput] = useState('1');
   const [grouping, setGrouping] = useState<EventGrouping>(null);
   const [query, setQuery] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<string | null>(null);
@@ -123,6 +123,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const registerDraft = useCallback((scope: ApiClient, project: string | null, check: () => boolean) =>
     draftExit.register(scope, project, check), [draftExit]);
 
+  const { versionInput, setVersionInput, loading: versionLoading, error: versionError } = useSchemaVersion(client, projectId, refreshTick);
   const versionText = versionInput.trim();
   const version = /^[0-9]+$/.test(versionText) ? Number(versionText) : Number.NaN;
   const validVersion = Number.isInteger(version) && version >= 1 && version <= MAX_SCHEMA_VERSION;
@@ -187,12 +188,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const projectCreated = useCallback((settings: ProjectSettings) => {
     addProject(settings.project);
     if (settings.project.id !== activeProjectId && !confirmDraftExit()) return false;
-    setProjectId(settings.project.id); setVersionInput('1'); setSelectedEvent(null); setGrouping(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
+    setProjectId(settings.project.id); setSelectedEvent(null); setGrouping(null); setMain({ status: 'idle' }); setSeries({ status: 'idle' });
     setNewProjectId(settings.project.id); setShowCreate(false);
     onNavigate?.('settings');
     return true;
   }, [onNavigate, addProject, activeProjectId, confirmDraftExit]);
-  const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, []);
+  const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, [setVersionInput]);
   const connected = useCallback((login: BrowserLogin) => {
     resetProjects();
     setToken(''); setProjectId(null); setSelectedEvent(null); setGrouping(null);
@@ -368,7 +369,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         refreshTick={settingsRefreshTick} setupRefreshTick={setupRefreshTick} diagnosticsRevision={diagnosticsRevision}
         onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} registerDraft={registerDraft} />
     </DeferredPanel></div>}
-    {view !== 'settings' && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
+    {versionLoading && <p role="status">최신 활성 스키마를 확인하고 있어요.</p>}
+    {versionError && <ErrorPanel error={versionError} onRetry={retry} />}
+    {view !== 'settings' && !versionLoading && !versionError && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
     {view !== 'settings' && deniedRead && <ErrorPanel error={deniedRead} onRetry={retry} />}
