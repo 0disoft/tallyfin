@@ -4,7 +4,12 @@
 전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
 
 ## 경계
-`createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
+`createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `monotonicNow`·`beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
+
+기본 호스트는 이벤트/HTTP-date에 `Date.now`, 재시도 예산에 `performance.now`를 쓴다.
+커스텀 호스트는 `monotonicNow`를 생략하면 기존 `now` 동작을 유지한다. 시계와 timer는
+같은 경과 시간 기준으로 구동해야 한다. 유한 입력 제한상 이벤트 한 건은 800 ASCII
+bytes 미만이므로 20건을 한 번에 조립해도 16KiB 이하다.
 
 내부 파일은 `types.ts`가 기존 공개 타입을, `common.ts`가 속성 검증·네이티브 어댑터·큐·재시도·숨김 전송·destroy 처리를, `index.ts`가 workflow 검증과 track/start 진입점을 맡는다.
 내부 enqueue는 연결 필드를 공통으로 받도록 분리했으며 기존 workflow의 `{ attempt }` 형식과 공개 BrowserClient API는 유지한다. 브라우저 퍼널 모듈은 기본 엔트리와 분리한 선택 엔트리 `@tallyfin/browser/funnels`로 구현했고 기본 번들에는 넣지 않는다.

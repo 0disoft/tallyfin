@@ -42,6 +42,8 @@ export interface ServerPlatform {
   uuid(): string;
   fetch: typeof fetch;
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
+  /** Schedule a deadline and return its cancellation function. */
+  timer?(callback: () => void, milliseconds: number): () => void;
 }
 export class ServerInputError extends Error {
   readonly code = 'invalid_event';
@@ -148,22 +150,26 @@ function platform(): ServerPlatform {
   return { now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(),
     fetch: (input, init) => globalThis.fetch(input, init), wait };
 }
+function timer(callback: () => void, milliseconds: number): () => void {
+  const id = setTimeout(callback, milliseconds); return () => clearTimeout(id);
+}
 /** Timeout covers credential acquisition, request and response body; all timers/listeners are removed. */
-async function limited<T>(work: (signal: AbortSignal) => Promise<T>, milliseconds: number, parent?: AbortSignal): Promise<T> {
-  const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
+async function limited<T>(work: (signal: AbortSignal) => Promise<T>, milliseconds: number,
+  schedule: (callback: () => void, milliseconds: number) => () => void, parent?: AbortSignal): Promise<T> {
+  const controller = new AbortController(); let cancelTimer: (() => void) | undefined;
   let stop = () => {};
   try {
     return await new Promise<T>((resolve, reject) => {
       stop = () => { controller.abort(); reject(aborted); };
       if (parent?.aborted) { stop(); return; }
       parent?.addEventListener('abort', stop, { once: true });
-      timer = setTimeout(() => { controller.abort(); reject(timedOut); }, milliseconds);
+      cancelTimer = schedule(() => { controller.abort(); reject(timedOut); }, milliseconds);
       Promise.resolve().then(() => {
         if (controller.signal.aborted) throw aborted;
         return work(controller.signal);
       }).then(resolve, reject);
     });
-  } finally { clearTimeout(timer!); parent?.removeEventListener('abort', stop); controller.abort(); }
+  } finally { cancelTimer?.(); parent?.removeEventListener('abort', stop); controller.abort(); }
 }
 /** Cleanup must not delay delivery results or replace their original failure classification. */
 function discardBody(body: ReadableStream<Uint8Array> | null): void {
@@ -223,6 +229,7 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
     schema = copy; endpoint = url.href;
   } catch { throw new TypeError('Invalid server SDK configuration.'); }
   const getToken = options.getToken; const encoder = new TextEncoder();
+  const schedule = host.timer ? host.timer.bind(host) : timer;
   return {
     createEvent(name, properties = {}, metadata = {}) {
       try {
@@ -293,7 +300,7 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
             }
             discardBody(response.body);
             return null;
-          }, Math.min(timeout, remaining), signal);
+          }, Math.min(timeout, remaining), schedule, signal);
           if (outcome) return { status: 'delivered', ...outcome, attempts: sent };
           reason = 'http_error';
           if (httpStatus !== 429 && httpStatus !== 408 && !(httpStatus! >= 500 && httpStatus! <= 599))
@@ -307,7 +314,7 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
         const delay = retryDelay(header, attempt, host.now());
         const remainingWait = deadline - host.monotonicNow();
         if (delay >= remainingWait) return fail('unavailable', 'retry_deferred', true);
-        try { await limited(waitSignal => host.wait(delay, waitSignal), remainingWait, signal); }
+        try { await limited(waitSignal => host.wait(delay, waitSignal), remainingWait, schedule, signal); }
         catch { return signal?.aborted ? fail('aborted', 'aborted', false) : fail('unavailable', 'retry_deferred', true); }
       }
       return fail('unavailable', reason, true);

@@ -24,6 +24,7 @@ export class FakeBrowser implements BrowserPlatform {
   nextId = 0;
   reply: (index: number) => Promise<Reply> = () => Promise.resolve({ status: 200, retryAfter: null });
   now = () => this.time;
+  monotonicNow = () => this.time;
   uuid = () => crypto.randomUUID();
   timer = (callback: () => void, milliseconds: number) => {
     const id = ++this.nextId; this.timers.set(id, { at: this.time + milliseconds, callback });

@@ -27,6 +27,8 @@ export interface BrowserClient {
 /** Optional host port used for deterministic tests or explicit browser adapters. */
 export interface BrowserPlatform {
   now(): number;
+  /** Elapsed time for retry budgets. Legacy hosts may omit this and retain their now() clock. */
+  monotonicNow?(): number;
   uuid(): string;
   timer(callback: () => void, milliseconds: number): () => void;
   send(endpoint: string, body: string, signal: AbortSignal): Promise<{ status: number; retryAfter: string | null }>;

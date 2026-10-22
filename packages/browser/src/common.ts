@@ -42,7 +42,7 @@ function schemaValid(schema: EventSchema): boolean {
 function browserPlatform(): BrowserPlatform | undefined {
   if (typeof document === 'undefined' || typeof fetch !== 'function' || typeof crypto === 'undefined') return undefined;
   return {
-    now: () => Date.now(), uuid: () => crypto.randomUUID(),
+    now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(),
     timer: (callback, milliseconds) => { const id = setTimeout(callback, milliseconds); return () => clearTimeout(id); },
     send(endpoint, body, signal) {
       return globalThis.fetch(endpoint, { method: 'POST', body, signal,
@@ -64,7 +64,7 @@ function browserPlatform(): BrowserPlatform | undefined {
 }
 interface Batch {
   // Reserved internal fields: build tooling may shorten them, never wire/public keys.
-  __tfBatchBody: string; __tfBatchCount: number; __tfBatchCreatedAt: number; __tfBatchTries: number;
+  __tfBatchBody: string; __tfBatchCount: number; __tfBatchDeadline: number; __tfBatchTries: number;
   __tfBatchStopRetry?: (() => void) | undefined; __tfBatchStopRequest?: (() => void) | undefined;
 }
 
@@ -88,6 +88,7 @@ export function createTransport<Schema extends EventSchema>(options: Omit<Browse
 }
 
 function client<Schema extends EventSchema>(endpoint: string, schema: Schema, platform: BrowserPlatform): Transport & { schema: Schema; platform: BrowserPlatform } {
+  const elapsed = (platform.monotonicNow ?? platform.now).bind(platform);
   const queue: string[] = [];
   const active = new Set<Batch>(); let stopped = false; let draining = false;
   let cancelTimer: (() => void) | undefined;
@@ -119,16 +120,10 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   };
   const prefix = `{"schemaVersion":${schema.version},"source":"browser","events":[`;
   const pack = (): Batch => {
-    let count = 0; let events = '';
-    for (const event of queue) {
-      if (count === 20) break;
-      const candidate = events + (count ? ',' : '') + event;
-      // Validated names, enums, IDs and ISO timestamps are ASCII. Numbers and
-      // booleans are serialized as ASCII too, so length is the UTF-8 byte size.
-      if ((prefix + candidate + ']}').length > 16384) break;
-      events = candidate; count++;
-    }
-    return { __tfBatchBody: prefix + events + ']}', __tfBatchCount: count, __tfBatchCreatedAt: platform.now(), __tfBatchTries: 0 };
+    // At most four 48-character keys/32-character values plus a bounded task link:
+    // each validated event is below 800 ASCII bytes, so 20 events fit in 16 KiB.
+    const count = Math.min(queue.length, 20), events = queue.slice(0, count).join(',');
+    return { __tfBatchBody: prefix + events + ']}', __tfBatchCount: count, __tfBatchDeadline: elapsed() + 600000, __tfBatchTries: 0 };
   };
   const release = (batch: Batch) => {
     active.delete(batch); batch.__tfBatchStopRequest = undefined;
@@ -139,7 +134,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   };
   const send = (batch: Batch) => {
     if (stopped || !active.has(batch)) return;
-    const remaining = batch.__tfBatchCreatedAt + 600000 - platform.now();
+    const remaining = batch.__tfBatchDeadline - elapsed();
     if (remaining <= 0) { release(batch); return; }
     const controller = new AbortController(); let finished = false;
     const finish = (status: number, header: string | null = null) => {
@@ -152,7 +147,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
         else if (header?.length === 29 && new Date(header).toUTCString() === header)
           delay = Date.parse(header) - platform.now();
         delay = Math.max(1000, delay);
-        if (platform.now() + delay < batch.__tfBatchCreatedAt + 600000) {
+        if (delay < batch.__tfBatchDeadline - elapsed()) {
           batch.__tfBatchTries++;
           batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);
           return;
@@ -166,7 +161,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     catch { finish(0); }
   };
   function launch() {
-    const batch = pack(); if (!batch.__tfBatchCount) { queue.shift(); schedule(0); return; }
+    const batch = pack();
     queue.splice(0, batch.__tfBatchCount); active.add(batch); send(batch);
   }
   const enqueue = (name: string, properties: Properties, occurredAt: number, attachment?: object) => {
@@ -174,7 +169,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     const copied = snapshot(name, properties); if (!copied) return false;
     const eventId = platform.uuid(); if (typeof eventId !== 'string' || !uuidPattern.test(eventId)) return false;
     const event = JSON.stringify({ eventId, name, occurredAt: new Date(occurredAt).toISOString(), properties: copied, ...attachment });
-    if (event.length > 16000) return false;
+    // Finite names, four bounded values and validated task links fit well below one batch.
     queue.push(event);
     if (!active.size && (queue.length >= 20 || !cancelTimer)) schedule(queue.length >= 20 ? 0 : 5000);
     return true;

@@ -1,5 +1,16 @@
 # 검증
 
+## SDK 재시도 시계와 가상 deadline (2026-10-22)
+
+BrowserPlatform에 선택적 monotonicNow를 추가했다. 기본 호스트는 날짜/HTTP-date와
+재시도 경과 시간을 분리하며 기존 커스텀 호스트는 now로 호환된다. 유한 입력 제한으로
+항상 16KiB에 들어가는 최대 20건을 한 번에 조립해 반복 문자열/크기 검사를 줄였다.
+ServerPlatform의 선택적 timer는 모든 제한 시간 대기에 사용하고 생략 시 기존 타이머다.
+SDK 검사 98/98, 두 SDK 빌드·루트 타입 검사·diff 검사를 통과했다. 원본/minified의
+10분 직전/정확히/직후·시계 역행/전진·최대 길이 20건·가상 credential/request/body/wait
+기한을 확인했다. gzip은 Sembom 3048, 퍼널 예제 3021, 생성 퍼널 3041 bytes로
+3072 bytes 이하다. 필수 호출 인자·응답 형식·DB·의존성·CI 변경은 없다.
+
 ## OIDC 대기 제한과 선택적 시계/취소 (2026-10-22)
 
 JWKS 전송을 deadline과 경합하고 오류/초과/취소 본문 정리를 기다리지 않는다. 선택적

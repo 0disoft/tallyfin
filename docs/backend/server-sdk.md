@@ -41,6 +41,10 @@
 
 `host`는 선택이고 `now`·`monotonicNow`·`uuid`·`fetch`·`wait`를 모두 함수로 줘야 한다.
 기본은 `Date.now`·`performance.now`·`crypto.randomUUID`·`globalThis.fetch`다.
+선택적 `timer(callback, milliseconds)`는 취소 함수를 반환한다. 제공하면 자격증명·요청·
+응답 본문·재시도 대기의 제한 시간에 모두 사용한다. `monotonicNow`·`wait`와 같은
+가상 스케줄러로 구동하면 실제 시간 대기 없이 단위 테스트할 수 있다. 생략 시 기존
+`setTimeout`/`clearTimeout` 동작을 유지한다.
 
 ### 연결 스켈레톤
 
