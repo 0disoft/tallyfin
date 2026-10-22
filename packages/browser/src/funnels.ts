@@ -1,6 +1,6 @@
 import { createTransport, integer, namePattern, own, record, uuidPattern } from './common.ts';
 import type { BrowserClient, BrowserOptions, BrowserPlatform, BrowserSchema, Properties } from './types.js';
-export type { BrowserPlatform, Properties } from './types.js';
+export type { DeliveryState, DeliveryObserver, BrowserPlatform, Properties } from './types.js';
 
 /** Non-browser milestones keep their position without exposing server definitions. */
 export interface BrowserFunnel { steps: readonly (string | null)[]; dimensions: readonly string[] }

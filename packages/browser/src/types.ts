@@ -8,7 +8,10 @@ export interface BrowserSchema {
   events: Readonly<Record<string, Readonly<Record<string, Rule>>>>;
   workflows: Readonly<Record<string, { start: string; success: string; failure?: string; dimensions: readonly string[] }>>;
 }
-export interface BrowserOptions { endpoint: string; schema: BrowserSchema; allowLocalHttp?: boolean; enabled?: boolean }
+/** Counts only; no event names, properties, IDs or response bodies are exposed. */
+export type DeliveryState = 'accepted' | 'retry' | 'failed' | 'expired' | 'overflow' | 'destroyed' | 'beacon_queued';
+export type DeliveryObserver = (state: DeliveryState, events: number) => void;
+export interface BrowserOptions { onDelivery?: DeliveryObserver; endpoint: string; schema: BrowserSchema; allowLocalHttp?: boolean; enabled?: boolean }
 export interface AttemptHandle {
   succeed(properties?: Properties): boolean;
   fail(properties?: Properties): boolean;

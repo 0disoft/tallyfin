@@ -1,6 +1,6 @@
 import { createTransport, namePattern, own, record, uuidPattern } from './common.ts';
 import type { BrowserClient, BrowserOptions, BrowserPlatform, BrowserSchema, Properties } from './types.js';
-export type { Value, Properties, Rule, BrowserSchema, BrowserOptions, AttemptHandle, BrowserClient, BrowserPlatform } from './types.js';
+export type { DeliveryState, DeliveryObserver, Value, Properties, Rule, BrowserSchema, BrowserOptions, AttemptHandle, BrowserClient, BrowserPlatform } from './types.js';
 const empty = (): BrowserClient => ({ track: () => false, start: () => undefined, flush() {}, destroy() {}, pending: 0 });
 
 function workflowsValid(schema: BrowserSchema): boolean {

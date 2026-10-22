@@ -32,7 +32,9 @@ for (const [name, entry] of Object.entries({ sdk: 'packages/browser/src/index.ts
     ? 'packages/browser/src/funnels.ts' : 'packages/browser/src/index.ts')), 'another task profile entered the bundle');
   sizes[name] = { bytes: bytes.length, gzipBytes: gzipSync(bytes).length };
 }
-console.log(JSON.stringify({ budgetGzipBytes: 3072, ...sizes }, null, 2));
-assert.ok(sizes.sdkWithSembom.gzipBytes <= 3072, 'SDK + integration + required schema exceeds the 3 KiB budget');
-assert.ok(sizes.sdkWithFunnel.gzipBytes <= 3072, 'Funnel SDK + integration + required schema exceeds the 3 KiB budget');
-assert.ok(sizes.sdkWithGeneratedFunnel.gzipBytes <= 3072, 'Generated funnel SDK + endpoint + required schema exceeds the 3 KiB budget');
+console.log(JSON.stringify({ budgetGzipBytes: 3328, standaloneBudgetGzipBytes: 3072, ...sizes }, null, 2));
+assert.ok(sizes.sdkWithSembom.gzipBytes <= 3328, 'SDK + integration + required schema exceeds the 3.25 KiB integration budget');
+assert.ok(sizes.sdkWithFunnel.gzipBytes <= 3328, 'Funnel SDK + integration + required schema exceeds the 3.25 KiB integration budget');
+assert.ok(sizes.sdkWithGeneratedFunnel.gzipBytes <= 3328, 'Generated funnel SDK + endpoint + required schema exceeds the 3.25 KiB integration budget');
+
+assert.ok(sizes.sdk.gzipBytes <= 3072 && sizes.funnelSdk.gzipBytes <= 3072, 'Standalone SDK exceeds the 3 KiB budget');

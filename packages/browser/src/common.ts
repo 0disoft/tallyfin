@@ -1,5 +1,5 @@
 import { MAX_BATCH_EVENTS, MAX_PENDING_EVENTS, MAX_HIDDEN_BATCHES, MAX_RETRIES, FLUSH_INTERVAL_MS, REQUEST_TIMEOUT_MS, RETRY_BUDGET_MS, retryDelay } from './delivery-policy.ts';
-import type { BrowserOptions, BrowserPlatform, BrowserSchema, Properties } from './types.js';
+import type { BrowserOptions, BrowserPlatform, BrowserSchema, Properties, DeliveryState } from './types.js';
 type EventSchema = Pick<BrowserSchema, 'version' | 'events'>;
 interface Transport {
   readonly pending: number;
@@ -85,11 +85,18 @@ export function createTransport<Schema extends EventSchema>(options: Omit<Browse
     if (serialized.length > 32768) return undefined;
     const schema: Schema = JSON.parse(serialized);
     if (!schemaValid(schema) || !validate(schema)) return undefined;
-    return client(endpoint.href, schema, platform);
+    return client(endpoint.href, schema, platform, options.onDelivery);
   } catch { return undefined; }
 }
 
-function client<Schema extends EventSchema>(endpoint: string, schema: Schema, platform: BrowserPlatform): Transport & { schema: Schema; platform: BrowserPlatform } {
+function client<Schema extends EventSchema>(endpoint: string, schema: Schema, platform: BrowserPlatform, onDelivery?: BrowserOptions['onDelivery']): Transport & { schema: Schema; platform: BrowserPlatform } {
+  let notifying = false;
+  const notify = (state: DeliveryState, events: number) => {
+    if (notifying || !events) return;
+    notifying = true;
+    try { onDelivery?.(state, events); } catch { /* Diagnostics cannot change delivery. */ }
+    finally { notifying = false; }
+  };
   const elapsed = (platform.monotonicNow ?? platform.now).bind(platform);
   const queue: string[] = [];
   const active = new Set<Batch>(); let stopped = false; let draining = false;
@@ -137,7 +144,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   const send = (batch: Batch) => {
     if (stopped || !active.has(batch)) return;
     const remaining = batch.__tfBatchDeadline - elapsed();
-    if (remaining <= 0) { release(batch); return; }
+    if (remaining <= 0) { release(batch); notify('expired', batch.__tfBatchCount); return; }
     const controller = new AbortController(); let finished = false;
     const finish = (status: number, header: string | null = null) => {
       if (finished || stopped || !active.has(batch)) return;
@@ -147,10 +154,10 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
         if (delay < batch.__tfBatchDeadline - elapsed()) {
           batch.__tfBatchTries++;
           batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);
-          return;
+          notify('retry', batch.__tfBatchCount); return;
         }
       }
-      release(batch);
+      release(batch); notify(status >= 200 && status < 300 ? 'accepted' : 'failed', batch.__tfBatchCount);
     };
     const stopTimeout = platform.timer(() => { controller.abort(); finish(0); }, Math.min(REQUEST_TIMEOUT_MS, remaining));
     batch.__tfBatchStopRequest = () => { finished = true; stopTimeout(); controller.abort(); };
@@ -162,7 +169,8 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     queue.splice(0, batch.__tfBatchCount); active.add(batch); send(batch);
   }
   const enqueue = (name: string, properties: Properties, occurredAt: number, attachment?: object) => {
-    if (stopped || pending() >= MAX_PENDING_EVENTS) return false;
+    if (stopped) return false;
+    if (pending() >= MAX_PENDING_EVENTS) { notify('overflow', 1); return false; }
     const copied = snapshot(name, properties); if (!copied) return false;
     const eventId = platform.uuid(); if (typeof eventId !== 'string' || !uuidPattern.test(eventId)) return false;
     const event = JSON.stringify({ eventId, name, occurredAt: new Date(occurredAt).toISOString(), properties: copied, ...attachment });
@@ -181,7 +189,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       const batch = pack(); if (!batch.__tfBatchCount) break;
       try { if (!platform.beacon(endpoint, batch.__tfBatchBody)) break; } catch { break; }
       // Beacon true means browser queue acceptance, not a committed server receipt.
-      queue.splice(0, batch.__tfBatchCount);
+      queue.splice(0, batch.__tfBatchCount); notify('beacon_queued', batch.__tfBatchCount);
     }
     cancelTimer?.(); cancelTimer = undefined;
     // Start unsent keepalive batches during the visibility callback, before timers can freeze.
@@ -195,7 +203,8 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       if (!stopped) {
         stopped = true; cancelTimer?.();
         for (const batch of active) { batch.__tfBatchStopRetry?.(); batch.__tfBatchStopRequest?.(); }
-        detach?.(); queue.length = 0; active.clear();
+        const discarded = pending();
+        detach?.(); queue.length = 0; active.clear(); notify('destroyed', discarded);
       }
     },
   };

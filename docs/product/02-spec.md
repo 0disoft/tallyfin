@@ -319,3 +319,13 @@ API 연결 설정에서 사용자가 가진 `logs:summary` v2 JSON을 선택해 
 
 - Sembom 파일럿 예시: [sembom.md](../integrations/sembom.md)
 - 프론트엔드 설계: [FRONTEND_DESIGN.md](../frontend/FRONTEND_DESIGN.md)
+
+## 전달 진단과 용량 예산 — 2026-10-23
+
+브라우저 SDK는 선택적 동기 onDelivery(state, events) 콜백으로 HTTP 수락·재시도·
+최종 실패·기한 초과·큐 초과·destroy 폐기·호스트 beacon 큐 수락을 구분한다. 이벤트
+내용이나 ID는 전달하지 않는다. 콜백 예외/재진입은 전송 상태를 바꾸지 않는다.
+SDK 단독 예산은 gzip 3KiB를 유지한다. 전달 진단 코드가 포함된 대표 연동 코드·필수
+설정 합계 예산은 3.25KiB(3,328B)로 조정한다. 기존 참조 예제가 3KiB에 근접해 있어
+진단을 빼거나 검증을 줄이는 대신 약 130B의 추가 코드 비용을 명시적으로 허용한다.
+이 단락이 앞선 3KiB 전체 연동 목표와 과거 측정값보다 우선한다.
