@@ -45,6 +45,8 @@ try {
     }
   }
   assert.equal(await local.db.prepare('SELECT SUM(count) AS n FROM event_daily_counts').first('n'), 16);
+  // Test-only historical completions with no duration measurement; aggregate totals remain unchanged.
+  await local.db.prepare("UPDATE workflow_daily_counts SET duration_counts_json='[0,0,0,0,0,0,0,0,0,0,0,0]' WHERE project_id='access-other'").run();
   const collector = new URL(await local.mf.ready).origin, previous = process.env.TALLYFIN_COLLECTOR_ORIGIN;
   delete process.env.TALLYFIN_COLLECTOR_ORIGIN;
   try {
@@ -186,6 +188,20 @@ try {
   workflowDailyUnavailable = false;
   await page.getByRole('button', { name: '계산 완료 다시 시도', exact: true }).click();
   await ready(); await expect(funnelCsv).toBeEnabled(); scenarios.push('workflow-panel-failure-recovery');
+  stage = 'workflow-duration';
+  const durationPanel = page.locator('.workflow-duration');
+  await expect(durationPanel).toContainText('측정 1건 · 미측정 완료 0건');
+  await expect(durationPanel.locator('tbody tr')).toHaveCount(6);
+  await expect(durationPanel.locator('tbody tr').first()).toContainText('100.0%');
+  const durationDownloadEvent = page.waitForEvent('download'); await workflowCsv.click();
+  const durationDownload = await durationDownloadEvent, durationContents = await readFile(await durationDownload.path(), 'utf8');
+  assert.ok(durationContents.includes('"workflow_duration_total"')); assert.ok(durationContents.includes('"duration_measured_attempts"'));
+  assert.ok(durationContents.includes('"under_1s"'));
+  await durationPanel.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: resolve(directory, 'workflow-duration-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 }); await durationPanel.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: resolve(directory, 'workflow-duration-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 }); scenarios.push(stage);
   arm('workflow-current-breakdown', 'workflows', 'breakdown', false);
   await workflowGroup.selectOption('tool'); await blocked(); scenarios.push(stage);
 
@@ -237,11 +253,14 @@ try {
   await funnelGroup.selectOption('tool');
   await expect.poll(() => observed.some(row => row.scenario === late.name)).toBe(true);
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other'); await ready();
+  await expect(durationPanel).toContainText('완료 기록은 있지만 소요시간은 미측정이에요.');
+  await expect(durationPanel.locator('table')).toHaveCount(0);
   late.release.resolve(); await late.finished.promise;
   await expect(workflowCsv).toBeEnabled();
   await expect(page.getByRole('heading', { name: '이 프로젝트를 볼 권한이 없어요', exact: true })).toHaveCount(0);
   pendingDownload = page.waitForEvent('download'); await workflowCsv.click();
   downloaded = await pendingDownload; contents = await readFile(await downloaded.path(), 'utf8');
+  assert.ok(contents.includes('"unmeasured"'));
   assert.ok(contents.includes('"access-other"')); assert.equal(contents.includes('"sembom"'), false); scenarios.push(stage);
   stage = 'bulk-overview-access-revocation';
   await page.getByRole('button', { name: '개요', exact: true }).click();

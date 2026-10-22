@@ -92,13 +92,14 @@ export type WorkflowSummary = {
   completionRate: number | null;
 };
 
-export type WorkflowDay = WorkflowSummary & { date: string; provisional: boolean };
+export type WorkflowDay = WorkflowSummary & { date: string; provisional: boolean; duration?: import('./workflow-duration.ts').WorkflowDuration };
 
 export type WorkflowResponse = {
   meta: QueryMeta & { source: 'browser' };
   workflowId: string;
   cohortBasis: 'startedAt';
   summary: WorkflowSummary;
+  duration?: import('./workflow-duration.ts').WorkflowDuration;
   days: WorkflowDay[];
 };
 export type WorkflowBreakdownResponse = Omit<WorkflowResponse, 'days'> & { groupBy: string;

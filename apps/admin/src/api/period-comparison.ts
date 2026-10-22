@@ -4,6 +4,7 @@ import type { ApiClient } from './client.ts';
 import { shiftDate } from './dates.ts';
 import type { EventSource, QueryMeta, Registry, SummaryResponse, WorkflowDefinition, WorkflowResponse, WorkflowSummary } from './types.ts';
 import { ContractError } from './validate.ts';
+import { validateWorkflowDurations } from './workflow-duration.ts';
 
 export type DateRange = { from: string; to: string };
 export type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
@@ -65,6 +66,7 @@ export function validateWorkflowSummary(value: WorkflowSummary, definition: Work
     (rate !== null && (value.completionRate === null || !Number.isFinite(value.completionRate) || Math.abs(rate - value.completionRate) > 0.000001))) invalid();
 }
 export function validateWorkflowLoad({ definition, response }: WorkflowLoad, registry: Registry, range: DateRange): void {
+  validateWorkflowDurations(response);
   if (!registry.workflows.some(item => item.id === definition.id) || response.workflowId !== definition.id || response.cohortBasis !== 'startedAt') invalid();
   assertMeta(response.meta, registry, range); validateWorkflowSummary(response.summary, definition);
   if (response.days.length !== days(range)) invalid();

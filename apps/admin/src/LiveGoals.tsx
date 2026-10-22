@@ -6,6 +6,7 @@ import type { WorkflowGroupingState } from './api/workflow-analysis';
 import { formatCount, formatRate } from './data';
 import WorkflowPropertyBreakdown from './WorkflowPropertyBreakdown';
 import LiveFunnels from './LiveFunnels';
+import WorkflowDuration from './WorkflowDuration';
 
 export default function LiveGoals({ client, registry, workflows, workflowErrors, onRecovered, range, previous, context, onState, compare, comparisonError }: {
   client: ApiClient; registry: Registry; workflows: WorkflowLoad[]; range: DateRange; previous: DateRange | null;
@@ -32,6 +33,7 @@ export default function LiveGoals({ client, registry, workflows, workflowErrors,
             <div><dt>대기</dt><dd>pending<span>{formatCount(load.response.summary.pendingAttempts)}건</span></dd></div>
           </dl>
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
+          <WorkflowDuration duration={load.response.duration} provisional={load.response.days.some(day => day.provisional)} />
           <WorkflowPropertyBreakdown key={`${context}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={range} previous={previous} context={context} onState={onState} />
         </section>; }))}
     <LiveFunnels client={client} registry={registry} range={range} context={context} previous={previous} compare={compare} comparisonError={comparisonError} />

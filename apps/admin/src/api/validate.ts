@@ -1,6 +1,7 @@
 // Minimal runtime validation for administration responses. Missing or mistyped
 // fields raise ContractError instead of being coerced, so a failed or partial
 // response is never rendered as a real zero.
+import { parseWorkflowDuration, validateWorkflowDurations } from './workflow-duration.ts';
 
 import type {
   EventDefinition,
@@ -359,11 +360,13 @@ function parseWorkflowSummary(value: unknown, path: string): WorkflowSummary {
 
 export function parseWorkflowResponse(value: unknown): WorkflowResponse {
   const record = expectRecord(value, 'response');
-  return {
+  const summary = parseWorkflowSummary(record.summary, 'response.summary');
+  const result: WorkflowResponse = {
     meta: parseWorkflowMeta(record.meta),
     workflowId: expectString(record.workflowId, 'response.workflowId'),
     cohortBasis: expectEnum(record.cohortBasis, ['startedAt'], 'response.cohortBasis') as 'startedAt',
-    summary: parseWorkflowSummary(record.summary, 'response.summary'),
+    summary,
+    ...(record.duration === undefined ? {} : { duration: parseWorkflowDuration(record.duration, summary) }),
     days: expectArray(record.days, 'response.days').map((item, index) => {
       const day = expectRecord(item, `response.days[${index}]`);
       const summary = parseWorkflowSummary(
@@ -379,10 +382,13 @@ export function parseWorkflowResponse(value: unknown): WorkflowResponse {
       return {
         date: expectString(day.date, `response.days[${index}].date`),
         ...summary,
+        ...(day.duration === undefined ? {} : { duration: parseWorkflowDuration(day.duration, summary) }),
         provisional: expectBoolean(day.provisional, `response.days[${index}].provisional`),
       };
     }),
   };
+  validateWorkflowDurations(result);
+  return result;
 }
 export function parseWorkflowBreakdownResponse(value: unknown): WorkflowBreakdownResponse {
   const record = expectRecord(value, 'response');

@@ -4,6 +4,7 @@ import { comparisonRows, countChange, rateChange, previousRange, validateSnapsho
 import type { EventSource, EventSeriesResponse, QueryMeta, Registry, WorkflowSummary, WorkflowBreakdownResponse } from './types.ts';
 import { compareWorkflowProperties, validateWorkflowBreakdown } from './workflow-analysis.ts';
 import { ContractError } from './validate.ts';
+import { durationAvailability, type WorkflowDuration } from './workflow-duration.ts';
 
 type Cell = string | number | boolean | null | undefined;
 type Row = Partial<Record<typeof CSV_COLUMNS[number], Cell>>;
@@ -16,7 +17,8 @@ export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'tim
   'selected_event', 'selected_group_by', 'period', 'from', 'to', 'generated_at', 'coverage', 'source',
   'record_type', 'metric', 'name', 'label', 'cohort_basis', 'date', 'group_by', 'value_type', 'value', 'count', 'share_percent',
   'started_attempts', 'succeeded_attempts', 'failed_attempts', 'pending_attempts', 'completion_rate_percent',
-  'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit', 'query_source'] as const;
+  'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit', 'query_source',
+  'duration_range', 'duration_measured_attempts', 'duration_unmeasured_attempts', 'duration_availability'] as const;
 
 /** Quoted UTF-8 CSV for spreadsheet viewing. Protect text cells, never alter numeric negatives. */
 export function csvCell(value: Cell): string {
@@ -53,6 +55,10 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
   const workflowFields = (summary: WorkflowSummary): Row => ({ started_attempts: summary.startedAttempts,
     succeeded_attempts: summary.succeededAttempts, failed_attempts: summary.failedAttempts,
     pending_attempts: summary.pendingAttempts, completion_rate_percent: summary.completionRate });
+  const durationFields = (duration: WorkflowDuration | undefined): Row => ({
+    duration_measured_attempts: duration?.measuredAttempts, duration_unmeasured_attempts: duration?.unmeasuredAttempts,
+    duration_availability: durationAvailability(duration),
+  });
   const visibleWorkflows = (snapshot: PeriodSnapshot) => view === 'overview'
     ? snapshot.workflows.filter(flow => flow.definition.id === registry.representativeWorkflowId) : snapshot.workflows;
   const addPeriod = (snapshot: PeriodSnapshot, period: string) => {
@@ -71,9 +77,26 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
       for (const flow of flows) {
         const base: Row = { name: flow.definition.id, label: flow.definition.label, cohort_basis: flow.response.cohortBasis };
         emit(flow.response.meta, period, { ...base, record_type: 'workflow_total', ...workflowFields(flow.response.summary),
+          ...durationFields(flow.response.duration),
           provisional: flow.response.days.some(day => day.provisional) });
         for (const day of flow.response.days) emit(flow.response.meta, period, { ...base, record_type: 'workflow_day',
-          date: day.date, ...workflowFields(day), provisional: day.provisional });
+          date: day.date, ...workflowFields(day), ...durationFields(day.duration), provisional: day.provisional });
+        if (view === 'goals') {
+          const addDuration = (duration: WorkflowDuration | undefined, date?: string, provisional?: boolean) => {
+            if (!duration) return;
+            for (const bucket of duration.buckets) {
+              const measured = duration.measuredAttempts > 0;
+              emit(flow.response.meta, period, { ...base, record_type: date ? 'workflow_duration_day' : 'workflow_duration_total',
+                date, provisional, duration_range: bucket.range, ...durationFields(duration),
+                availability: durationAvailability(duration),
+                succeeded_attempts: measured ? bucket.succeededAttempts : null, failed_attempts: measured ? bucket.failedAttempts : null,
+                count: measured ? bucket.succeededAttempts + (bucket.failedAttempts ?? 0) : null,
+                share_percent: measured ? (bucket.succeededAttempts + (bucket.failedAttempts ?? 0)) / duration.measuredAttempts * 100 : null });
+            }
+          };
+          addDuration(flow.response.duration, undefined, flow.response.days.some(day => day.provisional));
+          for (const day of flow.response.days) addDuration(day.duration, day.date, day.provisional);
+        }
       }
     }
   };
