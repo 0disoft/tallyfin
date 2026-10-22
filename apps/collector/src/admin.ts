@@ -5,7 +5,7 @@ import type { AdminPrincipal, AdminQuery, AdminStore } from '@tallyfin/core';
 /** The host must verify signature, issuer, audience and expiry before returning a principal. */
 export interface AdministratorAccess {
   store: AdminStore;
-  verifyBearer: (bearer: string) => Promise<AdminPrincipal | null>;
+  verifyBearer: (bearer: string, options?: { signal?: AbortSignal }) => Promise<AdminPrincipal | null>;
   /** Optional host port for a bounded, read-only administrator storage probe. */
   checkReadiness?: () => Promise<void>;
 }
@@ -13,7 +13,7 @@ export async function administrator(request: Request, access: AdministratorAcces
   const header = request.headers.get('Authorization');
   if (!access || !header || header.length > 8192 || !/^Bearer [^\s,]+$/i.test(header)) throw new CollectionError('unauthorized', 401);
   let principal: AdminPrincipal | null;
-  try { principal = await access.verifyBearer(header.slice(7)); } catch { throw new CollectionError('unauthorized', 401); }
+  try { principal = await access.verifyBearer(header.slice(7), { signal: request.signal }); } catch { throw new CollectionError('unauthorized', 401); }
   if (!principal || typeof principal.issuer !== 'string' || typeof principal.subject !== 'string' ||
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);

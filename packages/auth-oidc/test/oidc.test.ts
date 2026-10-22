@@ -103,17 +103,88 @@ test('key rotation refreshes after cooldown and unknown keys cannot cause a fetc
   assert.equal(calls, 3);
 });
 
-test('unavailable key endpoints fail closed and retry only after failure cooldown', async t => {
-  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+test('unavailable key endpoints fail closed and retry only after elapsed failure cooldown', async () => {
+  let elapsed = 0;
   let calls = 0;
-  const { verify } = fixture({ fetchImpl: async () => { calls++; throw new Error('private transport detail'); } });
+  const { verify } = fixture({ monotonicNow: () => elapsed,
+    fetchImpl: async () => { calls++; throw new Error('private transport detail'); } });
   const token = await signed();
   assert.equal(await verify(token), null);
   assert.equal(await verify(token), null);
   assert.equal(calls, 1);
-  t.mock.timers.tick(30001);
+  elapsed = 29999;
+  assert.equal(await verify(token), null); assert.equal(calls, 1);
+  elapsed = 30000;
   assert.equal(await verify(token), null);
   assert.equal(calls, 2);
+});
+
+test('failed and oversized key responses cannot be held open by cleanup', { timeout: 1000 }, async () => {
+  const token = await signed();
+  for (const kind of ['status', 'length', 'stream']) {
+    let canceled = false;
+    const response = new Response(new ReadableStream({
+      start(c) { if (kind === 'stream') c.enqueue(new Uint8Array(65537)); },
+      cancel() { canceled = true; return new Promise<void>(() => {}); },
+    }), { status: kind === 'status' ? 503 : 200, headers: kind === 'length' ? { 'Content-Length': '65537' } : {} });
+    assert.equal(await fixture({ fetchImpl: async () => response }).verify(token), null);
+    assert.equal(canceled, true);
+  }
+});
+
+test('key deadline ends an ignored abort and discards a late response', { timeout: 1000 }, async () => {
+  const deadline = new AbortController();
+  let entered!: () => void, finish!: (response: Response) => void, canceled = false;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const { verify } = fixture({ timeoutSignal: ms => { assert.equal(ms, 5000); return deadline.signal; },
+    fetchImpl: async () => { entered(); return new Promise<Response>(resolve => { finish = resolve; }); } });
+  const verifying = verify(await signed()); await ready; deadline.abort();
+  assert.equal(await verifying, null);
+  finish(new Response(new ReadableStream({ cancel() { canceled = true; return new Promise<void>(() => {}); } })));
+  for (let i = 0; i < 8; i++) await Promise.resolve();
+  assert.equal(canceled, true);
+});
+
+test('caller cancellation leaves a shared key fetch available to another verification', { timeout: 1000 }, async () => {
+  const controller = new AbortController(); let calls = 0;
+  let entered!: () => void, finish!: (response: Response) => void;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const { verify } = fixture({ fetchImpl: async () => { calls++; entered(); return new Promise(resolve => { finish = resolve; }); } });
+  const token = await signed(), canceled = verify(token, { signal: controller.signal }); await ready;
+  const other = verify(token); controller.abort();
+  assert.equal(await canceled, null);
+  finish(Response.json({ keys: [rsaJwk] }));
+  assert.deepEqual(await other, { issuer, subject: 'test-admin' }); assert.equal(calls, 1);
+  assert.equal(await verify(token, { signal: controller.signal }), null); assert.equal(calls, 1);
+});
+
+test('injected JWT time covers expiry, not-before and issued-at boundaries', async () => {
+  const at = Date.UTC(2026, 9, 22), now = at / 1000;
+  for (const tolerance of [0, 5]) {
+    const { verify } = fixture({ now: () => at, clockToleranceSeconds: tolerance });
+    for (const offset of [-1, 0, 1]) {
+      const expiry = await signed({ iat: now - 100, exp: now - tolerance + offset });
+      assert.equal(Boolean(await verify(expiry)), offset > 0);
+      const notBefore = await signed({ iat: now - 100, exp: now + 300, nbf: now + tolerance + offset });
+      assert.equal(Boolean(await verify(notBefore)), offset <= 0);
+      const issued = await signed({ iat: now + tolerance + offset, exp: now + 300 });
+      assert.equal(Boolean(await verify(issued)), offset <= 0);
+    }
+  }
+  const defaultVerify = createOidcVerifier({ issuer, audience, jwksUri: config.jwksUri, now: () => at,
+    fetchImpl: async () => Response.json({ keys: [rsaJwk] }) });
+  assert.equal(await defaultVerify(await signed({ iat: now - 100, exp: now - 5 })), null);
+  assert.ok(await defaultVerify(await signed({ iat: now - 100, exp: now - 4 })));
+  for (const at of [NaN, Infinity, -1]) {
+    const { verify, calls } = fixture({ now: () => at });
+    assert.equal(await verify(await signed()), null); assert.equal(calls.length, 0);
+  }
+});
+
+test('key acquisition cannot make an expired token succeed using the earlier clock snapshot', async () => {
+  let at = Date.UTC(2026, 9, 22); const start = at / 1000;
+  const { verify } = fixture({ now: () => at, fetchImpl: async () => { at += 6000; return Response.json({ keys: [rsaJwk] }); } });
+  assert.equal(await verify(await signed({ iat: start - 100, exp: start + 1 })), null);
 });
 
 test('redirect, oversized, malformed and private key sets are refused', async () => {
