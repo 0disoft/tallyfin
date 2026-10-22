@@ -2,6 +2,8 @@ import { validCleanupMetrics, CLEANUP_LOG_PROJECT_LIMIT as CLEANUP_RUN_PROJECT_L
 import type { ErrorCode } from '@tallyfin/core';
 import type { LatencyBucket, RequestOperation } from '../../apps/collector/src/request-observation.ts';
 import type { CleanupReport } from '../../apps/collector/src/cleanup.ts';
+import { cleanupFailed } from '../../apps/collector/src/cleanup-report.ts';
+import { validCleanupExecution, summarizeCleanupExecution } from './cleanup-execution.ts';
 import { diagnoseObservations } from './observation-diagnostics.ts';
 import { SUMMARY_LIMITS, OPERATIONS, BUCKETS, CODES } from './observation-values.ts';
 export { SUMMARY_LIMITS } from './observation-values.ts';
@@ -24,7 +26,7 @@ function add(count: Counts, weight: number) { count.observedResponses++; count.w
 interface CleanupRun { report?: CleanupReport; failureMarker: boolean }
 const CLEANUP_KEYS = ['runId', 'code', 'attempted', 'completed', 'failed', 'cursorAdvanced'];
 function cleanupEntry(value: Record<string, unknown>): { runId: string; report?: CleanupReport } {
-  const keys = value.code === 'retention_cleanup' ? [...CLEANUP_KEYS, ...(Object.hasOwn(value, 'metrics') ? ['metrics'] : [])] : ['runId', 'code'];
+  const keys = value.code === 'retention_cleanup' ? [...CLEANUP_KEYS, ...['metrics', 'execution'].filter(key => Object.hasOwn(value, key))] : ['runId', 'code'];
   if (Object.keys(value).length !== keys.length || Object.keys(value).some(key => !keys.includes(key)) ||
     typeof value.runId !== 'string' || !UUID.test(value.runId)) throw new ObservationSummaryError('invalid_log');
   const runId = value.runId.toLowerCase();
@@ -34,11 +36,18 @@ function cleanupEntry(value: Record<string, unknown>): { runId: string; report?:
     if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > CLEANUP_RUN_PROJECT_LIMIT)
       throw new ObservationSummaryError('invalid_log');
   }
-  if (Number(value.completed) + Number(value.failed) !== value.attempted || typeof value.cursorAdvanced !== 'boolean')
+  if (typeof value.cursorAdvanced !== 'boolean')
     throw new ObservationSummaryError('invalid_log');
+  const report: CleanupReport = { attempted: Number(value.attempted), completed: Number(value.completed), failed: Number(value.failed), cursorAdvanced: value.cursorAdvanced };
+  if (Object.hasOwn(value, 'execution')) {
+    if (!validCleanupExecution(value.execution, report)) throw new ObservationSummaryError('invalid_log');
+    const e = value.execution;
+    report.execution = { elapsedMs: e.elapsedMs, stopReason: e.stopReason, interruptedProjects: e.interruptedProjects,
+      checkpointedProjects: e.checkpointedProjects, ...(e.scheduleLagMs !== undefined ? { scheduleLagMs: e.scheduleLagMs } : {}) };
+  } else if (report.completed + report.failed !== report.attempted) throw new ObservationSummaryError('invalid_log');
   if (Object.hasOwn(value, 'metrics') && !validCleanupMetrics(value.metrics, Number(value.completed))) throw new ObservationSummaryError('invalid_log');
-  return { runId, report: { ...(value.metrics ? { metrics: value.metrics as CleanupMetrics } : {}), attempted: Number(value.attempted), completed: Number(value.completed),
-    failed: Number(value.failed), cursorAdvanced: value.cursorAdvanced } };
+  if (value.metrics) report.metrics = value.metrics as CleanupMetrics;
+  return { runId, report };
 }
 
 function summarizeCleanup(runs: ReadonlyMap<string, CleanupRun>) {
@@ -47,7 +56,7 @@ function summarizeCleanup(runs: ReadonlyMap<string, CleanupRun>) {
     attemptedProjects: 0, completedProjects: 0, failedProjects: 0, cursorAdvancedReports: 0, cursorNotAdvancedReports: 0 };
   let metrics: CleanupMetrics | undefined;
   for (const run of runs.values()) {
-    if (run.failureMarker || (run.report && (run.report.failed > 0 || !run.report.cursorAdvanced))) failedRuns++;
+    if (run.failureMarker || (run.report && cleanupFailed(run.report))) failedRuns++;
     if (run.failureMarker) summary.failureMarkerRuns++;
     if (!run.report) { summary.reportlessFailureRuns++; continue; }
     summary.reportedRuns++;
@@ -63,7 +72,8 @@ function summarizeCleanup(runs: ReadonlyMap<string, CleanupRun>) {
     if (run.report.cursorAdvanced) summary.cursorAdvancedReports++;
     else summary.cursorNotAdvancedReports++;
   }
-  return { summary: { ...summary, ...(metrics ? { metrics } : {}) }, failedRuns };
+  const execution = summarizeCleanupExecution([...runs.values()].flatMap(run => run.report ? [run.report] : []));
+  return { summary: { ...summary, ...(metrics ? { metrics } : {}), ...(execution ? { execution } : {}) }, failedRuns };
 }
 
 /** Accept the app's JSON line, not platform envelopes or arbitrary request details. */

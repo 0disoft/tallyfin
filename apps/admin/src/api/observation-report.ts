@@ -3,13 +3,14 @@ import type { RequestOperation, LatencyBucket } from '../../../../apps/collector
 import { CLEANUP_LOG_PROJECT_LIMIT as CLEANUP_RUN_PROJECT_LIMIT, validCleanupMetrics, type CleanupMetrics } from '../../../../tools/runtime/cleanup-metrics.ts';
 import { SUMMARY_LIMITS, OPERATIONS, BUCKETS, CODES } from '../../../../tools/runtime/observation-values.ts';
 import { diagnoseObservations } from '../../../../tools/runtime/observation-diagnostics.ts';
+import { validCleanupExecutionSummary, type CleanupExecutionSummary } from '../../../../tools/runtime/cleanup-execution.ts';
 
 export const REPORT_BYTE_LIMIT = SUMMARY_LIMITS.bytes;
 type Counts = { observedResponses: number; weightedRequestsEstimate: number };
 type Operation = Counts & { operation: RequestOperation; responses: (Counts & { status: number; code: ErrorCode | 'ok' })[];
   latencyBuckets: (Counts & { bucket: LatencyBucket })[] };
 type Cleanup = { observedRuns: number; reportedRuns: number; failureMarkerRuns: number; reportlessFailureRuns: number;
-  attemptedProjects: number; completedProjects: number; failedProjects: number; cursorAdvancedReports: number; cursorNotAdvancedReports: number; metrics?: CleanupMetrics };
+  attemptedProjects: number; completedProjects: number; failedProjects: number; cursorAdvancedReports: number; cursorNotAdvancedReports: number; metrics?: CleanupMetrics; execution?: CleanupExecutionSummary };
 export type ObservationReport = Counts & { schemaVersion: 'tallyfin.observation-summary/v2'; coverage: 'provided-app-log-lines-only';
   exactRequestCounts: false; latencyPercentilesAvailable: false; timeWindowAvailable: false;
   input: { lines: number; blankLines: number; ignoredOtherLogLines: number; duplicateLogLines: number };
@@ -47,11 +48,12 @@ const COUNT_KEYS = ['observedResponses', 'weightedRequestsEstimate'];
 const CLEANUP_KEYS = ['observedRuns', 'reportedRuns', 'failureMarkerRuns', 'reportlessFailureRuns', 'attemptedProjects',
   'completedProjects', 'failedProjects', 'cursorAdvancedReports', 'cursorNotAdvancedReports'] as const;
 function cleanup(value: unknown): Cleanup {
-  const row = object(value, CLEANUP_KEYS, ['metrics']), result: Cleanup = Object.fromEntries(CLEANUP_KEYS.map(key => [key, count(row[key])])) as Record<typeof CLEANUP_KEYS[number], number>;
+  const row = object(value, CLEANUP_KEYS, ['metrics', 'execution']), result: Cleanup = Object.fromEntries(CLEANUP_KEYS.map(key => [key, count(row[key])])) as Record<typeof CLEANUP_KEYS[number], number>;
+  if (Object.hasOwn(row, 'execution')) { require(validCleanupExecutionSummary(row.execution, result)); result.execution = structuredClone(row.execution); }
   if (Object.hasOwn(row, 'metrics')) { require(validCleanupMetrics(row.metrics, result.completedProjects)); result.metrics = row.metrics; }
   require(result.observedRuns === result.reportedRuns + result.reportlessFailureRuns &&
     result.failureMarkerRuns >= result.reportlessFailureRuns && result.failureMarkerRuns <= result.observedRuns &&
-    result.completedProjects + result.failedProjects === result.attemptedProjects &&
+    result.completedProjects + result.failedProjects + (result.execution?.interruptedProjects ?? 0) === result.attemptedProjects &&
     result.attemptedProjects <= result.reportedRuns * CLEANUP_RUN_PROJECT_LIMIT &&
     result.cursorAdvancedReports + result.cursorNotAdvancedReports === result.reportedRuns);
   return result;
@@ -79,8 +81,11 @@ function diagnostics(value: unknown, operations: Operation[], cleaned: Cleanup, 
   });
   distinct(findings.map(item => `${item.operation}:${item.code}`));
   const failedRuns = findings.find(item => item.code === 'cleanup_failures')?.observedCount ?? 0;
-  const lower = Math.max(cleaned.failureMarkerRuns, cleaned.cursorNotAdvancedReports, Math.ceil(cleaned.failedProjects / CLEANUP_RUN_PROJECT_LIMIT));
-  const upper = Math.min(cleaned.observedRuns, cleaned.failureMarkerRuns + cleaned.cursorNotAdvancedReports + Math.min(cleaned.failedProjects, cleaned.reportedRuns));
+  const knownFailed = cleaned.execution?.failedRuns ?? 0;
+  const legacyUnadvanced = cleaned.cursorNotAdvancedReports - (cleaned.execution?.cursorNotAdvancedRuns ?? 0);
+  const legacyRuns = cleaned.reportedRuns - (cleaned.execution?.reportedRuns ?? 0);
+  const lower = Math.max(cleaned.failureMarkerRuns, knownFailed + legacyUnadvanced, Math.ceil(cleaned.failedProjects / CLEANUP_RUN_PROJECT_LIMIT));
+  const upper = Math.min(cleaned.observedRuns, cleaned.failureMarkerRuns + knownFailed + legacyUnadvanced + Math.min(cleaned.failedProjects, legacyRuns));
   require(failedRuns >= lower && failedRuns <= upper);
   const expected = diagnoseObservations(operations, cleaned, failedRuns, ignored);
   require(JSON.stringify(canonical({ ...row, coverage, findings })) === JSON.stringify(canonical(expected)));

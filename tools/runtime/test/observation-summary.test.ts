@@ -62,7 +62,9 @@ test('summarizes cleanup report semantics from runCleanup and correlates its fai
   const report = summary.report();
   assert.equal(report.observedResponses, 0); assert.equal(report.weightedRequestsEstimate, 0);
   assert.deepEqual(report.operations, []);
-  assert.deepEqual(report.cleanup, { observedRuns: 1, reportedRuns: 1, failureMarkerRuns: 1, reportlessFailureRuns: 0,
+  const { execution, ...legacyCounts } = report.cleanup;
+  assert.equal(execution!.stopReasons[0]!.reason, 'page_limit'); assert.equal(execution!.checkpointedProjects, 3);
+  assert.deepEqual(legacyCounts, { observedRuns: 1, reportedRuns: 1, failureMarkerRuns: 1, reportlessFailureRuns: 0,
     attemptedProjects: 3, completedProjects: 2, failedProjects: 1, cursorAdvancedReports: 1, cursorNotAdvancedReports: 0 });
   const encoded = JSON.stringify(report);
   for (const privateValue of [runId, 'runId', 'project-a', 'project-b', 'private-storage-message']) assert.ok(!encoded.includes(privateValue));

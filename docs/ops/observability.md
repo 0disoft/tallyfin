@@ -12,7 +12,7 @@
 `samplingDenominator` 일곱 개만 담은 JSON 한 줄을 남긴다. 성공(200·204)은 UUID 앞 두
 글자 기준 4/256(1/64)만 남기고 `samplingDenominator=64`, 실패는 전량 남기고 1이다.
 로그 수준은 5xx `console.error`, 4xx `console.warn`, 그 밖 `console.log`다. 정리 작업
-로그(`retention_cleanup`·`retention_cleanup_failed`)는 그대로다. 필드·측정 구간·한계는
+로그(`retention_cleanup`·`retention_cleanup_failed`)는 아래 실행 진단도 기록한다. 필드·측정 구간·한계는
 [로그 경계](../backend/06-logging-and-observability.md)에 둔다.
 
 Wrangler 관측 설정도 그대로다. `observability.logs`는 enabled·`invocation_logs` false·
@@ -102,7 +102,7 @@ console JSON 문자열만 검증·집계하고 URL·헤더·예외는 버린다.
 보고서에는 진단 객체 `diagnostics`가 additive로 붙는다(`tallyfin.observation-diagnostics/v1`).
 `serviceHealth`는 항상 `unknown`이고 `coverage`가 http·cleanup·cleanupDetails·otherLogsIgnored를 나눠
 본다. `findings`는 `error`·`review` 항목과 `observedCount`·고정 `action` 코드를 담고, HTTP 응답
-하나는 최대 한 항목에만 든다. `cleanup_failures`는 실패 표시·`failed>0`·커서 미전진 실행의 고유
+하나는 최대 한 항목에만 든다. `cleanup_failures`는 실패 표시·`failed>0`·커서 충돌·취소·저장소 오류 실행의 고유
 `runId` 합집합이고 `cleanup_report_missing`과 겹칠 수 있다. `observedCount`는 관측 수이지 가중치나
 실패율이 아니며, 관측 수가 0인 항목은 넣지 않으므로 오류 0건도 서비스 정상 근거가 아니다. 4xx
 `review`는 정상 보호 동작일 수 있다. CLI 옵션·상한·종료 코드는 그대로이고 알림·네트워크·임계값은
@@ -154,3 +154,28 @@ oldestExpiredReceiptAgeMs, measuredProjects, capacityLimitedProjects를 담는�
 중복 로그는 한 번만 합산하고 최장 지연은 최댓값을 유지한다. 측정하지 않은 과거 로그는
 0으로 만들지 않는다. 지연은 성공적으로 처리한 프로젝트에 남은 만료 영수증만 나타내며
 삭제 한도 도달은 적체의 확정 판정이 아니다. 이전 최대 20개 프로젝트 로그도 계속 읽는다.
+
+## 정리 실행의 지연과 중단 이유
+
+새 retention_cleanup 로그는 execution에 elapsedMs·stopReason·interruptedProjects·
+checkpointedProjects를 기록하며 예약 실행에서는 scheduleLagMs도 기록한다.
+실행 시간은 performance.now() 기준의 내림한 밀리초 값이다. Worker 시계의 제약이 있어
+CPU 시간·실제 전체 지연·SLO로 해석하지 않는다. 예약 지연은 실행 시작 때의 벽시계와
+scheduledTime 차이이며 미래 예약은 0으로 제한한다. 삭제 기준은 계속 예약 시각이다.
+
+stopReason은 page_limit·time_budget·cycle_complete·empty_page·cursor_conflict·
+cancelled·storage_error 중 하나다. 프로젝트별 정리 실패는 failed에 따로 센다.
+page_limit·time_budget는 이월이며 성공 여부나 만료 데이터 전체 삭제를 보장하지 않는다.
+interruptedProjects는 결과를 확인하지 못한 작업 수이고 실제 삭제가 없었다는 뜻이 아니다.
+checkpointedProjects는 CAS로 확인한 순회 진행량이며 실패한 프로젝트도 포함할 수 있다.
+
+예외·취소 때도 같은 runId의 최종 보고서와 실패 표시를 함께 남기고 요약기는 한 실행으로
+센다. execution이 없는 과거 로그는 계속 읽되 시간·이유를 0으로 채우지 않는다. 과거 로그의
+실패 분류에는 기존 커서 미전진 기준을 유지한다. 새 로그의 시간 이월은 커서 미전진만으로
+실패로 만들지 않는다. execution은 닫힌 필드·건수 합계·범위를 검사하며 모순되거나
+사적인 필드가 있으면 부분 보고서를 만들지 않고 입력을 거부한다.
+
+요약 보고서 cleanup.execution은 진단을 기록한 실행 수·중단 이유별 실행 수·중단 작업 수·
+확인된 커서 진행량과 관측 최대 실행 시간·예약 지연을 제공한다. 예약 지연 표본 수도 따로
+남긴다. 이 범위는 제공된 로그뿐이며 오래된 로그가 섞이면 전체 실행을 대표하지 않는다.
+원본 오류·프로젝트 ID·설정·예약 시각 자체는 로그와 보고서에 추가하지 않는다.

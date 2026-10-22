@@ -5,6 +5,8 @@ import './observation-report.css';
 
 type Diagnostics = NonNullable<ObservationReport['diagnostics']>;
 type Finding = Diagnostics['findings'][number];
+const CLEANUP_REASONS = { page_limit: '이번 실행의 페이지 한도', time_budget: '실행 시간 한도', cycle_complete: '순회 중복 도달',
+  empty_page: '조회할 프로젝트 없음', cursor_conflict: '커서 갱신 충돌', cancelled: '취소·실행 기한 만료', storage_error: '저장소 오류' };
 
 const RESPONSE_PAGE_SIZE = 25;
 
@@ -161,6 +163,17 @@ export default function ObservationReportView({ report }: { report: ObservationR
         <div><dt>관측한 만료 영수증 최장 지연</dt><dd>{report.cleanup.metrics.oldestExpiredReceiptAgeMs === null ? '남은 만료 영수증 없음' : `${Math.ceil(report.cleanup.metrics.oldestExpiredReceiptAgeMs / 60000)}분`}</dd></div>
         <div><dt>설정된 수신량 대비 정리 한도 부족</dt><dd>{formatCount(report.cleanup.metrics.capacityLimitedProjects)}회</dd></div>
       </dl>}
+      {report.cleanup.execution && <>
+        <dl className="metric-list">
+          <div><dt>중단 이유를 기록한 실행</dt><dd>{formatCount(report.cleanup.execution.reportedRuns)}회 / {formatCount(report.cleanup.reportedRuns)}회</dd></div>
+          <div><dt>관측한 최대 실행 시간</dt><dd>{formatCount(report.cleanup.execution.maxElapsedMs)}ms</dd></div>
+          <div><dt>관측한 최대 예약 실행 지연</dt><dd>{report.cleanup.execution.maxScheduleLagMs === null ? '측정 기록 없음' : `${formatCount(report.cleanup.execution.maxScheduleLagMs)}ms`}</dd></div>
+          <div><dt>결과를 확인하지 못한 작업</dt><dd>{formatCount(report.cleanup.execution.interruptedProjects)}회</dd></div>
+          <div><dt>커서 진행을 확인한 시도</dt><dd>{formatCount(report.cleanup.execution.checkpointedProjects)}회</dd></div>
+          {report.cleanup.execution.stopReasons.map(row => <div key={row.reason}><dt>{CLEANUP_REASONS[row.reason]}</dt><dd>{formatCount(row.runs)}회</dd></div>)}
+        </dl>
+        <p className="context-note">시간·페이지 한도는 다음 실행으로 넘긴 상태예요. 순회 종료가 만료 데이터 전체 삭제를 뜻하지 않으며, 커서는 실패한 작업도 지나갈 수 있어요. 예약 지연을 기록한 실행은 {formatCount(report.cleanup.execution.scheduleLagSamples)}회예요.</p>
+      </>}
       {report.cleanup.metrics && <p className="context-note">성공적으로 측정한 프로젝트 {formatCount(report.cleanup.metrics.measuredProjects)}회 기준이에요. 전체 DB의 만료 잔량이나 실제 처리 속도를 뜻하지 않아요.</p>}
       {report.cleanup.reportedRuns === 0 && <p className="context-note">{report.cleanup.observedRuns === 0
         ? '정리 로그를 관측하지 못했어요. 처리 횟수는 알 수 없어요.'

@@ -12,7 +12,7 @@ cursor_conflict·cancelled·storage_error 중 하나다. 페이지·시간 한�
 interruptedProjects는 결과를 확인하지 못한 진행 중 작업 수이고, checkpointedProjects는
 커서 CAS로 진행을 확인한 시도 수다. 실패한 프로젝트도 기존 정책대로 커서를 진행하므로
 이 수치는 삭제 성공 건수가 아니다. 마지막 CAS의 불리언만으로 전체 진행을 판단하지 않는다.
-취소는 이미 실행 중인 D1 작업의 롤백을 보장하지 않는다. runCleanup의 선택적 onReport는
+취소는 이미 실행 중인 D1 작업의 롤백을 보장하지 않는다. runCleanup의 선택적 동기 onReport는
 최종 스냅샷을 한 번 받으며 관측 실패나 전달 객체 변경은 원본 결과·예외에 영향을 주지 않는다.
 
 상태: Worker `scheduled` 핸들러와 D1 순회 위치 저장을 로컬에서 구현·검증했다.

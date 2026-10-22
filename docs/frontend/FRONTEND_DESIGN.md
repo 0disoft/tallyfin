@@ -1056,6 +1056,13 @@ CSV 마지막 열 `query_source`는 사용자가 조회한 출처(browser/server
 
 ## 정리 처리량 관측 — 2026-10-23
 
+운영 로그 보고서는 선택적 cleanup.execution을 검증해 보존 정리 영역에 중단 이유별
+횟수·최대 실행 시간·최대 예약 실행 지연·중단 작업 수·확인된 커서 진행량을 표시한다.
+진단과 예약 지연을 기록한 표본 수를 각각 보여주며 시간·페이지 한도는 다음 실행으로
+이월한 상태라고 안내한다. 순회 종료와 데이터 전체 삭제, 커서 진행과 삭제 성공을 구분한다.
+과거 보고서에 execution이 없으면 시간 값을 만들어 표시하지 않는다. 기존 로컬 파일 읽기와
+worker 수명·입력 제한은 그대로이며 네트워크나 자동 갱신은 추가하지 않는다.
+
 정리 로그와 보고서의 선택적 `metrics`에 deletedRows, saturatedTables,
 oldestExpiredReceiptAgeMs, measuredProjects, capacityLimitedProjects를 담는다.
 중복 로그는 한 번만 합산하고 최장 지연은 최댓값을 유지한다. 측정하지 않은 과거 로그는
