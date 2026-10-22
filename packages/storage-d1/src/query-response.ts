@@ -1,13 +1,14 @@
 import { ANALYTICS_ROW_LIMITS } from './policy.ts';
-import { addCounts, CollectionError, count, dateEnd, DAY, workflowCounts } from '@tallyfin/core';
+import { addCounts, CollectionError, count, dateEnd, DAY, emptyDurationCounts, workflowCounts, workflowDuration } from '@tallyfin/core';
 import type { AdminQuery, QueryMeta, Registry } from '@tallyfin/core';
 import { readDimensions } from './dimensions.ts';
 import { workflowBreakdown, type WorkflowDimensionRow } from './workflow-breakdown.ts';
 import { funnelSeries, type FunnelCountRow } from './funnel-query.ts';
 import { funnelBreakdown, type FunnelDimensionRow } from './funnel-breakdown.ts';
+import { durationRowCounts, type DurationRow } from './workflow-duration.ts';
 
 export interface EventRow { event_name: string; event_date: string; dimension_key: string; count: number }
-export interface WorkflowRow { cohort_date: string; started_count: number; succeeded_count: number; failed_count: number }
+export interface WorkflowRow extends DurationRow { cohort_date: string; started_count: number; succeeded_count: number; failed_count: number }
 
 export function queryResponse(registry: Registry, input: AdminQuery, meta: QueryMeta, dates: string[], rows: unknown[], now: number) {
   if (input.kind === 'funnel' || input.kind === 'funnel-breakdown') {
@@ -28,15 +29,21 @@ export function queryResponse(registry: Registry, input: AdminQuery, meta: Query
   if (!definition) throw new CollectionError('not_found', 404);
   if (rows.length > ANALYTICS_ROW_LIMITS.days) throw new CollectionError('storage_unavailable', 503);
   const totals = { started: 0, succeeded: 0, failed: 0 };
+  const durationTotals = emptyDurationCounts();
   const byDate = new Map((rows as WorkflowRow[]).map(row => [row.cohort_date, row]));
   const days = dates.map(date => {
     const row = byDate.get(date);
     const started = count(row?.started_count ?? 0), succeeded = count(row?.succeeded_count ?? 0), failed = count(row?.failed_count ?? 0);
     totals.started = addCounts(totals.started, started); totals.succeeded = addCounts(totals.succeeded, succeeded); totals.failed = addCounts(totals.failed, failed);
-    return { date, ...workflowCounts(started, succeeded, failed, definition.failureEvent !== null), provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY };
+    const counts = durationRowCounts(row);
+    const duration = workflowDuration(counts, succeeded, failed, definition.failureEvent !== null);
+    for (let index = 0; index < counts.length; index++) durationTotals[index] = addCounts(durationTotals[index]!, counts[index]!);
+    return { date, ...workflowCounts(started, succeeded, failed, definition.failureEvent !== null), duration,
+      provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY };
   });
   return { meta, workflowId: definition.id, cohortBasis: 'startedAt',
-    summary: workflowCounts(totals.started, totals.succeeded, totals.failed, definition.failureEvent !== null), days };
+    summary: workflowCounts(totals.started, totals.succeeded, totals.failed, definition.failureEvent !== null),
+    duration: workflowDuration(durationTotals, totals.succeeded, totals.failed, definition.failureEvent !== null), days };
 }
 
 export function eventSeries(registry: Registry, input: AdminQuery, meta: QueryMeta, dates: string[], rows: EventRow[]) {

@@ -50,7 +50,7 @@ test('explicit second workflow wins independently of registration order; unset v
     await fixture.db.prepare('INSERT INTO project_schemas(project_id,version,status,definitions_json,published_at) VALUES(?,?,?,?,?)')
       .bind('sembom', version, 'active', JSON.stringify(definitions), now).run();
     for (const [id, starts, successes] of [[first.id, 4, 4], [second.id, 8, 2]] as const)
-      await fixture.db.prepare('INSERT INTO workflow_daily_counts VALUES(?,?,?,?,?,?,?,?,?,?)')
+      await fixture.db.prepare('INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
         .bind('sembom', version, 'browser', day, id, '{}', starts, successes, 0, now).run();
     const row = parseOverview(await (await handler()(request())).json()).data[0]!;
     assert.equal(row.version, version); assert.equal(row.error, false);
@@ -80,7 +80,7 @@ test('period totals and workflow rates match existing reads across local midnigh
   for (const [day, count] of [[date, 9], [prior, 4]] as const) {
     await fixture.db.prepare('INSERT INTO event_daily_counts(project_id,schema_version,source,event_date,event_name,dimension_key,count,updated_at) VALUES(?,?,?,?,?,?,?,?)')
       .bind('sembom', 1, 'browser', day, registry.events[0]!.name, '{}', count, now).run();
-    await fixture.db.prepare('INSERT INTO workflow_daily_counts VALUES(?,?,?,?,?,?,?,?,?,?)')
+    await fixture.db.prepare('INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
       .bind('sembom', 1, 'browser', day, registry.workflows[0]!.id, '{}', 4, count === 9 ? 3 : 1, 0, now).run();
   }
   const store = new D1Queries(fixture.db), body = await store.overview(principal, ['sembom'], 'browser', now), row = body.data[0]!;

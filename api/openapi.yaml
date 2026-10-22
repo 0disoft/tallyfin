@@ -1801,6 +1801,44 @@ components:
           maxItems: 31
           items:
             $ref: "#/components/schemas/EventDay"
+    WorkflowDurationBucket:
+      type: object
+      additionalProperties: false
+      required: [range, succeededAttempts, failedAttempts]
+      properties:
+        range:
+          type: string
+          enum: [under_1s, 1s_to_5s, 5s_to_30s, 30s_to_2m, 2m_to_10m, 10m_to_24h]
+        succeededAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        failedAttempts:
+          anyOf:
+            - type: integer
+              minimum: 0
+              maximum: 9007199254740991
+            - type: "null"
+    WorkflowDuration:
+      type: object
+      additionalProperties: false
+      description: Six ordered non-overlapping elapsed-time buckets from browser event timestamps, not server latency. Lower bounds inclusive and upper bounds exclusive, except the 24h maximum is included. Count only attempts whose start and first committed terminal are both seen. Duplicate phases never recount. Unmeasured completions predate measurement; do not infer zero duration or backfill expired attempts. Bucket sums equal measuredAttempts and measured plus unmeasured equals succeeded plus failed. Failureless definitions use null failure counts in all buckets.
+      required: [measuredAttempts, unmeasuredAttempts, buckets]
+      properties:
+        measuredAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        unmeasuredAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        buckets:
+          type: array
+          minItems: 6
+          maxItems: 6
+          items:
+            $ref: "#/components/schemas/WorkflowDurationBucket"
     WorkflowDay:
       type: object
       additionalProperties: false
@@ -1840,9 +1878,12 @@ components:
               minimum: 0
               maximum: 100
             - type: "null"
+        duration:
+          $ref: "#/components/schemas/WorkflowDuration"
         provisional:
           type: boolean
     WorkflowSummary:
+      description: Workflow attempt counts; optional duration distributions are returned separately on WorkflowResponse and WorkflowDay.
       type: object
       additionalProperties: false
       required:
@@ -1897,6 +1938,8 @@ components:
           const: startedAt
         summary:
           $ref: "#/components/schemas/WorkflowSummary"
+        duration:
+          $ref: "#/components/schemas/WorkflowDuration"
         days:
           type: array
           minItems: 1

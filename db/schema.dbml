@@ -204,6 +204,7 @@ Table workflow_daily_counts {
   started_count integer [not null, default: 0]
   succeeded_count integer [not null, default: 0]
   failed_count integer [not null, default: 0]
+  duration_counts_json text [not null, default: "'[0,0,0,0,0,0,0,0,0,0,0,0]'", note: 'Six fixed duration buckets, interleaved success/failure counts. Measured counts may be below terminal counts for pre-0012 data. Updated atomically with terminal deltas. Retained with the 90-day cohort.']
   updated_at bigint [not null]
   indexes {
     (project_id, schema_version, source, cohort_date, workflow_id, dimension_key) [pk]

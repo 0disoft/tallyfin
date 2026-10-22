@@ -2,6 +2,7 @@ import { addCounts, closed, CollectionError, dateMillis, DAY, emptyOverviewRow, 
   queryDates, SCHEMA_LIMITS, validateOverviewInput, validateRegistry } from '@tallyfin/core';
 import type { AdminPrincipal, OverviewResponse, OverviewRow, Registry } from '@tallyfin/core';
 import { queryResponse } from './query-response.ts';
+import { DURATION_SUM_SQL } from './workflow-duration.ts';
 import type { EventRow, WorkflowRow } from './query-response.ts';
 import { overviewRejections } from './overview-rejections.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlResult, SqlStatement } from './sql.ts';
@@ -57,7 +58,7 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
         .bind(split, p.id, p.version, source, from, to, ...grant));
       const workflow = source === 'browser' ? registry.workflows.find(w => w.id === registry.representativeWorkflowId) : undefined;
       statements.push(db.prepare(`SELECT cohort_date, SUM(started_count) AS started_count, SUM(succeeded_count) AS succeeded_count,
-        SUM(failed_count) AS failed_count FROM workflow_daily_counts WHERE project_id = ? AND schema_version = ? AND source = 'browser'
+        SUM(failed_count) AS failed_count, ${DURATION_SUM_SQL} FROM workflow_daily_counts WHERE project_id = ? AND schema_version = ? AND source = 'browser'
         AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ? AND ${access})
         GROUP BY cohort_date LIMIT 15`).bind(p.id, p.version, workflow?.id ?? '', from, to, ...grant));
       plans.set(p.id, { state: p, registry, from, split, to, offset });

@@ -36,7 +36,7 @@ test('lookup migration preserves query results, improves actual D1 plans and rej
     const before = await rows(), oldPlans = await plans();
     const upgrade = statements.slice(boundary);
     await assert.rejects(db.batch([...upgrade.map(sql => db.prepare(sql)), db.prepare('SELECT * FROM missing_upgrade_table')]));
-    assert.deepEqual(await initialize(db, false), { migrations: ['0011_analytics_lookup.sql'], applied: false });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0011_analytics_lookup.sql', '0012_workflow_duration.sql'], applied: false });
     await initialize(db, true);
     assert.deepEqual((await rows()).map(row => row.results), before.map(row => row.results));
     assert.ok(before.every(row => row.results.length > 0));

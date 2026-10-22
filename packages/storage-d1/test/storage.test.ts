@@ -109,7 +109,7 @@ test('SQL protects schema immutability, foreign keys and workflow invariant', as
   await assert.rejects(fixture.db.prepare("UPDATE project_schemas SET definitions_json = '{}' ").run());
   await assert.rejects(fixture.db.prepare("UPDATE projects SET time_zone = 'UTC'").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO event_daily_counts VALUES ('other', 1, 'browser', '2026-10-08', 'tool_view', '[]', 1, 0)").run());
-  await assert.rejects(fixture.db.prepare("INSERT INTO workflow_daily_counts VALUES ('sembom', 1, 'browser', '2026-10-08', 'calculation', '[]', 1, 2, 0, 0)").run());
+  await assert.rejects(fixture.db.prepare("INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES ('sembom', 1, 'browser', '2026-10-08', 'calculation', '[]', 1, 2, 0, 0)").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO event_daily_counts VALUES ('sembom', 1, 'browser', '2026-10-08', 'tool_view', '[]', 1.5, 0)").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO workflow_attempts VALUES ('sembom', 'browser', 'attempt', 1, 'calculation', 0, '1970-01-01', '[]', 1, 'success', NULL, 259200000)").run());
 });

@@ -15,3 +15,4 @@ export * from './rejections.ts';
 export * from './admin-changes.ts';
 export * from './funnel.ts';
 export * from './overview.ts';
+export * from './workflow-duration.ts';

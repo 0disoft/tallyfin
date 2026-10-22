@@ -154,13 +154,15 @@ test('summary and daily event dates differ from workflow start cohorts; absent b
   assert.deepEqual(buckets.days[1].breakdown, [{ value: 'required', count: 1 }, { value: null, count: 1 }]);
   const goal = await read(`/v1/projects/sembom/workflows/calculation/daily${range}`);
   assert.deepEqual(goal.summary, { startedAttempts: 1, succeededAttempts: 1, failedAttempts: null, pendingAttempts: 0, completionRate: 100 });
+  assert.equal(goal.duration.measuredAttempts, 1); assert.equal(goal.duration.unmeasuredAttempts, 0);
+  assert.equal(goal.duration.buckets[2].succeededAttempts, 1); assert.equal(goal.duration.buckets[2].failedAttempts, null);
   assert.deepEqual(goal.days.map((d: any) => d.startedAttempts), [1, 0]);
   assert.equal(goal.days[1].completionRate, null); assert.equal(goal.days[0].provisional, true);
 });
 
 test('workflow grouping uses start cohorts, reconciles with daily totals and preserves empty and zero-start days', async () => {
   await events();
-  await fixture.db.prepare('INSERT INTO workflow_daily_counts VALUES (?,?,?,?,?,?,?,?,?,?)')
+  await fixture.db.prepare('INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
     .bind('sembom',1,'browser','2026-10-08','calculation',dimensionKey({tool:'grade'},['tool']),3,1,0,now).run();
   const result = await read(`/v1/projects/sembom/workflows/calculation/breakdown${range}&groupBy=tool`);
   const daily = await read(`/v1/projects/sembom/workflows/calculation/daily${range}`);
@@ -193,7 +195,7 @@ test('workflow buckets keep boolean false and integer zero as typed values acros
     const definitions=structuredClone({events:registry.events,workflows:registry.workflows});
     for (const name of ['input_start','calculation_success']) definitions.events.find(event=>event.name===name)!.properties.tool=rule;
     await fixture.db.prepare('INSERT INTO project_schemas VALUES (?,?,?,?,?,NULL)').bind('sembom',version,'active',JSON.stringify(definitions),now).run();
-    await fixture.db.prepare('INSERT INTO workflow_daily_counts VALUES (?,?,?,?,?,?,?,?,?,?)')
+    await fixture.db.prepare('INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .bind('sembom',version,'browser','2026-10-08','calculation',dimensionKey({tool:value},['tool']),2,1,0,now).run();
     const result=await read(`/v1/projects/sembom/workflows/calculation/breakdown${range.replace('Version=1',`Version=${version}`)}&groupBy=tool`);
     assert.equal(result.buckets[0].value,value);assert.equal(result.buckets[0].summary.completionRate,50);
@@ -207,7 +209,7 @@ test('one workflow grouping merges other dimensions and retains actual failure c
     definitions.events.find(event=>event.name===name)!.properties.flag={type:'boolean',required:true,purpose:'Public flag'};
   await fixture.db.prepare('INSERT INTO project_schemas VALUES (?,?,?,?,?,NULL)').bind('sembom',4,'active',JSON.stringify(definitions),now).run();
   for (const [flag,start,success,failed] of [[false,8,4,2],[true,2,1,0]] as const)
-    await fixture.db.prepare('INSERT INTO workflow_daily_counts VALUES (?,?,?,?,?,?,?,?,?,?)')
+    await fixture.db.prepare('INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
       .bind('sembom',4,'browser','2026-10-08','calculation',dimensionKey({tool:'loan',flag},['tool','flag']),start,success,failed,now).run();
   const result=await read(`/v1/projects/sembom/workflows/calculation/breakdown${range.replace('Version=1','Version=4')}&groupBy=tool`);
   assert.equal(result.buckets.length,1);assert.equal(result.buckets[0].value,'loan');

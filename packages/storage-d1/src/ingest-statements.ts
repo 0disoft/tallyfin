@@ -1,4 +1,4 @@
-import { DAY, RETENTION_POLICY } from '@tallyfin/core';
+import { DAY, emptyDurationCounts, RETENTION_POLICY, WORKFLOW_DURATION_SLOTS } from '@tallyfin/core';
 import type { IngestPlan, PreparedBatch, PreparedServerBatch, ServerPrincipal } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
@@ -38,9 +38,11 @@ export function ingestStatements(db: SqlDatabase, batch: PreparedBatch | Prepare
   // Create valid zero rows, then apply deltas within the same guarded atomic write batch.
   statements.push(...plan.workflows.map(w => db.prepare(`UPDATE workflow_daily_counts SET
     started_count=started_count+?, succeeded_count=succeeded_count+?, failed_count=failed_count+?,
+    duration_counts_json=json_array(${Array.from({ length: WORKFLOW_DURATION_SLOTS }, (_, index) =>
+      `CAST(json_extract(duration_counts_json, '$[${index}]') + ? AS INTEGER)`).join(',')}),
     updated_at=max(updated_at, ?) WHERE project_id=? AND schema_version=? AND source='browser'
     AND cohort_date=? AND workflow_id=? AND dimension_key=?`).bind(w.started_count, w.succeeded_count,
-      w.failed_count, batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
+      w.failed_count, ...(w.durationCounts ?? emptyDurationCounts()), batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
   statements.push(...funnelStatements(db, batch.projectId, batch.schemaVersion, batch.receivedAt, plan));
   return statements;
 }

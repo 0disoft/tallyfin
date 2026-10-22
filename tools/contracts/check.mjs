@@ -6,6 +6,7 @@ import Ajv from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { Parser } from '@dbml/core';
 import { funnelCounts } from '../../packages/core/src/funnel.ts';
+import { emptyDurationCounts, workflowDuration } from '../../packages/core/src/workflow-duration.ts';
 
 const root = new URL('../../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
@@ -18,6 +19,19 @@ const validate = (name, value) => ajv.validate({ $ref: `tallyfin#/$defs/${name}`
 const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
+
+check('workflow duration distributions are bounded, optional for old servers and preserve unmeasured history', () => {
+  const counts = emptyDurationCounts(); counts[4] = 1;
+  const duration = workflowDuration(counts, 2, 0, false);
+  assert.ok(validate('WorkflowDuration', duration));
+  const response = example('workflow-response');
+  response.duration = workflowDuration(counts, response.summary.succeededAttempts, 0, false);
+  response.days.forEach((day, index) => { day.duration = workflowDuration(index === 0 ? counts : emptyDurationCounts(), day.succeededAttempts, 0, false); });
+  assert.ok(validate('WorkflowResponse', response));
+  for (const change of [v => v.buckets.pop(), v => v.buckets[0].range = 'other', v => v.buckets[0].succeededAttempts = -1, v => v.extra = true]) {
+    const invalid = structuredClone(duration); change(invalid); assert.equal(validate('WorkflowDuration', invalid), false);
+  }
+});
 
 check('project list supports bounded search without changing cursor or response contracts', () => {
   const route = spec.paths['/v1/projects'].get;

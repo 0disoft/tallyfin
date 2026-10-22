@@ -131,7 +131,22 @@ test('0006 upgrades atomically without data/authority backfill, retains indexes 
     const db = await mf.getD1Database('DB'), sql = migrationStatements(), start = sql.findIndex(s => s.startsWith('CREATE TABLE event_receipts_next'));
     assert.ok(start > 0);
     await db.batch(sql.slice(0, start).map(s => db.prepare(s))); await seed(db);
-    await new D1Store(db).commit(await prepare(), browserRegistry);
+    // Historical rows must be seeded using the pre-0012 column contract.
+    const prepared = await prepare();
+    const startEvent = prepared.events[0]!, endEvent = prepared.events[1]!, workflow = startEvent.workflow!;
+    await db.batch([
+      ...prepared.events.map(event => db.prepare('INSERT INTO event_receipts VALUES (?,?,?,?,?,?,?)')
+        .bind('sembom', 'browser', event.event.eventId, 1, event.payloadHash, now, now + 2 * DAY)),
+      ...prepared.events.map(event => db.prepare('INSERT INTO event_daily_counts VALUES (?,?,?,?,?,?,?,?)')
+        .bind('sembom', 1, 'browser', event.eventDate, event.event.name, event.dimensionKey, 1, now)),
+      db.prepare('INSERT INTO workflow_attempts VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+        .bind('sembom', 'browser', workflow.attemptId, 1, workflow.id, workflow.startedAt, workflow.cohortDate,
+          workflow.dimensionKey, 1, 'success', endEvent.occurredAt, workflow.startedAt + 3 * DAY),
+      db.prepare('INSERT INTO workflow_daily_counts VALUES (?,?,?,?,?,?,?,?,?,?)')
+        .bind('sembom', 1, 'browser', workflow.cohortDate, workflow.id, workflow.dimensionKey, 1, 1, 0, now),
+      db.prepare('INSERT INTO ingest_daily_usage VALUES (?,?,?,?)').bind('sembom', '2026-10-08', 2, now + 4 * DAY),
+      db.prepare('UPDATE projects SET ingest_revision=1, latest_received_at=?').bind(now),
+    ]);
     await db.prepare("INSERT INTO project_grants VALUES ('sembom',?,?,'owner',?)").bind(publisher.issuer, publisher.subject, now).run();
     const tables = ['projects', 'project_grants', 'project_schemas', 'event_receipts', 'event_daily_counts', 'workflow_attempts',
       'workflow_daily_counts', 'ingest_daily_usage'];
@@ -141,9 +156,10 @@ test('0006 upgrades atomically without data/authority backfill, retains indexes 
       db.prepare("INSERT INTO event_daily_counts VALUES ('sembom',1,'server','2026-10-09','job_finished','[]',-1,0)")]));
     assert.deepEqual(await snapshot(), before);
     assert.equal(await db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name IN ('project_publishers','event_receipts_next','event_daily_counts_next')").first('n'), 0);
-    assert.deepEqual(await initialize(db, false), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql'], applied: true });
-    assert.deepEqual(await snapshot(), before.map((rows, index) => index === 0 ? rows.map(row => ({ ...row, grant_revision: 0 })) : rows));
+    assert.deepEqual(await initialize(db, false), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql'], applied: true });
+    assert.deepEqual(await snapshot(), before.map((rows, index) => index === 0 ? rows.map(row => ({ ...row, grant_revision: 0 }))
+      : index === 6 ? rows.map(row => ({ ...row, duration_counts_json: '[0,0,0,0,0,0,0,0,0,0,0,0]' })) : rows));
     assert.deepEqual(await initialize(db, true), { migrations: [], applied: false });
     assert.equal(await db.prepare('SELECT count(*) AS n FROM project_publishers').first('n'), 0);
     assert.equal((await db.prepare('PRAGMA foreign_key_check').all()).results.length, 0);

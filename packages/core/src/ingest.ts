@@ -2,6 +2,7 @@ import { CollectionError } from './types.ts';
 import type { PreparedBatch, PreparedServerBatch } from './types.ts';
 import { COLLECTION_POLICY } from './policy.ts';
 import { transitionWorkflow } from './workflow-transition.ts';
+import { emptyDurationCounts, workflowDurationSlot } from './workflow-duration.ts';
 import { planFunnelProgress } from './funnel.ts';
 import type { FunnelDelta, FunnelRunState } from './funnel.ts';
 
@@ -15,6 +16,7 @@ export interface EventDelta { event_date: string; event_name: string; dimension_
 export interface WorkflowDelta {
   cohort_date: string; workflow_id: string; dimension_key: string;
   started_count: number; succeeded_count: number; failed_count: number;
+  durationCounts?: number[];
 }
 export interface IngestSnapshot { receipts: Receipt[]; attempts: AttemptState[]; newReceiptsToday: number; funnelRuns?: FunnelRunState[] }
 export interface IngestPlan {
@@ -36,6 +38,11 @@ export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot:
     const delta = workflowDeltas.get(key) ?? { cohort_date: state.cohort_date, workflow_id: state.workflow_id,
       dimension_key: state.dimension_key, started_count: 0, succeeded_count: 0, failed_count: 0 };
     delta.started_count += start; delta.succeeded_count += success; delta.failed_count += failure;
+    if (success || failure) {
+      if (state.terminal_at === null || state.terminal_kind === null) throw new CollectionError('storage_unavailable', 503);
+      const counts = delta.durationCounts ??= emptyDurationCounts();
+      counts[workflowDurationSlot(state.terminal_at - state.started_at, state.terminal_kind)]! += success + failure;
+    }
     workflowDeltas.set(key, delta);
   };
   for (const prepared of batch.events) {
