@@ -13,4 +13,5 @@ export const RETENTION_POLICY = {
   analyticsDays: 90, rejectionDays: 7, dailyUsageDays: 4, idleMinuteGraceMs: 120_000,
 } as const;
 export const QUERY_POLICY = { maxDays: 31, defaultPageSize: 25, maxPageSize: 100,
-  maxQueryChars: 512, maxIdentityCursorQueryChars: 12352 } as const;
+  maxQueryChars: 512, maxIdentityCursorQueryChars: 12352,
+  maxProjectSearchChars: 80, maxProjectSearchQueryChars: 1024 } as const;

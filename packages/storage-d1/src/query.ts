@@ -1,4 +1,4 @@
-import { closed, CollectionError, DAY, dateMillis, integer, NAME, PROJECT_ID, QUERY_POLICY, queryDates, validateRegistry } from '@tallyfin/core';
+import { closed, CollectionError, DAY, dateMillis, integer, NAME, PROJECT_ID, projectSearch, QUERY_POLICY, queryDates, validateRegistry } from '@tallyfin/core';
 import type { AdminPrincipal, AdminQuery, AdminStore, GrantChange, PublisherChange, ProjectSettingsUpdate, QueryMeta, SchemaPublication } from '@tallyfin/core';
 import { queryStatements } from './query-statements.ts';
 import { queryResponse } from './query-response.ts';
@@ -58,11 +58,14 @@ export class D1Queries implements AdminStore {
   updateSettings(principal: AdminPrincipal, id: string, update: ProjectSettingsUpdate, now = Date.now()) {
     return updateProjectSettings(this.db, principal, id, update, this.options, now);
   }
-  async list(principal: AdminPrincipal, limit: number, cursor: string) {
+  async list(principal: AdminPrincipal, limit: number, cursor: string, q = '') {
     if (!integer(limit, 1, 100) || (cursor && !PROJECT_ID.test(cursor))) throw new CollectionError('invalid_request', 400);
+    const search = projectSearch(q);
+    // Keep the unfiltered query unchanged. Bound literal search within the same grant-scoped read.
+    const filter = search ? ' AND (instr(lower(p.id), lower(?)) > 0 OR instr(lower(p.name), lower(?)) > 0)' : '';
     const result = await this.db.batch<ProjectState>([this.db.prepare(`SELECT p.* FROM projects p
-      WHERE p.id > ? AND EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = p.id AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))
-      ORDER BY p.id LIMIT ?`).bind(cursor, principal.issuer, principal.subject, limit + 1)]);
+      WHERE p.id > ? AND EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = p.id AND g.issuer = ? AND g.subject = ? AND g.role IN ('reader','owner'))${filter}
+      ORDER BY p.id LIMIT ?`).bind(cursor, principal.issuer, principal.subject, ...(search ? [search, search] : []), limit + 1)]);
     if (result.length !== 1 || !result[0]?.success || !Array.isArray(result[0].results)) throw new CollectionError('storage_unavailable', 503);
     const rows = result[0].results;
     return { data: rows.slice(0, limit).map(p => ({ id: p.id, name: p.name, status: p.status, timeZone: p.time_zone })),

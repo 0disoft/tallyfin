@@ -19,6 +19,15 @@ const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
 
+check('project list supports bounded search without changing cursor or response contracts', () => {
+  const route = spec.paths['/v1/projects'].get;
+  assert.deepEqual(route.parameters.map(p => p.name), ['q', 'limit', 'cursor']);
+  assert.equal(route.parameters[0].schema.maxLength, 80);
+  assert.equal(route.parameters[0].required, false);
+  assert.equal(route.parameters[2].schema.maxLength, 48);
+  assert.equal(route.responses['200'].content['application/json'].schema.$ref, '#/components/schemas/ProjectPage');
+});
+
 check('representative workflow is optional schema metadata with bounded publication and registry IDs', () => {
   const registry = example('registry'), draft = { events: registry.events, workflows: registry.workflows };
   for (const representativeWorkflowId of ['w', 'w'.repeat(48)]) {

@@ -106,6 +106,43 @@ test('project pages reapply grants, cursor is only a position, and issuer is par
     assert.equal((await read(`/v1/projects/sembom${route}`, 403)).error.code, 'forbidden');
   assert.equal((await read('/v1/projects/zeta/schemas/1', 403)).error.code, 'forbidden');
 });
+test('project search filters before paging, matches names and IDs literally, and reapplies grants', async () => {
+  for (const id of ['alpha', 'bravo', 'zeta']) { await seed(fixture.db, id); await grant(id); }
+  await fixture.db.prepare('UPDATE projects SET name = ? WHERE id IN (?, ?, ?)').bind('계산 Tool 100%_ready', 'alpha', 'bravo', 'zeta').run();
+  const search = (q: string, rest = '') => read(`/v1/projects?q=${encodeURIComponent(q)}${rest}`);
+  assert.deepEqual((await search('  ALPha  ')).data.map((p: any) => p.id), ['alpha']);
+  assert.deepEqual((await search('계산 tool')).data.map((p: any) => p.id), ['alpha', 'bravo', 'zeta']);
+  const first = await search('%_', '&limit=1');
+  assert.deepEqual(first.data.map((p: any) => p.id), ['alpha']); assert.equal(first.page.nextCursor, 'alpha');
+  const second = await search('%_', '&limit=1&cursor=alpha');
+  assert.deepEqual(second.data.map((p: any) => p.id), ['bravo']); assert.equal(second.page.nextCursor, 'bravo');
+  await fixture.db.prepare('DELETE FROM project_grants WHERE project_id = ?').bind('zeta').run();
+  await grant('zeta', 'reader', { ...principal, issuer: 'https://other.example.invalid' });
+  const last = await search('%_', '&limit=1&cursor=bravo');
+  assert.deepEqual(last.data, []); assert.equal(last.page.nextCursor, null);
+  assert.deepEqual((await search("' OR 1=1 --")).data, []);
+  assert.deepEqual((await search('missing')).data, []);
+  assert.deepEqual((await search('   ')).data.map((p: any) => p.id), ['alpha', 'bravo', 'sembom']);
+  assert.equal((await handler()(request('/v1/projects?q=alpha', 'GET', null))).status, 401);
+});
+
+test('project search bounds raw input and encoded queries at HTTP and direct store boundaries', async () => {
+  const queries = new D1Queries(fixture.db);
+  for (const length of [79, 80]) {
+    const q = '가'.repeat(length);
+    await read(`/v1/projects?q=${encodeURIComponent(q)}`);
+    assert.deepEqual((await queries.list(principal, 25, '', q)).data, []);
+  }
+  for (const q of ['가'.repeat(81), 'x\u0000', '\nalpha', 'alpha\t', '\u007f']) {
+    await read(`/v1/projects?q=${encodeURIComponent(q)}`, 400);
+    await assert.rejects(queries.list(principal, 25, '', q), { code: 'invalid_request' });
+  }
+  await read('/v1/projects?q=a&q=b', 400);
+  await read('/v1/projects?q=a&unknown=b', 400);
+  await read('/v1/projects?q=a&cursor=BAD', 400);
+  await read('/v1/projects?q=' + '%20'.repeat(350), 400);
+});
+
 test('summary and daily event dates differ from workflow start cohorts; absent buckets stay null', async () => {
   await events();
   const summary = await read(`/v1/projects/sembom/summary${range}`);

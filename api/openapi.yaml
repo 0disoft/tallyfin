@@ -2791,6 +2791,13 @@ paths:
       operationId: listProjects
       summary: List accessible projects
       parameters:
+        - name: q
+          in: query
+          required: false
+          description: Literal substring of project ID or name, with ASCII case ignored. Leading and trailing spaces are trimmed; empty means no filter. Controls are rejected. Maximum 80 UTF-16 code units (also enforced for direct store calls). Query string maximum is 1024 characters after URL encoding. Keep q unchanged across pages and restart without cursor when q changes. Results retain lexical project ID order and grants are reapplied on every page.
+          schema:
+            type: string
+            maxLength: 80
         - name: limit
           in: query
           required: false

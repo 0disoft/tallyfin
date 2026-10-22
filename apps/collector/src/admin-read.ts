@@ -1,4 +1,4 @@
-import { QUERY_POLICY, SCHEMA_LIMITS } from '@tallyfin/core';
+import { projectSearch, QUERY_POLICY, SCHEMA_LIMITS } from '@tallyfin/core';
 import { CollectionError, dateMillis, DAY, NAME, PROJECT_ID, validGrantIdentity } from '@tallyfin/core';
 import type { AdminQuery } from '@tallyfin/core';
 import { parameters, positive } from './admin-input.ts';
@@ -45,11 +45,11 @@ export async function schemasRoute({ request, url, access, principal }: AdminCon
 }
 
 export async function listRoute({ url, access, principal }: AdminContext): Promise<unknown> {
-  parameters(url, ['limit', 'cursor']);
+  parameters(url, ['limit', 'cursor', 'q'], QUERY_POLICY.maxProjectSearchQueryChars);
   const limit = positive(url.searchParams.get('limit') ?? String(QUERY_POLICY.defaultPageSize), QUERY_POLICY.maxPageSize);
   const cursor = url.searchParams.get('cursor') ?? '';
   if (cursor && !PROJECT_ID.test(cursor)) throw new CollectionError('invalid_request', 400);
-  return access.store.list(principal, limit, cursor);
+  return access.store.list(principal, limit, cursor, projectSearch(url.searchParams.get('q') ?? ''));
 }
 
 export async function queryRoute({ url, access, principal, now }: AdminContext): Promise<unknown> {

@@ -45,8 +45,14 @@ export interface AdminStore {
   publishSchema(principal: AdminPrincipal, projectId: string, version: number, input: SchemaPublication, now: number): Promise<PublishedSchema>;
   settings(principal: AdminPrincipal, projectId: string): Promise<ProjectSettings>;
   updateSettings(principal: AdminPrincipal, projectId: string, update: ProjectSettingsUpdate, now?: number): Promise<ProjectSettings>;
-  list(principal: AdminPrincipal, limit: number, cursor: string): Promise<{ data: Project[]; page: { limit: number; nextCursor: string | null } }>;
+  list(principal: AdminPrincipal, limit: number, cursor: string, q?: string): Promise<{ data: Project[]; page: { limit: number; nextCursor: string | null } }>;
   query(principal: AdminPrincipal, query: AdminQuery, now: number): Promise<unknown>;
+}
+/** Literal substring search; trim spaces without accepting controls or unbounded input. */
+export function projectSearch(value: unknown = ''): string {
+  if (typeof value !== 'string' || value.length > QUERY_POLICY.maxProjectSearchChars || /[\x00-\x1f\x7f]/.test(value))
+    throw new CollectionError('invalid_request', 400);
+  return value.trim();
 }
 export function dateMillis(value: string): number {
   const at = Date.parse(`${value}T00:00:00Z`);
