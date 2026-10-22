@@ -43,6 +43,7 @@ import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contrac
 import { parseAdminHealth, type AdminHealth } from './admin-health-contract.ts';
 import { awaitRequest } from './request-lifecycle.ts';
 import { readResponseJson } from './response-body.ts';
+import { createReadScheduler, type ReadLease } from './read-scheduler.ts';
 
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
@@ -171,9 +172,10 @@ export class ApiClient {
   #getBearer: (() => Promise<string>) | undefined;
   #onDestroy: (() => void) | undefined;
   #requestTimeoutMs: number;
+  #readSlot: ReturnType<typeof createReadScheduler>;
   #onAnalyticsAccessDenied: ((projectId: string, error: ApiError) => void) | undefined;
 
-  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike; requestTimeoutMs?: number;
+  constructor(options: { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike; requestTimeoutMs?: number; maxConcurrentReads?: number;
     onAnalyticsAccessDenied?: (projectId: string, error: ApiError) => void } = {}) {
     const basePath = options.basePath ?? API_BASE_PATH;
     if (basePath !== API_BASE_PATH) {
@@ -184,6 +186,7 @@ export class ApiClient {
       throw new ApiError('invalid_request', '요청 대기 시간은 10~120000밀리초의 정수여야 해요.');
     }
     this.#requestTimeoutMs = requestTimeoutMs;
+    this.#readSlot = createReadScheduler(options.maxConcurrentReads);
     this.#onAnalyticsAccessDenied = options.onAnalyticsAccessDenied;
     this.#token = options.token ?? '';
     this.#getBearer = options.getBearer;
@@ -514,6 +517,8 @@ export class ApiClient {
     const checkRequest = () => { enforceDeadline(); controller.signal.throwIfAborted(); };
     const timeout = setTimeout(() => controller.abort(new ApiError('timeout', KIND_MESSAGE.timeout)), this.#requestTimeoutMs);
     let observedStatus: number | undefined;
+    let lease: ReadLease | undefined;
+    const track = <T>(operation: () => Promise<T>) => lease ? lease.track(operation) : operation();
     let notified = false;
     const notifyDenial = (error: ApiError) => {
       // Owner-only settings/grant failures do not revoke reader access to analytics.
@@ -524,6 +529,14 @@ export class ApiClient {
     };
     try {
       checkRequest();
+      if (body === undefined && !method) {
+        try {
+          const slot = this.#readSlot(controller.signal);
+          lease = slot instanceof Promise ? await slot : slot;
+        }
+        catch (cause) { checkRequest(); throw new ApiError('network', KIND_MESSAGE.network, { cause }); }
+        checkRequest();
+      }
       let bearer = this.#token;
       if (this.#getBearer) {
         try {
@@ -541,7 +554,7 @@ export class ApiClient {
       if (bearer) headers.Authorization = `Bearer ${bearer}`;
       let response: { ok: boolean; status: number; json: () => Promise<unknown> };
       try {
-        response = await awaitRequest(controller.signal, () => this.#fetch(url, {
+        response = await awaitRequest(controller.signal, () => track(() => this.#fetch(url, {
           method: method ?? (body === undefined ? 'GET' : 'PATCH'),
           ...(body === undefined ? {} : { body }),
           headers,
@@ -551,7 +564,7 @@ export class ApiClient {
           referrerPolicy: 'no-referrer',
           // An API redirect must not replay credentials or a mutation at another route.
           redirect: 'error',
-        }));
+        })));
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
         throw new ApiError('network', KIND_MESSAGE.network, { cause: error });
@@ -563,9 +576,9 @@ export class ApiClient {
         const kind = STATUS_KIND[observedStatus]!;
         notifyDenial(new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus }));
       }
-      if (!response.ok) throw await awaitRequest(controller.signal, () => this.#toApiError(response));
+      if (!response.ok) throw await awaitRequest(controller.signal, () => track(() => this.#toApiError(response)));
       try {
-        const result = await awaitRequest(controller.signal, () => response.json());
+        const result = await awaitRequest(controller.signal, () => track(() => response.json()));
         checkRequest();
         return result;
       } catch (error) {
@@ -587,6 +600,7 @@ export class ApiClient {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) notifyDenial(error);
       throw error;
     } finally {
+      lease?.close();
       clearTimeout(timeout);
       // Keep the controller registered until the body is read so destroy()
       // can abort an in-flight body stream too.
