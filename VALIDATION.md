@@ -1,5 +1,15 @@
 # 검증
 
+## 새 소스 사본의 타입 출력 폴더 (2026-10-23)
+
+collector:types·admin:types는 Node mkdirSync의 recursive 옵션으로 .tmp를 먼저 준비한다.
+기존 생성 경로·검사 순서·의존성은 유지한다. Windows에서 Git 추적 소스와 현재 package.json을
+별도 사본으로 복사하고 .tmp가 없는 것을 확인한 뒤 기존 node_modules를 junction으로
+연결해 npm run typecheck를 통과했다. Collector/Admin 바인딩·공통/runtime·관리자 타입을
+모두 확인했으며 새 의존성 설치나 운영 호출은 없다. 개발 안내와 이 기록을 갱신했다.
+HTTP API·DB·의존성·CI·위생 설정 변경은 없고 제품 동작이 같아 전체 테스트는 이 단계에서
+반복하지 않았다. 별도 사본은 기존 설치 의존성을 재사용한 검사이며 새 npm ci 검사는 아니다.
+
 ## 서버 SDK 취소 이유 보존 (2026-10-23)
 
 limited의 내부 AbortController에 호출자의 parent.reason을 전달한다. 공개 DeliveryResult와
