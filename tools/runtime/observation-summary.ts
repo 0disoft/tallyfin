@@ -1,6 +1,6 @@
 import type { ErrorCode } from '@tallyfin/core';
 import type { LatencyBucket, RequestOperation } from '../../apps/collector/src/request-observation.ts';
-import { CLEANUP_PROJECT_LIMIT, type CleanupReport } from '../../apps/collector/src/cleanup.ts';
+import { CLEANUP_RUN_PROJECT_LIMIT, type CleanupReport } from '../../apps/collector/src/cleanup.ts';
 import { diagnoseObservations } from './observation-diagnostics.ts';
 import { SUMMARY_LIMITS, OPERATIONS, BUCKETS, CODES } from './observation-values.ts';
 export { SUMMARY_LIMITS } from './observation-values.ts';
@@ -30,7 +30,7 @@ function cleanupEntry(value: Record<string, unknown>): { runId: string; report?:
   if (value.code === 'retention_cleanup_failed') return { runId };
   for (const key of ['attempted', 'completed', 'failed']) {
     const count = value[key];
-    if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > CLEANUP_PROJECT_LIMIT)
+    if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > CLEANUP_RUN_PROJECT_LIMIT)
       throw new ObservationSummaryError('invalid_log');
   }
   if (Number(value.completed) + Number(value.failed) !== value.attempted || typeof value.cursorAdvanced !== 'boolean')

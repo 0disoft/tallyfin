@@ -3,8 +3,9 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { Miniflare, Log, LogLevel } from 'miniflare';
-import { runCleanup, CLEANUP_ROW_LIMIT } from '../src/cleanup.ts';
+import { runCleanup, CLEANUP_ROW_LIMIT, CLEANUP_BUDGET_MS, CLEANUP_RUN_PROJECT_LIMIT } from '../src/cleanup.ts';
 import { D1Maintenance } from '@tallyfin/storage-d1';
+import { createWorker } from '../src/index.ts';
 import { migrationStatements, seed, now } from '../../../packages/storage-d1/test/helpers.ts';
 
 test('failed projects do not block later cleanup or cursor progress', async () => {
@@ -34,6 +35,75 @@ test('scan failure never starts cleanup; stale cursor result remains visible', a
   const report = await runCleanup({ ...store, nextCleanupPage: async () => ({ revision: 0, projects: [] }) }, now);
   assert.equal(report.cursorAdvanced, false);
   await assert.rejects(runCleanup(store, Number.NaN), /invalid cleanup time/);
+});
+
+function paged(count: number) {
+  const projects = Array.from({ length: count }, (_, index) => ({ id: `project-${String(index).padStart(2, '0')}`, timeZone: 'UTC' }));
+  let cursor = 0, revision = 0, reads = 0;
+  const seen: string[] = [], checkpoints: string[][] = [];
+  return { seen, checkpoints, reads: () => reads, store: {
+    async nextCleanupPage(limit: number) {
+      reads++; return { revision, projects: projects.slice(cursor, cursor + limit) };
+    },
+    async cleanup(id: string) { seen.push(id); },
+    async advanceCleanupCursor(page: { revision: number; projects: { id: string }[] }) {
+      assert.equal(page.revision, revision++); checkpoints.push(page.projects.map(project => project.id));
+      cursor = (cursor + page.projects.length) % projects.length; return true;
+    },
+  } };
+}
+
+test('cleanup processes at most four sequential pages and never repeats projects after wrapping', async () => {
+  for (const count of [7, CLEANUP_RUN_PROJECT_LIMIT, CLEANUP_RUN_PROJECT_LIMIT + 1]) {
+    const f = paged(count), report = await runCleanup(f.store, now, { clock: () => 0, maxPages: 4 });
+    assert.equal(report.attempted, Math.min(count, CLEANUP_RUN_PROJECT_LIMIT));
+    assert.equal(report.completed, report.attempted); assert.equal(report.cursorAdvanced, true);
+    assert.equal(new Set(f.seen).size, report.attempted);
+    assert.equal(f.checkpoints.flat().length, report.attempted); assert.ok(f.reads() <= 4);
+  }
+});
+
+test('budget boundaries persist only the attempted prefix and leave the next project for a later run', async () => {
+  for (const elapsed of [CLEANUP_BUDGET_MS - 1, CLEANUP_BUDGET_MS, CLEANUP_BUDGET_MS + 1]) {
+    const f = paged(7); let time = 0;
+    const report = await runCleanup({ ...f.store,
+      async nextCleanupPage(limit) { time = elapsed; return f.store.nextCleanupPage(limit); },
+      async cleanup(id) { await f.store.cleanup(id); time++; },
+    }, now, { clock: () => time });
+    const expected = elapsed < CLEANUP_BUDGET_MS ? 1 : 0;
+    assert.equal(report.attempted, expected); assert.equal(report.cursorAdvanced, expected === 1);
+    assert.deepEqual(f.checkpoints.flat(), f.seen); assert.equal(f.reads(), 1);
+    if (expected) {
+      const next = await runCleanup(f.store, now, { clock: () => 0, maxPages: 4 });
+      assert.equal(next.attempted, 7); assert.equal(f.seen[1], 'project-01');
+    }
+  }
+});
+
+test('cursor conflict stops before the next page; cancellation preserves its cause without advancing', async () => {
+  const f = paged(7), report = await runCleanup({ ...f.store, advanceCleanupCursor: async () => false }, now, { maxPages: 4 });
+  assert.equal(report.attempted, 5); assert.equal(report.cursorAdvanced, false); assert.equal(f.reads(), 1);
+  const aborted = paged(7), controller = new AbortController(), reason = new Error('scheduled lifetime ended');
+  const store = { ...aborted.store, async cleanup() { controller.abort(reason); throw reason; } };
+  await assert.rejects(runCleanup(store, now, { signal: controller.signal }), error => error === reason);
+  assert.equal(aborted.reads(), 1); assert.equal(aborted.checkpoints.length, 0);
+  await assert.rejects(runCleanup(store, now, { signal: controller.signal }), error => error === reason);
+  assert.equal(aborted.reads(), 1);
+});
+
+test('default query budget is one page; elapsed budget and invalid options never start another page', async () => {
+  const f = paged(21), report = await runCleanup(f.store, now, { clock: () => 0 });
+  assert.equal(report.attempted, 5); assert.equal(f.reads(), 1);
+  let time = 0; const timed = paged(21);
+  const timedReport = await runCleanup({ ...timed.store, async cleanup(id) {
+    await timed.store.cleanup(id); if (timed.seen.length === 5) time = CLEANUP_BUDGET_MS;
+  } }, now, { clock: () => time, maxPages: 4 });
+  assert.equal(timedReport.attempted, 5); assert.equal(timedReport.cursorAdvanced, true); assert.equal(timed.reads(), 1);
+  for (const maxPages of [0, 5, 1.5, NaN]) {
+    await assert.rejects(runCleanup(f.store, now, { maxPages }), TypeError);
+    assert.throws(() => createWorker(undefined, undefined, { cleanupMaxPages: maxPages }), TypeError);
+  }
+  assert.equal(f.reads(), 1);
 });
 
 test('real scheduled Worker cleans bounded expired rows and preserves live data', async () => {
@@ -74,5 +144,21 @@ test('real scheduled Worker cleans bounded expired rows and preserves live data'
     assert.equal((await worker.scheduled({ scheduledTime: now, cron: '* * * * *' })).outcome, 'exception');
     const maintenance = new D1Maintenance(db);
     assert.equal((await maintenance.nextCleanupPage()).revision, 3);
+    await db.prepare("UPDATE projects SET time_zone = 'Asia/Seoul'").run();
+    for (let index = 0; index < 6; index++) {
+      const id = `aaa-${index}`; await seed(db, id);
+      await db.prepare("INSERT INTO event_receipts VALUES (?, 'browser', 'expired', 1, ?, ?, ?)")
+        .bind(id, '0'.repeat(64), now - 172800000, now).run();
+    }
+    assert.equal((await worker.scheduled({ scheduledTime: now, cron: '* * * * *' })).outcome, 'ok');
+    assert.equal(await db.prepare("SELECT count(*) FROM event_receipts WHERE event_id='expired'").first('count(*)'), 1);
+    assert.equal((await maintenance.nextCleanupPage()).revision, 4);
+    let queries = 0;
+    await createWorker(undefined, undefined, { cleanupMaxPages: 4 }).scheduled({ scheduledTime: now }, { DB: {
+      prepare: sql => db.prepare(sql),
+      async batch(statements) { queries += statements.length; return db.batch(statements as Parameters<typeof db.batch>[0]); },
+    } });
+    assert.equal(await db.prepare("SELECT count(*) FROM event_receipts WHERE event_id='expired'").first('count(*)'), 0);
+    assert.equal((await maintenance.nextCleanupPage()).revision, 6); assert.ok(queries <= 200);
   } finally { await mf.dispose(); }
 });

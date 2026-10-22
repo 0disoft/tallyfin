@@ -117,8 +117,8 @@ Get-Content -LiteralPath tail-log.json -Encoding utf8 |
   표시와 상세 보고는 서로 보완이지 중복이나 충돌이 아니다. 같은 `runId`의 상세 보고가 서로
   다르면 `run_conflict`로 보고서 전체를 거부한다.
 - 검증: 상세 보고 6필드(`runId`·`code`·`attempted`·`completed`·`failed`·`cursorAdvanced`),
-  표시 2필드(`runId`·`code`). `attempted`·`completed`·`failed`는 0~`CLEANUP_PROJECT_LIMIT`
-  (현재 5) 정수이고 `completed + failed = attempted`, `cursorAdvanced`는 불리언이다.
+  표시 2필드(`runId`·`code`). `attempted`·`completed`·`failed`는 0~`CLEANUP_RUN_PROJECT_LIMIT`
+  (현재 20, 기본 실행은 5) 정수이고 `completed + failed = attempted`, `cursorAdvanced`는 불리언이다.
 - 실행별 카운트이고 프로젝트 수가 아니다. `attempted`는 프로젝트 시도 횟수 합계라 같은 프로젝트가
   여러 번 들어갈 수 있다. `completed`는 정리 호출이 성공한 수이지 삭제된 행 수나 만료 데이터를
   전부 지웠다는 뜻이 아니고, `cursorAdvanced=true`도 프로젝트 실패가 없었다는 뜻이 아니다.

@@ -1,6 +1,6 @@
 import type { ErrorCode } from '@tallyfin/core';
 import type { RequestOperation, LatencyBucket } from '../../../../apps/collector/src/request-observation.ts';
-import { CLEANUP_PROJECT_LIMIT } from '../../../../apps/collector/src/cleanup.ts';
+import { CLEANUP_RUN_PROJECT_LIMIT } from '../../../../apps/collector/src/cleanup.ts';
 import { SUMMARY_LIMITS, OPERATIONS, BUCKETS, CODES } from '../../../../tools/runtime/observation-values.ts';
 import { diagnoseObservations } from '../../../../tools/runtime/observation-diagnostics.ts';
 
@@ -51,7 +51,7 @@ function cleanup(value: unknown): Cleanup {
   require(result.observedRuns === result.reportedRuns + result.reportlessFailureRuns &&
     result.failureMarkerRuns >= result.reportlessFailureRuns && result.failureMarkerRuns <= result.observedRuns &&
     result.completedProjects + result.failedProjects === result.attemptedProjects &&
-    result.attemptedProjects <= result.reportedRuns * CLEANUP_PROJECT_LIMIT &&
+    result.attemptedProjects <= result.reportedRuns * CLEANUP_RUN_PROJECT_LIMIT &&
     result.cursorAdvancedReports + result.cursorNotAdvancedReports === result.reportedRuns);
   return result;
 }
@@ -78,7 +78,7 @@ function diagnostics(value: unknown, operations: Operation[], cleaned: Cleanup, 
   });
   distinct(findings.map(item => `${item.operation}:${item.code}`));
   const failedRuns = findings.find(item => item.code === 'cleanup_failures')?.observedCount ?? 0;
-  const lower = Math.max(cleaned.failureMarkerRuns, cleaned.cursorNotAdvancedReports, Math.ceil(cleaned.failedProjects / CLEANUP_PROJECT_LIMIT));
+  const lower = Math.max(cleaned.failureMarkerRuns, cleaned.cursorNotAdvancedReports, Math.ceil(cleaned.failedProjects / CLEANUP_RUN_PROJECT_LIMIT));
   const upper = Math.min(cleaned.observedRuns, cleaned.failureMarkerRuns + cleaned.cursorNotAdvancedReports + Math.min(cleaned.failedProjects, cleaned.reportedRuns));
   require(failedRuns >= lower && failedRuns <= upper);
   const expected = diagnoseObservations(operations, cleaned, failedRuns, ignored);

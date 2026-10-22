@@ -21,6 +21,19 @@ test('actual CLI report round-trips without request identities; JSON key order a
   assert.equal(parseObservationReport(source).diagnostics.serviceHealth, 'unknown');
   assert.ok(!JSON.stringify(parseObservationReport(source)).includes('requestId'));
 });
+test('multi-page cleanup summaries retain the expanded project budget and failure bounds', () => {
+  for (const failed of [0, 20]) {
+    const summary = new ObservationSummary();
+    summary.addLine(JSON.stringify({ runId: '01000000-0000-4000-8000-000000000002', code: 'retention_cleanup',
+      attempted: 20, completed: 20 - failed, failed, cursorAdvanced: true }));
+    const report = summary.report(), result = parseObservationReport(report);
+    assert.equal(result.cleanup.attemptedProjects, 20); assert.equal(result.cleanup.failedProjects, failed);
+    const invalid = structuredClone(report); invalid.cleanup.attemptedProjects = 21;
+    invalid.cleanup.completedProjects = 21 - failed;
+    assert.throws(() => parseObservationReport(invalid));
+  }
+});
+
 test('actual overlapping cleanup markers and partial details retain run counts without pretending missing processing counts are zero', () => {
   const source = summary([
     { runId: '01000000-0000-4000-8000-000000000002', code: 'retention_cleanup', attempted: 1, completed: 1, failed: 0, cursorAdvanced: false },

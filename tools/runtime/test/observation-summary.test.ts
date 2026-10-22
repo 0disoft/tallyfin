@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { ObservationSummary, ObservationSummaryError, SUMMARY_LIMITS } from '../observation-summary.ts';
 import { sampleRequestObservation } from '../../../apps/collector/src/request-observation.ts';
 import { runCleanup } from '../../../apps/collector/src/cleanup.ts';
+import { CLEANUP_RUN_PROJECT_LIMIT } from '../../../apps/collector/src/cleanup.ts';
 
 const requestId = '01000000-0000-4000-8000-000000000001';
 function log(overrides = {}) {
@@ -86,7 +87,10 @@ test('cleanup markers may precede reports; duplicates normalize UUID/key order a
 });
 
 test('cleanup validation rejects private fields and impossible project counters; failures poison the whole summary', () => {
-  const invalid = [cleanup({ attempted: 6 }), cleanup({ completed: -1 }), cleanup({ failed: 0.5 }),
+  const valid = new ObservationSummary();
+  valid.addLine(JSON.stringify(cleanup({ attempted: CLEANUP_RUN_PROJECT_LIMIT, completed: CLEANUP_RUN_PROJECT_LIMIT, failed: 0 })));
+  assert.equal(valid.report().cleanup.completedProjects, CLEANUP_RUN_PROJECT_LIMIT);
+  const invalid = [cleanup({ attempted: CLEANUP_RUN_PROJECT_LIMIT + 1 }), cleanup({ completed: -1 }), cleanup({ failed: 0.5 }),
     cleanup({ attempted: '3' }), cleanup({ failed: 0 }), cleanup({ cursorAdvanced: 'true' }),
     cleanup({ runId: 'private-run-marker' }), cleanup({ token: 'private-marker' }),
     { ...marker(), failed: 1 }, { code: 'retention_cleanup_failed' },

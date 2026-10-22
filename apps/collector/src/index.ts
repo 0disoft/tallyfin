@@ -8,16 +8,18 @@ export type { AdministratorAccess } from './admin.ts';
 export type { PublisherAccess } from './publisher.ts';
 import type { AdministratorAccess } from './admin.ts';
 import type { PublisherAccess } from './publisher.ts';
-import { runCleanup } from './cleanup.ts';
+import { runCleanup, cleanupPageLimit } from './cleanup.ts';
 import { logRequestObservation } from './request-observation.ts';
 import { checkAdministratorStorageRead } from './readiness.ts';
 import { databaseCapacity, requestDatabase } from './dependency-lifetime.ts';
 
 // Host supplies the D1 binding. No deployed resource ID or credential is committed.
 export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string }
+export interface WorkerOptions { requestTimeoutMs?: number; maxDatabaseOperations?: number; cleanupMaxPages?: number }
 export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'], verifyPublisher?: PublisherAccess['verifyBearer'],
-  options: { requestTimeoutMs?: number; maxDatabaseOperations?: number } = {}) {
+  options: WorkerOptions = {}) {
   const capacity = databaseCapacity(options.maxDatabaseOperations);
+  const cleanupMaxPages = cleanupPageLimit(options.cleanupMaxPages);
   const requestTimeoutMs = options.requestTimeoutMs ?? 15_000;
   if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs < 1 || requestTimeoutMs > 30_000) throw new TypeError('Invalid request timeout');
   return {
@@ -38,7 +40,8 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
     const runId = crypto.randomUUID();
     const lifetime = requestDatabase(bindings.DB, new AbortController().signal, capacity, 30_000);
     try {
-      const report = await runCleanup(new D1Maintenance(lifetime.db), controller.scheduledTime);
+      const report = await runCleanup(new D1Maintenance(lifetime.db), controller.scheduledTime,
+        { signal: lifetime.signal, maxPages: cleanupMaxPages });
       console.log(JSON.stringify({ runId, code: 'retention_cleanup', ...report }));
       if (report.failed || !report.cursorAdvanced) throw Error('retention cleanup incomplete');
     } catch (cause) {
@@ -49,13 +52,13 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
   },
 }; }
 /** Explicit host opt-in; construction validates config but fetches no keys. */
-export function createOidcWorker(options: OidcOptions, publisherOptions?: OidcOptions) {
+export function createOidcWorker(options: OidcOptions, publisherOptions?: OidcOptions, workerOptions: WorkerOptions = {}) {
   if (publisherOptions?.audience === options.audience) throw new TypeError('Administrator and publisher audiences must differ.');
-  return createWorker(createOidcVerifier(options), publisherOptions ? createOidcVerifier({ ...publisherOptions, exclusiveAudience: true }) : undefined);
+  return createWorker(createOidcVerifier(options), publisherOptions ? createOidcVerifier({ ...publisherOptions, exclusiveAudience: true }) : undefined, workerOptions);
 }
 /** Machine ingestion without administrator access. Host supplies a dedicated API audience. */
-export function createPublisherOidcWorker(options: OidcOptions) {
-  return createWorker(undefined, createOidcVerifier({ ...options, exclusiveAudience: true }));
+export function createPublisherOidcWorker(options: OidcOptions, workerOptions: WorkerOptions = {}) {
+  return createWorker(undefined, createOidcVerifier({ ...options, exclusiveAudience: true }), workerOptions);
 }
 // Authentication is closed until an embedding host explicitly supplies its trusted verifier.
 export default createWorker();
