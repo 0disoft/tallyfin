@@ -217,3 +217,23 @@ test('invalid trusted configuration throws before any request', () => {
     { audience: '' }, { algorithms: [] }, { algorithms: ['HS256'] }, { clockToleranceSeconds: 61 },
   ]) assert.throws(() => createOidcVerifier({ ...config, ...options } as OidcOptions), TypeError);
 });
+
+test('Workers cache misses bound external fetches and queued requests reuse public data with request-local responses', async t => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'WebSocketPair');
+  Object.defineProperty(globalThis, 'WebSocketPair', { configurable: true, value: function () {} });
+  t.after(() => { if (descriptor) Object.defineProperty(globalThis, 'WebSocketPair', descriptor); else Reflect.deleteProperty(globalThis, 'WebSocketPair'); });
+  let calls = 0, entered!: () => void;
+  const ready = new Promise<void>(resolve => { entered = resolve; });
+  const releases: ((response: Response) => void)[] = [];
+  const { verify } = fixture({ fetchImpl: async () => {
+    calls++; const pending = new Promise<Response>(resolve => { releases.push(resolve); });
+    if (calls === 2) entered(); return pending;
+  } });
+  const token = await signed();
+  const requests = Array.from({ length: 12 }, () => verify(token));
+  await ready; assert.equal(calls, 2);
+  for (const release of releases) release(Response.json({ keys: [rsaJwk] }));
+  const results = await Promise.all(requests);
+  assert.ok(results.every(result => result?.subject === 'test-admin')); assert.equal(calls, 2);
+  assert.deepEqual(await verify(token), { issuer, subject: 'test-admin' }); assert.equal(calls, 2);
+});

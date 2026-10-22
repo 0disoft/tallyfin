@@ -1,3 +1,4 @@
+import { createKeyFetchGate } from './key-fetch-gate.ts';
 import { createRemoteJWKSet, customFetch, decodeProtectedHeader, jwtVerify } from 'jose';
 import { awaitSignal, discard } from './lifecycle.ts';
 
@@ -50,35 +51,45 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
     throw new TypeError('OIDC clock tolerance must be 0..60 seconds');
   const transport = options.fetchImpl ?? ((input, init) => globalThis.fetch(input, init));
   const clock = options.now ?? Date.now, elapsed = options.monotonicNow ?? (() => performance.now());
-  let retryAfter = -Infinity;
+  let retryAfter = -Infinity, generation = 0, issued = 0, applied = 0;
+  let publicBody: string | undefined;
+  const keyFetch = createKeyFetchGate();
   const keys = createRemoteJWKSet(new URL(jwksUri), {
     timeoutDuration: TIMEOUT_MS, cooldownDuration: COOLDOWN_MS, cacheMaxAge: 600000,
     [customFetch]: async (url, init) => {
-      if (elapsed() < retryAfter) throw new Error('OIDC key endpoint cooling down');
+      const observed = generation;
       const signal = options.timeoutSignal ? AbortSignal.any([init.signal, options.timeoutSignal(TIMEOUT_MS)]) : init.signal;
-      try {
-        const response = await awaitSignal(signal, async () => {
-          const value = await transport(url, {
-            ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
+      return keyFetch(signal, async () => {
+        // Cache only validated public bytes. Every request creates its own Response/stream.
+        if (generation !== observed && publicBody !== undefined)
+          return new Response(publicBody, { headers: { 'Content-Type': 'application/jwk-set+json' } });
+        if (elapsed() < retryAfter) throw new Error('OIDC key endpoint cooling down');
+        const sequence = ++issued;
+        try {
+          const response = await awaitSignal(signal, async () => {
+            const value = await transport(url, {
+              ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
+            });
+            if (signal.aborted) { discard(value.body); signal.throwIfAborted(); }
+            return value;
           });
-          if (signal.aborted) { discard(value.body); signal.throwIfAborted(); }
-          return value;
-        });
-        if (response.status !== 200 || !response.body) {
-          discard(response.body);
+          if (response.status !== 200 || !response.body) {
+            discard(response.body);
+            throw new Error('OIDC key endpoint unavailable');
+          }
+          const body = await boundedBody(response, signal);
+          const jwks: unknown = JSON.parse(body);
+          if (!jwks || typeof jwks !== 'object' || !('keys' in jwks) || !Array.isArray(jwks.keys) ||
+            jwks.keys.length === 0 || jwks.keys.length > MAX_JWKS_KEYS || jwks.keys.some(key =>
+              !key || typeof key !== 'object' || ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'].some(field => field in key)))
+            throw new Error('Invalid public OIDC key set');
+          if (sequence > applied) { publicBody = body; applied = sequence; generation++; }
+          return new Response(body, { headers: { 'Content-Type': 'application/jwk-set+json' } });
+        } catch {
+          retryAfter = elapsed() + COOLDOWN_MS;
           throw new Error('OIDC key endpoint unavailable');
         }
-        const body = await boundedBody(response, signal);
-        const jwks: unknown = JSON.parse(body);
-        if (!jwks || typeof jwks !== 'object' || !('keys' in jwks) || !Array.isArray(jwks.keys) ||
-          jwks.keys.length === 0 || jwks.keys.length > MAX_JWKS_KEYS || jwks.keys.some(key =>
-            !key || typeof key !== 'object' || ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'].some(field => field in key)))
-          throw new Error('Invalid public OIDC key set');
-        return new Response(body, { headers: { 'Content-Type': 'application/jwk-set+json' } });
-      } catch {
-        retryAfter = elapsed() + COOLDOWN_MS;
-        throw new Error('OIDC key endpoint unavailable');
-      }
+      });
     },
   });
 
