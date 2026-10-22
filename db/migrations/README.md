@@ -1,7 +1,22 @@
 # 저장 계약과 마이그레이션 상태
 
+## 0013_workflow_failure_reasons.sql
+
+0012 다음 적용한다. workflow_attempts.failure_reason_slot과 workflow_daily_counts의
+33칸 failure_reason_counts_json을 추가한다. 0~31은 해당 버전 enum을 정렬한 위치이며
+32는 원인 누락이다. 기존 행은 0 배열로 확장하여 기존 실패를 미측정으로 남긴다.
+각 값은 음이 아닌 안전 정수이고 합계는 failed_count 이하이며 시도의 슬롯은 실패에만 허용한다.
+기존 CAS batch의 완료 갱신과 같은 UPDATE에서 더하며 별도 쿼리를 추가하지 않는다.
+
+DB 확장 후 새 Collector를 배포한다. 이전 수집기로 롤백할 때 열과 집계는 남긴다.
+과거 실패를 역산하거나 원문 오류를 보관하지 않는다. CHECK 검증의 운영 소요시간은
+미측정이므로 운영 데이터량에 따른 적용 시간을 확인해야 한다. 적용 뒤
+PRAGMA foreign_key_check, 슬롯 합계 <= failed_count, 반복 initialize 결과를 확인한다.
+로컬 검사만 수행했으며 원격 D1 마이그레이션은 실행하지 않았다.
+
+
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0012`가 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
+마이그레이션 `0002`~`0013`가 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는

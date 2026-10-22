@@ -25,6 +25,7 @@ export function transitionWorkflow(workflow: NonNullable<PreparedEvent['workflow
   }
   if (state.terminal_kind && state.terminal_kind !== workflow.phase) throw new CollectionError('attempt_conflict', 409);
   if (state.terminal_kind === workflow.phase) return { state, duplicate: true, delta: null };
-  return { state: { ...state, terminal_kind: workflow.phase, terminal_at: occurredAt }, duplicate: false,
+  return { state: { ...state, terminal_kind: workflow.phase, terminal_at: occurredAt,
+      ...(workflow.phase === 'failure' && workflow.failureReasonSlot !== undefined ? { failure_reason_slot: workflow.failureReasonSlot } : {}) }, duplicate: false,
     delta: state.start_seen ? [0, Number(workflow.phase === 'success'), Number(workflow.phase === 'failure')] : null };
 }

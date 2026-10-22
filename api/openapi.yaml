@@ -1205,6 +1205,11 @@ components:
               pattern: ^[a-z][a-z0-9_]{0,47}$
               maxLength: 48
             - type: "null"
+        failureReasonProperty:
+          description: Optional enum property on the failure event. Only the first committed failure reason counts; raw error text is never accepted. Omit to disable measurement.
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
         dimensions:
           type: array
           minItems: 0
@@ -1839,6 +1844,47 @@ components:
           maxItems: 6
           items:
             $ref: "#/components/schemas/WorkflowDurationBucket"
+    FailureReasonBucket:
+      type: object
+      additionalProperties: false
+      required: [value, failedAttempts]
+      properties:
+        value:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9_-]{0,31}$
+          maxLength: 32
+        failedAttempts:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+    FailureReasonDistribution:
+      description: Start-cohort and schema-version scoped first committed failures. Sorted enum buckets plus missingReasonFailures equal measuredFailures; measuredFailures plus unmeasuredFailures equal all confirmed failures. Missing reason is measured; historical failures are unmeasured. Shares use all confirmed failures, including missing and unmeasured. No backfill from expired attempts.
+      type: object
+      additionalProperties: false
+      required: [property, measuredFailures, missingReasonFailures, unmeasuredFailures, buckets]
+      properties:
+        property:
+          type: string
+          pattern: ^[a-z][a-z0-9_]{0,47}$
+          maxLength: 48
+        measuredFailures:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        missingReasonFailures:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        unmeasuredFailures:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        buckets:
+          type: array
+          minItems: 1
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/FailureReasonBucket"
     WorkflowDay:
       type: object
       additionalProperties: false
@@ -1877,6 +1923,11 @@ components:
             - type: number
               minimum: 0
               maximum: 100
+            - type: "null"
+        failureReasons:
+          description: Null when no failure reason property is configured. Older responses may omit this field. Daily buckets reconcile with the period distribution.
+          anyOf:
+            - $ref: "#/components/schemas/FailureReasonDistribution"
             - type: "null"
         duration:
           $ref: "#/components/schemas/WorkflowDuration"
@@ -1938,6 +1989,11 @@ components:
           const: startedAt
         summary:
           $ref: "#/components/schemas/WorkflowSummary"
+        failureReasons:
+          description: Null when no failure reason property is configured. Older responses may omit this field. Daily buckets reconcile with the period distribution.
+          anyOf:
+            - $ref: "#/components/schemas/FailureReasonDistribution"
+            - type: "null"
         duration:
           $ref: "#/components/schemas/WorkflowDuration"
         days:

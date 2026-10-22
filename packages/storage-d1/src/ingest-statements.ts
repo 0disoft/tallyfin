@@ -1,4 +1,5 @@
 import { DAY, emptyDurationCounts, RETENTION_POLICY, WORKFLOW_DURATION_SLOTS } from '@tallyfin/core';
+import { emptyFailureReasonCounts, FAILURE_REASON_SLOTS } from '@tallyfin/core';
 import type { IngestPlan, PreparedBatch, PreparedServerBatch, ServerPrincipal } from '@tallyfin/core';
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
@@ -21,9 +22,9 @@ export function ingestStatements(db: SqlDatabase, batch: PreparedBatch | Prepare
   statements.push(...bulk(db, 'event_receipts', ['project_id', 'source', 'event_id', 'schema_version', 'payload_hash', 'received_at', 'expires_at'],
     plan.receipts.map(r => [batch.projectId, batch.source, r.event_id, r.schema_version, r.payload_hash, r.received_at, r.expires_at]),
     `ON CONFLICT(project_id, source, event_id) DO UPDATE SET schema_version=excluded.schema_version, payload_hash=excluded.payload_hash, received_at=excluded.received_at, expires_at=excluded.expires_at`));
-  statements.push(...bulk(db, 'workflow_attempts', ['project_id', 'source', 'attempt_id', 'schema_version', 'workflow_id', 'started_at', 'cohort_date', 'dimension_key', 'start_seen', 'terminal_kind', 'terminal_at', 'expires_at'],
-    plan.attempts.map(a => [batch.projectId, 'browser', a.attempt_id, a.schema_version, a.workflow_id, a.started_at, a.cohort_date, a.dimension_key, a.start_seen, a.terminal_kind, a.terminal_at, a.expires_at]),
-    `ON CONFLICT(project_id, source, attempt_id) DO UPDATE SET schema_version=excluded.schema_version, workflow_id=excluded.workflow_id, started_at=excluded.started_at, cohort_date=excluded.cohort_date, dimension_key=excluded.dimension_key, start_seen=excluded.start_seen, terminal_kind=excluded.terminal_kind, terminal_at=excluded.terminal_at, expires_at=excluded.expires_at`));
+  statements.push(...bulk(db, 'workflow_attempts', ['project_id', 'source', 'attempt_id', 'schema_version', 'workflow_id', 'started_at', 'cohort_date', 'dimension_key', 'start_seen', 'terminal_kind', 'terminal_at', 'expires_at', 'failure_reason_slot'],
+    plan.attempts.map(a => [batch.projectId, 'browser', a.attempt_id, a.schema_version, a.workflow_id, a.started_at, a.cohort_date, a.dimension_key, a.start_seen, a.terminal_kind, a.terminal_at, a.expires_at, a.failure_reason_slot ?? null]),
+    `ON CONFLICT(project_id, source, attempt_id) DO UPDATE SET schema_version=excluded.schema_version, workflow_id=excluded.workflow_id, started_at=excluded.started_at, cohort_date=excluded.cohort_date, dimension_key=excluded.dimension_key, start_seen=excluded.start_seen, terminal_kind=excluded.terminal_kind, terminal_at=excluded.terminal_at, expires_at=excluded.expires_at, failure_reason_slot=excluded.failure_reason_slot`));
   statements.push(db.prepare(`INSERT INTO ingest_daily_usage (project_id, utc_date, new_receipts, expires_at) VALUES (?, ?, ?, ?)
     ON CONFLICT(project_id, utc_date) DO UPDATE SET new_receipts = new_receipts + excluded.new_receipts`).bind(
       batch.projectId, utcDate, plan.receipts.length, Date.parse(`${utcDate}T00:00:00Z`) + RETENTION_POLICY.dailyUsageDays * DAY));
@@ -40,9 +41,12 @@ export function ingestStatements(db: SqlDatabase, batch: PreparedBatch | Prepare
     started_count=started_count+?, succeeded_count=succeeded_count+?, failed_count=failed_count+?,
     duration_counts_json=json_array(${Array.from({ length: WORKFLOW_DURATION_SLOTS }, (_, index) =>
       `CAST(json_extract(duration_counts_json, '$[${index}]') + ? AS INTEGER)`).join(',')}),
+    failure_reason_counts_json=json_array(${Array.from({ length: FAILURE_REASON_SLOTS }, (_, index) =>
+      `CAST(json_extract(failure_reason_counts_json, '$[${index}]') + ? AS INTEGER)`).join(',')}),
     updated_at=max(updated_at, ?) WHERE project_id=? AND schema_version=? AND source='browser'
     AND cohort_date=? AND workflow_id=? AND dimension_key=?`).bind(w.started_count, w.succeeded_count,
-      w.failed_count, ...(w.durationCounts ?? emptyDurationCounts()), batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
+      w.failed_count, ...(w.durationCounts ?? emptyDurationCounts()), ...(w.failureReasonCounts ?? emptyFailureReasonCounts()),
+      batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
   statements.push(...funnelStatements(db, batch.projectId, batch.schemaVersion, batch.receivedAt, plan));
   return statements;
 }

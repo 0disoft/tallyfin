@@ -6,9 +6,11 @@ import { workflowBreakdown, type WorkflowDimensionRow } from './workflow-breakdo
 import { funnelSeries, type FunnelCountRow } from './funnel-query.ts';
 import { funnelBreakdown, type FunnelDimensionRow } from './funnel-breakdown.ts';
 import { durationRowCounts, type DurationRow } from './workflow-duration.ts';
+import { emptyFailureReasonCounts, failureReasonDefinition, failureReasonDistribution } from '@tallyfin/core';
+import { failureReasonRowCounts, type FailureReasonRow } from './workflow-failure-reasons.ts';
 
 export interface EventRow { event_name: string; event_date: string; dimension_key: string; count: number }
-export interface WorkflowRow extends DurationRow { cohort_date: string; started_count: number; succeeded_count: number; failed_count: number }
+export interface WorkflowRow extends DurationRow, FailureReasonRow { cohort_date: string; started_count: number; succeeded_count: number; failed_count: number }
 
 export function queryResponse(registry: Registry, input: AdminQuery, meta: QueryMeta, dates: string[], rows: unknown[], now: number) {
   if (input.kind === 'funnel' || input.kind === 'funnel-breakdown') {
@@ -30,6 +32,7 @@ export function queryResponse(registry: Registry, input: AdminQuery, meta: Query
   if (rows.length > ANALYTICS_ROW_LIMITS.days) throw new CollectionError('storage_unavailable', 503);
   const totals = { started: 0, succeeded: 0, failed: 0 };
   const durationTotals = emptyDurationCounts();
+  const reasonTotals = emptyFailureReasonCounts(), reasonDefinition = failureReasonDefinition(registry, definition);
   const byDate = new Map((rows as WorkflowRow[]).map(row => [row.cohort_date, row]));
   const days = dates.map(date => {
     const row = byDate.get(date);
@@ -37,13 +40,16 @@ export function queryResponse(registry: Registry, input: AdminQuery, meta: Query
     totals.started = addCounts(totals.started, started); totals.succeeded = addCounts(totals.succeeded, succeeded); totals.failed = addCounts(totals.failed, failed);
     const counts = durationRowCounts(row);
     const duration = workflowDuration(counts, succeeded, failed, definition.failureEvent !== null);
+    const reasons = failureReasonRowCounts(row), failureReasons = failureReasonDistribution(reasonDefinition, reasons, failed);
+    for (let index = 0; index < reasons.length; index++) reasonTotals[index] = addCounts(reasonTotals[index]!, reasons[index]!);
     for (let index = 0; index < counts.length; index++) durationTotals[index] = addCounts(durationTotals[index]!, counts[index]!);
-    return { date, ...workflowCounts(started, succeeded, failed, definition.failureEvent !== null), duration,
+    return { date, ...workflowCounts(started, succeeded, failed, definition.failureEvent !== null), duration, failureReasons,
       provisional: now < dateEnd(date, meta.timeZone) + 2 * DAY };
   });
   return { meta, workflowId: definition.id, cohortBasis: 'startedAt',
     summary: workflowCounts(totals.started, totals.succeeded, totals.failed, definition.failureEvent !== null),
-    duration: workflowDuration(durationTotals, totals.succeeded, totals.failed, definition.failureEvent !== null), days };
+    duration: workflowDuration(durationTotals, totals.succeeded, totals.failed, definition.failureEvent !== null),
+    failureReasons: failureReasonDistribution(reasonDefinition, reasonTotals, totals.failed), days };
 }
 
 export function eventSeries(registry: Registry, input: AdminQuery, meta: QueryMeta, dates: string[], rows: EventRow[]) {

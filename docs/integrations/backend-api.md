@@ -1,5 +1,15 @@
 # 관리자 API 연결
 
+## 실패 원인 응답
+
+workflow.failureReasonProperty는 실패 이벤트의 enum 속성만 선택한다. workflow daily와
+각 days의 선택 failureReasons는 property, measuredFailures, missingReasonFailures,
+unmeasuredFailures, buckets(value, failedAttempts)를 제공한다. 미설정은 null, 구 응답의
+필드 생략은 정보 없음이다. enum 합계 + 누락 = 측정, 측정 + 미측정 = 전체 확정 실패다.
+화면과 CSV 비율은 전체 확정 실패를 분모로 사용한다. 최초 확정 실패만 한 번 집계하며
+시작일·버전별로 분리한다. 새 수집기 배포 전에 0012 다음 0013 DB 확장이 필요하다.
+
+
 작업 흐름 daily의 선택 duration은 6개 순서 고정 구간의 성공/실패 분포와
 measuredAttempts·unmeasuredAttempts를 제공한다. 새 응답에서는 기간과 모든 날짜에
 있으며, 구 응답은 필드가 없을 수 있다. 실패 없는 정의는 구간 failedAttempts도 null이다.

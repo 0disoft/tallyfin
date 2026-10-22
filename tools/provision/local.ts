@@ -14,7 +14,7 @@ export async function openLocal(stateDir: string) {
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
   const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql']) {
+  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql']) {
     const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
     // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
     const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
@@ -82,6 +82,14 @@ export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ mig
       Array.from({ length: 12 }, (_, i) => `json_type(duration_counts_json, '$[${i}]') = 'integer'`).some(check => !sql.includes(check)) ||
       !sql.includes('<= succeeded_count') || !sql.includes('<= failed_count'))
       throw new ProvisionError('partial_database', '소요시간 집계 제약이 빠져 초기화를 중단했어요. DB 상태를 확인해 주세요.');
+  }
+  if (existingColumns.has('workflow_daily_counts.failure_reason_counts_json')) {
+    const sql = result[0].results.find(row => row.name === 'workflow_daily_counts')?.sql ?? '';
+    const attempts = result[0].results.find(row => row.name === 'workflow_attempts')?.sql ?? '';
+    if (!sql.includes('json_array_length(failure_reason_counts_json) = 33') ||
+      !sql.includes('<= failed_count') || !attempts.includes("terminal_kind IS 'failure'") ||
+      Array.from({ length: 33 }, (_, i) => `json_type(failure_reason_counts_json, '$[${i}]') = 'integer'`).some(check => !sql.includes(check)))
+      throw new ProvisionError('partial_database', '실패 원인 집계 제약이 빠져 초기화를 중단했어요. DB 상태를 확인해 주세요.');
   }
   // Index-only upgrades need their own marker; tables and columns cannot detect them.
   const lookup = migrations.find(migration => migration.name === '0011_analytics_lookup.sql')!;

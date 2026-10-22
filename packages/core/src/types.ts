@@ -12,6 +12,7 @@ export interface EventDefinition {
 export interface WorkflowDefinition {
   id: string; label: string; source: 'browser'; startEvent: string;
   successEvent: string; failureEvent: string | null; dimensions: string[];
+  failureReasonProperty?: string;
 }
 export interface FunnelDefinition {
   id: string; label: string; steps: { eventName: string; source: EventSource }[]; dimensions: string[];
@@ -45,6 +46,7 @@ export interface PreparedEvent {
   workflow?: {
     id: string; phase: 'start' | 'success' | 'failure'; attemptId: string;
     startedAt: number; cohortDate: string; dimensionKey: string;
+    failureReasonSlot?: number;
   };
 }
 export interface PreparedBatch {

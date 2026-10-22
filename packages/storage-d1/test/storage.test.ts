@@ -111,7 +111,7 @@ test('SQL protects schema immutability, foreign keys and workflow invariant', as
   await assert.rejects(fixture.db.prepare("INSERT INTO event_daily_counts VALUES ('other', 1, 'browser', '2026-10-08', 'tool_view', '[]', 1, 0)").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO workflow_daily_counts (project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES ('sembom', 1, 'browser', '2026-10-08', 'calculation', '[]', 1, 2, 0, 0)").run());
   await assert.rejects(fixture.db.prepare("INSERT INTO event_daily_counts VALUES ('sembom', 1, 'browser', '2026-10-08', 'tool_view', '[]', 1.5, 0)").run());
-  await assert.rejects(fixture.db.prepare("INSERT INTO workflow_attempts VALUES ('sembom', 'browser', 'attempt', 1, 'calculation', 0, '1970-01-01', '[]', 1, 'success', NULL, 259200000)").run());
+  await assert.rejects(fixture.db.prepare("INSERT INTO workflow_attempts (project_id,source,attempt_id,schema_version,workflow_id,started_at,cohort_date,dimension_key,start_seen,terminal_kind,terminal_at,expires_at) VALUES ('sembom', 'browser', 'attempt', 1, 'calculation', 0, '1970-01-01', '[]', 1, 'success', NULL, 259200000)").run());
 });
 test('full 20-event batch respects D1 binding limits', async () => {
   const b = batch(); b.events = Array.from({ length: 20 }, () => ({ ...b.events[0], eventId: crypto.randomUUID(), name: 'tool_view' }));

@@ -156,10 +156,12 @@ test('0006 upgrades atomically without data/authority backfill, retains indexes 
       db.prepare("INSERT INTO event_daily_counts VALUES ('sembom',1,'server','2026-10-09','job_finished','[]',-1,0)")]));
     assert.deepEqual(await snapshot(), before);
     assert.equal(await db.prepare("SELECT count(*) AS n FROM sqlite_master WHERE name IN ('project_publishers','event_receipts_next','event_daily_counts_next')").first('n'), 0);
-    assert.deepEqual(await initialize(db, false), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql'], applied: true });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql'], applied: true });
     assert.deepEqual(await snapshot(), before.map((rows, index) => index === 0 ? rows.map(row => ({ ...row, grant_revision: 0 }))
-      : index === 6 ? rows.map(row => ({ ...row, duration_counts_json: '[0,0,0,0,0,0,0,0,0,0,0,0]' })) : rows));
+      : index === 5 ? rows.map(row => ({ ...row, failure_reason_slot: null }))
+      : index === 6 ? rows.map(row => ({ ...row, duration_counts_json: '[0,0,0,0,0,0,0,0,0,0,0,0]',
+        failure_reason_counts_json: JSON.stringify(Array(33).fill(0)) })) : rows));
     assert.deepEqual(await initialize(db, true), { migrations: [], applied: false });
     assert.equal(await db.prepare('SELECT count(*) AS n FROM project_publishers').first('n'), 0);
     assert.equal((await db.prepare('PRAGMA foreign_key_check').all()).results.length, 0);

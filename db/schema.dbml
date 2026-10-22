@@ -148,6 +148,7 @@ Table workflow_attempts {
   start_seen boolean [not null, default: false]
   terminal_kind text [note: 'success | failure | null, first committed terminal wins']
   terminal_at bigint
+  failure_reason_slot integer [note: 'Optional measured enum slot 0..31 in sorted version values, 32 means not provided. Null is unmeasured. Only valid on the first committed failure.']
   expires_at bigint [not null, note: 'started_at + 72h']
   indexes {
     (project_id, source, attempt_id) [pk]
@@ -205,6 +206,7 @@ Table workflow_daily_counts {
   succeeded_count integer [not null, default: 0]
   failed_count integer [not null, default: 0]
   duration_counts_json text [not null, default: "'[0,0,0,0,0,0,0,0,0,0,0,0]'", note: 'Six fixed duration buckets, interleaved success/failure counts. Measured counts may be below terminal counts for pre-0012 data. Updated atomically with terminal deltas. Retained with the 90-day cohort.']
+  failure_reason_counts_json text [not null, note: '33 nonnegative safe integer slots, zero by default. 0..31 map sorted immutable version enum values, 32 is measured without reason. Sum cannot exceed failed_count. Unused enum slots must be zero. Same CAS update and 90-day retention.']
   updated_at bigint [not null]
   indexes {
     (project_id, schema_version, source, cohort_date, workflow_id, dimension_key) [pk]

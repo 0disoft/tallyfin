@@ -1,5 +1,19 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
+## 작업 흐름 실패 원인 집계 — 2026-10-23
+
+workflow의 선택 failureReasonProperty는 실패 이벤트의 enum 속성 하나만 참조한다.
+자유 입력 오류 메시지는 받지 않는다. daily 응답과 days의 선택 failureReasons는 속성명,
+정렬된 enum buckets, measuredFailures·missingReasonFailures·unmeasuredFailures를 제공한다.
+미설정이면 null이고 구 서버는 필드를 생략할 수 있다. 원인 누락은 측정 실패에 포함하며
+과거 미측정 실패와 구별한다. 비율의 분모는 누락·미측정을 포함한 전체 확정 실패다.
+
+시작일 코호트·버전·권한 경계를 유지하고, 최초 확정 실패만 기존 CAS batch에서 집계한다.
+종료가 먼저 오면 시작 관측 시 집계한다. 재전송은 최초 원인을 덮어쓰거나 다시 세지 않는다.
+시도 정리 뒤에도 일별 집계 보존 기간 동안 남는다. 기존 SQL 수는 유지하고 행/응답은 커진다.
+DB 0013을 새 수집기보다 먼저 적용해야 하며 원격 적용은 하지 않았다.
+
+
 ## 작업 흐름 완료 소요시간 — 2026-10-23
 
 기존 workflow daily 응답에 선택 duration과 각 days 항목의 duration을 추가했다.

@@ -87,7 +87,7 @@ function validateWorkflows(definitions: SchemaDefinitions): void {
   const bound = new Set<string>(); const workflows = new Set<string>();
   for (const [index, workflow] of definitions.workflows.entries()) {
     const path = `/workflows/${index}`;
-    if (!closed(workflow, ['id', 'label', 'source', 'startEvent', 'successEvent', 'failureEvent', 'dimensions']) ||
+    if (!closed(workflow, ['id', 'label', 'source', 'startEvent', 'successEvent', 'failureEvent', 'dimensions'], ['failureReasonProperty']) ||
       !matches(workflow.id, NAME) || !text(workflow.label, 1, 80) || workflow.source !== 'browser' ||
       !Array.isArray(workflow.dimensions) || workflow.dimensions.length > SCHEMA_LIMITS.dimensions || !workflow.dimensions.every(key => matches(key, NAME)) ||
       new Set(workflow.dimensions).size !== workflow.dimensions.length) fail(path);
@@ -105,6 +105,12 @@ function validateWorkflows(definitions: SchemaDefinitions): void {
       events.push(event);
     }
     validateDimensions(workflow.dimensions, events, path);
+    if (has(workflow, 'failureReasonProperty')) {
+      const failure = definitions.events.find(event => event.name === workflow.failureEvent);
+      if (!matches(workflow.failureReasonProperty, NAME) || !failure ||
+        failure.properties[workflow.failureReasonProperty]?.type !== 'enum')
+        fail(`${path}/failureReasonProperty`, 'invalid_reference');
+    }
   }
 }
 

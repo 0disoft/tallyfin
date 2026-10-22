@@ -7,6 +7,7 @@ import addFormats from 'ajv-formats';
 import { Parser } from '@dbml/core';
 import { funnelCounts } from '../../packages/core/src/funnel.ts';
 import { emptyDurationCounts, workflowDuration } from '../../packages/core/src/workflow-duration.ts';
+import { emptyFailureReasonCounts, failureReasonDistribution } from '../../packages/core/src/workflow-failure-reasons.ts';
 
 const root = new URL('../../', import.meta.url);
 const read = path => fs.readFileSync(new URL(path, root), 'utf8');
@@ -19,6 +20,22 @@ const validate = (name, value) => ajv.validate({ $ref: `tallyfin#/$defs/${name}`
 const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
+
+check('failure reasons are optional, nullable, closed enum distributions without raw messages', () => {
+  const counts = emptyFailureReasonCounts(); counts[0] = 1;
+  const reasons = failureReasonDistribution({ property: 'error', values: ['0-error'] }, counts, 2);
+  assert.ok(validate('FailureReasonDistribution', reasons), JSON.stringify(ajv.errors));
+  const response = example('workflow-response'); response.failureReasons = null;
+  response.days.forEach(day => { day.failureReasons = null; });
+  assert.ok(validate('WorkflowResponse', response));
+  for (const edit of [v => v.buckets = [], v => v.buckets[0].value = 'raw error message',
+    v => v.buckets[0].failedAttempts = -1, v => v.message = 'private', v => v.measuredFailures = null]) {
+    const value = structuredClone(reasons); edit(value); assert.equal(validate('FailureReasonDistribution', value), false);
+  }
+  const flow = example('registry').workflows[0];
+  assert.ok(validate('WorkflowDefinition', { ...flow, failureReasonProperty: 'error' }));
+  assert.equal(validate('WorkflowDefinition', { ...flow, failureReasonProperty: null }), false);
+});
 
 check('workflow duration distributions are bounded, optional for old servers and preserve unmeasured history', () => {
   const counts = emptyDurationCounts(); counts[4] = 1;

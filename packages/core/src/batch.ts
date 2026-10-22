@@ -1,6 +1,7 @@
 import { COLLECTION_POLICY } from './policy.ts';
 import { CollectionError } from './types.ts';
 import { prepareFunnelStage } from './funnel-preparation.ts';
+import { failureReasonDefinition, MISSING_FAILURE_REASON_SLOT } from './workflow-failure-reasons.ts';
 import type { BrowserBatch, BrowserEvent, EventSource, PreparedBatch, PreparedEvent, PreparedServerBatch, Properties, PropertyDefinition, Registry, ServerBatch } from './types.ts';
 import { canonicalEvent, closed, DAY, dimensionKey, has, integer, localDate, matches, MAX_BODY_BYTES, NAME, record, sha256, utcMillis, UUID } from './value.ts';
 
@@ -99,6 +100,11 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
       const dimensions: Properties = Object.fromEntries(workflow.dimensions.map(key => [key, input.properties[key]!]));
       prepared.workflow = { id: workflow.id, phase, attemptId: input.attempt.attemptId, startedAt,
         cohortDate: localDate(startedAt, registry.project.timeZone), dimensionKey: dimensionKey(dimensions) };
+      if (phase === 'failure' && workflow.failureReasonProperty !== undefined) {
+        const reason = failureReasonDefinition(registry, workflow)!;
+        prepared.workflow.failureReasonSlot = has(input.properties, reason.property)
+          ? reason.values.indexOf(input.properties[reason.property] as string) : MISSING_FAILURE_REASON_SLOT;
+      }
     } else if (input.attempt) throw new CollectionError('invalid_event', 422);
     if (has(input, 'funnel')) {
       prepared.funnel = prepareFunnelStage(prepared, registry, batch.source, receivedAt);

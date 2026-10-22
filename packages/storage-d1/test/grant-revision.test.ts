@@ -15,7 +15,7 @@ test('grant migration preserves rows, tracks direct SQL changes and refuses inco
       .bind('https://identity.example.invalid', 'migration-test', now).run();
     await insert();
     const before = (await db.prepare('SELECT * FROM project_grants').all()).results;
-    assert.deepEqual(await initialize(db, false), { migrations: ['0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql'], applied: false });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql'], applied: false });
     await initialize(db, true);
     assert.deepEqual((await db.prepare('SELECT * FROM project_grants').all()).results, before);
     const revision = () => db.prepare("SELECT grant_revision FROM projects WHERE id='sembom'").first('grant_revision');
