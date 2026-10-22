@@ -1,3 +1,4 @@
+import WorkflowFailureReasons from './WorkflowFailureReasons';
 import WorkflowFailurePanel from './WorkflowFailurePanel';
 import type { ApiClient } from './api/client';
 import type { Registry } from './api/types';
@@ -34,6 +35,7 @@ export default function LiveGoals({ client, registry, workflows, workflowErrors,
           </dl>
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
           <WorkflowDuration duration={load.response.duration} provisional={load.response.days.some(day => day.provisional)} />
+          <WorkflowFailureReasons definition={definition} reasons={load.response.failureReasons} failed={load.response.summary.failedAttempts} provisional={load.response.days.some(day => day.provisional)} />
           <WorkflowPropertyBreakdown key={`${context}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={range} previous={previous} context={context} onState={onState} />
         </section>; }))}
     <LiveFunnels client={client} registry={registry} range={range} context={context} previous={previous} compare={compare} comparisonError={comparisonError} />

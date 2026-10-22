@@ -39,7 +39,7 @@ export function parseSchemaValidation(value: unknown): SchemaValidation {
   if (typeof r.valid !== 'boolean' || r.privacyReviewRequired !== true || !Array.isArray(r.issues) || r.issues.length !== (r.valid ? 0 : 1)) fail();
   const issues = r.issues.map(value => {
     const issue = object(value, ['path', 'code']);
-    if (typeof issue.path !== 'string' || issue.path.length > 160 || !/^(?:\/(?:events|workflows)(?:\/\d+(?:\/(?:name|id|properties|dimensions|startEvent|successEvent|failureEvent)(?:\/[a-z0-9_]+)?)?)?|\/representativeWorkflowId|\/funnels(?:\/\d+(?:\/(?:id|dimensions(?:\/\d+)?|steps\/\d+(?:\/(?:eventName|source))?))?)?)?$/.test(issue.path) ||
+    if (typeof issue.path !== 'string' || issue.path.length > 160 || !/^(?:\/(?:events|workflows)(?:\/\d+(?:\/(?:name|id|properties|dimensions|startEvent|successEvent|failureEvent|failureReasonProperty)(?:\/[a-z0-9_]+)?)?)?|\/representativeWorkflowId|\/funnels(?:\/\d+(?:\/(?:id|dimensions(?:\/\d+)?|steps\/\d+(?:\/(?:eventName|source))?))?)?)?$/.test(issue.path) ||
       !['invalid_definition', 'definition_limit', 'duplicate', 'cardinality_limit', 'browser_event_required', 'invalid_reference', 'dimension_mismatch'].includes(String(issue.code))) fail();
     return { path: issue.path, code: issue.code as SchemaIssueCode };
   });

@@ -37,6 +37,7 @@ export type WorkflowDefinition = {
   startEvent: string;
   successEvent: string;
   failureEvent: string | null;
+  failureReasonProperty?: string;
   dimensions: string[];
 };
 
@@ -92,13 +93,14 @@ export type WorkflowSummary = {
   completionRate: number | null;
 };
 
-export type WorkflowDay = WorkflowSummary & { date: string; provisional: boolean; duration?: import('./workflow-duration.ts').WorkflowDuration };
+export type WorkflowDay = WorkflowSummary & { date: string; provisional: boolean; duration?: import('./workflow-duration.ts').WorkflowDuration; failureReasons?: import('./workflow-failure-reasons.ts').FailureReasons | null };
 
 export type WorkflowResponse = {
   meta: QueryMeta & { source: 'browser' };
   workflowId: string;
   cohortBasis: 'startedAt';
   summary: WorkflowSummary;
+  failureReasons?: import('./workflow-failure-reasons.ts').FailureReasons | null;
   duration?: import('./workflow-duration.ts').WorkflowDuration;
   days: WorkflowDay[];
 };

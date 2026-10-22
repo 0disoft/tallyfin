@@ -1,3 +1,4 @@
+import { parseFailureReasons, validateFailureReasons } from './workflow-failure-reasons.ts';
 // Minimal runtime validation for administration responses. Missing or mistyped
 // fields raise ContractError instead of being coerced, so a failed or partial
 // response is never rendered as a real zero.
@@ -200,6 +201,7 @@ function parseWorkflowDefinition(value: unknown, path: string): WorkflowDefiniti
     startEvent: expectString(record.startEvent, `${path}.startEvent`),
     successEvent: expectString(record.successEvent, `${path}.successEvent`),
     failureEvent: record.failureEvent === null ? null : expectString(record.failureEvent, `${path}.failureEvent`),
+    ...(Object.hasOwn(record, 'failureReasonProperty') ? { failureReasonProperty: expectString(record.failureReasonProperty, `${path}.failureReasonProperty`) } : {}),
     dimensions: expectArray(record.dimensions, `${path}.dimensions`).map((item, index) =>
       expectString(item, `${path}.dimensions[${index}]`),
     ),
@@ -233,6 +235,12 @@ export function parseRegistry(value: unknown): Registry {
     if (!/^[a-z][a-z0-9_]{0,47}$/.test(id) || registry.workflows.filter(w => w.id === id).length !== 1)
       fail('response.representativeWorkflowId', 'invalid reference');
     registry.representativeWorkflowId = id;
+  }
+  for (const workflow of registry.workflows) {
+    if (workflow.failureReasonProperty === undefined) continue;
+    const property = registry.events.find(e => e.name === workflow.failureEvent && e.source === 'browser')?.properties[workflow.failureReasonProperty];
+    if (!/^[a-z][a-z0-9_]{0,47}$/.test(workflow.failureReasonProperty) || property?.type !== 'enum')
+      fail('response.workflows.failureReasonProperty', 'invalid enum reference');
   }
   return registry;
 }
@@ -366,6 +374,7 @@ export function parseWorkflowResponse(value: unknown): WorkflowResponse {
     workflowId: expectString(record.workflowId, 'response.workflowId'),
     cohortBasis: expectEnum(record.cohortBasis, ['startedAt'], 'response.cohortBasis') as 'startedAt',
     summary,
+    ...(record.failureReasons === undefined ? {} : { failureReasons: parseFailureReasons(record.failureReasons, summary) }),
     ...(record.duration === undefined ? {} : { duration: parseWorkflowDuration(record.duration, summary) }),
     days: expectArray(record.days, 'response.days').map((item, index) => {
       const day = expectRecord(item, `response.days[${index}]`);
@@ -382,12 +391,14 @@ export function parseWorkflowResponse(value: unknown): WorkflowResponse {
       return {
         date: expectString(day.date, `response.days[${index}].date`),
         ...summary,
+        ...(day.failureReasons === undefined ? {} : { failureReasons: parseFailureReasons(day.failureReasons, summary) }),
         ...(day.duration === undefined ? {} : { duration: parseWorkflowDuration(day.duration, summary) }),
         provisional: expectBoolean(day.provisional, `response.days[${index}].provisional`),
       };
     }),
   };
   validateWorkflowDurations(result);
+  validateFailureReasons(result);
   return result;
 }
 export function parseWorkflowBreakdownResponse(value: unknown): WorkflowBreakdownResponse {

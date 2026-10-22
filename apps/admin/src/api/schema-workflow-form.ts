@@ -5,10 +5,11 @@ import type { EventFormDraft } from './schema-event-form.ts';
 
 export type WorkflowPhase = 'startEvent' | 'successEvent' | 'failureEvent';
 export type FormWorkflow = Record<string, unknown> & { id: string; label: string; source: 'browser';
-  startEvent: string; successEvent: string; failureEvent: string | null; dimensions: string[] };
+  startEvent: string; successEvent: string; failureEvent: string | null; failureReasonProperty?: string; dimensions: string[] };
 export type WorkflowFormDraft = Omit<EventFormDraft, 'workflows'> & { workflows: FormWorkflow[] };
 export type WorkflowChange = { kind: 'add' } | { kind: 'remove'; index: number } |
   { kind: 'representative'; value: string } |
+  { kind: 'failureReason'; index: number; value: string } |
   { kind: 'edit'; index: number; field: 'id' | 'label' | WorkflowPhase; value: string | null } |
   { kind: 'dimensions'; index: number; value: string[] };
 const NAME = /^[a-z][a-z0-9_]{0,47}$/;
@@ -22,7 +23,8 @@ export function readWorkflowForm(text: string): WorkflowFormDraft {
     throw Error('대표 흐름 ID는 JSON에서 문자열로 지정하거나 필드를 지워 주세요.');
   if (draft.workflows.length > 10 || draft.workflows.some(workflow => !record(workflow) || typeof workflow.id !== 'string' ||
     typeof workflow.label !== 'string' || workflow.source !== 'browser' || typeof workflow.startEvent !== 'string' ||
-    typeof workflow.successEvent !== 'string' || (workflow.failureEvent !== null && typeof workflow.failureEvent !== 'string') ||
+    typeof workflow.successEvent !== 'string' ||
+    (Object.hasOwn(workflow, 'failureReasonProperty') && typeof workflow.failureReasonProperty !== 'string') || (workflow.failureEvent !== null && typeof workflow.failureEvent !== 'string') ||
     !Array.isArray(workflow.dimensions) || !workflow.dimensions.every(key => typeof key === 'string')))
     throw Error('폼으로 편집할 수 없는 작업 흐름이에요. JSON에서 정의를 확인해 주세요.');
   return draft as WorkflowFormDraft;
@@ -47,6 +49,13 @@ export function changeWorkflowForm(text: string, change: WorkflowChange): string
       draft.workflows.splice(change.index, 1);
       if (draft.representativeWorkflowId === workflow.id && !draft.workflows.some(w => w.id === workflow.id))
         delete draft.representativeWorkflowId;
+    }
+    else if (change.kind === 'failureReason') {
+      if (change.value === '') delete workflow.failureReasonProperty;
+      else {
+        if (!workflowFailureReasonChoices(draft, change.index).includes(change.value)) throw Error('실패 이벤트의 enum 속성을 선택하세요.');
+        workflow.failureReasonProperty = change.value;
+      }
     }
     else if (change.kind === 'dimensions') {
       if (change.value.length > 4 || new Set(change.value).size !== change.value.length || !change.value.every(key => NAME.test(key)))
@@ -90,7 +99,7 @@ function signature(property: unknown): string | null {
     return JSON.stringify(['integer', property.minimum, property.maximum]);
   return null;
 }
-export type WorkflowWarning = { field: WorkflowPhase | 'dimensions'; message: string };
+export type WorkflowWarning = { field: WorkflowPhase | 'dimensions' | 'failureReasonProperty'; message: string };
 export function workflowWarnings(draft: WorkflowFormDraft, index: number): WorkflowWarning[] {
   const workflow = draft.workflows[index]; if (!workflow) return [];
   const warnings: WorkflowWarning[] = [], events = [];
@@ -109,6 +118,8 @@ export function workflowWarnings(draft: WorkflowFormDraft, index: number): Workf
     if (events.length !== (workflow.failureEvent === null ? 2 : 3) || signatures.some(value => value === null) || new Set(signatures).size !== 1)
       warnings.push({ field: 'dimensions', message: `${key}: 모든 단계에 같은 자료형과 허용 값을 가진 필수 속성이 필요해요.` });
   }
+  if (workflow.failureReasonProperty !== undefined && !workflowFailureReasonChoices(draft, index).includes(workflow.failureReasonProperty))
+    warnings.push({ field: 'failureReasonProperty', message: '실패 이벤트의 enum 속성을 다시 선택하거나 원인 집계를 해제하세요.' });
   return warnings;
 }
 export function workflowIssueTarget(text: string, issue: SchemaValidation['issues'][number]): string | null {
@@ -116,7 +127,7 @@ export function workflowIssueTarget(text: string, issue: SchemaValidation['issue
     try { readWorkflowForm(text); return 'schema-representative-workflow'; } catch { return null; }
   }
   if (issue.path === '/workflows') return 'schema-workflow-heading';
-  const match = /^\/workflows\/(\d+)(?:\/(id|startEvent|successEvent|failureEvent|dimensions)(?:\/\d+)?)?$/.exec(issue.path);
+  const match = /^\/workflows\/(\d+)(?:\/(id|startEvent|successEvent|failureEvent|failureReasonProperty|dimensions)(?:\/\d+)?)?$/.exec(issue.path);
   if (!match) return null;
   let draft: WorkflowFormDraft; try { draft = readWorkflowForm(text); } catch { return null; }
   const index = Number(match[1]), workflow = draft.workflows[index]; if (!workflow) return null;
@@ -127,4 +138,10 @@ export function workflowIssueTarget(text: string, issue: SchemaValidation['issue
   if (workflow.dimensions.length > 4 || new Set(workflow.dimensions).size !== workflow.dimensions.length || !workflow.dimensions.every(key => NAME.test(key)))
     return `${base}-dimensions`;
   return null;
+}
+
+export function workflowFailureReasonChoices(draft: WorkflowFormDraft, index: number): string[] {
+  const workflow = draft.workflows[index];
+  const event = draft.events.find(event => event.source === 'browser' && event.name === workflow?.failureEvent);
+  return Object.entries(event?.properties ?? {}).filter(([name, property]) => NAME.test(name) && record(property) && property.type === 'enum').map(([name]) => name);
 }

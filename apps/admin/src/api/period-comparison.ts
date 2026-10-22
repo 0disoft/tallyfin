@@ -1,3 +1,4 @@
+import { validateFailureReasonDefinition } from './workflow-failure-reasons.ts';
 import { ApiError } from './client.ts';
 import { toApiError } from './load-state.ts';
 import type { ApiClient } from './client.ts';
@@ -67,6 +68,7 @@ export function validateWorkflowSummary(value: WorkflowSummary, definition: Work
 }
 export function validateWorkflowLoad({ definition, response }: WorkflowLoad, registry: Registry, range: DateRange): void {
   validateWorkflowDurations(response);
+  validateFailureReasonDefinition(response, definition, registry);
   if (!registry.workflows.some(item => item.id === definition.id) || response.workflowId !== definition.id || response.cohortBasis !== 'startedAt') invalid();
   assertMeta(response.meta, registry, range); validateWorkflowSummary(response.summary, definition);
   if (response.days.length !== days(range)) invalid();

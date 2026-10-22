@@ -1,5 +1,30 @@
 # Tallyfin 프론트엔드 설계
 
+## 목표 화면의 실패 원인 — 2026-10-23
+
+LiveGoals의 각 작업 흐름에 WorkflowFailureReasons를 연결한다. 기존 일별 응답만 사용하고
+추가 조회·타이머·전역 상태를 만들지 않는다. 실패 이벤트 없음, 원인 속성 미설정, 구 응답의
+정보 없음, 확정 실패 없음, 전체 미측정과 일부 측정을 구별한다. 속성명·측정·누락·미측정·
+집계 중 상태를 표시한다. 원인별 비율의 분모는 누락·미측정까지 포함한 전체 확정 실패다.
+누락 행을 따로 표시하며 미측정 때문에 합계가 100%보다 작을 수 있음을 알린다.
+
+파서는 enum 정렬·중복·안전 정수·측정/누락/미측정 관계와 일별/기간 합계를 확인한다.
+조회·CSV snapshot 검증은 발행 스키마의 속성명/허용 값도 확인한다. 구 서버의 필드 생략은
+정보 없음으로 유지하고 null은 미설정으로 구별한다. 모순이 있으면 해당 흐름 조회/CSV를 막는다.
+
+목표 CSV는 workflow_failure_reason_total/day 행과 failure_reason_property, failure_reason,
+failure_reason_measured_failures, failure_reason_missing_failures, failure_reason_unmeasured_failures,
+failure_reason_availability 열을 끝에 추가한다. 기존 열 순서는 유지한다. metric으로 enum·
+missing·unmeasured 행을 구별하며 전체 미측정 분포의 enum 건수/비율은 비워 둔다.
+현재/직전 기간의 측정 범위는 별도로 기록하며 측정 범위가 다른 변화율은 만들지 않는다.
+
+SchemaWorkflowForm은 선택 실패 이벤트의 enum 속성 선택·해제를 제공한다. 빈 선택은 선택
+필드를 제거한다. 실패 이벤트 변경으로 참조가 틀어지면 경고하며 서버 검증은
+/workflows/{index}/failureReasonProperty를 해당 select로 연결한다. 검증·개인정보 검토·발행
+게이트와 권한 잠금은 기존 편집기 수명을 따른다. 새 버전에만 적용하고 기존 발행본은 유지한다.
+표는 이름과 행/열 헤더를 제공하고 작은 화면에서는 키보드로 가로 스크롤할 수 있다.
+
+
 ## 목표 화면의 완료 소요시간 — 2026-10-23
 
 LiveGoals의 각 작업 흐름에 WorkflowDuration을 추가했다. 기존 일별 응답의 기간 duration을

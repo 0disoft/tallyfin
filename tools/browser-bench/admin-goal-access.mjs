@@ -106,8 +106,22 @@ try {
   await page.locator('#schema-draft').fill(originalDraft);
   await expect(representative).toHaveValue('calculation');
   await page.screenshot({ path: resolve(directory, 'representative-editor.png'), fullPage: true });
+  scenarios.push(stage);
+  stage = 'failure-reason-editor';
+  const failurePhase = page.locator('#schema-workflow-0-failureEvent');
+  const failureProperty = page.getByRole('combobox', { name: '실패 원인 속성', exact: true });
+  await failurePhase.selectOption('validation_error'); await failureProperty.selectOption('error');
+  assert.equal(JSON.parse(await page.locator('#schema-draft').inputValue()).workflows[0].failureReasonProperty, 'error');
+  await failureProperty.selectOption('');
+  assert.equal(Object.hasOwn(JSON.parse(await page.locator('#schema-draft').inputValue()).workflows[0], 'failureReasonProperty'), false);
+  await failureProperty.selectOption('error'); await failurePhase.selectOption({ label: '실패 단계 없음' });
+  await page.getByRole('button', { name: '정의 검증', exact: true }).click();
+  await expect(page.locator('#schema-errors')).toContainText('/workflows/0/failureReasonProperty');
+  await expect(failureProperty).toBeFocused(); await expect(failureProperty).toHaveAttribute('aria-invalid', 'true');
+  await page.locator('#schema-draft').fill(originalDraft); scenarios.push(stage);
+
   await page.getByRole('button', { name: '개요', exact: true }).click();
-  await page.getByRole('heading', { name: '서비스 통합 현황', exact: true }).waitFor(); scenarios.push(stage);
+  await page.getByRole('heading', { name: '서비스 통합 현황', exact: true }).waitFor();
   // Changing the project unmounts the retained settings workspace before the existing table-removal checks.
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
   await page.getByRole('heading', { name: '대표 흐름 미지정', exact: true }).waitFor();
@@ -262,6 +276,40 @@ try {
   downloaded = await pendingDownload; contents = await readFile(await downloaded.path(), 'utf8');
   assert.ok(contents.includes('"unmeasured"'));
   assert.ok(contents.includes('"access-other"')); assert.equal(contents.includes('"sembom"'), false); scenarios.push(stage);
+  stage = 'failure-reason-distribution';
+  // The preceding late-denial scenario revoked this grant. Restore it before refreshing the project list.
+  await provisioner.apply(await provisioner.plan('grant', { projectId: 'sembom', issuer: local.issuer, subject, role: 'owner' }));
+  const reasonRegistry = structuredClone(await store.loadRegistry('access-other', 1)); reasonRegistry.schemaVersion = 2;
+  Object.assign(reasonRegistry.workflows[0], { failureEvent: 'validation_error', failureReasonProperty: 'error' });
+  await provisioner.apply(await provisioner.plan('register', reasonRegistry));
+  for (const error of ['required', 'range', undefined]) {
+    const at = Date.now(), occurredAt = new Date(at).toISOString(), attemptId = crypto.randomUUID();
+    const attempt = { workflowId: 'calculation', attemptId, startedAt: occurredAt };
+    const events = ['input_start', 'validation_error'].map(name => ({ eventId: crypto.randomUUID(), name, occurredAt, attempt,
+      properties: { tool: 'loan', ...(name === 'validation_error' && error !== undefined ? { error } : {}) } }));
+    const batch = parseBatch(JSON.stringify({ schemaVersion: 2, source: 'browser', events }));
+    await store.commit(await prepareBatch(batch, reasonRegistry, at), reasonRegistry);
+  }
+  await local.db.prepare("UPDATE workflow_daily_counts SET started_count=started_count+1, failed_count=failed_count+1 WHERE project_id='access-other' AND schema_version=2").run();
+  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '스키마 버전', exact: true })).toHaveValue('2');
+  const reasonPanel = page.locator('.workflow-failure-reasons');
+  await expect(reasonPanel).toContainText('측정 3건 · 원인 누락 1건 · 미측정 실패 1건');
+  await expect(reasonPanel.locator('tbody tr')).toHaveCount(3);
+  assert.deepEqual(await reasonPanel.locator('tbody tr').evaluateAll(tableCells),
+    [['range', '1', '25.0%'], ['required', '1', '25.0%'], ['원인 누락', '1', '25.0%']]);
+  await expect(workflowCsv).toBeEnabled();
+  pendingDownload = page.waitForEvent('download'); await workflowCsv.click();
+  downloaded = await pendingDownload; contents = await readFile(await downloaded.path(), 'utf8');
+  const reasonLines = contents.replace(/^\uFEFF/, '').trimEnd().split('\r\n'), reasonColumns = cells(reasonLines.shift());
+  const reasonRecords = reasonLines.map(line => { const row = cells(line); return Object.fromEntries(reasonColumns.map((key, i) => [key, row[i]])); });
+  assert.deepEqual(reasonRecords.filter(row => row.record_type === 'workflow_failure_reason_total').map(row =>
+    [row.metric, row.failure_reason, row.count, row.share_percent]),
+    [['enum', 'range', '1', '25'], ['enum', 'required', '1', '25'], ['missing', '', '1', '25'], ['unmeasured', '', '1', '25']]);
+  await reasonPanel.scrollIntoViewIfNeeded(); await page.screenshot({ path: resolve(directory, 'failure-reasons-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 }); await reasonPanel.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: resolve(directory, 'failure-reasons-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 }); scenarios.push(stage);
   stage = 'bulk-overview-access-revocation';
   await page.getByRole('button', { name: '개요', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
@@ -279,7 +327,7 @@ try {
   await expect(page.locator('.event-table, .goal-section, .funnel-section')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /CSV 내려받기/ })).toHaveCount(0);
   assert.equal(routeError, false); assert.equal(pageErrors, 0); assert.equal(observed.length, 7);
-  const report = { verified: true, browser: browser.version(), scenarios, observed, seededEvents: 16, csvCounts,
+  const report = { verified: true, browser: browser.version(), scenarios, observed, seededEvents: 22, csvCounts, failureReasonEditorVerified: true, failureReasonDistributionVerified: true,
     displayedComparisonVerified: true, downloadedComparisonVerified: true,
     signedLocalIdentity: true, actualD1Revocation: true, staleTablesCleared: true, exportsBlocked: true,
     explicitRecovery: true, otherProjectExportIsolated: true, lateDenialIgnored: true, disconnectClears: true,

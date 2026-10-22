@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflowFocusAfterChange, workflowIssueTarget, workflowWarnings } from './api/schema-workflow-form.ts';
+import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflowFailureReasonChoices, workflowFocusAfterChange, workflowIssueTarget, workflowWarnings } from './api/schema-workflow-form.ts';
 import type { WorkflowChange, WorkflowFormDraft, WorkflowPhase } from './api/schema-workflow-form.ts';
 import type { SchemaValidation } from './api/schema-contract.ts';
 
@@ -73,6 +73,8 @@ export default function SchemaWorkflowForm({ draft, editable, onChange, onOpenJs
       /** A raw failure string equal to the sentinel would otherwise render as "no failure", so shift the sentinel for that row. */
       const noFailure = workflow.failureEvent === NO_FAILURE ? '@none-alt' : NO_FAILURE;
       const warnings = workflowWarnings(form, index), dimensionWarning = warnings.filter(item => item.field === 'dimensions').map(item => item.message).join(' ');
+      const reasonChoices = workflowFailureReasonChoices(form, index), reason = workflow.failureReasonProperty ?? '';
+      const reasonInvalid = Object.hasOwn(workflow, 'failureReasonProperty') && !reasonChoices.includes(reason);
       const described = (id: string, extra: string[] = []) => ['schema-workflow-help', `${base}-help`, ...extra, ...(errorTarget === id ? ['schema-errors'] : [])].join(' ');
       return <fieldset className="schema-workflow-row" key={index}>
         <legend>{index + 1}번 작업 흐름</legend>
@@ -103,6 +105,18 @@ export default function SchemaWorkflowForm({ draft, editable, onChange, onOpenJs
             </select>
             {warning && <p className="schema-workflow-warning" id={`${id}-warning`}>{warning}</p>}</div>;
         })}</div>
+        <div className="settings-field"><label className="field-label" htmlFor={`${base}-failureReasonProperty`}>실패 원인 속성</label>
+          <select className="text-input settings-select" id={`${base}-failureReasonProperty`} value={reason} disabled={!editable}
+            aria-invalid={reasonInvalid || errorTarget === `${base}-failureReasonProperty` || undefined}
+            aria-describedby={described(`${base}-failureReasonProperty`, [`${base}-reason-help`, ...(reasonInvalid ? [`${base}-reason-warning`] : [])])}
+            onChange={event => change({ kind: 'failureReason', index, value: event.target.value })}>
+            <option value="">실패 원인 집계 안 함</option>
+            {reasonChoices.map(name => <option key={name} value={name}>{name}</option>)}
+            {reasonInvalid && reason !== '' && <option value={reason}>{reason} (사용할 수 없음)</option>}
+          </select>
+          <p className="field-help" id={`${base}-reason-help`}>실패 이벤트의 enum 속성 하나를 선택해요. 새 버전 발행 이후 최초 실패 원인만 집계하며, 원인 누락과 과거 미측정을 구별해요.</p>
+          {reasonInvalid && <p className="schema-workflow-warning" id={`${base}-reason-warning`}>실패 이벤트의 enum 속성을 다시 선택하거나 원인 집계를 해제하세요.</p>}
+        </div>
         <div className="settings-field schema-workflow-dimension-field">
           <span className="field-label" id={`${base}-dimensions-label`}>비교 기준 속성</span>
           <div className="schema-workflow-dimensions" id={`${base}-dimensions`} role="group" tabIndex={-1} aria-labelledby={`${base}-dimensions-label`}

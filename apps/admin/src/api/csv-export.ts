@@ -1,3 +1,4 @@
+import { failureReasonAvailability, type FailureReasons } from './workflow-failure-reasons.ts';
 import { analyzeEventSeries } from './event-analysis.ts';
 import { compareEventProperties } from './event-property-comparison.ts';
 import { comparisonRows, countChange, rateChange, previousRange, validateSnapshot, type PeriodSnapshot } from './period-comparison.ts';
@@ -18,7 +19,9 @@ export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'tim
   'record_type', 'metric', 'name', 'label', 'cohort_basis', 'date', 'group_by', 'value_type', 'value', 'count', 'share_percent',
   'started_attempts', 'succeeded_attempts', 'failed_attempts', 'pending_attempts', 'completion_rate_percent',
   'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit', 'query_source',
-  'duration_range', 'duration_measured_attempts', 'duration_unmeasured_attempts', 'duration_availability'] as const;
+  'duration_range', 'duration_measured_attempts', 'duration_unmeasured_attempts', 'duration_availability',
+  'failure_reason_property', 'failure_reason', 'failure_reason_measured_failures', 'failure_reason_missing_failures',
+  'failure_reason_unmeasured_failures', 'failure_reason_availability'] as const;
 
 /** Quoted UTF-8 CSV for spreadsheet viewing. Protect text cells, never alter numeric negatives. */
 export function csvCell(value: Cell): string {
@@ -59,6 +62,11 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
     duration_measured_attempts: duration?.measuredAttempts, duration_unmeasured_attempts: duration?.unmeasuredAttempts,
     duration_availability: durationAvailability(duration),
   });
+  const reasonFields = (reasons: FailureReasons | null | undefined, property?: string): Row => ({
+    failure_reason_property: property, failure_reason_measured_failures: reasons?.measuredFailures,
+    failure_reason_missing_failures: reasons?.missingReasonFailures, failure_reason_unmeasured_failures: reasons?.unmeasuredFailures,
+    failure_reason_availability: failureReasonAvailability(reasons),
+  });
   const visibleWorkflows = (snapshot: PeriodSnapshot) => view === 'overview'
     ? snapshot.workflows.filter(flow => flow.definition.id === registry.representativeWorkflowId) : snapshot.workflows;
   const addPeriod = (snapshot: PeriodSnapshot, period: string) => {
@@ -77,10 +85,10 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
       for (const flow of flows) {
         const base: Row = { name: flow.definition.id, label: flow.definition.label, cohort_basis: flow.response.cohortBasis };
         emit(flow.response.meta, period, { ...base, record_type: 'workflow_total', ...workflowFields(flow.response.summary),
-          ...durationFields(flow.response.duration),
+          ...durationFields(flow.response.duration), ...reasonFields(flow.response.failureReasons, flow.definition.failureReasonProperty),
           provisional: flow.response.days.some(day => day.provisional) });
         for (const day of flow.response.days) emit(flow.response.meta, period, { ...base, record_type: 'workflow_day',
-          date: day.date, ...workflowFields(day), ...durationFields(day.duration), provisional: day.provisional });
+          date: day.date, ...workflowFields(day), ...durationFields(day.duration), ...reasonFields(day.failureReasons, flow.definition.failureReasonProperty), provisional: day.provisional });
         if (view === 'goals') {
           const addDuration = (duration: WorkflowDuration | undefined, date?: string, provisional?: boolean) => {
             if (!duration) return;
@@ -96,6 +104,22 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
           };
           addDuration(flow.response.duration, undefined, flow.response.days.some(day => day.provisional));
           for (const day of flow.response.days) addDuration(day.duration, day.date, day.provisional);
+          const addReasons = (reasons: FailureReasons | null | undefined, failed: number | null, date?: string, provisional?: boolean) => {
+            if (!reasons) return;
+            const measured = reasons.measuredFailures > 0;
+            for (const bucket of [...reasons.buckets.map(bucket => ({ ...bucket, metric: 'enum' })),
+              { value: '', failedAttempts: reasons.missingReasonFailures, metric: 'missing' },
+              { value: '', failedAttempts: reasons.unmeasuredFailures, metric: 'unmeasured' }]) {
+              const available = bucket.metric === 'unmeasured' || measured || failed === 0;
+              emit(flow.response.meta, period, { ...base, record_type: date ? 'workflow_failure_reason_day' : 'workflow_failure_reason_total',
+                date, provisional, metric: bucket.metric, failure_reason: bucket.value,
+                ...reasonFields(reasons, flow.definition.failureReasonProperty), availability: failureReasonAvailability(reasons),
+                count: available ? bucket.failedAttempts : null,
+                share_percent: available && failed ? bucket.failedAttempts / failed * 100 : null });
+            }
+          };
+          addReasons(flow.response.failureReasons, flow.response.summary.failedAttempts, undefined, flow.response.days.some(day => day.provisional));
+          for (const day of flow.response.days) addReasons(day.failureReasons, day.failedAttempts, day.date, day.provisional);
         }
       }
     }

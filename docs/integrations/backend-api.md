@@ -6,7 +6,8 @@ workflow.failureReasonProperty는 실패 이벤트의 enum 속성만 선택한�
 각 days의 선택 failureReasons는 property, measuredFailures, missingReasonFailures,
 unmeasuredFailures, buckets(value, failedAttempts)를 제공한다. 미설정은 null, 구 응답의
 필드 생략은 정보 없음이다. enum 합계 + 누락 = 측정, 측정 + 미측정 = 전체 확정 실패다.
-화면과 CSV 비율은 전체 확정 실패를 분모로 사용한다. 최초 확정 실패만 한 번 집계하며
+화면과 CSV 비율은 전체 확정 실패를 분모로 사용한다. 관리자 파서와 CSV는
+설정된 enum과 일별/기간 합계를 검증하고 구 응답의 누락 필드를 0으로 만들지 않는다. 최초 확정 실패만 한 번 집계하며
 시작일·버전별로 분리한다. 새 수집기 배포 전에 0012 다음 0013 DB 확장이 필요하다.
 
 
