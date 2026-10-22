@@ -21,7 +21,7 @@ export function useMainAnalysis({ client, activeProjectId, activeTimeZone, versi
     (async () => {
       try {
         const registry = await client.getSchema(activeProjectId, version, { signal: controller.signal });
-        const snapshot = await loadPeriod(client, registry, range, controller.signal, source);
+        const snapshot = await loadPeriod(client, registry, range, controller.signal, source, view);
         if (controller.signal.aborted) return;
         setMain({ status: 'ready', key: mainKey, data: { registry, ...snapshot } });
       } catch (error) {
@@ -41,7 +41,7 @@ export function usePeriodComparison({ client, compare, aggregateComparisonAvaila
     if (!compare || !aggregateComparisonAvailable || view === 'settings' || !client || !mainData || comparisonError) { setComparison({ status: 'idle' }); return; }
     const controller = new AbortController();
     setComparison({ status: 'loading', key: comparisonKey });
-    loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal, source)
+    loadPeriod(client, mainData.registry, previousRange(mainData.range), controller.signal, source, view)
       .then(data => { if (!controller.signal.aborted) setComparison({ status: 'ready', key: comparisonKey, data }); })
       .catch(error => { if (!controller.signal.aborted) setComparison({ status: 'error', key: comparisonKey, error: toApiError(error) }); });
     return () => controller.abort();

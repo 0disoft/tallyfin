@@ -580,3 +580,28 @@ test('abort while awaiting shared refresh ends only that request and destroy pre
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(calls.length, 1);
 });
+
+
+test('screen-scoped periods skip unrelated workflows and CSV rejects missing goal data', async () => {
+  const { registry, snapshot } = comparisonFixture();
+  const second = { ...registry.workflows[0], id: 'other', label: 'Other' };
+  registry.workflows.push(second);
+  const calls = [];
+  const client = { getSummary: async () => snapshot.summary,
+    getWorkflowDaily: async (_id, workflowId) => {
+      calls.push(workflowId);
+      if (workflowId === 'other') throw Error('unrelated workflow unavailable');
+      return snapshot.workflows[0].response;
+    } };
+  const signal = new AbortController().signal;
+  const events = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'events');
+  assert.deepEqual(calls, []); assert.deepEqual(events.workflows, []);
+  assert.ok(analyticsCsv({ registry, current: events, view: 'events' }).text.includes('event_total'));
+  assert.throws(() => analyticsCsv({ registry, current: events, view: 'goals' }));
+  const overview = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'overview');
+  assert.deepEqual(calls, ['convert']); assert.equal(overview.workflows.length, 1);
+  assert.ok(analyticsCsv({ registry, current: overview, view: 'overview' }).text.includes('workflow_total'));
+  await assert.rejects(loadPeriod(client, registry, snapshot.range, signal, 'browser', 'goals'), /unrelated workflow/);
+  assert.throws(() => validateSnapshot({ ...events, view: 'goals' }, registry));
+  assert.throws(() => validateSnapshot({ ...overview, workflows: [{ ...overview.workflows[0], definition: second }] }, registry));
+});

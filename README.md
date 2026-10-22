@@ -13,7 +13,7 @@ Tallyfin은 Rodisoft의 여러 서비스가 공통으로 쓰는 가벼운 제품
 - `packages/server`: 의존성 없는 서버 발행 SDK. `createEvent`·재시도 배치 `send`.
 - `packages/auth-oidc`: 관리자·발행자 OIDC JWT 검증기.
 - `apps/admin`: 프로젝트 개요·이벤트 분석·설정·목표·퍼널 화면, browser/server 출처 선택 조회, 권한 조회·변경, 설정의 owner 전용 발행자 관리(`LivePublishers`), 관리자 변경 이력, 자기 계정 조회, 공개 클라이언트 OIDC PKCE 로그인 코드. 퍼널 단계 편집 폼과 퍼널 CSV도 로컬에서 연결했다.
-- `db/migrations`: `0001_initial.sql`과 `0002`~`0009`. 0007은 다단계 퍼널(`funnel_runs`·`funnel_daily_counts`), 0008은 발행 권한 감사 action(`publisher.granted`·`publisher.revoked`)을 넣는 `admin_changes` 재생성, 0009는 발행 권한에 불변 부여 ID `grant_id`를 더하는 `project_publishers` 재생성이다. 지금까지 9개 마이그레이션·16개 테이블이다.
+- `db/migrations`: `0001_initial.sql`과 `0002`~`0011`. 0007은 다단계 퍼널(`funnel_runs`·`funnel_daily_counts`), 0008은 발행 권한 감사 action(`publisher.granted`·`publisher.revoked`)을 넣는 `admin_changes` 재생성, 0009는 발행 권한에 불변 부여 ID `grant_id`를 더하는 `project_publishers` 재생성이다. 0010은 관리자 권한 revision, 0011은 분석 조회 인덱스를 추가한다. 지금까지 11개 마이그레이션·16개 테이블이다.
 
 2~10단계 퍼널은 등록·검증·발행·정의 조회까지 로컬에서 구현했고, browser·server 수집 경로가 연결 이벤트를 영수증·할당량·집계와 같은 D1 batch에 저장한다. 연결 상태 72시간과 단계 집계 90일 정리도 로컬에서 확인했다. 서버 발행은 코어 검증부터 전용 `POST /v1/projects/{projectId}/server-batches` endpoint, 발행자 OIDC 검증 배선, 발행자 권한 등록·회수 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`), `publisher-grant`·`publisher-revoke` CLI, 서버 출처 조회 화면까지 로컬에서 구현·검증했다. 발행 권한 부여·회수는 API와 CLI 모두 관리자 변경 이력에 감사 행을 같은 D1 batch로 남기고, 다시 실행해 이미 원하는 상태면 새 이력을 만들지 않는다.
 

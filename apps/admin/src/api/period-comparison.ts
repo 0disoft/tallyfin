@@ -5,7 +5,13 @@ import { ContractError } from './validate.ts';
 
 export type DateRange = { from: string; to: string };
 export type WorkflowLoad = { definition: WorkflowDefinition; response: WorkflowResponse };
-export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad[]; range: DateRange };
+export type AnalysisView = 'overview' | 'events' | 'goals';
+export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad[]; range: DateRange; view?: AnalysisView };
+
+export function periodWorkflows(registry: Registry, source: EventSource, view: AnalysisView = 'goals'): WorkflowDefinition[] {
+  if (source !== 'browser' || view === 'events') return [];
+  return view === 'overview' ? registry.workflows.slice(0, 1) : registry.workflows;
+}
 export type ComparisonRow = { key: string; label: string; current: number | null; previous: number | null; rate?: boolean };
 export function comparisonRows(current: PeriodSnapshot, previous: PeriodSnapshot, view: string): ComparisonRow[] {
   if (current.summary.meta.source !== previous.summary.meta.source) invalid();
@@ -77,18 +83,20 @@ export function validateSnapshot(snapshot: PeriodSnapshot, registry: Registry, s
   if (summary.events.length !== expected.length || new Set(summary.events.map(event => event.name)).size !== expected.length ||
     summary.events.some(event => !expected.includes(event.name)) ||
     summary.events.reduce((total, event) => count(total + count(event.count)), 0) !== count(summary.totalEvents)) invalid();
-  if (workflows.length !== (source === 'browser' ? registry.workflows.length : 0) || new Set(workflows.map(load => load.definition.id)).size !== workflows.length) invalid();
+  if (snapshot.view !== undefined && !['overview', 'events', 'goals'].includes(snapshot.view)) invalid();
+  const expectedFlows = periodWorkflows(registry, source, snapshot.view);
+  if (workflows.length !== expectedFlows.length || workflows.some((load, index) => load.definition.id !== expectedFlows[index]!.id)) invalid();
   for (const workflow of workflows) validateWorkflowLoad(workflow, registry, range);
 }
 /** Separate requests keep each window within the API's 31-day limit. */
-export async function loadPeriod(client: ApiClient, registry: Registry, range: DateRange, signal: AbortSignal, source: EventSource = 'browser'): Promise<PeriodSnapshot> {
+export async function loadPeriod(client: ApiClient, registry: Registry, range: DateRange, signal: AbortSignal, source: EventSource = 'browser', view?: AnalysisView): Promise<PeriodSnapshot> {
   const options = { schemaVersion: registry.schemaVersion, ...range, signal };
   const [summary, workflows] = await Promise.all([
     client.getSummary(registry.project.id, { ...options, source }),
-    Promise.all((source === 'browser' ? registry.workflows : []).map(async definition => ({ definition,
+    Promise.all(periodWorkflows(registry, source, view).map(async definition => ({ definition,
       response: await client.getWorkflowDaily(registry.project.id, definition.id, options) }))),
   ]);
-  const snapshot = { summary, workflows, range };
+  const snapshot = { summary, workflows, range, ...(view ? { view } : {}) };
   validateSnapshot(snapshot, registry, source);
   return snapshot;
 }

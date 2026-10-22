@@ -34,6 +34,7 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
   const { registry, current, previous, view, selection } = input;
   const source = input.source ?? 'browser';
   if (source === 'server' && view === 'goals') invalid();
+  if ((current.view && current.view !== view) || (previous?.view && previous.view !== view)) invalid();
   validateSnapshot(current, registry, source);
   if (previous) {
     validateSnapshot(previous, registry, source);
