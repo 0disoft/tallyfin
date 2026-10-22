@@ -425,6 +425,16 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+    OverviewPeriod:
+      type: object
+      additionalProperties: false
+      required: [timeZone, from, to, previousFrom, previousTo]
+      properties:
+        timeZone: { type: string, minLength: 1, maxLength: 64 }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        previousFrom: { type: string, format: date }
+        previousTo: { type: string, format: date }
     OverviewWorkflowSample:
       type: object
       additionalProperties: false
@@ -452,7 +462,7 @@ components:
     OverviewRow:
       type: object
       additionalProperties: false
-      required: [projectId, version, latestReceivedAt, events, previousEvents, workflowLabel, completion, previousCompletion, workflowUnavailable, workflowStats, rejected, rejectionUnavailable, error, accessDenied]
+      required: [projectId, version, latestReceivedAt, period, events, previousEvents, workflowLabel, completion, previousCompletion, workflowUnavailable, workflowStats, rejected, rejectionUnavailable, error, accessDenied]
       properties:
         projectId:
           $ref: "#/components/schemas/ProjectId"
@@ -463,6 +473,11 @@ components:
         latestReceivedAt:
           anyOf:
             - { type: string, format: date-time }
+            - { type: "null" }
+        period:
+          description: Explicit project-local current and previous seven-day windows at generatedAt; null on row failure.
+          anyOf:
+            - $ref: "#/components/schemas/OverviewPeriod"
             - { type: "null" }
         events:
           anyOf:

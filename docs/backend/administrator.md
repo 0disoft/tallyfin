@@ -12,6 +12,10 @@ workflowStats는 현재/직전 기간의 시작·성공·실패·진행 중 건�
 provisional은 기존 일별 조회와 같은 현지 날짜 종료 후 2일 규칙을 따른다. 흐름 없음·
 권한/집계 실패·서버 출처는 workflowStats=null이다. 추가 SQL은 실행하지 않는다.
 
+성공 행의 period는 timeZone·from/to·previousFrom/previousTo를 명시한다. 활성 스키마가
+없어도 기간은 제공하며 오류/권한 상실 행은 period=null로 지운다. generatedAt은 요청
+시각에 고정한 기간 계산 기준이며 모든 DB 읽기가 한 시점의 스냅샷이라는 뜻은 아니다.
+
 메타데이터 한 번과 권한 재검사·집계 batch 한 번 이후 거부 기록을 서비스별 순차
 페이지로 읽는다. 4,096행을 즉시 합산해 원문을 누적하지 않으며 최대 17 batch·42 SQL이다.
 모든 집계에 grant 조건을 적용하고 두 batch 사이의 활성 버전·정의·시간대 변경은

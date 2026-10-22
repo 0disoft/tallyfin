@@ -21,6 +21,7 @@ test('overview makes exactly one protected GET for five services, retaining orde
   try {
     const rows = await projectOverview(f.client, projects, 'browser', signal, now);
     assert.deepEqual(rows.map(row => row.project.id), projects.map(project => project.id));
+    assert.ok(rows.every(row => row.generatedAt === now.toISOString()));
     assert.ok(rows.every(row => row.events === 0 && row.rejected === 0 && row.completion === null));
     assert.equal(f.calls.length, 1);
     const { url, options } = f.calls[0], parsed = new URL(url, 'https://admin.invalid');
@@ -87,4 +88,10 @@ test('a stalled 401 body revokes all requested analytics immediately on headers'
     await assert.rejects(read, e => e.kind === 'unauthorized');
     assert.deepEqual(denials, projects.map(p => p.id));
   } finally { release(); client.destroy(); }
+});
+test('overview rejects period metadata that changes the known project time zone', async () => {
+  const body = payload(); body.data[0].period = { timeZone: 'UTC', from: '2026-10-17', to: '2026-10-23', previousFrom: '2026-10-10', previousTo: '2026-10-16' };
+  const f = fixture(body);
+  try { await assert.rejects(projectOverview(f.client, projects, 'browser', new AbortController().signal)); }
+  finally { f.client.destroy(); }
 });

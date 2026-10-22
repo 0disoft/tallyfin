@@ -42,9 +42,12 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
   const statements: SqlStatement[] = [metadata(db, principal, ids)], plans = new Map<string, Plan>();
   const utcTo = new Date(now).toISOString().slice(0, 10), utcFrom = shift(utcTo, -6);
   for (const row of rows) {
-    const p = states.get(row.projectId); if (!p || p.version === null) continue;
+    const p = states.get(row.projectId); if (!p) continue;
     try {
-      const registry = registryFor(p, options), to = localDate(now, p.time_zone), split = shift(to, -6), from = shift(split, -7);
+      const to = localDate(now, p.time_zone), split = shift(to, -6), from = shift(split, -7);
+      row.period = { timeZone: p.time_zone, from: split, to, previousFrom: from, previousTo: shift(split, -1) };
+      if (p.version === null) continue;
+      const registry = registryFor(p, options);
       const offset = statements.length;
       // Every aggregate repeats authorization; the metadata below shares this batch snapshot.
       const grant = [p.id, principal.issuer, principal.subject];
@@ -58,7 +61,7 @@ export async function projectOverview(db: SqlDatabase, principal: AdminPrincipal
         AND workflow_id = ? AND cohort_date BETWEEN ? AND ? AND EXISTS (SELECT 1 FROM projects p WHERE p.id = ? AND ${access})
         GROUP BY cohort_date LIMIT 15`).bind(p.id, p.version, workflow?.id ?? '', from, to, ...grant));
       plans.set(p.id, { state: p, registry, from, split, to, offset });
-    } catch { row.error = true; }
+    } catch { row.error = true; row.period = null; }
   }
   check();
   const results = plans.size ? checked(await db.batch<State | EventRow | WorkflowRow>(statements), statements.length) : []; check();

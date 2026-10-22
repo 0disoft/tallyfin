@@ -10,6 +10,8 @@ import { createCollector } from '../src/handler.ts';
 let fixture: Awaited<ReturnType<typeof setup>>;
 const principal = { issuer: 'https://identity.example.invalid', subject: 'overview-reader' };
 const ids = ['sembom', 'service-b', 'service-c', 'service-d', 'service-e'];
+const day = localDate(now, registry.project.timeZone), shift = (days: number) => new Date(Date.parse(day) + days * DAY).toISOString().slice(0, 10);
+const period = { timeZone: registry.project.timeZone, from: shift(-6), to: day, previousFrom: shift(-13), previousTo: shift(-7) };
 before(async () => { fixture = await setup(); });
 after(async () => { await fixture?.mf.dispose(); });
 beforeEach(async () => {
@@ -77,7 +79,7 @@ test('missing and foreign projects are identical denials; empty active schemas r
   const body = parseOverview(await (await handler()(request('projectIds=sembom,service-b,missing,service-c'))).json());
   assert.equal(body.data[0]!.error, false);
   for (const row of body.data.slice(1, 3)) assert.deepEqual(row, { ...emptyOverviewRow(row.projectId), error: true, accessDenied: true });
-  assert.deepEqual(body.data[3], { ...emptyOverviewRow('service-c'), rejected: 0 });
+  assert.deepEqual(body.data[3], { ...emptyOverviewRow('service-c'), period, rejected: 0 });
 });
 test('revocation and schema changes between batches cannot expose stale metrics', async () => {
   for (const sql of ["DELETE FROM project_grants WHERE project_id='sembom'",
@@ -179,7 +181,7 @@ test('retired and never-published schemas preserve independent receipt and rejec
   for (const source of ['browser', 'server'] as const) {
     const m = measured(), response = await new D1Queries(m.db).overview(principal, ['sembom', 'service-b'], source, now);
     const body = parseOverview(response);
-    for (const row of body.data) assert.deepEqual(row, { ...emptyOverviewRow(row.projectId), rejected: 3, latestReceivedAt: new Date(now).toISOString() });
+    for (const row of body.data) assert.deepEqual(row, { ...emptyOverviewRow(row.projectId), period, rejected: 3, latestReceivedAt: new Date(now).toISOString() });
     assert.deepEqual(m.totals(), { batches: 3, statements: 5 });
   }
   await fixture.db.prepare("DELETE FROM project_grants WHERE project_id='sembom'").run();
@@ -192,7 +194,7 @@ test('schema-free rejection failure preserves receipt time and never invents a z
   const m = measured(async index => { if (index === 2) throw Error('private storage failure'); });
   const response = await handler(m.db)(request()); assert.equal(response.status, 200);
   const body = parseOverview(await response.json());
-  assert.deepEqual(body.data[0], { ...emptyOverviewRow('sembom'), latestReceivedAt: new Date(now).toISOString(), rejectionUnavailable: true });
+  assert.deepEqual(body.data[0], { ...emptyOverviewRow('sembom'), period, latestReceivedAt: new Date(now).toISOString(), rejectionUnavailable: true });
 });
 test('schema-free diagnostics recheck grants before disclosing receipt history', async () => {
   await fixture.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='sembom'").run();

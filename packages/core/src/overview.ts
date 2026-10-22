@@ -6,9 +6,11 @@ export interface OverviewWorkflowSample {
   startedAttempts: number; succeededAttempts: number; failedAttempts: number | null; pendingAttempts: number; provisional: boolean;
 }
 export interface OverviewWorkflowStats { current: OverviewWorkflowSample; previous: OverviewWorkflowSample }
+export interface OverviewPeriod { timeZone: string; from: string; to: string; previousFrom: string; previousTo: string }
 export interface OverviewRow {
   /** Null version means no schema-based metrics; project diagnostics remain available. */
   projectId: string; version: number | null; latestReceivedAt: string | null;
+  period: OverviewPeriod | null;
   events: number | null; previousEvents: number | null; workflowLabel: string | null;
   completion: number | null; previousCompletion: number | null; workflowUnavailable: boolean;
   workflowStats: OverviewWorkflowStats | null;
@@ -21,6 +23,6 @@ export function validateOverviewInput(ids: readonly string[], source: string): a
     !['browser', 'server'].includes(source)) throw new CollectionError('invalid_request', 400);
 }
 export function emptyOverviewRow(projectId: string): OverviewRow {
-  return { projectId, version: null, latestReceivedAt: null, events: null, previousEvents: null, workflowLabel: null,
+  return { projectId, version: null, latestReceivedAt: null, period: null, events: null, previousEvents: null, workflowLabel: null,
     completion: null, previousCompletion: null, workflowUnavailable: false, workflowStats: null, rejected: null, rejectionUnavailable: false, error: false, accessDenied: false };
 }

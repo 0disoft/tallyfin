@@ -95,6 +95,17 @@ try {
   await expect(overview).toContainText('현재 성공 1 / 시작 1 · 진행 중 0');
   await expect(overview).toContainText('직전 성공 1 / 시작 1 · 진행 중 0');
   await expect(overview).toContainText('집계 중 · 비교 보류');
+  await expect(overview).toContainText('조회 기준(UTC):');
+  await expect(overview).toContainText(`현재 ${localDate(now - 6 * 86400000, 'Asia/Seoul')} ~ ${today}`);
+  await expect(overview).toContainText(`직전 ${localDate(now - 13 * 86400000, 'Asia/Seoul')} ~ ${localDate(now - 7 * 86400000, 'Asia/Seoul')}`);
+  await page.clock.setFixedTime(new Date(Date.now() + 86400000));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(overview.getByRole('status')).toContainText('조회 기준과 현재 기기 날짜가 달라졌어요');
+  assert.equal(overviewRequests, 1);
+  await page.clock.setFixedTime(new Date());
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(overview.getByText('조회 기준과 현재 기기 날짜가 달라졌어요.', { exact: false })).toHaveCount(0);
+  assert.equal(overviewRequests, 1);
   scenarios.push(stage);
   stage = 'schema-free-overview-diagnostics';
   await local.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='access-other'").run();

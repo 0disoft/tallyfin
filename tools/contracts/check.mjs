@@ -423,7 +423,9 @@ check('schema publication requires reviewed definitions and listing/publication 
   assert.equal(operation.responses['405'].headers.Allow.schema.const, 'GET, PUT');
 });
 check('service overview is authenticated, bounded, ordered and aggregate-only', () => {
-  const row = { projectId: 'sembom', version: 1, latestReceivedAt: null, events: 0, previousEvents: 0, workflowLabel: null,
+  const row = { projectId: 'sembom', version: 1, latestReceivedAt: null,
+    period: { timeZone: 'Asia/Seoul', from: '2026-10-17', to: '2026-10-23', previousFrom: '2026-10-10', previousTo: '2026-10-16' },
+    events: 0, previousEvents: 0, workflowLabel: null,
     completion: null, previousCompletion: null, workflowUnavailable: false, workflowStats: null, rejected: 0, rejectionUnavailable: false, error: false, accessDenied: false };
   const body = { source: 'browser', generatedAt: '2026-10-23T00:00:00.000Z', data: [row] };
   assert.ok(validate('OverviewResponse', body));
