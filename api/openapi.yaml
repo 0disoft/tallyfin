@@ -11,6 +11,9 @@ info:
     90-day retention and recorded-changes-only coverage. Server batch schemas and core validation are implemented;
     guarded server persistence and dedicated authenticated server ingestion are implemented locally.
     Event summary and daily reads select browser or server source, defaulting to browser; workflow cohorts remain browser-only.
+    OIDC key endpoint failures return storage_unavailable (503), while invalid credentials return unauthorized (401).
+    Collector requests have a 15-second dependency deadline. A timed-out write may already be committed;
+    clients must reconcile its outcome or use the operation's documented identical-request replay contract.
 tags:
   - name: Collection
     description: Explicit registered browser and server events; no visitor identifiers or free text.

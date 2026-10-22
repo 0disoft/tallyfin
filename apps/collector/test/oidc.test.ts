@@ -6,6 +6,32 @@ import { fileURLToPath } from 'node:url';
 import { Miniflare, Log, LogLevel } from 'miniflare';
 import { migrationStatements, seed } from '../../../packages/storage-d1/test/helpers.ts';
 
+test('real Worker distinguishes provider outages from invalid tokens before database access', async () => {
+  const issuer = 'https://identity.example.invalid', audience = 'test-api';
+  const { privateKey } = await generateKeyPair('RS256');
+  const token = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'test', typ: 'at+jwt' })
+    .setIssuer(issuer).setAudience(audience).setSubject('operator').setIssuedAt().setExpirationTime('5m').sign(privateKey);
+  const root = fileURLToPath(new URL('../../../', import.meta.url));
+  const bundle = await build({ stdin: { resolveDir: root, loader: 'ts', contents: `
+    import { createOidcWorker } from './apps/collector/src/index.ts';
+    export default createOidcWorker({ issuer: ${JSON.stringify(issuer)}, audience: ${JSON.stringify(audience)},
+      jwksUri: ${JSON.stringify(issuer + '/jwks')}, fetchImpl: async () => { throw new Error('private provider detail'); } },
+      { issuer: ${JSON.stringify(issuer)}, audience: 'publisher-api', jwksUri: ${JSON.stringify(issuer + '/jwks')},
+        fetchImpl: async () => { throw new Error('private provider detail'); } });
+  ` }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+  const runtime = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
+    log: new Log(LogLevel.NONE) }); // Deliberately no DB: authentication must finish first.
+  try {
+    for (const path of ['/v1/health', '/v1/projects/sembom/server-batches']) {
+      const response = await runtime.dispatchFetch('https://collector.example.invalid' + path,
+        { method: path.endsWith('server-batches') ? 'POST' : 'GET', headers: { Authorization: `Bearer ${token}` } });
+      assert.equal(response.status, 503); assert.equal((await response.json() as { error: { code: string } }).error.code, 'storage_unavailable');
+      const invalid = await runtime.dispatchFetch('https://collector.example.invalid' + path, { headers: { Authorization: 'Bearer malformed' } });
+      assert.equal(invalid.status, 401); assert.equal((await invalid.text()).includes('private'), false);
+    }
+  } finally { await runtime.dispose(); }
+});
+
 test('OIDC Worker verifies real signatures before applying and rechecking D1 grants', async () => {
   const issuer = 'https://identity.example.invalid';
   const audience = 'tallyfin-test-api';

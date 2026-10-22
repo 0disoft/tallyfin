@@ -24,6 +24,10 @@ export interface OidcOptions {
   timeoutSignal?: (milliseconds: number) => AbortSignal;
 }
 export interface OidcPrincipal { issuer: string; subject: string }
+/** Internal dependency failure; never serialize the cause into an authentication response. */
+export class OidcDependencyError extends Error {
+  constructor(options?: ErrorOptions) { super('OIDC key endpoint unavailable', options); this.name = 'OidcDependencyError'; }
+}
 
 const MAX_TOKEN_LENGTH = 8185; // Fits the collector's 8192-character Authorization limit.
 const MAX_JWKS_BYTES = 65536;
@@ -32,7 +36,7 @@ const TIMEOUT_MS = 5000;
 const COOLDOWN_MS = 30000;
 
 /** No credentials, discovery, or network activity at construction time. */
-export function createOidcVerifier(options: OidcOptions): (bearer: string, options?: { signal?: AbortSignal }) => Promise<OidcPrincipal | null> {
+export function createOidcVerifier(options: OidcOptions): (bearer: string, options?: { signal?: AbortSignal; throwDependencyErrors?: boolean }) => Promise<OidcPrincipal | null> {
   const issuer = httpsUrl(options.issuer, 'issuer');
   const jwksUri = httpsUrl(options.jwksUri, 'jwksUri');
   if (issuer.length > 512 || !options.audience?.trim() || options.audience.length > 512 || options.audience !== options.audience.trim())
@@ -85,10 +89,12 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
             throw new Error('Invalid public OIDC key set');
           if (sequence > applied) { publicBody = body; applied = sequence; generation++; }
           return new Response(body, { headers: { 'Content-Type': 'application/jwk-set+json' } });
-        } catch {
+        } catch (cause) {
           if (sequence >= applied) retryAfter = elapsed() + COOLDOWN_MS;
-          throw new Error('OIDC key endpoint unavailable');
+          throw new OidcDependencyError({ cause });
         }
+      }).catch(cause => {
+        throw cause instanceof OidcDependencyError ? cause : new OidcDependencyError({ cause });
       });
     },
   });
@@ -118,7 +124,11 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
         typeof payload.exp !== 'number' || !Number.isFinite(payload.exp) || payload.exp <= payload.iat ||
         payload.exp <= Math.floor(now) - tolerance || (payload.nbf !== undefined && payload.nbf > Math.floor(now) + tolerance)) return null;
       return { issuer, subject: payload.sub };
-    } catch {
+    } catch (cause) {
+      if (call.throwDependencyErrors) {
+        call.signal?.throwIfAborted();
+        if (cause instanceof OidcDependencyError) throw cause;
+      }
       // Verification details, claims, and tokens never enter logs or error responses.
       return null;
     }

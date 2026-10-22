@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { before, test } from 'node:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { createOidcVerifier } from '../src/index.ts';
+import { createOidcVerifier, OidcDependencyError } from '../src/index.ts';
 import type { OidcOptions } from '../src/index.ts';
 
 // Real signatures under ephemeral keys. No reusable credentials or private keys are stored.
@@ -29,6 +29,20 @@ function fixture(options: Partial<OidcOptions> = {}) {
   }, ...options });
   return { verify, calls };
 }
+
+test('opt-in dependency errors retain cause while bad tokens remain null and cancellation keeps its reason', async () => {
+  const cause = new Error('private provider failure'); let calls = 0;
+  const { verify } = fixture({ fetchImpl: async () => { calls++; throw cause; } });
+  assert.equal(await verify('malformed', { throwDependencyErrors: true }), null);
+  await assert.rejects(verify(await signed(), { throwDependencyErrors: true }), error => {
+    assert.ok(error instanceof OidcDependencyError); assert.equal(error.cause, cause);
+    assert.equal(JSON.stringify(error).includes(cause.message), false); return true;
+  });
+  await assert.rejects(verify(await signed(), { throwDependencyErrors: true }), OidcDependencyError);
+  assert.equal(calls, 1); // Cooldown does not retry or reclassify the outage as invalid credentials.
+  const controller = new AbortController(); controller.abort(cause);
+  await assert.rejects(verify(await signed(), { signal: controller.signal, throwDependencyErrors: true }), error => error === cause);
+});
 
 test('valid RSA access token returns only the verified identity and reuses public keys', async () => {
   const { verify, calls } = fixture();

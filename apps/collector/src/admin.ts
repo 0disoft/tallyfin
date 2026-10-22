@@ -1,5 +1,6 @@
 import { CollectionError } from '@tallyfin/core';
 import { awaitDependency } from './dependency-lifetime.ts';
+import { OidcDependencyError } from '@tallyfin/auth-oidc';
 import type { AdminPrincipal, AdminStore } from '@tallyfin/core';
 import { healthRoute, identityRoute, changesRoute, rejectionsRoute, schemasRoute, listRoute, queryRoute } from './admin-read.ts';
 import { publishersRoute, grantsRoute, createRoute, draftRoute, publishRoute, settingsRoute } from './admin-write.ts';
@@ -7,7 +8,7 @@ import { publishersRoute, grantsRoute, createRoute, draftRoute, publishRoute, se
 /** The host must verify signature, issuer, audience and expiry before returning a principal. */
 export interface AdministratorAccess {
   store: AdminStore;
-  verifyBearer: (bearer: string, options?: { signal?: AbortSignal }) => Promise<AdminPrincipal | null>;
+  verifyBearer: (bearer: string, options?: { signal?: AbortSignal; throwDependencyErrors?: boolean }) => Promise<AdminPrincipal | null>;
   /** Optional host port for a bounded, read-only administrator storage probe. */
   checkReadiness?: () => Promise<void>;
 }
@@ -42,8 +43,12 @@ async function authenticate(request: Request, access: AdministratorAccess | unde
   const header = request.headers.get('Authorization');
   if (!access || !header || header.length > 8192 || !/^Bearer [^\s,]+$/i.test(header)) throw new CollectionError('unauthorized', 401);
   let principal: AdminPrincipal | null;
-  try { principal = await awaitDependency(request.signal, () => access.verifyBearer(header.slice(7), { signal: request.signal })); }
-  catch (cause) { request.signal.throwIfAborted(); throw new CollectionError('unauthorized', 401, { cause }); }
+  try { principal = await awaitDependency(request.signal, () => access.verifyBearer(header.slice(7), { signal: request.signal, throwDependencyErrors: true })); }
+  catch (cause) {
+    request.signal.throwIfAborted();
+    throw cause instanceof OidcDependencyError ? new CollectionError('storage_unavailable', 503, { cause })
+      : new CollectionError('unauthorized', 401, { cause });
+  }
   if (!principal || typeof principal.issuer !== 'string' || typeof principal.subject !== 'string' ||
     !principal.issuer.trim() || !principal.subject.trim() || principal.issuer.length > 512 || principal.subject.length > 512)
     throw new CollectionError('unauthorized', 401);

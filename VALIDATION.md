@@ -1,5 +1,15 @@
 # 검증
 
+## OIDC 제공자 장애와 인증 거부 구분 (2026-10-23)
+
+OIDC 검증은 선택적 throwDependencyErrors 호출 옵션으로 키 조회/용량/기한 오류의
+cause와 호출자 취소를 전달한다. 기본 직접 호출의 null 반환은 유지한다. Collector는
+이 옵션을 사용해 제공자 장애를 storage_unavailable 503으로, 잘못된 토큰은 기존
+unauthorized 401로 반환한다. OpenAPI에 장애 분류와 쓰기 시간 초과의 결과 불명을
+명시했다. 실제 Worker의 관리자/발행자 경로를 포함한 인증 검사 25/25, 계약 검사
+63개 및 루트 TypeScript 검사를 통과했다. 응답 형식·DB·의존성·CI 변경과 원격
+반영은 없다.
+
 ## Collector 요청·DB 실행 격리 (2026-10-23)
 
 Worker 요청은 인증부터 DB 처리까지 15초의 공통 기한과 원래 취소 이유를 사용한다.
