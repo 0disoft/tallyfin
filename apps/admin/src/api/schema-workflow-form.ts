@@ -8,6 +8,7 @@ export type FormWorkflow = Record<string, unknown> & { id: string; label: string
   startEvent: string; successEvent: string; failureEvent: string | null; dimensions: string[] };
 export type WorkflowFormDraft = Omit<EventFormDraft, 'workflows'> & { workflows: FormWorkflow[] };
 export type WorkflowChange = { kind: 'add' } | { kind: 'remove'; index: number } |
+  { kind: 'representative'; value: string } |
   { kind: 'edit'; index: number; field: 'id' | 'label' | WorkflowPhase; value: string | null } |
   { kind: 'dimensions'; index: number; value: string[] };
 const NAME = /^[a-z][a-z0-9_]{0,47}$/;
@@ -17,6 +18,8 @@ const record = (value: unknown): value is Record<string, unknown> => !!value && 
 /** Preserve incomplete references and extra keys; unsupported structures stay in JSON. */
 export function readWorkflowForm(text: string): WorkflowFormDraft {
   const draft = readEventForm(text);
+  if (Object.hasOwn(draft, 'representativeWorkflowId') && typeof draft.representativeWorkflowId !== 'string')
+    throw Error('대표 흐름 ID는 JSON에서 문자열로 지정하거나 필드를 지워 주세요.');
   if (draft.workflows.length > 10 || draft.workflows.some(workflow => !record(workflow) || typeof workflow.id !== 'string' ||
     typeof workflow.label !== 'string' || workflow.source !== 'browser' || typeof workflow.startEvent !== 'string' ||
     typeof workflow.successEvent !== 'string' || (workflow.failureEvent !== null && typeof workflow.failureEvent !== 'string') ||
@@ -26,14 +29,25 @@ export function readWorkflowForm(text: string): WorkflowFormDraft {
 }
 export function changeWorkflowForm(text: string, change: WorkflowChange): string {
   const draft = readWorkflowForm(text);
-  if (change.kind === 'add') {
+  if (change.kind === 'representative') {
+    if (change.value === '') delete draft.representativeWorkflowId;
+    else {
+      if (!NAME.test(change.value) || draft.workflows.filter(w => w.id === change.value).length !== 1)
+        throw Error('이 초안에 등록된 작업 흐름을 선택해 주세요.');
+      draft.representativeWorkflowId = change.value;
+    }
+  } else if (change.kind === 'add') {
     if (draft.workflows.length >= 10) throw Error('작업 흐름은 최대 10개까지 등록할 수 있어요.');
     let suffix = 1; while (draft.workflows.some(workflow => workflow.id === `workflow_${suffix}`)) suffix++;
     draft.workflows.push({ id: `workflow_${suffix}`, label: '', source: 'browser', startEvent: '', successEvent: '', failureEvent: null, dimensions: [] });
   } else {
     if (!Number.isInteger(change.index) || !draft.workflows[change.index]) throw Error('편집할 작업 흐름을 확인해 주세요.');
     const workflow = draft.workflows[change.index]!;
-    if (change.kind === 'remove') draft.workflows.splice(change.index, 1);
+    if (change.kind === 'remove') {
+      draft.workflows.splice(change.index, 1);
+      if (draft.representativeWorkflowId === workflow.id && !draft.workflows.some(w => w.id === workflow.id))
+        delete draft.representativeWorkflowId;
+    }
     else if (change.kind === 'dimensions') {
       if (change.value.length > 4 || new Set(change.value).size !== change.value.length || !change.value.every(key => NAME.test(key)))
         throw Error('비교 기준은 올바른 속성 이름으로 최대 4개까지 중복 없이 선택하세요.');
@@ -43,6 +57,9 @@ export function changeWorkflowForm(text: string, change: WorkflowChange): string
       if (change.field === 'id' && draft.workflows.some((row, index) => index !== change.index && row.id === change.value))
         throw Error('이미 사용 중인 작업 흐름 ID예요. 다른 흐름을 덮어쓰지 않았어요.');
       draft.workflows[change.index] = { ...workflow, [change.field]: change.value } as FormWorkflow;
+      if (change.field === 'id' && draft.representativeWorkflowId === workflow.id &&
+        !draft.workflows.some((row, index) => index !== change.index && row.id === workflow.id))
+        draft.representativeWorkflowId = change.value;
     }
   }
   const next = JSON.stringify(draft, null, 2); readDraft(next); return next;
@@ -95,6 +112,9 @@ export function workflowWarnings(draft: WorkflowFormDraft, index: number): Workf
   return warnings;
 }
 export function workflowIssueTarget(text: string, issue: SchemaValidation['issues'][number]): string | null {
+  if (issue.path === '/representativeWorkflowId') {
+    try { readWorkflowForm(text); return 'schema-representative-workflow'; } catch { return null; }
+  }
   if (issue.path === '/workflows') return 'schema-workflow-heading';
   const match = /^\/workflows\/(\d+)(?:\/(id|startEvent|successEvent|failureEvent|dimensions)(?:\/\d+)?)?$/.exec(issue.path);
   if (!match) return null;

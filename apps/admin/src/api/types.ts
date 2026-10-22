@@ -48,6 +48,7 @@ export type Registry = {
   limits: { requestsPerMinute: number; newReceiptsPerUtcDay: number };
   events: EventDefinition[];
   workflows: WorkflowDefinition[];
+  representativeWorkflowId?: string;
   funnels?: FunnelDefinition[];
 };
 

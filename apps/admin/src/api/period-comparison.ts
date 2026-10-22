@@ -13,7 +13,7 @@ export type PeriodSnapshot = { summary: SummaryResponse; workflows: WorkflowLoad
 
 export function periodWorkflows(registry: Registry, source: EventSource, view: AnalysisView = 'goals'): WorkflowDefinition[] {
   if (source !== 'browser' || view === 'events') return [];
-  return view === 'overview' ? registry.workflows.slice(0, 1) : registry.workflows;
+  return view === 'overview' ? registry.workflows.filter(w => w.id === registry.representativeWorkflowId) : registry.workflows;
 }
 export type ComparisonRow = { key: string; label: string; current: number | null; previous: number | null; rate?: boolean };
 export function comparisonRows(current: PeriodSnapshot, previous: PeriodSnapshot, view: string): ComparisonRow[] {
@@ -23,8 +23,8 @@ export function comparisonRows(current: PeriodSnapshot, previous: PeriodSnapshot
     const before = new Map(previous.summary.events.map(event => [event.name, event.count]));
     rows.push(...current.summary.events.map(event => ({ key: `event:${event.name}`, label: event.name, current: event.count, previous: before.get(event.name) ?? null })));
   } else {
-    const flows = view === 'overview' ? current.workflows.slice(0, 1) : current.workflows;
-    for (const flow of flows) {
+    // Overview snapshots already contain only the explicitly selected workflow.
+    for (const flow of current.workflows) {
       const before = previous.workflows.find(item => item.definition.id === flow.definition.id)?.response.summary;
       for (const [key, label, rate] of [['startedAttempts', '시작', false], ['succeededAttempts', '성공', false], ['completionRate', '완료율', true]] as const)
         rows.push({ key: `${flow.definition.id}:${key}`, label: `${flow.definition.label} · ${label}`, current: flow.response.summary[key], previous: before?.[key] ?? null, rate });

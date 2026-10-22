@@ -1,6 +1,6 @@
 import { ContractError } from './validate.ts';
 
-export type SchemaDraft = { events: unknown[]; workflows: unknown[]; funnels?: unknown[] };
+export type SchemaDraft = { events: unknown[]; workflows: unknown[]; funnels?: unknown[]; representativeWorkflowId?: unknown };
 export type SchemaIssueCode = 'invalid_definition' | 'definition_limit' | 'duplicate' | 'cardinality_limit' | 'browser_event_required' | 'invalid_reference' | 'dimension_mismatch';
 export type SchemaValidation = { valid: boolean; issues: { path: string; code: SchemaIssueCode }[]; privacyReviewRequired: true };
 export type SchemaMetadata = { schemaVersion: number; schemaStatus: 'active' | 'retired'; publishedAt: string };
@@ -39,7 +39,7 @@ export function parseSchemaValidation(value: unknown): SchemaValidation {
   if (typeof r.valid !== 'boolean' || r.privacyReviewRequired !== true || !Array.isArray(r.issues) || r.issues.length !== (r.valid ? 0 : 1)) fail();
   const issues = r.issues.map(value => {
     const issue = object(value, ['path', 'code']);
-    if (typeof issue.path !== 'string' || issue.path.length > 160 || !/^(?:\/(?:events|workflows)(?:\/\d+(?:\/(?:name|id|properties|dimensions|startEvent|successEvent|failureEvent)(?:\/[a-z0-9_]+)?)?)?|\/funnels(?:\/\d+(?:\/(?:id|dimensions(?:\/\d+)?|steps\/\d+(?:\/(?:eventName|source))?))?)?)?$/.test(issue.path) ||
+    if (typeof issue.path !== 'string' || issue.path.length > 160 || !/^(?:\/(?:events|workflows)(?:\/\d+(?:\/(?:name|id|properties|dimensions|startEvent|successEvent|failureEvent)(?:\/[a-z0-9_]+)?)?)?|\/representativeWorkflowId|\/funnels(?:\/\d+(?:\/(?:id|dimensions(?:\/\d+)?|steps\/\d+(?:\/(?:eventName|source))?))?)?)?$/.test(issue.path) ||
       !['invalid_definition', 'definition_limit', 'duplicate', 'cardinality_limit', 'browser_event_required', 'invalid_reference', 'dimension_mismatch'].includes(String(issue.code))) fail();
     return { path: issue.path, code: issue.code as SchemaIssueCode };
   });
@@ -52,7 +52,7 @@ export function parsePublishedSchema(value: unknown): PublishedSchema {
     projectId: projectId(r.projectId), definitionHash: r.definitionHash };
 }
 export function readDraft(text: string): SchemaDraft {
-  const value = object(JSON.parse(text), ['events', 'workflows'], ['funnels']);
+  const value = object(JSON.parse(text), ['events', 'workflows'], ['funnels', 'representativeWorkflowId']);
   if (!Array.isArray(value.events) || !Array.isArray(value.workflows) ||
     Object.hasOwn(value, 'funnels') && !Array.isArray(value.funnels) || new TextEncoder().encode(JSON.stringify(value)).length > 32768) fail();
   return value as SchemaDraft;
@@ -67,5 +67,6 @@ export async function definitionHash(value: SchemaDraft): Promise<string> {
   return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
 }
 export function schemaDefinitions(value: SchemaDraft): SchemaDraft {
-  return { events: value.events, workflows: value.workflows, ...(Object.hasOwn(value, 'funnels') ? { funnels: value.funnels! } : {}) };
+  return { events: value.events, workflows: value.workflows, ...(Object.hasOwn(value, 'funnels') ? { funnels: value.funnels! } : {}),
+    ...(Object.hasOwn(value, 'representativeWorkflowId') ? { representativeWorkflowId: value.representativeWorkflowId } : {}) };
 }

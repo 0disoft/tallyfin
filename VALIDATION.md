@@ -1,5 +1,44 @@
 # 검증
 
+## 대표 작업 흐름 프론트엔드 단계 (2026-10-23)
+
+스키마 작업 흐름 편집기에서 대표 흐름 선택·해제, 선택한 흐름 ID 변경 시 참조 갱신,
+선택한 흐름 삭제 시 자동 해제와 `role="status"` 안내를 연결했다. 잘못된 ID는 의미 검증
+오류와 초점·`aria-invalid`로 표시한다. 개별·통합 개요의 미지정 상태, 기존 권한 회수 7개
+시나리오와 CSV 잠금·복구·늦은 응답 폐기도 확인했다.
+
+앞선 전체 검사에서 관리자 312/312와 집중 스키마 34/34를 통과했다. 당시 `npm run typecheck`는
+루트·관리자·Collector runtime/worker 타입을 모두 통과했고 최신 관리자 빌드,
+bundle 2/2·Sites 11/11, 계약 65/65와 OpenAPI lint도 통과했다. 일반 소스 lint 명령은
+없어 OpenAPI lint만 실행했다.
+
+이후 CSV 도우미가 받아들이던 범위 없는 전체 workflow 스냅샷도
+`representativeWorkflowId`로 고르고 비교 행에 같은 선택을 적용했다. 대표가 두 번째
+workflow인 경우와 미지정인 경우, CSV 비교의 선택 ID를 집중 검사에 추가했고 현재
+client 39/39를 통과했다. 마지막 comparison assertion을 포함한 최종 재실행도 39/39였고,
+최종 관리자 타입 검사와 빌드(3.47초), 최종 빌드의 bundle 2/2도 통과했다. 이 CSV 도우미
+변경 뒤 전체 312/312와 브라우저 검사는 반복하지 않았다. 34/34와 39/39는 앞선 312/312와
+범위가 겹치며 합계에 더하지 않는다.
+
+Chromium 156.0.8078.4의 실제 로컬 서명 로그인·D1에서 `npm run verify:admin-goal-access`가
+통과했다. pageErrors 0·routeError false이며 보고서는
+`.tmp/admin-goal-access-7UOzOa/report.json`이다. apiWrites 1은 읽기 전용 스키마 검증
+POST이며 브라우저에서 발행하지 않는다. DB 발행은 백엔드 검사에서 확인했다.
+선택된 스냅샷 경로는 이번 CSV 보완에서 바뀌지 않아 브라우저 검사는 반복하지 않았다.
+
+초기 테스트 도우미의 `setDraft` 오타를 고쳤다. 주입한 503 중 일반 화면 대기와 숨겨진
+설정 테이블 잔여 수 확인은 서비스 제목 대기와 프로젝트 전환으로 설정 화면을 unmount하는
+방식으로 바로잡았고, 엄격한 테이블 제거 단언은 유지했다. 검사 도구 오류를 제품 실패로
+해석하지 않는다.
+
+소유 문서는 `api/openapi.yaml`, `db/schema.dbml`(설명만),
+`docs/product/02-spec.md`, `docs/frontend/FRONTEND_DESIGN.md`,
+`docs/integrations/backend-api.md`, `docs/backend/administrator.md`, `VALIDATION.md`다.
+
+API 필드는 앞선 백엔드 커밋에 포함됐고 새 DB 컬럼·마이그레이션은 없다. SDK·의존성·CI·
+위생 설정 변경은 없다. 원격 D1·실제 OIDC·운영 부하와 전체 루트 테스트는 실행하지 않았으며
+관련 검사로 대체했다. 푸시·배포·게시도 하지 않았다.
+
 ## 대표 작업 흐름 백엔드 단계 (2026-10-23)
 
 스키마 정의에 선택 필드 `representativeWorkflowId`를 추가했다. ID 문법과 같은 버전의

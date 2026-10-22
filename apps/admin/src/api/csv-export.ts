@@ -53,6 +53,8 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
   const workflowFields = (summary: WorkflowSummary): Row => ({ started_attempts: summary.startedAttempts,
     succeeded_attempts: summary.succeededAttempts, failed_attempts: summary.failedAttempts,
     pending_attempts: summary.pendingAttempts, completion_rate_percent: summary.completionRate });
+  const visibleWorkflows = (snapshot: PeriodSnapshot) => view === 'overview'
+    ? snapshot.workflows.filter(flow => flow.definition.id === registry.representativeWorkflowId) : snapshot.workflows;
   const addPeriod = (snapshot: PeriodSnapshot, period: string) => {
     emit(snapshot.summary.meta, period, { record_type: 'total', count: snapshot.summary.totalEvents });
     if (view !== 'goals') {
@@ -65,7 +67,7 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
       }
     }
     if (view !== 'events') {
-      const flows = view === 'overview' ? snapshot.workflows.slice(0, 1) : snapshot.workflows;
+      const flows = visibleWorkflows(snapshot);
       for (const flow of flows) {
         const base: Row = { name: flow.definition.id, label: flow.definition.label, cohort_basis: flow.response.cohortBasis };
         emit(flow.response.meta, period, { ...base, record_type: 'workflow_total', ...workflowFields(flow.response.summary),
@@ -78,7 +80,7 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
   addPeriod(current, 'current');
   if (previous) {
     addPeriod(previous, 'previous');
-    for (const row of comparisonRows(current, previous, view)) {
+    for (const row of comparisonRows({ ...current, workflows: visibleWorkflows(current) }, { ...previous, workflows: visibleWorkflows(previous) }, view)) {
       const change = row.rate ? rateChange(row.current, row.previous) : countChange(row.current, row.previous);
       emit(current.summary.meta, 'comparison', { record_type: 'comparison_metric', name: row.key, label: row.label,
         value: row.current, previous_from: previous.range.from, previous_to: previous.range.to, previous_value: row.previous,

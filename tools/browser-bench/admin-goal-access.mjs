@@ -84,6 +84,32 @@ try {
   stage = 'login'; await page.goto(origin); await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
+  stage = 'representative-workflow-editor';
+  await page.getByRole('button', { name: '설정', exact: true }).click();
+  const representative = page.getByRole('combobox', { name: '개요의 대표 작업 흐름', exact: true });
+  await expect(representative).toHaveValue('calculation');
+  const originalDraft = await page.locator('#schema-draft').inputValue();
+  await representative.selectOption(''); await expect(representative).toHaveValue('');
+  assert.equal(Object.hasOwn(JSON.parse(await page.locator('#schema-draft').inputValue()), 'representativeWorkflowId'), false);
+  await representative.selectOption('calculation');
+  await page.locator('#schema-workflow-0-id').fill('renamed'); await expect(representative).toHaveValue('renamed');
+  await page.getByRole('button', { name: '1번 작업 흐름 삭제', exact: true }).click();
+  await expect(representative).toHaveValue('');
+  await expect(page.getByRole('status').filter({ hasText: '대표 작업 흐름을 삭제해' })).toHaveCount(1);
+  await page.getByText('JSON 직접 편집', { exact: true }).click();
+  await page.locator('#schema-draft').fill(JSON.stringify({ ...JSON.parse(originalDraft), representativeWorkflowId: 'foreign' }));
+  await page.getByRole('button', { name: '정의 검증', exact: true }).click();
+  await expect(page.locator('#schema-errors')).toContainText('/representativeWorkflowId');
+  await expect(representative).toBeFocused(); await expect(representative).toHaveAttribute('aria-invalid', 'true');
+  await page.locator('#schema-draft').fill(originalDraft);
+  await expect(representative).toHaveValue('calculation');
+  await page.screenshot({ path: resolve(directory, 'representative-editor.png'), fullPage: true });
+  await page.getByRole('button', { name: '개요', exact: true }).click();
+  await page.getByRole('heading', { name: '서비스 통합 현황', exact: true }).waitFor(); scenarios.push(stage);
+  // Changing the project unmounts the retained settings workspace before the existing table-removal checks.
+  await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
+  await page.getByRole('heading', { name: '대표 흐름 미지정', exact: true }).waitFor();
+  await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   stage = 'bulk-overview';
   let overviewRequests = 0;
   page.on('request', request => { if (new URL(request.url()).pathname === '/v1/overview') overviewRequests++; });
@@ -95,6 +121,7 @@ try {
   await expect(overview).toContainText('현재 성공 1 / 시작 1 · 진행 중 0');
   await expect(overview).toContainText('직전 성공 1 / 시작 1 · 진행 중 0');
   await expect(overview).toContainText('집계 중 · 비교 보류');
+  await expect(overview.locator('tbody tr').filter({ hasText: 'Other access fixture' })).toContainText('대표 흐름 미지정');
   await expect(overview).toContainText('조회 기준(UTC):');
   await expect(overview).toContainText(`현재 ${localDate(now - 6 * 86400000, 'Asia/Seoul')} ~ ${today}`);
   await expect(overview).toContainText(`직전 ${localDate(now - 13 * 86400000, 'Asia/Seoul')} ~ ${localDate(now - 7 * 86400000, 'Asia/Seoul')}`);
@@ -241,7 +268,7 @@ try {
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify({ ...report, directory }));
 } catch (error) {
   if (directory) {
-    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, verified: false, scenarios, observed }) + '\n');
+    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, verified: false, scenarios, observed, error: error.message }) + '\n');
     await page?.screenshot({ path: resolve(directory, 'failure.png'), fullPage: true }).catch(() => {});
   }
   process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, error: error.name }));

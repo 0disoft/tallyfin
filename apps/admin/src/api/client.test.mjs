@@ -582,8 +582,48 @@ test('abort while awaiting shared refresh ends only that request and destroy pre
 });
 
 
+test('overview reads only the designated workflow; unset versions retain event CSV and goals read all', async () => {
+  const { registry, snapshot } = comparisonFixture();
+  const second = { ...registry.workflows[0], id: 'chosen', label: 'Chosen' };
+  registry.workflows.push(second);
+  const calls = [], client = { getSummary: async () => snapshot.summary,
+    getWorkflowDaily: async (_id, workflowId) => { calls.push(workflowId); return { ...snapshot.workflows[0].response, workflowId }; } };
+  const signal = new AbortController().signal;
+  const unset = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'overview');
+  assert.deepEqual(calls, []); assert.deepEqual(unset.workflows, []);
+  assert.ok(!analyticsCsv({ registry, current: unset, view: 'overview' }).text.includes('workflow_total'));
+  registry.representativeWorkflowId = second.id;
+  for (const reorder of [false, true]) {
+    if (reorder) registry.workflows.reverse();
+    calls.length = 0;
+    const overview = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'overview');
+    assert.deepEqual(calls, [second.id]); assert.equal(overview.workflows[0].definition.id, second.id);
+    validateSnapshot(overview, registry);
+  }
+  calls.length = 0;
+  registry.workflows.reverse(); // The representative is second again.
+  const goals = await loadPeriod(client, registry, snapshot.range, signal, 'browser', 'goals');
+  assert.deepEqual(calls.sort(), ['chosen', 'convert']);
+  const unscoped = { ...goals }; delete unscoped.view;
+  assert.deepEqual(exportRows(analyticsCsv({ registry, current: unscoped, view: 'overview' }))
+    .filter(row => row.record_type === 'workflow_total').map(row => row.name), ['chosen']);
+  const prior = structuredClone(unscoped); prior.range = previousRange(unscoped.range);
+  prior.summary.meta = { ...prior.summary.meta, ...prior.range };
+  for (const flow of prior.workflows) {
+    flow.response.meta = prior.summary.meta;
+    flow.response.days.forEach((day, index) => { day.date = new Date(Date.parse(prior.range.from) + index * 86400000).toISOString().slice(0, 10); });
+  }
+  const csv = exportRows(analyticsCsv({ registry, current: unscoped, previous: prior, view: 'overview' }));
+  assert.deepEqual(csv.filter(row => row.record_type === 'comparison_metric' && row.name.includes(':')).map(row => row.name),
+    ['chosen:startedAttempts', 'chosen:succeededAttempts', 'chosen:completionRate']);
+  delete registry.representativeWorkflowId;
+  assert.equal(exportRows(analyticsCsv({ registry, current: unscoped, view: 'overview' }))
+    .filter(row => row.record_type === 'workflow_total').length, 0);
+});
+
 test('screen-scoped periods skip unrelated workflows and CSV rejects missing goal data', async () => {
   const { registry, snapshot } = comparisonFixture();
+  registry.representativeWorkflowId = registry.workflows[0].id;
   const second = { ...registry.workflows[0], id: 'other', label: 'Other' };
   registry.workflows.push(second);
   const calls = [];

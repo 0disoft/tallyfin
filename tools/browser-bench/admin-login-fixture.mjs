@@ -50,6 +50,7 @@ export async function adminLoginFixture(directory, { profile = 'login', allowCre
     }
     if (profile !== 'onboarding') {
       const registry = JSON.parse(await readFile(new URL('../../api/examples/registry.json', import.meta.url), 'utf8'));
+      registry.representativeWorkflowId = registry.workflows[0].id;
       if (profile === 'goals') registry.funnels = [{ id: 'calculation_funnel', label: '계산 퍼널',
         steps: ['input_start', 'calculation_success'].map(eventName => ({ eventName, source: 'browser' })), dimensions: ['tool'] }];
       const provisioner = new Provisioner(db);
@@ -59,6 +60,7 @@ export async function adminLoginFixture(directory, { profile = 'login', allowCre
         await provisioner.apply(await provisioner.plan('grant', { projectId: registry.project.id, issuer,
           subject: 'synthetic-backup-operator', role: 'owner' }));
         const other = structuredClone(registry); other.project.id = 'access-other'; other.project.name = 'Other access fixture';
+        if (profile === 'goals') delete other.representativeWorkflowId; // Exercise an explicitly unset overview with registered goals.
         await provisioner.apply(await provisioner.plan('register', other));
         await provisioner.apply(await provisioner.plan('grant', { projectId: other.project.id, issuer, subject, role: 'owner' }));
       }

@@ -227,6 +227,12 @@ export function parseRegistry(value: unknown): Registry {
     ),
   };
   if (Object.hasOwn(record, 'funnels')) registry.funnels = parseFunnels(record.funnels, registry.events);
+  if (Object.hasOwn(record, 'representativeWorkflowId')) {
+    const id = expectString(record.representativeWorkflowId, 'response.representativeWorkflowId');
+    if (!/^[a-z][a-z0-9_]{0,47}$/.test(id) || registry.workflows.filter(w => w.id === id).length !== 1)
+      fail('response.representativeWorkflowId', 'invalid reference');
+    registry.representativeWorkflowId = id;
+  }
   return registry;
 }
 

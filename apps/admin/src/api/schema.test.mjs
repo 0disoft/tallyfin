@@ -9,6 +9,49 @@ import { changePropertyForm, propertyChoices, propertyIsDimension, propertyIssue
 import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflowWarnings, workflowIssueTarget, workflowFocusAfterChange } from './schema-workflow-form.ts';
 import { validateSchemaDraft } from '../../../../packages/core/src/schema.ts';
 import { changeFunnelForm } from './schema-funnel-form.ts';
+import { parseRegistry } from './validate.ts';
+
+test('representative form selection preserves hashes, follows rename and unsets only when selected workflow is removed', async () => {
+  const draft = workflowDraft(), text = JSON.stringify(draft), id = draft.workflows[0].id;
+  assert.equal(Object.hasOwn(schemaDefinitions(draft), 'representativeWorkflowId'), false);
+  let selected = changeWorkflowForm(text, { kind: 'representative', value: id });
+  assert.equal(validateSchemaDraft(JSON.parse(selected)).valid, true);
+  assert.notEqual(await definitionHash(draft), await definitionHash(JSON.parse(selected)));
+  assert.equal(schemaDefinitions(JSON.parse(selected)).representativeWorkflowId, id);
+  selected = changeWorkflowForm(selected, { kind: 'edit', index: 0, field: 'id', value: 'renamed' });
+  assert.equal(JSON.parse(selected).representativeWorkflowId, 'renamed');
+  const added = changeWorkflowForm(selected, { kind: 'add' });
+  assert.equal(JSON.parse(changeWorkflowForm(added, { kind: 'remove', index: 1 })).representativeWorkflowId, 'renamed');
+  assert.equal(Object.hasOwn(JSON.parse(changeWorkflowForm(selected, { kind: 'remove', index: 0 })), 'representativeWorkflowId'), false);
+  const unset = JSON.parse(changeWorkflowForm(selected, { kind: 'representative', value: '' }));
+  assert.equal(Object.hasOwn(unset, 'representativeWorkflowId'), false);
+  assert.throws(() => changeWorkflowForm(text, { kind: 'representative', value: 'foreign' }));
+  assert.equal(JSON.stringify(draft), text);
+  const invalid = JSON.stringify({ ...draft, representativeWorkflowId: 'foreign' });
+  assert.equal(readWorkflowForm(invalid).representativeWorkflowId, 'foreign');
+  assert.equal(workflowIssueTarget(invalid, { path: '/representativeWorkflowId', code: 'invalid_reference' }), 'schema-representative-workflow');
+  assert.equal(parseSchemaValidation(validateSchemaDraft(JSON.parse(invalid))).issues[0].path, '/representativeWorkflowId');
+  assert.throws(() => readWorkflowForm(JSON.stringify({ ...draft, representativeWorkflowId: null })));
+  const saved = registry(1, JSON.parse(selected)); delete saved.publishedAt;
+  assert.equal(parseRegistry(saved).representativeWorkflowId, 'renamed');
+  for (const representativeWorkflowId of [null, '', 'foreign', 'x'.repeat(49)])
+    assert.throws(() => parseRegistry({ ...saved, representativeWorkflowId }));
+});
+
+test('representative-only edits invalidate approval and survive editor publication reload', async () => {
+  const f = fixture(); await ready(f.editor);
+  f.editor.edit('draft', JSON.stringify(workflowDraft()));
+  await f.editor.validate(); f.editor.setPrivacy(true);
+  const id = workflowDraft().workflows[0].id;
+  f.editor.edit('draft', changeWorkflowForm(f.editor.state.draft, { kind: 'representative', value: id }));
+  assert.equal(f.editor.state.privacyReviewed, false);
+  assert.equal(f.editor.state.validatedKey, null);
+  await f.editor.validate(); f.editor.setPrivacy(true); await f.editor.publish();
+  const write = f.calls.find(call => call.init.method === 'PUT');
+  assert.equal(JSON.parse(write.init.body).representativeWorkflowId, id);
+  await f.editor.load();
+  assert.equal(JSON.parse(f.editor.state.draft).representativeWorkflowId, id);
+});
 
 const definitions = () => ({ events: [{ name: 'operation_completed', label: '작업 완료', source: 'browser', properties: {} }], workflows: [] });
 const metadata = version => ({ schemaVersion: version, schemaStatus: 'active', publishedAt: '2026-10-09T00:00:00.000Z' });

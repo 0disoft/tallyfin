@@ -33,7 +33,10 @@ export default function SchemaWorkflowForm({ draft, editable, onChange, onOpenJs
     try {
       const next = changeWorkflowForm(draft, action);
       if (action.kind === 'add') { pendingFocus.current = workflowFocusAfterChange(action, form.workflows.length); setNotice('새 작업 흐름을 추가했어요. ID와 표시 이름을 입력하세요.'); }
-      else if (action.kind === 'remove') { pendingFocus.current = workflowFocusAfterChange(action, form.workflows.length); setNotice(`${action.index + 1}번 작업 흐름을 초안에서 삭제했어요.`); }
+      else if (action.kind === 'remove') { pendingFocus.current = workflowFocusAfterChange(action, form.workflows.length);
+        setNotice(Object.hasOwn(form, 'representativeWorkflowId') && !Object.hasOwn(JSON.parse(next), 'representativeWorkflowId')
+          ? '대표 작업 흐름을 삭제해 대표 지정도 해제했어요. 다른 흐름을 선택할 수 있어요.' : `${action.index + 1}번 작업 흐름을 초안에서 삭제했어요.`); }
+      else if (action.kind === 'representative') setNotice(action.value ? '초안의 대표 작업 흐름을 선택했어요. 발행 후 개요에 반영돼요.' : '초안의 대표 흐름 지정을 해제했어요.');
       onChange(next);
     } catch (e) {
       pendingFocus.current = null;
@@ -46,9 +49,24 @@ export default function SchemaWorkflowForm({ draft, editable, onChange, onOpenJs
   }
   const browserEvents = form.events.filter(event => event.source === 'browser' && NAME.test(event.name))
     .filter((event, index, list) => list.findIndex(item => item.name === event.name) === index);
+  const representatives = form.workflows.filter(workflow => NAME.test(workflow.id) && form.workflows.filter(w => w.id === workflow.id).length === 1);
+  const representative = typeof form.representativeWorkflowId === 'string' ? form.representativeWorkflowId : '';
+  const invalidRepresentative = Object.hasOwn(form, 'representativeWorkflowId') && !representatives.some(w => w.id === representative);
   return <section className="schema-workflow-form" aria-labelledby="schema-workflow-heading">
     <div className="settings-head"><h3 id="schema-workflow-heading" tabIndex={-1}>작업 흐름 편집</h3><span className="settings-badge">{form.workflows.length} / 10</span></div>
     <p className="field-help" id="schema-workflow-help">작업 흐름은 브라우저 이벤트를 시작·성공·실패 단계로 연결해요. 비교 기준은 단계마다 같은 필수 속성이어야 해요. 표시되는 경고는 참고용이고 최종 판정은 서버 검증에서 확인하세요.</p>
+    <div className="settings-field"><label className="field-label" htmlFor="schema-representative-workflow">개요의 대표 작업 흐름</label>
+      <select className="text-input settings-select" id="schema-representative-workflow" value={representative} disabled={!editable}
+        aria-invalid={invalidRepresentative || errorTarget === 'schema-representative-workflow' || undefined}
+        aria-describedby={`schema-representative-help${invalidRepresentative ? ' schema-representative-warning' : ''}${errorTarget === 'schema-representative-workflow' ? ' schema-errors' : ''}`}
+        onChange={event => change({ kind: 'representative', value: event.target.value })}>
+        <option value="">대표 흐름 미지정</option>
+        {representatives.map(workflow => <option key={workflow.id} value={workflow.id}>{workflow.label.trim() ? `${workflow.label} (${workflow.id})` : workflow.id}</option>)}
+        {invalidRepresentative && representative !== '' && <option value={representative}>{representative} (사용할 수 없음)</option>}
+      </select>
+      <p className="field-help" id="schema-representative-help">서비스 통합 현황과 서비스 개요의 완료율에 사용할 흐름이에요. 새 버전 발행 후 반영돼요. 미지정이면 완료율을 표시하지 않으며, 목표 화면에서는 모든 흐름을 조회해요.</p>
+      {invalidRepresentative && <p className="schema-workflow-warning" id="schema-representative-warning">대표 흐름 ID가 이 초안의 고유한 흐름을 가리키지 않아요. 다시 선택하거나 지정을 해제하세요.</p>}
+    </div>
     {form.workflows.length === 0 && <p className="notice">아직 작업 흐름이 없어요. 흐름을 추가한 뒤 정의를 검증하세요.</p>}
     <div className="schema-workflow-list">{form.workflows.map((workflow, index) => {
       const base = `schema-workflow-${index}`, choices = workflowDimensionChoices(form, index), atMax = workflow.dimensions.length >= 4;

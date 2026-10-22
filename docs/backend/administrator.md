@@ -4,7 +4,10 @@
 
 `GET /v1/overview?projectIds=sembom,other&source=browser`는 인증 후 중복 없는 1~5개 ID와
 browser/server 출처만 받는다. 요청 순서대로 최신 활성 스키마의 최근/직전 7일 이벤트,
-브라우저 첫 작업 흐름의 완료율, 최근 수신과 최근 UTC 7일 거부 합계를 반환한다.
+스키마의 `representativeWorkflowId`가 가리키는 browser 작업 흐름의 완료율, 최근 수신과
+최근 UTC 7일 거부 합계를 반환한다. 필드를 생략한 정상 미지정은 흐름 이름과 완료율을
+null로 두며 첫 workflow를 고르지 않는다. 문법이 틀리거나 같은 버전에 없는 참조는 초안
+검증·발행에서 거부하고, 저장된 정의가 계약을 위반하면 해당 행을 오류로 표시한다.
 기간은 서버가 프로젝트 시간대로 계산한다. 사용 중지된 최신 버전은 선택하지 않는다.
 
 workflowStats는 현재/직전 기간의 시작·성공·실패·진행 중 건수와 provisional을 제공한다.
