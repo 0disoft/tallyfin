@@ -1,5 +1,6 @@
-import { CollectionError, parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, PROJECT_ID, REJECTION_REASONS } from '@tallyfin/core';
-import type { CollectionStore, ErrorCode, RejectionReason } from '@tallyfin/core';
+import { failureHeaders, messages, recordRejectedRequest } from './failure.ts';
+import { CollectionError, parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, PROJECT_ID } from '@tallyfin/core';
+import type { CollectionStore, ErrorCode } from '@tallyfin/core';
 import { readBody } from './body.ts';
 import { administrator } from './admin.ts';
 import type { AdministratorAccess } from './admin.ts';
@@ -8,20 +9,6 @@ import type { PublisherAccess } from './publisher.ts';
 import { observationClock, latencyBucket } from './request-observation.ts';
 import type { RequestObservation, RequestOperation } from './request-observation.ts';
 
-const messages: Record<ErrorCode, string> = {
-  invalid_request: 'Invalid request.', invalid_event: 'Invalid or unregistered event.', unknown_schema: 'Schema is unavailable.',
-  origin_denied: 'Origin is not allowed.', project_unavailable: 'Project is unavailable.',
-  event_conflict: 'Event ID conflicts with a previous event.', attempt_conflict: 'Attempt conflicts with previous state.',
-  settings_conflict: 'Project settings changed. Reload before saving.',
-  schema_conflict: 'Schema version conflicts. Reload and review before publishing.',
-  project_conflict: 'Project ID conflicts with an existing project.',
-  project_limit_reached: 'Project creation limit reached.',
-  grant_conflict: 'Project grant changed. Reload before saving.',
-  publisher_conflict: 'Publishing permission changed. Reload before revoking.',
-  last_owner: 'The last project owner cannot be removed or demoted.',
-  quota_exceeded: 'Collection quota exceeded.', unauthorized: 'Authentication is required.',
-  forbidden: 'Access denied.', not_found: 'Endpoint not found.', storage_unavailable: 'Storage is temporarily unavailable.',
-};
 export interface CollectorOptions {
   now?: () => number;
   uuid?: () => string;
@@ -120,33 +107,12 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       return finish(Response.json(result, { status: 200, headers }));
     } catch (error) {
       const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503);
-      if (failure.status === 401) headers.set('WWW-Authenticate', 'Bearer');
-      if (failure.status === 405 && !routeForCollection(request.url)) headers.set('Allow',
-        new URL(request.url).pathname === '/v1/projects' ? 'GET, POST' :
-        /^\/v1\/projects\/[^/]+\/(grants|publishers)$/.test(new URL(request.url).pathname) ? 'GET, PUT, DELETE' :
-        /^\/v1\/projects\/[^/]+\/schemas\/validate$/.test(new URL(request.url).pathname) ? 'POST' :
-        /^\/v1\/projects\/[^/]+\/schemas\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PUT' :
-        /^\/v1\/projects\/[^/]+$/.test(new URL(request.url).pathname) ? 'GET, PATCH' : 'GET');
-      if (failure.status === 429) {
-        // Admission resumes at the next fixed minute; daily quota resumes at UTC midnight.
-        headers.set('Retry-After', String(retryAfter ?? Math.max(1, Math.ceil((86_400_000 - receivedAt % 86_400_000) / 1000))));
-      } else if (failure.status === 503) headers.set('Retry-After', '1');
+      const responseHeaders = failureHeaders(failure, request.url, receivedAt, retryAfter, headers);
       // A diagnostic sink failure must not change the outcome or disclose its exception.
       try { options.log?.({ requestId, code: failure.code }); } catch { /* best effort */ }
-      if (admitted && rejectionProjectId) {
-        const reason = failure.code === 'quota_exceeded' ? 'daily_limit' : failure.code as RejectionReason;
-        if (reason !== 'minute_limit' && REJECTION_REASONS.includes(reason)) {
-          const id = rejectionProjectId;
-          const task = (async () => {
-            try { await activeStore.recordRejection(id, receivedAt, reason); } catch { /* bounded best-effort, no retry or raw error logging */ }
-          })();
-          if (options.waitUntil) {
-            try { options.waitUntil(task); } catch { await task; }
-          } else await task;
-        }
-      }
-      return finish(Response.json({ error: { code: failure.code, message: messages[failure.code], requestId } }, { status: failure.status, headers }), failure.code);
+      if (admitted && rejectionProjectId)
+        await recordRejectedRequest(activeStore, rejectionProjectId, receivedAt, failure.code, options.waitUntil);
+      return finish(Response.json({ error: { code: failure.code, message: messages[failure.code], requestId } }, { status: failure.status, headers: responseHeaders }), failure.code);
     }
   };
 }
-const routeForCollection = (url: string) => /^\/v1\/projects\/[^/]+\/(batches|server-batches)$/.test(new URL(url).pathname);
