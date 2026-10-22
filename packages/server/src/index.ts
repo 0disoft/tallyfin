@@ -1,3 +1,5 @@
+import { SERVER_DELIVERY_POLICY as DELIVERY } from './policy.ts';
+
 export type Value = string | boolean | number;
 export type Properties = Readonly<Record<string, Value>>;
 export type Rule = readonly ['boolean', boolean] | readonly ['enum', boolean, readonly string[]] |
@@ -178,10 +180,10 @@ function discardBody(body: ReadableStream<Uint8Array> | null): void {
 async function receipt(response: Response, count: number, signal: AbortSignal): Promise<{ accepted: number; duplicates: number }> {
   const length = response.headers.get('Content-Length');
   if (!response.body || !/^application\/json(?:\s*;\s*charset\s*=\s*(?:utf-8|"utf-8"))?\s*$/i.test(response.headers.get('Content-Type') ?? '') ||
-    (length !== null && (!/^\d+$/.test(length) || Number(length) > 1024))) {
+    (length !== null && (!/^\d+$/.test(length) || Number(length) > DELIVERY.maxReceiptBytes))) {
     discardBody(response.body); throw badResponse;
   }
-  const reader = response.body.getReader(); const buffer = new Uint8Array(1024); let size = 0;
+  const reader = response.body.getReader(); const buffer = new Uint8Array(DELIVERY.maxReceiptBytes); let size = 0;
   let complete = false, cancelled = false;
   const cancel = () => {
     if (cancelled) return;
@@ -205,30 +207,77 @@ async function receipt(response: Response, count: number, signal: AbortSignal): 
   finally { signal.removeEventListener('abort', cancel); if (!complete) cancel(); reader.releaseLock(); }
 }
 function retryDelay(header: string | null, attempt: number, now: number): number {
-  if (header !== null && header.length <= 128) {
-    if (/^\d+$/.test(header)) return Math.max(1000, Number(header) * 1000);
+  if (header !== null && header.length <= DELIVERY.maxRetryHeaderChars) {
+    if (/^\d+$/.test(header)) return Math.max(DELIVERY.retryBaseMs, Number(header) * 1000);
     // Date.parse normalizes nonexistent days and ignores mismatched weekdays.
     if (header.length === 29 && new Date(header).toUTCString() === header)
-      return Math.max(1000, Date.parse(header) - now);
+      return Math.max(DELIVERY.retryBaseMs, Date.parse(header) - now);
   }
-  return 1000 * 2 ** (attempt - 1);
+  return DELIVERY.retryBaseMs * 2 ** (attempt - 1);
 }
+type BatchSnapshot = { body: string; count: number } | { reason: 'invalid_batch' | 'invalid_event' };
+function snapshotBatch(events: readonly ServerEvent[], schema: ServerSchema, now: () => number): BatchSnapshot {
+  try {
+    if (!Array.isArray(events) || !events.length || events.length > DELIVERY.maxBatchEvents) return { reason: 'invalid_batch' };
+    const time = now(), count = events.length, snapshot: ServerEvent[] = [];
+    // Array.map skips holes, which JSON would serialize as null. Inspect every own slot.
+    for (let index = 0; index < count; index++) {
+      if (!own(events, String(index))) throw new ServerInputError();
+      snapshot.push(eventSnapshot(events[index], schema, time));
+    }
+    if (new Set(snapshot.map(e => e.eventId)).size !== snapshot.length) return { reason: 'invalid_batch' };
+    const body = JSON.stringify({ schemaVersion: schema.version, source: 'server', events: snapshot });
+    if (new TextEncoder().encode(body).byteLength > DELIVERY.maxBatchBytes) return { reason: 'invalid_batch' };
+    return { body, count };
+  } catch { return { reason: 'invalid_event' }; }
+}
+
+interface AttemptProgress { issued: boolean; sent: number; httpStatus: number | null; header: string | null }
+async function sendAttempt(host: ServerPlatform, endpoint: string, body: string, count: number,
+  getToken: ServerOptions['getToken'], deadline: number, signal: AbortSignal, progress: AttemptProgress) {
+  let token: string;
+  try { token = await getToken(signal); }
+  catch { throw authFailed; }
+  if (signal.aborted) throw aborted;
+  // Synchronous credential work can outlast the timer before the event loop runs it.
+  if (host.monotonicNow() >= deadline) throw timedOut;
+  if (typeof token !== 'string' || !token || token.length > DELIVERY.maxTokenChars || /[\s,]/.test(token)) throw authFailed;
+  progress.issued = true; progress.sent++;
+  const response = await host.fetch(endpoint, { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body,
+    signal, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+  if (signal.aborted) { discardBody(response.body); throw aborted; }
+  // Timers may be delayed by synchronous transport work or a busy event loop.
+  if (host.monotonicNow() >= deadline) { discardBody(response.body); throw timedOut; }
+  progress.httpStatus = response.status; progress.header = response.headers.get('Retry-After');
+  if (response.status !== 200) { discardBody(response.body); return null; }
+  const result = await receipt(response, count, signal);
+  if (host.monotonicNow() >= deadline) throw timedOut;
+  return result;
+}
+
+function terminalHttpFailure(status: number | null): { status: 'rejected' | 'unavailable'; reason: FailureReason; retryable: boolean } | null {
+  if (status === 429 || status === 408 || (status !== null && status >= 500 && status <= 599)) return null;
+  if (status !== null && status >= 400 && status < 500) return { status: 'rejected', reason: 'http_error', retryable: false };
+  return { status: 'unavailable', reason: 'invalid_response', retryable: true };
+}
+
 export function createTallyfinServer(options: ServerOptions, host: ServerPlatform = platform()): ServerClient {
   let schema: ServerSchema; let endpoint: string;
-  const attempts = options.maxAttempts ?? 3; const timeout = options.requestTimeoutMs ?? 5000; const budget = options.retryBudgetMs ?? 30000;
+  const attempts = options.maxAttempts ?? DELIVERY.maxAttempts; const timeout = options.requestTimeoutMs ?? DELIVERY.defaultTimeoutMs; const budget = options.retryBudgetMs ?? DELIVERY.defaultBudgetMs;
   try {
     const url = new URL(options.endpoint); const local = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
     if (url.username || url.password || url.search || url.hash ||
       !/^\/v1\/projects\/[a-z][a-z0-9-]{0,47}\/server-batches$/.test(url.pathname) ||
       !(url.protocol === 'https:' || (options.allowLocalHttp === true && local && url.protocol === 'http:')) ||
-      typeof options.getToken !== 'function' || !integer(attempts, 1, 3) || !integer(timeout, 10, 30000) || !integer(budget, 10, 600000) ||
+      typeof options.getToken !== 'function' || !integer(attempts, 1, DELIVERY.maxAttempts) || !integer(timeout, DELIVERY.minTimeoutMs, DELIVERY.maxTimeoutMs) || !integer(budget, DELIVERY.minTimeoutMs, DELIVERY.maxBudgetMs) ||
       [host.now, host.monotonicNow, host.uuid, host.fetch, host.wait].some(fn => typeof fn !== 'function')) throw Error();
     const text = JSON.stringify(options.schema);
     if (text.length > 32768) throw Error();
     const copy: unknown = JSON.parse(text); if (!schemaValid(copy)) throw Error();
     schema = copy; endpoint = url.href;
   } catch { throw new TypeError('Invalid server SDK configuration.'); }
-  const getToken = options.getToken; const encoder = new TextEncoder();
+  const getToken = options.getToken;
   const schedule = host.timer ? host.timer.bind(host) : timer;
   return {
     createEvent(name, properties = {}, metadata = {}) {
@@ -250,68 +299,35 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
       } catch { throw new ServerInputError(); }
     },
     async send(events, sendOptions = {}) {
-      let sent = 0; let httpStatus: number | null = null;
+      const progress: AttemptProgress = { issued: false, sent: 0, httpStatus: null, header: null };
       const fail = (status: 'rejected' | 'unavailable' | 'aborted', reason: FailureReason, retryable: boolean): DeliveryResult =>
-        ({ status, reason, httpStatus, retryable, attempts: sent });
+        ({ status, reason, httpStatus: progress.httpStatus, retryable, attempts: progress.sent });
       const signal = sendOptions.signal;
       if (signal?.aborted) return fail('aborted', 'aborted', false);
-      let body: string; let count: number;
-      try {
-        if (!Array.isArray(events) || !events.length || events.length > 20) return fail('rejected', 'invalid_batch', false);
-        const now = host.now(); const snapshot: ServerEvent[] = [];
-        // Array.map skips holes, which JSON would serialize as null. Inspect every own slot.
-        count = events.length;
-        for (let index = 0; index < count; index++) {
-          if (!own(events, String(index))) throw new ServerInputError();
-          snapshot.push(eventSnapshot(events[index], schema, now));
-        }
-        if (new Set(snapshot.map(e => e.eventId)).size !== snapshot.length) return fail('rejected', 'invalid_batch', false);
-        body = JSON.stringify({ schemaVersion: schema.version, source: 'server', events: snapshot });
-        if (encoder.encode(body).byteLength > 16384) return fail('rejected', 'invalid_batch', false);
-      } catch { return fail('rejected', 'invalid_event', false); }
+      const batch = snapshotBatch(events, schema, () => host.now());
+      if ('reason' in batch) return fail('rejected', batch.reason, false);
+      const { body, count } = batch;
       const deadline = host.monotonicNow() + budget;
       let reason: FailureReason = 'transport_unavailable';
       for (let attempt = 1; attempt <= attempts; attempt++) {
         const remaining = deadline - host.monotonicNow();
         if (remaining <= 0) return fail('unavailable', 'retry_deferred', true);
         const requestDeadline = Math.min(deadline, host.monotonicNow() + timeout);
-        let header: string | null = null; let issued = false;
+        progress.header = null; progress.issued = false;
         try {
-          const outcome = await limited(async requestSignal => {
-            let token: string;
-            try { token = await getToken(requestSignal); }
-            catch { throw authFailed; }
-            if (requestSignal.aborted) throw aborted;
-            // Synchronous credential work can outlast the timer before the event loop runs it.
-            if (host.monotonicNow() >= requestDeadline) throw timedOut;
-            if (typeof token !== 'string' || !token || token.length > 8185 || /[\s,]/.test(token)) throw authFailed;
-            issued = true; sent++;
-            const response = await host.fetch(endpoint, { method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }, body,
-              signal: requestSignal, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
-            if (requestSignal.aborted) { discardBody(response.body); throw aborted; }
-            // Timers may be delayed by synchronous transport work or a busy event loop.
-            if (host.monotonicNow() >= requestDeadline) { discardBody(response.body); throw timedOut; }
-            httpStatus = response.status; header = response.headers.get('Retry-After');
-            if (response.status === 200) {
-              const result = await receipt(response, count, requestSignal);
-              if (host.monotonicNow() >= requestDeadline) throw timedOut;
-              return result;
-            }
-            discardBody(response.body);
-            return null;
-          }, Math.min(timeout, remaining), schedule, signal);
-          if (outcome) return { status: 'delivered', ...outcome, attempts: sent };
+          const outcome = await limited(requestSignal => sendAttempt(host, endpoint, body, count, getToken,
+            requestDeadline, requestSignal, progress), Math.min(timeout, remaining), schedule, signal);
+          if (outcome) return { status: 'delivered', ...outcome, attempts: progress.sent };
           reason = 'http_error';
-          if (httpStatus !== 429 && httpStatus !== 408 && !(httpStatus! >= 500 && httpStatus! <= 599))
-            return httpStatus! >= 400 && httpStatus! < 500 ? fail('rejected', reason, false) : fail('unavailable', 'invalid_response', true);
+          const terminal = terminalHttpFailure(progress.httpStatus);
+          if (terminal) return fail(terminal.status, terminal.reason, terminal.retryable);
         } catch (error) {
           if (signal?.aborted || error === aborted) return fail('aborted', 'aborted', false);
-          if (!issued || error === authFailed) return fail('unavailable', 'authentication_unavailable', true);
+          if (!progress.issued || error === authFailed) return fail('unavailable', 'authentication_unavailable', true);
           reason = error === badResponse ? 'invalid_response' : 'transport_unavailable';
         }
         if (attempt === attempts) return fail('unavailable', reason, true);
-        const delay = retryDelay(header, attempt, host.now());
+        const delay = retryDelay(progress.header, attempt, host.now());
         const remainingWait = deadline - host.monotonicNow();
         if (delay >= remainingWait) return fail('unavailable', 'retry_deferred', true);
         try { await limited(waitSignal => host.wait(delay, waitSignal), remainingWait, schedule, signal); }

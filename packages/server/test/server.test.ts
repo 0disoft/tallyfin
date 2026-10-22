@@ -217,7 +217,7 @@ test('bundled ESM exports work in Node and contain no core, storage, browser or 
   const result = await build({ entryPoints: [fileURLToPath(new URL('../src/index.ts', import.meta.url))], bundle: true,
     write: false, format: 'esm', platform: 'neutral', target: 'es2023', metafile: true });
   assert.ok(Object.values(result.metafile.outputs).every(output => !output.imports.length));
-  assert.equal(Object.keys(result.metafile.inputs).length, 1);
+  assert.ok(Object.keys(result.metafile.inputs).every(path => path.replaceAll('\\', '/').includes('packages/server/src/')));
   const sdk = await import('data:text/javascript;base64,' + Buffer.from(result.outputFiles[0]!.text).toString('base64'));
   const f = fixture(); const client = sdk.createTallyfinServer(f.config, f.host);
   const e = client.createEvent('job_finished', { outcome: 'success' });

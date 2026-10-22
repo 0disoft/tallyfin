@@ -1,3 +1,4 @@
+import { MAX_BATCH_EVENTS, MAX_PENDING_EVENTS, MAX_HIDDEN_BATCHES, MAX_RETRIES, FLUSH_INTERVAL_MS, REQUEST_TIMEOUT_MS, RETRY_BUDGET_MS, retryDelay } from './delivery-policy.ts';
 import type { BrowserOptions, BrowserPlatform, BrowserSchema, Properties } from './types.js';
 type EventSchema = Pick<BrowserSchema, 'version' | 'events'>;
 interface Transport {
@@ -122,13 +123,13 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
   const pack = (): Batch => {
     // At most four 48-character keys/32-character values plus a bounded task link:
     // each validated event is below 800 ASCII bytes, so 20 events fit in 16 KiB.
-    const count = Math.min(queue.length, 20), events = queue.slice(0, count).join(',');
-    return { __tfBatchBody: prefix + events + ']}', __tfBatchCount: count, __tfBatchDeadline: elapsed() + 600000, __tfBatchTries: 0 };
+    const count = Math.min(queue.length, MAX_BATCH_EVENTS), events = queue.slice(0, count).join(',');
+    return { __tfBatchBody: prefix + events + ']}', __tfBatchCount: count, __tfBatchDeadline: elapsed() + RETRY_BUDGET_MS, __tfBatchTries: 0 };
   };
   const release = (batch: Batch) => {
     active.delete(batch); batch.__tfBatchStopRequest = undefined;
     if (!active.size) {
-      if (queue.length) schedule(draining || queue.length >= 20 ? 0 : 5000);
+      if (queue.length) schedule(draining || queue.length >= MAX_BATCH_EVENTS ? 0 : FLUSH_INTERVAL_MS);
       else { draining = false; cancelTimer?.(); cancelTimer = undefined; }
     }
   };
@@ -140,13 +141,8 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     const finish = (status: number, header: string | null = null) => {
       if (finished || stopped || !active.has(batch)) return;
       finished = true; stopTimeout(); batch.__tfBatchStopRequest = undefined;
-      if (([0, 408, 429].includes(status) || (status >= 500 && status <= 599)) && batch.__tfBatchTries < 2) {
-        let delay = 1000 * 2 ** batch.__tfBatchTries;
-        if (header !== null && /^\d+$/.test(header)) delay = Number(header) * 1000;
-        // Round-trip rejects normalized invalid dates and nonstandard date strings.
-        else if (header?.length === 29 && new Date(header).toUTCString() === header)
-          delay = Date.parse(header) - platform.now();
-        delay = Math.max(1000, delay);
+      if (([0, 408, 429].includes(status) || (status >= 500 && status <= 599)) && batch.__tfBatchTries < MAX_RETRIES) {
+        const delay = retryDelay(header, batch.__tfBatchTries, platform.now());
         if (delay < batch.__tfBatchDeadline - elapsed()) {
           batch.__tfBatchTries++;
           batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);
@@ -155,7 +151,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       }
       release(batch);
     };
-    const stopTimeout = platform.timer(() => { controller.abort(); finish(0); }, Math.min(10000, remaining));
+    const stopTimeout = platform.timer(() => { controller.abort(); finish(0); }, Math.min(REQUEST_TIMEOUT_MS, remaining));
     batch.__tfBatchStopRequest = () => { finished = true; stopTimeout(); controller.abort(); };
     try { platform.send(endpoint, batch.__tfBatchBody, controller.signal).then(r => finish(r.status, r.retryAfter), () => finish(0)); }
     catch { finish(0); }
@@ -165,13 +161,13 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     queue.splice(0, batch.__tfBatchCount); active.add(batch); send(batch);
   }
   const enqueue = (name: string, properties: Properties, occurredAt: number, attachment?: object) => {
-    if (stopped || pending() >= 40) return false;
+    if (stopped || pending() >= MAX_PENDING_EVENTS) return false;
     const copied = snapshot(name, properties); if (!copied) return false;
     const eventId = platform.uuid(); if (typeof eventId !== 'string' || !uuidPattern.test(eventId)) return false;
     const event = JSON.stringify({ eventId, name, occurredAt: new Date(occurredAt).toISOString(), properties: copied, ...attachment });
     // Finite names, four bounded values and validated task links fit well below one batch.
     queue.push(event);
-    if (!active.size && (queue.length >= 20 || !cancelTimer)) schedule(queue.length >= 20 ? 0 : 5000);
+    if (!active.size && (queue.length >= MAX_BATCH_EVENTS || !cancelTimer)) schedule(queue.length >= MAX_BATCH_EVENTS ? 0 : FLUSH_INTERVAL_MS);
     return true;
   };
   const flush = () => { if (!stopped) { draining = true; if (!active.size && queue.length) schedule(0); } };
@@ -188,7 +184,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
     }
     cancelTimer?.(); cancelTimer = undefined;
     // Start unsent keepalive batches during the visibility callback, before timers can freeze.
-    while (queue.length && active.size < 2) launch();
+    while (queue.length && active.size < MAX_HIDDEN_BATCHES) launch();
   });
   return {
     schema, platform,
