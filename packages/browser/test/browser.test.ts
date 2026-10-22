@@ -210,7 +210,7 @@ test('native browser adapter omits credentials/referrer and releases its visibil
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(sent?.credentials, 'omit'); assert.equal(sent?.referrerPolicy, 'no-referrer');
     assert.equal(sent?.keepalive, true); assert.equal(sent?.cache, 'no-store');
-    assert.equal((sent?.headers as Record<string, string>)['Content-Type'], 'text/plain;charset=utf-8');
+    assert.equal(new Request(endpoint, sent).headers.get('Content-Type')?.toLowerCase(), 'text/plain;charset=utf-8');
   } finally {
     client.destroy();
     for (const [key, descriptor] of originals) { if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }

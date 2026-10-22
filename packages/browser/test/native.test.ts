@@ -38,6 +38,7 @@ test('native adapter releases a batch after headers even if body cancellation st
 
 test('native adapter refuses redirect forwarding and drops opaque redirect responses without retry', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
+  t.mock.method(Math, 'random', () => 0.5);
   const originals = new Map(['document', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
   let client: ReturnType<typeof createTallyfin> | undefined;
   Object.defineProperty(globalThis, 'document', { value: new EventTarget(), configurable: true });
@@ -71,7 +72,9 @@ test('native adapter refuses redirect forwarding and drops opaque redirect respo
   } });
   client = createTallyfin({ endpoint, schema }); client.track('view', { tool: 'loan' }); client.flush();
   t.mock.timers.tick(0); await turn(); assert.equal(client.pending, 1);
-  t.mock.timers.tick(1000); await turn();
-  t.mock.timers.tick(2000); await turn();
+  t.mock.timers.tick(1499); await turn(); assert.equal(calls, 1);
+  t.mock.timers.tick(1); await turn(); assert.equal(calls, 2);
+  t.mock.timers.tick(2499); await turn(); assert.equal(calls, 2);
+  t.mock.timers.tick(1); await turn();
   assert.equal(calls, 3); assert.equal(client.pending, 0); client.destroy();
 });

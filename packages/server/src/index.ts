@@ -41,6 +41,8 @@ export interface ServerClient {
 export interface ServerPlatform {
   now(): number;
   monotonicNow(): number;
+  /** Retry jitter sample in 0..1. Legacy injected hosts default to zero jitter. */
+  random?(): number;
   uuid(): string;
   fetch: typeof fetch;
   wait(milliseconds: number, signal: AbortSignal): Promise<void>;
@@ -150,7 +152,7 @@ function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
 }
 function platform(): ServerPlatform {
   return { now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(),
-    fetch: (input, init) => globalThis.fetch(input, init), wait };
+    fetch: (input, init) => globalThis.fetch(input, init), wait, random: Math.random };
 }
 function timer(callback: () => void, milliseconds: number): () => void {
   const id = setTimeout(callback, milliseconds); return () => clearTimeout(id);
@@ -327,7 +329,8 @@ export function createTallyfinServer(options: ServerOptions, host: ServerPlatfor
           reason = error === badResponse ? 'invalid_response' : 'transport_unavailable';
         }
         if (attempt === attempts) return fail('unavailable', reason, true);
-        const delay = retryDelay(progress.header, attempt, host.now());
+        const delay = retryDelay(progress.header, attempt, host.now())
+          + DELIVERY.retryBaseMs * Math.min(1, Math.max(0, host.random?.() || 0));
         const remainingWait = deadline - host.monotonicNow();
         if (delay >= remainingWait) return fail('unavailable', 'retry_deferred', true);
         try { await limited(waitSignal => host.wait(delay, waitSignal), remainingWait, schedule, signal); }

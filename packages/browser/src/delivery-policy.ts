@@ -9,10 +9,10 @@ export const RETRY_BUDGET_MS = 600_000;
 export const RETRY_BASE_MS = 1000;
 
 /** Retry-After uses wall time; the caller compares this delay with its monotonic deadline. */
-export function retryDelay(header: string | null, retries: number, now: number): number {
+export function retryDelay(header: string | null, retries: number, now: number, jitter = 0): number {
   let delay = RETRY_BASE_MS * 2 ** retries;
   if (header !== null && /^\d+$/.test(header)) delay = Number(header) * 1000;
   else if (header?.length === 29 && new Date(header).toUTCString() === header)
     delay = Date.parse(header) - now;
-  return Math.max(RETRY_BASE_MS, delay);
+  return Math.max(RETRY_BASE_MS, delay) + RETRY_BASE_MS * Math.min(1, Math.max(0, jitter || 0));
 }

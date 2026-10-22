@@ -43,11 +43,12 @@ function schemaValid(schema: EventSchema): boolean {
 function browserPlatform(): BrowserPlatform | undefined {
   if (typeof document === 'undefined' || typeof fetch !== 'function' || typeof crypto === 'undefined') return undefined;
   return {
-    now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(),
+    now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(), random: Math.random,
     timer: (callback, milliseconds) => { const id = setTimeout(callback, milliseconds); return () => clearTimeout(id); },
     send(endpoint, body, signal) {
       return globalThis.fetch(endpoint, { method: 'POST', body, signal,
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, credentials: 'omit',
+        // Fetch supplies text/plain;charset=UTF-8 for this string body.
+        credentials: 'omit',
         keepalive: true, cache: 'no-store', referrerPolicy: 'no-referrer', redirect: 'manual' }).then(response => {
         // Native fetch defaults to CORS; cleanup must not delay the HTTP status.
         void response.body?.cancel().catch(() => {});
@@ -142,7 +143,7 @@ function client<Schema extends EventSchema>(endpoint: string, schema: Schema, pl
       if (finished || stopped || !active.has(batch)) return;
       finished = true; stopTimeout(); batch.__tfBatchStopRequest = undefined;
       if (([0, 408, 429].includes(status) || (status >= 500 && status <= 599)) && batch.__tfBatchTries < MAX_RETRIES) {
-        const delay = retryDelay(header, batch.__tfBatchTries, platform.now());
+        const delay = retryDelay(header, batch.__tfBatchTries, platform.now(), platform.random?.());
         if (delay < batch.__tfBatchDeadline - elapsed()) {
           batch.__tfBatchTries++;
           batch.__tfBatchStopRetry = platform.timer(() => { batch.__tfBatchStopRetry = undefined; send(batch); }, delay);

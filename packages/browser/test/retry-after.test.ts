@@ -2,6 +2,15 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createTallyfinFunnels } from '../src/funnels.ts';
 import { endpoint, FakeBrowser } from './helpers.ts';
+import { retryDelay } from '../src/delivery-policy.ts';
+
+test('retry jitter respects the exponential base and Retry-After floor, with bounded adapter samples', () => {
+  assert.equal(retryDelay(null, 0, 0, 0.5), 1500);
+  assert.equal(retryDelay(null, 1, 0, 0.5), 2500);
+  assert.equal(retryDelay('10', 0, 0, 0.5), 10500);
+  for (const sample of [-1, NaN, -Infinity]) assert.equal(retryDelay(null, 0, 0, sample), 1000);
+  for (const sample of [1, 2, Infinity]) assert.equal(retryDelay(null, 0, 0, sample), 2000);
+});
 
 const profiles = {
   workflow: (host: FakeBrowser) => host.client(),
@@ -12,6 +21,16 @@ const profiles = {
 };
 
 for (const [profile, create] of Object.entries(profiles)) {
+  test(`${profile}: injected jitter delays retries without changing the event body`, async () => {
+    const host: FakeBrowser & { random?: () => number } = new FakeBrowser(); host.random = () => 0.5;
+    host.reply = async index => ({ status: index ? 200 : 503, retryAfter: '2' });
+    const client = create(host);
+    try {
+      client.track('view', { tool: 'loan' }); client.flush(); await host.tick(2499);
+      assert.equal(host.calls.length, 1); await host.tick(1); assert.equal(host.calls.length, 2);
+      assert.equal(host.calls[0]!.body, host.calls[1]!.body); assert.equal(client.pending, 0);
+    } finally { client.destroy(); }
+  });
   test(`${profile}: HTTP-date Retry-After survives flush and hidden callbacks with unchanged bytes`, async () => {
     for (const status of [429, 503]) {
       const host = new FakeBrowser(); const until = new Date(host.time + 60000).toUTCString();

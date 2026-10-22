@@ -1,5 +1,17 @@
 # 검증
 
+## 멱등 수집 재전송의 jitter (2026-10-23)
+
+브라우저/서버 SDK의 기존 지수 백오프와 Retry-After 하한에 최대 1초의 양수 jitter를
+더한다. 기본 전송은 Math.random을 사용하고 주입한 플랫폼은 선택적 random으로
+제어하며, 생략한 기존 주입 플랫폼은 기존 일정대로 동작한다. ID·본문·횟수·총시간
+한도와 인증/검증/충돌 거부의 무재시도를 유지한다. 브라우저 string body의 기본
+Content-Type은 Fetch가 제공하므로 중복 명시를 제거하고 실제 Request 헤더로 검증했다.
+SDK 검사 102/102, 루트 TypeScript 검사, 오프라인 SDK pack/외부 소비자 설치·선언
+컴파일·세 진입점 실행을 통과했다(네트워크/credential 요청 0회).
+브라우저 gzip은 Sembom 3050, 퍼널 3023, 생성 퍼널 3046 bytes로 3072 이하다.
+공개 HTTP API·DB·의존성·CI 변경과 푸시·배포·게시는 없다.
+
 ## OIDC 제공자 장애와 인증 거부 구분 (2026-10-23)
 
 OIDC 검증은 선택적 throwDependencyErrors 호출 옵션으로 키 조회/용량/기한 오류의

@@ -29,6 +29,8 @@ export interface BrowserPlatform {
   now(): number;
   /** Elapsed time for retry budgets. Legacy hosts may omit this and retain their now() clock. */
   monotonicNow?(): number;
+  /** Retry jitter sample in [0,1). Legacy injected hosts default to zero jitter. */
+  random?(): number;
   uuid(): string;
   timer(callback: () => void, milliseconds: number): () => void;
   send(endpoint: string, body: string, signal: AbortSignal): Promise<{ status: number; retryAfter: string | null }>;
