@@ -1,9 +1,10 @@
-import { ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity, validateRegistry } from '@tallyfin/core';
-import type { AttemptState, PreparedBatch, PreparedServerBatch, Receipt, Registry, RejectionReason, ServerCollectionStore, ServerPrincipal } from '@tallyfin/core';
-import { bulk } from './sql.ts';
-import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
-import { funnelStatements, readFunnelRun } from './funnels.ts';
-import type { FunnelRunRow } from './funnels.ts';
+import { COLLECTION_POLICY, RETENTION_POLICY, ADMIN_CHANGE_RETENTION_DAYS, canonicalJson, closed, CollectionError, DAY, integer, localDate, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity, validateRegistry } from '@tallyfin/core';
+import type { PreparedBatch, PreparedServerBatch, Registry, RejectionReason, ServerCollectionStore, ServerPrincipal } from '@tallyfin/core';
+import { ingestStatements } from './ingest-statements.ts';
+import { readIngestSnapshot } from './ingest-snapshot.ts';
+import { D1_POLICY } from './policy.ts';
+import type { ProjectRow, SchemaRow, SqlDatabase } from './sql.ts';
+import { readFunnelRun } from './funnels.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
 export { D1Queries } from './query.ts';
 export { D1Maintenance } from './maintenance.ts';
@@ -22,14 +23,14 @@ export class D1Store implements ServerCollectionStore {
     if (!row) return null;
     const origins: unknown = JSON.parse(row.allowed_origins_json);
     if (!Array.isArray(origins) || !origins.every((origin: unknown) => typeof origin === 'string') ||
-      !integer(row.requests_per_minute, 1, 600) || !integer(row.new_receipts_per_utc_day, 1, 1_000_000))
+      !integer(row.requests_per_minute, 1, COLLECTION_POLICY.maxRequestsPerMinute) || !integer(row.new_receipts_per_utc_day, 1, COLLECTION_POLICY.maxNewReceiptsPerUtcDay))
       throw new CollectionError('storage_unavailable', 503);
     return { id: row.id, name: row.name, status: row.status, timeZone: row.time_zone,
       allowedOrigins: origins,
       limits: { requestsPerMinute: row.requests_per_minute, newReceiptsPerUtcDay: row.new_receipts_per_utc_day } };
   }
   async admit(projectId: string, receivedAt: number, limit: number): Promise<boolean> {
-    if (!PROJECT_ID.test(projectId) || !integer(receivedAt, 0, 8_640_000_000_000_000) || !integer(limit, 1, 600)) throw new CollectionError('invalid_request', 400);
+    if (!PROJECT_ID.test(projectId) || !integer(receivedAt, 0, 8_640_000_000_000_000) || !integer(limit, 1, COLLECTION_POLICY.maxRequestsPerMinute)) throw new CollectionError('invalid_request', 400);
     const minute = Math.floor(receivedAt / 60_000) * 60_000;
     const result = await this.db.batch<{ request_count: number }>([this.db.prepare(`
       INSERT INTO ingest_minute_usage (project_id, minute_start, request_count) VALUES (?, ?, 1)
@@ -49,7 +50,7 @@ export class D1Store implements ServerCollectionStore {
       throw new CollectionError('invalid_request', 400);
     const path = `$.${reason}`;
     const result = await this.db.batch([this.db.prepare(`UPDATE ingest_minute_usage SET rejections_json =
-      json_set(rejections_json, ?, json_object('count', min(coalesce(json_extract(rejections_json, ?), 0) + 1, 600),
+      json_set(rejections_json, ?, json_object('count', min(coalesce(json_extract(rejections_json, ?), 0) + 1, COLLECTION_POLICY.maxRequestsPerMinute),
         'lastRejectedAt', max(coalesce(json_extract(rejections_json, ?), 0), ?)))
       WHERE project_id = ? AND minute_start = ?`).bind(path, `${path}.count`, `${path}.lastRejectedAt`, receivedAt,
         projectId, Math.floor(receivedAt / 60_000) * 60_000)]);
@@ -95,74 +96,21 @@ export class D1Store implements ServerCollectionStore {
     return this.commitIngest(batch, registry, { issuer: principal.issuer, subject: principal.subject });
   }
   private async commitIngest(batch: PreparedBatch | PreparedServerBatch, registry: Registry, publisher?: ServerPrincipal): Promise<{ accepted: number; duplicates: number }> {
-    const utcDate = new Date(batch.receivedAt).toISOString().slice(0, 10);
-    const eventIds = batch.events.map(e => e.event.eventId);
-    const attemptIds = [...new Set(batch.events.flatMap(e => e.workflow ? [e.workflow.attemptId] : []))];
-    const runIds = [...new Set(batch.events.flatMap(e => e.funnel ? [e.funnel.event.funnel.runId] : []))];
-    const placeholders = (ids: string[]) => ids.map(() => '?').join(',') || 'NULL';
     // All mutations of ingest state increment projects.ingest_revision. Reads form one consistent snapshot.
     // A CHECK guard inside the write batch rolls back a raced snapshot; bounded retries re-read receipts.
-    for (let retry = 0; retry < 3; retry++) {
-      const read = await this.db.batch<ProjectRow | SchemaRow | Receipt | AttemptState | FunnelRunRow | { new_receipts: number } | { authorized: number }>([
-        this.db.prepare('SELECT * FROM projects WHERE id = ?').bind(batch.projectId),
-        this.db.prepare('SELECT * FROM project_schemas WHERE project_id = ? AND version = ?').bind(batch.projectId, batch.schemaVersion),
-        this.db.prepare(`SELECT * FROM event_receipts WHERE project_id = ? AND source = ? AND event_id IN (${placeholders(eventIds)})`).bind(batch.projectId, batch.source, ...eventIds),
-        this.db.prepare(`SELECT * FROM workflow_attempts WHERE project_id = ? AND source = 'browser' AND attempt_id IN (${placeholders(attemptIds)})`).bind(batch.projectId, ...attemptIds),
-        this.db.prepare('SELECT new_receipts FROM ingest_daily_usage WHERE project_id = ? AND utc_date = ?').bind(batch.projectId, utcDate),
-        ...(publisher ? [this.db.prepare('SELECT 1 AS authorized FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?')
-          .bind(batch.projectId, publisher.issuer, publisher.subject)] : []),
-        ...(runIds.length ? [this.db.prepare(`SELECT * FROM funnel_runs WHERE project_id = ? AND run_id IN (${placeholders(runIds)})`)
-          .bind(batch.projectId, ...runIds)] : []),
-      ]);
-      const runIndex = publisher ? 6 : 5;
-      if (read.length !== runIndex + Number(runIds.length > 0) || read.some(row => !row.success)) throw new CollectionError('storage_unavailable', 503);
-      if (publisher && (read[5]?.results.length !== 1 || (read[5]?.results[0] as { authorized?: number })?.authorized !== 1))
-        throw new CollectionError('forbidden', 403);
-      const project = read[0]?.results[0] as ProjectRow | undefined;
-      const schema = read[1]?.results[0] as SchemaRow | undefined;
+    for (let retry = 0; retry < D1_POLICY.snapshotAttempts; retry++) {
+      const snapshot = await readIngestSnapshot(this.db, batch, publisher);
+      if (!snapshot.publisherAuthorized) throw new CollectionError('forbidden', 403);
+      const { project, schema } = snapshot;
       if (!project || project.status !== 'active') throw new CollectionError('project_unavailable', 403);
       if (!schema || schema.status !== 'active') throw new CollectionError('unknown_schema', 422);
       const currentRegistry = this.registry(project, schema);
       if (canonicalJson(currentRegistry) !== canonicalJson(registry)) throw new CollectionError('storage_unavailable', 503);
-      const plan = planIngest(batch, { receipts: read[2]!.results as Receipt[], attempts: read[3]!.results as AttemptState[],
-        funnelRuns: runIds.length ? (read[runIndex]!.results as FunnelRunRow[]).map(readFunnelRun) : [],
-        newReceiptsToday: (read[4]?.results[0] as { new_receipts: number } | undefined)?.new_receipts ?? 0 }, project.new_receipts_per_utc_day);
+      const plan = planIngest(batch, { receipts: snapshot.receipts, attempts: snapshot.attempts,
+        funnelRuns: snapshot.runRows.map(readFunnelRun), newReceiptsToday: snapshot.newReceiptsToday }, project.new_receipts_per_utc_day);
       // Pure retransmission needs no write; it is linearized at the consistent read snapshot.
       if (!plan.receipts.length) return { accepted: plan.accepted, duplicates: plan.duplicates };
-      const statements: SqlStatement[] = [this.db.prepare(`UPDATE projects SET
-        ingest_revision = CASE WHEN ingest_revision = ? AND status = 'active' AND time_zone = ?
-          AND allowed_origins_json = ? AND new_receipts_per_utc_day = ? AND requests_per_minute = ?
-          AND EXISTS (SELECT 1 FROM project_schemas WHERE project_id = ? AND version = ? AND status = 'active' AND definitions_json = ?)
-          ${publisher ? 'AND EXISTS (SELECT 1 FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?)' : ''}
-          THEN ingest_revision + 1 ELSE -1 END,
-        latest_received_at = max(coalesce(latest_received_at, 0), ?) WHERE id = ?`).bind(project.ingest_revision, project.time_zone,
-          project.allowed_origins_json, project.new_receipts_per_utc_day, project.requests_per_minute,
-          batch.projectId, batch.schemaVersion, schema.definitions_json,
-          ...(publisher ? [batch.projectId, publisher.issuer, publisher.subject] : []), batch.receivedAt, batch.projectId)];
-      statements.push(...bulk(this.db, 'event_receipts', ['project_id', 'source', 'event_id', 'schema_version', 'payload_hash', 'received_at', 'expires_at'],
-        plan.receipts.map(r => [batch.projectId, batch.source, r.event_id, r.schema_version, r.payload_hash, r.received_at, r.expires_at]),
-        `ON CONFLICT(project_id, source, event_id) DO UPDATE SET schema_version=excluded.schema_version, payload_hash=excluded.payload_hash, received_at=excluded.received_at, expires_at=excluded.expires_at`));
-      statements.push(...bulk(this.db, 'workflow_attempts', ['project_id', 'source', 'attempt_id', 'schema_version', 'workflow_id', 'started_at', 'cohort_date', 'dimension_key', 'start_seen', 'terminal_kind', 'terminal_at', 'expires_at'],
-        plan.attempts.map(a => [batch.projectId, 'browser', a.attempt_id, a.schema_version, a.workflow_id, a.started_at, a.cohort_date, a.dimension_key, a.start_seen, a.terminal_kind, a.terminal_at, a.expires_at]),
-        `ON CONFLICT(project_id, source, attempt_id) DO UPDATE SET schema_version=excluded.schema_version, workflow_id=excluded.workflow_id, started_at=excluded.started_at, cohort_date=excluded.cohort_date, dimension_key=excluded.dimension_key, start_seen=excluded.start_seen, terminal_kind=excluded.terminal_kind, terminal_at=excluded.terminal_at, expires_at=excluded.expires_at`));
-      statements.push(this.db.prepare(`INSERT INTO ingest_daily_usage (project_id, utc_date, new_receipts, expires_at) VALUES (?, ?, ?, ?)
-        ON CONFLICT(project_id, utc_date) DO UPDATE SET new_receipts = new_receipts + excluded.new_receipts`).bind(
-          batch.projectId, utcDate, plan.receipts.length, Date.parse(`${utcDate}T00:00:00Z`) + 4 * DAY));
-      statements.push(...bulk(this.db, 'event_daily_counts', ['project_id', 'schema_version', 'source', 'event_date', 'event_name', 'dimension_key', 'count', 'updated_at'],
-        plan.events.map(e => [batch.projectId, batch.schemaVersion, batch.source, e.event_date, e.event_name, e.dimension_key, e.count, batch.receivedAt]),
-        `ON CONFLICT(project_id, schema_version, source, event_date, event_name, dimension_key) DO UPDATE SET count=count+excluded.count, updated_at=max(updated_at, excluded.updated_at)`));
-      statements.push(...bulk(this.db, 'workflow_daily_counts', ['project_id', 'schema_version', 'source', 'cohort_date', 'workflow_id', 'dimension_key', 'started_count', 'succeeded_count', 'failed_count', 'updated_at'],
-        plan.workflows.map(w => [batch.projectId, batch.schemaVersion, 'browser', w.cohort_date, w.workflow_id, w.dimension_key, 0, 0, 0, batch.receivedAt]),
-        `ON CONFLICT(project_id, schema_version, source, cohort_date, workflow_id, dimension_key) DO NOTHING`));
-      // SQLite validates the INSERT before resolving its conflict. A terminal-only delta
-      // (0 starts, 1 success) is invalid as a new row, but valid when added to an existing cohort.
-      // Create valid zero rows, then apply deltas within the same guarded atomic write batch.
-      statements.push(...plan.workflows.map(w => this.db.prepare(`UPDATE workflow_daily_counts SET
-        started_count=started_count+?, succeeded_count=succeeded_count+?, failed_count=failed_count+?,
-        updated_at=max(updated_at, ?) WHERE project_id=? AND schema_version=? AND source='browser'
-        AND cohort_date=? AND workflow_id=? AND dimension_key=?`).bind(w.started_count, w.succeeded_count,
-          w.failed_count, batch.receivedAt, batch.projectId, batch.schemaVersion, w.cohort_date, w.workflow_id, w.dimension_key)));
-      statements.push(...funnelStatements(this.db, batch.projectId, batch.schemaVersion, batch.receivedAt, plan));
+      const statements = ingestStatements(this.db, batch, project, schema, plan, publisher);
       try {
         const committed = await this.db.batch(statements);
         if (committed[0]?.meta.changes !== 1 || committed.some(r => !r.success)) throw new CollectionError('storage_unavailable', 503);
@@ -175,16 +123,16 @@ export class D1Store implements ServerCollectionStore {
     }
     throw new CollectionError('storage_unavailable', 503);
   }
-  async cleanup(projectId: string, timeZone: string, now: number, limit = 500): Promise<void> {
-    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw Error('invalid cleanup limit');
+  async cleanup(projectId: string, timeZone: string, now: number, limit: number = D1_POLICY.cleanupRows): Promise<void> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > D1_POLICY.maxCleanupRows) throw Error('invalid cleanup limit');
     const today = localDate(now, timeZone);
-    const oldest = new Date(Date.parse(`${today}T00:00:00Z`) - 89 * DAY).toISOString().slice(0, 10);
+    const oldest = new Date(Date.parse(`${today}T00:00:00Z`) - (RETENTION_POLICY.analyticsDays - 1) * DAY).toISOString().slice(0, 10);
     const statements = ['event_receipts', 'workflow_attempts', 'funnel_runs', 'ingest_daily_usage'].map(table => this.db.prepare(
       `DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND expires_at <= ? LIMIT ?)`
     ).bind(projectId, now, limit));
     statements.push(this.db.prepare(`DELETE FROM ingest_minute_usage WHERE rowid IN (SELECT rowid FROM ingest_minute_usage WHERE project_id = ?
       AND (minute_start < ? OR (rejections_json = '{}' AND minute_start < ?)) LIMIT ?)`).bind(projectId,
-        Math.floor(now / DAY) * DAY - 6 * DAY, Math.floor(now / 60_000) * 60_000 - 120_000, limit));
+        Math.floor(now / DAY) * DAY - (RETENTION_POLICY.rejectionDays - 1) * DAY, Math.floor(now / 60_000) * 60_000 - RETENTION_POLICY.idleMinuteGraceMs, limit));
     for (const [table, column] of [['event_daily_counts', 'event_date'], ['workflow_daily_counts', 'cohort_date'], ['funnel_daily_counts', 'cohort_date']])
       statements.push(this.db.prepare(`DELETE FROM ${table} WHERE rowid IN (SELECT rowid FROM ${table} WHERE project_id = ? AND ${column} < ? LIMIT ?)`).bind(projectId, oldest, limit));
     statements.push(this.db.prepare(`DELETE FROM admin_changes WHERE id IN
