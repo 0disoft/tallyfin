@@ -76,8 +76,8 @@ export class ApiError extends Error {
   status: number;
   code: string | null;
   requestId: string | null;
-  constructor(kind: ApiErrorKind, message: string, details: { status?: number; code?: string | null; requestId?: string | null } = {}) {
-    super(message);
+  constructor(kind: ApiErrorKind, message: string, details: { status?: number; code?: string | null; requestId?: string | null; cause?: unknown } = {}) {
+    super(message, details);
     this.name = 'ApiError';
     this.kind = kind;
     this.status = details.status ?? 0;
@@ -499,9 +499,9 @@ export class ApiClient {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     const controller = new AbortController();
-    const forward = () => controller.abort();
+    const forward = () => controller.abort(signal?.reason);
     if (signal) {
-      if (signal.aborted) controller.abort();
+      if (signal.aborted) controller.abort(signal.reason);
       else signal.addEventListener('abort', forward, { once: true });
     }
     this.#controllers.add(controller);
@@ -532,9 +532,9 @@ export class ApiClient {
           bearer = await awaitRequest(controller.signal, () => Promise.resolve().then(getBearer));
           if (!bearer) throw new Error();
         }
-        catch {
+        catch (cause) {
           checkRequest();
-          throw new ApiError('unauthorized', KIND_MESSAGE.unauthorized, { status: 401 });
+          throw new ApiError('unauthorized', KIND_MESSAGE.unauthorized, { status: 401, cause });
         }
       }
       checkRequest();
@@ -554,7 +554,7 @@ export class ApiClient {
         }));
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
-        throw new ApiError('network', KIND_MESSAGE.network);
+        throw new ApiError('network', KIND_MESSAGE.network, { cause: error });
       }
       observedStatus = response.status;
       checkRequest();
@@ -570,7 +570,7 @@ export class ApiClient {
         return result;
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
-        throw new ApiError('contract', 'API 응답을 JSON으로 읽지 못했어요.');
+        throw new ApiError('contract', 'API 응답을 JSON으로 읽지 못했어요.', { cause: error });
       }
     } catch (error) {
       enforceDeadline();

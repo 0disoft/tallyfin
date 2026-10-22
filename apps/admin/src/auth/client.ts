@@ -1,5 +1,6 @@
 import * as oauth from 'oauth4webapi';
 import { secureEndpoint, type LoginConfig } from './config.ts';
+import { awaitRequest } from '../api/request-lifecycle.ts';
 
 export const TRANSACTION_KEY = 'tallyfin.oidc.transaction.v1';
 const TRANSACTION_TTL = 10 * 60 * 1000;
@@ -10,7 +11,7 @@ export interface LoginStorage { getItem(key: string): string | null; setItem(key
 interface Tokens { access: string; refresh?: string; expiresAt: number; refreshAt: number; subject: string }
 
 export class LoginError extends Error {
-  constructor() { super('로그인을 완료하지 못했어요. 제공자 설정을 확인한 뒤 다시 로그인해 주세요.'); this.name = 'LoginError'; }
+  constructor(options?: ErrorOptions) { super('로그인을 완료하지 못했어요. 제공자 설정을 확인한 뒤 다시 로그인해 주세요.', options); this.name = 'LoginError'; }
 }
 
 /** Public-client OIDC: tokens never enter browser storage, URLs, or serialized objects. */
@@ -58,7 +59,7 @@ export class BrowserLogin {
       // This is the sole storage write: one-use verifier/state/nonce, never tokens.
       this.#storage.setItem(TRANSACTION_KEY, JSON.stringify({ state, nonce, verifier, createdAt: Date.now(), config: this.#fingerprint }));
       return url.href;
-    } catch { throw new LoginError(); }
+    } catch (cause) { throw new LoginError({ cause }); }
   }
 
   /** Single-flight avoids replaying the authorization code in React StrictMode. */
@@ -89,7 +90,7 @@ export class BrowserLogin {
       if (!subject) throw new LoginError();
       this.#assertActive();
       this.#accept(result, subject);
-    } catch { this.#tokens = undefined; throw new LoginError(); }
+    } catch (cause) { this.#tokens = undefined; throw new LoginError({ cause }); }
   }
 
   async getAccessToken(): Promise<string> {
@@ -107,7 +108,7 @@ export class BrowserLogin {
       this.#assertActive();
       if (!this.#tokens || Date.now() >= this.#tokens.expiresAt) throw new LoginError();
       return this.#tokens.access;
-    } catch { this.#tokens = undefined; throw new LoginError(); }
+    } catch (cause) { this.#tokens = undefined; throw new LoginError({ cause }); }
   }
 
   async #refresh(): Promise<void> {
@@ -160,22 +161,26 @@ export class BrowserLogin {
       this.#assertActive();
       this.#server = server;
       return server;
-    })().catch(() => { this.#discovery = undefined; throw new LoginError(); });
+    })().catch(cause => { this.#discovery = undefined; throw new LoginError({ cause }); });
   }
   #transport: typeof fetch = async (input, init) => {
     secureEndpoint(String(input));
     const signal = AbortSignal.any([this.#abort.signal, AbortSignal.timeout(REQUEST_TIMEOUT), ...(init?.signal ? [init.signal] : [])]);
-    const response = await this.#fetch(input, { ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+    const response = await awaitRequest(signal, async () => {
+      const value = await this.#fetch(input, { ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store' });
+      if (signal.aborted) { discard(value.body); signal.throwIfAborted(); }
+      return value;
+    });
     if (!response.body) return response;
     const reader = response.body.getReader();
-    const cancel = () => { void reader.cancel().catch(() => {}); };
+    const cancel = () => { try { void reader.cancel().catch(() => {}); } catch { /* Cleanup cannot replace the login result. */ } };
     signal.addEventListener('abort', cancel, { once: true });
     const chunks: Uint8Array[] = [];
     let size = 0;
     try {
       signal.throwIfAborted();
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value } = await awaitRequest(signal, () => reader.read());
         signal.throwIfAborted();
         if (done) break;
         size += value.length;
@@ -186,6 +191,10 @@ export class BrowserLogin {
       let offset = 0;
       for (const chunk of chunks) { body.set(chunk, offset); offset += chunk.length; }
       return new Response(body, { status: response.status, headers: response.headers });
-    } finally { signal.removeEventListener('abort', cancel); await reader.cancel().catch(() => {}); reader.releaseLock(); }
+    } finally { signal.removeEventListener('abort', cancel); cancel(); reader.releaseLock(); }
   };
+}
+
+function discard(body: ReadableStream<Uint8Array> | null): void {
+  try { void body?.cancel().catch(() => {}); } catch { /* Late responses have no remaining consumer. */ }
 }

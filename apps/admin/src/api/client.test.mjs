@@ -9,6 +9,21 @@ import { analyzeEventSeries, eventContext, eventPropertyNames, selectedGrouping 
 import { previousRange, countChange, rateChange, validateSnapshot, loadPeriod } from './period-comparison.ts';
 import { analyticsCsv, csvCell, serializeCsv, CSV_COLUMNS } from './csv-export.ts';
 
+test('transport errors retain their cause and caller cancellation retains its exact reason', async () => {
+  const cause = new Error('private connection failure');
+  const client = new ApiClient({ fetchImpl: async () => { throw cause; } });
+  await assert.rejects(client.listProjects(), error => error.kind === 'network' && error.cause === cause && !JSON.stringify(error).includes(cause.message));
+  client.destroy();
+  const controller = new AbortController();
+  let enter;
+  const ready = new Promise(resolve => { enter = resolve; });
+  const waiting = new ApiClient({ fetchImpl: async () => { enter(); return new Promise(() => {}); } });
+  const pending = waiting.listProjects({ signal: controller.signal }); await ready;
+  controller.abort(cause);
+  await assert.rejects(pending, error => error === cause);
+  waiting.destroy();
+});
+
 // Fixtures below use no multiline fields; csvCell has a dedicated multiline/escaping check.
 function exportRows(file) {
   return file.text.slice(1).trimEnd().split('\r\n').slice(1).map(line => {

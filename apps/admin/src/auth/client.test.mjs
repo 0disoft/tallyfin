@@ -167,3 +167,34 @@ test('callback parameters are scrubbed synchronously and config contains no secr
   assert.throws(() => loginConfig({ VITE_OIDC_ISSUER: issuer, VITE_OIDC_CLIENT_ID: 'client', VITE_OIDC_SCOPE: 'openid' }, 'http://remote.example.invalid'));
   assert.equal(loginConfig({ VITE_OIDC_ISSUER: issuer, VITE_OIDC_CLIENT_ID: 'client', VITE_OIDC_SCOPE: 'openid' }, 'http://127.0.0.1:5180').redirectUri, 'http://127.0.0.1:5180/auth/callback');
 });
+
+test('oversized discovery rejects even when response cleanup never settles', { timeout: 1000 }, async () => {
+  let cancelled = 0;
+  const login = new BrowserLogin(config, { getItem() { return null; }, setItem() {}, removeItem() {} }, async () =>
+    new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array(65537)); },
+      cancel() { cancelled++; return new Promise(() => {}); } })));
+  try { await assert.rejects(login.begin(), LoginError); assert.equal(cancelled, 1); }
+  finally { login.destroy(); }
+});
+
+test('destroy stops an uncooperative discovery and discards its late response', { timeout: 1000 }, async () => {
+  let enter, finish, cancelled = 0;
+  const ready = new Promise(resolve => { enter = resolve; });
+  const login = new BrowserLogin(config, { getItem() { return null; }, setItem() {}, removeItem() {} }, async () => {
+    enter(); return new Promise(resolve => { finish = resolve; });
+  });
+  const pending = login.begin(); await ready; login.destroy();
+  await assert.rejects(pending, LoginError);
+  finish(new Response(new ReadableStream({ cancel() { cancelled++; } })));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(cancelled, 1);
+});
+
+test('login errors retain the transport cause without serializing it', async () => {
+  const cause = new Error('private provider detail');
+  const login = new BrowserLogin(config, { getItem() { return null; }, setItem() {}, removeItem() {} }, async () => { throw cause; });
+  try { await assert.rejects(login.begin(), error => {
+    assert.equal(error.cause.cause, cause);
+    assert.equal(JSON.stringify(error).includes(cause.message), false); return true;
+  }); } finally { login.destroy(); }
+});

@@ -1,5 +1,12 @@
 # 검증
 
+## 로그인 장애 대기와 원인 보존 (2026-10-23)
+
+로그인 fetch/본문은 취소 신호로 대기를 끝내며 늦은 응답을 폐기한다. 끝나지 않는
+cancel Promise가 실패 반환을 막지 않는다. LoginError/ApiError는 비공개 cause를
+보존하고 API 취소는 호출자의 reason을 유지한다. 관리자 인증/클라이언트 49/49와
+관리자 TypeScript 검사를 통과했다. 공개 API·DB·의존성·CI 변경과 원격 반영은 없다.
+
 ## 자원 수명·경합 개선 최종 검증 (2026-10-23)
 
 전체 테스트를 `node --test --test-concurrency=2 --test-timeout=30000`과 기존
