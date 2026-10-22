@@ -1,3 +1,4 @@
+import { COLLECTION_POLICY } from './policy.ts';
 import { CollectionError } from './types.ts';
 import type { BrowserEvent, EventSource, FunnelDefinition, FunnelLink, Registry } from './types.ts';
 import { parseBatch, parseServerBatch, prepareBatch, prepareServerBatch } from './batch.ts';
@@ -59,14 +60,14 @@ function orderedTimes(times: (number | null)[], startedAt: number): boolean {
   let previous = startedAt;
   return times.every((time, index) => {
     if (time === null) return true;
-    if (!integer(time, startedAt, startedAt + DAY) || time < previous || (index === 0 && time !== startedAt)) return false;
+    if (!integer(time, startedAt, startedAt + COLLECTION_POLICY.taskWindowMs) || time < previous || (index === 0 && time !== startedAt)) return false;
     previous = time; return true;
   });
 }
 /** Call only after project/source event receipt deduplication, within the ingestion transaction. */
 export function planFunnelProgress(observation: PreparedFunnelObservation, previous: FunnelRunState | null): FunnelProgress {
-  if (previous && (!integer(previous.startedAt, 0, 8_640_000_000_000_000 - 3 * DAY) ||
-    previous.expiresAt !== previous.startedAt + 3 * DAY || !Array.isArray(previous.stepTimes) ||
+  if (previous && (!integer(previous.startedAt, 0, 8_640_000_000_000_000 - COLLECTION_POLICY.linkageTtlMs) ||
+    previous.expiresAt !== previous.startedAt + COLLECTION_POLICY.linkageTtlMs || !Array.isArray(previous.stepTimes) ||
     previous.stepTimes.length < 2 || previous.stepTimes.length > 10 || !orderedTimes(previous.stepTimes, previous.startedAt)))
     throw new CollectionError('storage_unavailable', 503);
   const active = previous && previous.expiresAt > observation.receivedAt ? previous : null;
@@ -78,7 +79,7 @@ export function planFunnelProgress(observation: PreparedFunnelObservation, previ
   const state: FunnelRunState = active ? { ...active, stepTimes: [...active.stepTimes] } : {
     projectId: observation.projectId, schemaVersion: observation.schemaVersion, funnelId: observation.event.funnel.funnelId,
     runId: observation.event.funnel.runId, startedAt: observation.startedAt, cohortDate: observation.cohortDate,
-    dimensionKey: observation.dimensionKey, stepTimes: Array<number | null>(observation.stepCount).fill(null), expiresAt: observation.startedAt + 3 * DAY,
+    dimensionKey: observation.dimensionKey, stepTimes: Array<number | null>(observation.stepCount).fill(null), expiresAt: observation.startedAt + COLLECTION_POLICY.linkageTtlMs,
   };
   const before = prefixLength(state.stepTimes);
   const seenAt = state.stepTimes[observation.stepIndex]!;

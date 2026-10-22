@@ -1,6 +1,7 @@
 import { CollectionError } from './types.ts';
 import type { PreparedBatch, PreparedServerBatch } from './types.ts';
-import { DAY } from './value.ts';
+import { COLLECTION_POLICY } from './policy.ts';
+import { transitionWorkflow } from './workflow-transition.ts';
 import { planFunnelProgress } from './funnel.ts';
 import type { FunnelDelta, FunnelRunState } from './funnel.ts';
 
@@ -24,7 +25,7 @@ export interface IngestPlan {
 
 export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot: IngestSnapshot, dailyLimit: number): IngestPlan {
   const receipts = new Map(snapshot.receipts.filter(r => r.expires_at > batch.receivedAt).map(r => [r.event_id, r]));
-  const attempts = new Map(snapshot.attempts.filter(a => a.expires_at > batch.receivedAt).map(a => [a.attempt_id, { ...a }]));
+  const attempts = new Map(snapshot.attempts.filter(a => a.expires_at > batch.receivedAt).map(a => [a.attempt_id, a]));
   const changed = new Map<string, AttemptState>();
   const runs = new Map((snapshot.funnelRuns ?? []).filter(run => run.expiresAt > batch.receivedAt).map(run => [run.runId, run]));
   const changedRuns = new Map<string, FunnelRunState>(); const funnelDeltas = new Map<string, FunnelDelta>();
@@ -45,7 +46,7 @@ export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot:
       plan.duplicates++; continue;
     }
     const receipt: Receipt = { event_id: prepared.event.eventId, schema_version: batch.schemaVersion,
-      payload_hash: prepared.payloadHash, received_at: batch.receivedAt, expires_at: batch.receivedAt + 2 * DAY };
+      payload_hash: prepared.payloadHash, received_at: batch.receivedAt, expires_at: batch.receivedAt + COLLECTION_POLICY.receiptTtlMs };
     plan.receipts.push(receipt); receipts.set(receipt.event_id, receipt);
     let duplicatePhase = false;
     if (prepared.funnel) {
@@ -60,29 +61,11 @@ export function planIngest(batch: PreparedBatch | PreparedServerBatch, snapshot:
       }
     }
     if (prepared.workflow) {
-      const workflow = prepared.workflow;
-      const state = attempts.get(workflow.attemptId) ?? {
-        attempt_id: workflow.attemptId, schema_version: batch.schemaVersion, workflow_id: workflow.id,
-        started_at: workflow.startedAt, cohort_date: workflow.cohortDate, dimension_key: workflow.dimensionKey,
-        start_seen: 0, terminal_kind: null, terminal_at: null, expires_at: workflow.startedAt + 3 * DAY,
-      } satisfies AttemptState;
-      if (state.schema_version !== batch.schemaVersion || state.workflow_id !== workflow.id || state.started_at !== workflow.startedAt ||
-        state.dimension_key !== workflow.dimensionKey) throw new CollectionError('attempt_conflict', 409);
-      if (workflow.phase === 'start') {
-        duplicatePhase = state.start_seen === 1;
-        if (!duplicatePhase) {
-          state.start_seen = 1;
-          addWorkflow(state, 1, Number(state.terminal_kind === 'success'), Number(state.terminal_kind === 'failure'));
-        }
-      } else {
-        if (state.terminal_kind && state.terminal_kind !== workflow.phase) throw new CollectionError('attempt_conflict', 409);
-        duplicatePhase = state.terminal_kind === workflow.phase;
-        if (!duplicatePhase) {
-          state.terminal_kind = workflow.phase; state.terminal_at = prepared.occurredAt;
-          if (state.start_seen) addWorkflow(state, 0, Number(workflow.phase === 'success'), Number(workflow.phase === 'failure'));
-        }
-      }
-      attempts.set(state.attempt_id, state); changed.set(state.attempt_id, state);
+      const progress = transitionWorkflow({ ...prepared.workflow, schemaVersion: batch.schemaVersion }, prepared.occurredAt,
+        attempts.get(prepared.workflow.attemptId));
+      duplicatePhase = progress.duplicate;
+      if (progress.delta) addWorkflow(progress.state, ...progress.delta);
+      attempts.set(progress.state.attempt_id, progress.state); changed.set(progress.state.attempt_id, progress.state);
     }
     if (duplicatePhase) { plan.duplicates++; continue; }
     plan.accepted++;

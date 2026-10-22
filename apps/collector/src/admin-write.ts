@@ -1,3 +1,4 @@
+import { QUERY_POLICY, SCHEMA_LIMITS } from '@tallyfin/core';
 import { closed, CollectionError, has, MAX_PUBLICATION_BYTES, MAX_SCHEMA_BYTES, parseGrantChange, parsePublisherChange, parseSchemaPublication, parseSettingsUpdate, PROJECT_ID, validateSchemaDraft } from '@tallyfin/core';
 import { parameters, positive, readJsonBody } from './admin-input.ts';
 import type { AdminContext } from './admin-input.ts';
@@ -12,8 +13,8 @@ export async function publishersRoute({ request, url, access, principal, now }: 
     const value = await readJsonBody(request);
     return access.store.changePublisher(principal, id, parsePublisherChange(value, request.method), now);
   }
-  parameters(url, ['limit', 'cursor'], 12352);
-  return access.store.publishers(principal, id, positive(url.searchParams.get('limit') ?? '25', 100),
+  parameters(url, ['limit', 'cursor'], QUERY_POLICY.maxIdentityCursorQueryChars);
+  return access.store.publishers(principal, id, positive(url.searchParams.get('limit') ?? String(QUERY_POLICY.defaultPageSize), QUERY_POLICY.maxPageSize),
     url.searchParams.get('cursor') ?? '');
 }
 
@@ -28,8 +29,8 @@ export async function grantsRoute({ request, url, access, principal, now }: Admi
     return access.store.changeGrant(principal, id, parseGrantChange(value, request.method), now);
   }
   // A cursor can contain two provisioned identities of up to 512 characters each.
-  parameters(url, ['limit', 'cursor'], 12352);
-  return access.store.grants(principal, id, positive(url.searchParams.get('limit') ?? '25', 100),
+  parameters(url, ['limit', 'cursor'], QUERY_POLICY.maxIdentityCursorQueryChars);
+  return access.store.grants(principal, id, positive(url.searchParams.get('limit') ?? String(QUERY_POLICY.defaultPageSize), QUERY_POLICY.maxPageSize),
     url.searchParams.get('cursor') ?? '');
 }
 
@@ -57,7 +58,7 @@ export async function draftRoute({ request, url, access, principal }: AdminConte
 
 export async function publishRoute({ request, url, access, principal, now }: AdminContext, id: string, versionText: string): Promise<unknown> {
   if (!PROJECT_ID.test(id)) throw new CollectionError('invalid_request', 400);
-  const version = positive(versionText, 2147483647);
+  const version = positive(versionText, SCHEMA_LIMITS.maxVersion);
   parameters(url, []);
   const project = await access.store.settings(principal, id);
   if (!project.canEdit) throw new CollectionError('forbidden', 403);

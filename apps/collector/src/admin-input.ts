@@ -1,3 +1,4 @@
+import { QUERY_POLICY } from '@tallyfin/core';
 import { CollectionError } from '@tallyfin/core';
 import type { AdminPrincipal } from '@tallyfin/core';
 import type { AdministratorAccess } from './admin.ts';
@@ -10,7 +11,7 @@ export async function readJsonBody(request: Request, maximum?: number): Promise<
   try { return JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
 }
 
-export function parameters(url: URL, allowed: string[], maximumLength = 512) {
+export function parameters(url: URL, allowed: string[], maximumLength: number = QUERY_POLICY.maxQueryChars) {
   if (url.search.length > maximumLength) throw new CollectionError('invalid_request', 400);
   const seen = new Set();
   for (const key of url.searchParams.keys()) {

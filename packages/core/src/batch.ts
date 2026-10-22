@@ -1,3 +1,4 @@
+import { COLLECTION_POLICY } from './policy.ts';
 import { CollectionError } from './types.ts';
 import { prepareFunnelStage } from './funnel-preparation.ts';
 import type { BrowserBatch, BrowserEvent, EventSource, PreparedBatch, PreparedEvent, PreparedServerBatch, Properties, PropertyDefinition, Registry, ServerBatch } from './types.ts';
@@ -15,7 +16,7 @@ function parseForSource(body: string, source: EventSource): BrowserBatch | Serve
   let value: unknown;
   try { value = JSON.parse(body); } catch { throw new CollectionError('invalid_request', 400); }
   if (!closed(value, ['schemaVersion', 'source', 'events']) || !integer(value.schemaVersion, 1, 2_147_483_647) || value.source !== source ||
-    !Array.isArray(value.events) || value.events.length < 1 || value.events.length > 20) throw new CollectionError('invalid_request', 400);
+    !Array.isArray(value.events) || value.events.length < 1 || value.events.length > COLLECTION_POLICY.maxBatchEvents) throw new CollectionError('invalid_request', 400);
   const ids = new Set<string>();
   for (const event of value.events) {
     if (!closed(event, ['eventId', 'name', 'occurredAt', 'properties'], source === 'browser' ? ['attempt', 'funnel'] : ['funnel']) ||
@@ -72,7 +73,7 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
     for (const [key, property] of Object.entries(definition.properties))
       if (property.required && !has(input.properties, key)) throw new CollectionError('invalid_event', 422);
     const occurredAt = utcMillis(input.occurredAt);
-    if (occurredAt < receivedAt - DAY || occurredAt > receivedAt + 300_000) throw new CollectionError('invalid_event', 422);
+    if (occurredAt < receivedAt - COLLECTION_POLICY.maxEventAgeMs || occurredAt > receivedAt + COLLECTION_POLICY.maxFutureSkewMs) throw new CollectionError('invalid_event', 422);
     const event: BrowserEvent = { ...input, properties: { ...input.properties }, occurredAt: new Date(occurredAt).toISOString() };
     const prepared: PreparedEvent = { event, occurredAt, eventDate: localDate(occurredAt, registry.project.timeZone),
       dimensionKey: dimensionKey(input.properties, Object.keys(definition.properties)), payloadHash: '' };
@@ -82,7 +83,7 @@ async function prepareEvents(batch: BrowserBatch | ServerBatch, registry: Regist
       if (!input.attempt || input.attempt.workflowId !== workflow.id) throw new CollectionError('invalid_event', 422);
       const startedAt = utcMillis(input.attempt.startedAt);
       const phase = input.name === workflow.startEvent ? 'start' : input.name === workflow.successEvent ? 'success' : 'failure';
-      if (startedAt > occurredAt || occurredAt - startedAt > DAY || (phase === 'start' && startedAt !== occurredAt)) throw new CollectionError('invalid_event', 422);
+      if (startedAt > occurredAt || occurredAt - startedAt > COLLECTION_POLICY.taskWindowMs || (phase === 'start' && startedAt !== occurredAt)) throw new CollectionError('invalid_event', 422);
       event.attempt = { ...input.attempt, startedAt: new Date(startedAt).toISOString() };
       const dimensions: Properties = Object.fromEntries(workflow.dimensions.map(key => [key, input.properties[key]!]));
       prepared.workflow = { id: workflow.id, phase, attemptId: input.attempt.attemptId, startedAt,

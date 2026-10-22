@@ -1,3 +1,4 @@
+import { COLLECTION_POLICY } from './policy.ts';
 import { CollectionError } from './types.ts';
 import type { Registry } from './types.ts';
 import { canonicalJson, closed, has, integer, matches, sha256, text } from './value.ts';
@@ -17,7 +18,7 @@ export interface ProjectSettingsUpdate {
 export function validateMutableSettings(value: unknown, options: { allowLocalHttp?: boolean } = {}): MutableProjectSettings {
   if (!closed(value, ['name', 'status', 'allowedOrigins', 'limits']) || !text(value.name, 1, 80) ||
     !['active', 'paused'].includes(String(value.status)) || !closed(value.limits, ['requestsPerMinute', 'newReceiptsPerUtcDay']) ||
-    !integer(value.limits.requestsPerMinute, 1, 600) || !integer(value.limits.newReceiptsPerUtcDay, 1, 1_000_000) ||
+    !integer(value.limits.requestsPerMinute, 1, COLLECTION_POLICY.maxRequestsPerMinute) || !integer(value.limits.newReceiptsPerUtcDay, 1, COLLECTION_POLICY.maxNewReceiptsPerUtcDay) ||
     !Array.isArray(value.allowedOrigins) || value.allowedOrigins.length > 16 ||
     new Set(value.allowedOrigins).size !== value.allowedOrigins.length) throw Error('invalid project settings');
   for (const origin of value.allowedOrigins) {
@@ -38,8 +39,8 @@ export function parseSettingsUpdate(value: unknown): ProjectSettingsUpdate {
       value.allowedOrigins.length > 16 || value.allowedOrigins.some(origin => !text(origin, 1, 256)))) ||
     (has(value, 'limits') && (!closed(value.limits, [], ['requestsPerMinute', 'newReceiptsPerUtcDay']) ||
       Object.keys(value.limits).length === 0 ||
-      (has(value.limits, 'requestsPerMinute') && !integer(value.limits.requestsPerMinute, 1, 600)) ||
-      (has(value.limits, 'newReceiptsPerUtcDay') && !integer(value.limits.newReceiptsPerUtcDay, 1, 1_000_000)))))
+      (has(value.limits, 'requestsPerMinute') && !integer(value.limits.requestsPerMinute, 1, COLLECTION_POLICY.maxRequestsPerMinute)) ||
+      (has(value.limits, 'newReceiptsPerUtcDay') && !integer(value.limits.newReceiptsPerUtcDay, 1, COLLECTION_POLICY.maxNewReceiptsPerUtcDay)))))
     throw new CollectionError('invalid_request', 400);
   return structuredClone(value) as unknown as ProjectSettingsUpdate;
 }

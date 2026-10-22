@@ -16,7 +16,7 @@ export function prepareFunnelStage(prepared: PreparedEvent, registry: Registry, 
   if (stepIndex < 0 || startedAt > prepared.occurredAt || prepared.occurredAt - startedAt > DAY ||
     (stepIndex === 0 && startedAt !== prepared.occurredAt)) throw new CollectionError('invalid_event', 422);
   const event: FunnelEvent = { eventId: prepared.event.eventId, name: prepared.event.name,
-    properties: prepared.event.properties, occurredAt: prepared.event.occurredAt,
+    properties: { ...prepared.event.properties }, occurredAt: prepared.event.occurredAt,
     funnel: { funnelId: definition.id, runId: link.runId, startedAt: new Date(startedAt).toISOString() } };
   return { projectId: registry.project.id, schemaVersion: registry.schemaVersion, source, receivedAt, event,
     eventDate: prepared.eventDate, eventDimensionKey: prepared.dimensionKey, payloadHash: '', stepIndex,

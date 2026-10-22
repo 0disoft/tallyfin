@@ -1,3 +1,4 @@
+import { COLLECTION_POLICY, RETENTION_POLICY, QUERY_POLICY } from './policy.ts';
 import { CollectionError } from './types.ts';
 import type { Registry } from './types.ts';
 import type { ProjectSettings, ProjectSettingsUpdate } from './settings.ts';
@@ -53,7 +54,7 @@ export function dateMillis(value: string): number {
 }
 export function queryDates(from: string, to: string, zone: string, now: number): string[] {
   const start = dateMillis(from), end = dateMillis(to), today = dateMillis(localDate(now, zone));
-  if (start > end || end > today || start < today - 89 * DAY || (end - start) / DAY >= 31)
+  if (start > end || end > today || start < today - (RETENTION_POLICY.analyticsDays - 1) * DAY || (end - start) / DAY >= QUERY_POLICY.maxDays)
     throw new CollectionError('invalid_request', 400);
   return Array.from({ length: (end - start) / DAY + 1 }, (_, i) => new Date(start + i * DAY).toISOString().slice(0, 10));
 }
@@ -76,7 +77,7 @@ export function dateEnd(date: string, zone: string): number {
     const parts = formatter.formatToParts(at);
     return ['year', 'month', 'day'].map(type => parts.find(p => p.type === type)!.value).join('-');
   };
-  let low = target - 2 * DAY, high = target + 3 * DAY;
+  let low = target - 2 * DAY, high = target + COLLECTION_POLICY.linkageTtlMs;
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
     if (dayAt(mid) <= date) low = mid + 1; else high = mid;

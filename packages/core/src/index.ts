@@ -1,5 +1,6 @@
 export * from './types.ts';
 export * from './value.ts';
+export * from './policy.ts';
 export * from './registry.ts';
 export * from './schema.ts';
 export * from './schema-publication.ts';

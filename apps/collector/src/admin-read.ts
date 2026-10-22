@@ -1,3 +1,4 @@
+import { QUERY_POLICY, SCHEMA_LIMITS } from '@tallyfin/core';
 import { CollectionError, dateMillis, DAY, NAME, PROJECT_ID, validGrantIdentity } from '@tallyfin/core';
 import type { AdminQuery } from '@tallyfin/core';
 import { parameters, positive } from './admin-input.ts';
@@ -24,7 +25,7 @@ export async function changesRoute({ request, url, access, principal, now }: Adm
   if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
   if (!PROJECT_ID.test(id)) throw new CollectionError('invalid_request', 400);
   parameters(url, ['limit', 'cursor']);
-  return access.store.changes(principal, id, positive(url.searchParams.get('limit') ?? '25', 100),
+  return access.store.changes(principal, id, positive(url.searchParams.get('limit') ?? String(QUERY_POLICY.defaultPageSize), QUERY_POLICY.maxPageSize),
     url.searchParams.get('cursor') ?? '', now);
 }
 
@@ -39,13 +40,13 @@ export async function schemasRoute({ request, url, access, principal }: AdminCon
   if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
   if (!PROJECT_ID.test(id)) throw new CollectionError('invalid_request', 400);
   parameters(url, ['limit', 'beforeVersion']);
-  return access.store.schemas(principal, id, positive(url.searchParams.get('limit') ?? '25', 100),
-    url.searchParams.has('beforeVersion') ? positive(url.searchParams.get('beforeVersion')!, 2147483647) : null);
+  return access.store.schemas(principal, id, positive(url.searchParams.get('limit') ?? String(QUERY_POLICY.defaultPageSize), QUERY_POLICY.maxPageSize),
+    url.searchParams.has('beforeVersion') ? positive(url.searchParams.get('beforeVersion')!, SCHEMA_LIMITS.maxVersion) : null);
 }
 
 export async function listRoute({ url, access, principal }: AdminContext): Promise<unknown> {
   parameters(url, ['limit', 'cursor']);
-  const limit = positive(url.searchParams.get('limit') ?? '25', 100);
+  const limit = positive(url.searchParams.get('limit') ?? String(QUERY_POLICY.defaultPageSize), QUERY_POLICY.maxPageSize);
   const cursor = url.searchParams.get('cursor') ?? '';
   if (cursor && !PROJECT_ID.test(cursor)) throw new CollectionError('invalid_request', 400);
   return access.store.list(principal, limit, cursor);
@@ -59,7 +60,7 @@ export async function queryRoute({ url, access, principal, now }: AdminContext):
   const allowed = kind === 'registry' ? [] : kind === 'event' || kind === 'workflow-breakdown' || kind === 'funnel-breakdown' ? ['schemaVersion', 'from', 'to', 'groupBy'] : ['schemaVersion', 'from', 'to'];
   if (kind === 'summary' || kind === 'event') allowed.push('source');
   parameters(url, allowed);
-  const query: AdminQuery = { projectId: match[1]!, version: positive(match[2] ?? url.searchParams.get('schemaVersion') ?? '', 2147483647), kind };
+  const query: AdminQuery = { projectId: match[1]!, version: positive(match[2] ?? url.searchParams.get('schemaVersion') ?? '', SCHEMA_LIMITS.maxVersion), kind };
   if (kind !== 'registry') {
     const source = url.searchParams.get('source');
     if (source !== null) {
@@ -68,7 +69,7 @@ export async function queryRoute({ url, access, principal, now }: AdminContext):
     }
     query.from = url.searchParams.get('from') ?? ''; query.to = url.searchParams.get('to') ?? '';
     const start = dateMillis(query.from), end = dateMillis(query.to);
-    if (start > end || end - start >= 31 * DAY) throw new CollectionError('invalid_request', 400);
+    if (start > end || end - start >= QUERY_POLICY.maxDays * DAY) throw new CollectionError('invalid_request', 400);
     const name = match[4] ?? match[5] ?? match[7];
     if (name !== undefined) { if (!NAME.test(name)) throw new CollectionError('invalid_request', 400); query.name = name; }
     const groupBy = url.searchParams.get('groupBy');
