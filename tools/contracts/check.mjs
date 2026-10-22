@@ -422,6 +422,21 @@ check('schema publication requires reviewed definitions and listing/publication 
   for (const code of ['401', '403', '409', '413', '415', '503']) assert.ok(operation.responses[code]);
   assert.equal(operation.responses['405'].headers.Allow.schema.const, 'GET, PUT');
 });
+check('service overview is authenticated, bounded, ordered and aggregate-only', () => {
+  const row = { projectId: 'sembom', version: 1, latestReceivedAt: null, events: 0, previousEvents: 0, workflowLabel: null,
+    completion: null, previousCompletion: null, workflowUnavailable: false, rejected: 0, rejectionUnavailable: false, error: false, accessDenied: false };
+  const body = { source: 'browser', generatedAt: '2026-10-23T00:00:00.000Z', data: [row] };
+  assert.ok(validate('OverviewResponse', body));
+  for (const mutate of [v => v.data = [], v => v.data = Array(6).fill(row), v => v.data[0].events = -1,
+    v => v.data[0].completion = 101, v => v.data[0].private = 'body', v => v.source = 'unknown']) {
+    const value = structuredClone(body); mutate(value); assert.equal(validate('OverviewResponse', value), false);
+  }
+  const operation = spec.paths['/v1/overview'].get;
+  assert.deepEqual(operation.security, [{ adminBearer: [] }]);
+  for (const code of ['200', '400', '401', '405', '503']) assert.ok(operation.responses[code]);
+  assert.equal(operation.responses['405'].headers.Allow.schema.const, 'GET');
+  assert.equal(operation.parameters.find(p => p.name === 'projectIds').required, true);
+});
 check('all changed document relative links resolve', () => {
   const documents=['README.md','DEVELOPMENT.md','VALIDATION.md','ARCHITECTURE.md','docs/README.md','docs/product/02-spec.md','docs/product/01-roadmap.md','docs/adr/0002-contract-source-of-truth.md','docs/adr/0003-minimal-privacy-preserving-events.md','docs/adr/0005-event-and-aggregation-contract.md','docs/backend/event-contract.md','docs/backend/collector.md','docs/backend/README.md','docs/backend/03-persistence-model.md','docs/backend/04-http-api-policy.md','docs/integrations/backend-api.md','docs/integrations/sembom.md','docs/monorepo/package-ownership.md','docs/monorepo/workspace-boundaries.md','db/migrations/README.md'];
   documents.push('docs/frontend/FRONTEND_DESIGN.md', 'docs/backend/browser-sdk.md', 'docs/backend/server-sdk.md', 'docs/backend/server-events.md', 'docs/backend/runtime.md',

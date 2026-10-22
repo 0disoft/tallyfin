@@ -170,6 +170,8 @@ export class SchemaEditor {
       this.#draftBaseline = this.state.draft;
       this.#set({ phase: 'ready', pending: null, snapshot: { ...snapshot, definitions: input.draft,
         page: { ...snapshot.page, latestVersion: Math.max(saved.schemaVersion, snapshot.page.latestVersion ?? 0),
+          ...(snapshot.page.latestActiveVersion !== undefined ? { latestActiveVersion: saved.schemaStatus === 'active'
+            ? Math.max(saved.schemaVersion, snapshot.page.latestActiveVersion ?? 0) : snapshot.page.latestActiveVersion } : {}),
           data: [saved, ...snapshot.page.data.filter(r => r.schemaVersion !== saved.schemaVersion)] } },
         target: nextVersion(saved.schemaVersion), validatedKey: null, privacyReviewed: false, report: null,
         message: saved.schemaStatus === 'retired' ? `v${saved.schemaVersion}은 이미 발행된 사용 중지 버전이에요. 활성 상태로 바꾸지 않았어요.`

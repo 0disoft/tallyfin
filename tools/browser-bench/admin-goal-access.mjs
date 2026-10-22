@@ -84,6 +84,16 @@ try {
   stage = 'login'; await page.goto(origin); await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
+  stage = 'bulk-overview';
+  let overviewRequests = 0;
+  page.on('request', request => { if (new URL(request.url()).pathname === '/v1/overview') overviewRequests++; });
+  const overview = page.locator('section[aria-labelledby="project-overview-heading"]');
+  await page.getByRole('button', { name: '통합 현황 불러오기', exact: true }).click();
+  await expect(overview.locator('tbody tr')).toHaveCount(2);
+  assert.equal(overviewRequests, 1);
+  await expect(overview).not.toContainText('조회하지 못했어요');
+  scenarios.push(stage);
+  await page.getByRole('button', { name: '통합 현황 닫기', exact: true }).click();
   await page.getByRole('button', { name: '목표', exact: true }).click();
   const workflowCsv = page.getByRole('button', { name: '작업 흐름 CSV 내려받기', exact: true });
   const comparison = page.getByRole('checkbox', { name: '작업 흐름·퍼널 기간 비교', exact: true });
@@ -178,6 +188,18 @@ try {
   pendingDownload = page.waitForEvent('download'); await workflowCsv.click();
   downloaded = await pendingDownload; contents = await readFile(await downloaded.path(), 'utf8');
   assert.ok(contents.includes('"access-other"')); assert.equal(contents.includes('"sembom"'), false); scenarios.push(stage);
+  stage = 'bulk-overview-access-revocation';
+  await page.getByRole('button', { name: '개요', exact: true }).click();
+  await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
+  await provisioner.apply(await provisioner.plan('grant', { projectId: 'access-other', issuer: local.issuer,
+    subject: 'synthetic-backup-operator', role: 'owner' }));
+  await provisioner.apply(await provisioner.plan('revoke', { projectId: 'access-other', issuer: local.issuer, subject }));
+  await page.getByRole('button', { name: '통합 현황 불러오기', exact: true }).click();
+  await page.getByRole('heading', { name: '이 프로젝트를 볼 권한이 없어요', exact: true }).waitFor();
+  await expect(overview.locator('tbody tr')).toHaveCount(2);
+  await expect(overview).toContainText('조회하지 못했어요');
+  for (const button of await page.getByRole('button', { name: /CSV 내려받기/ }).all()) await expect(button).toBeDisabled();
+  assert.equal(overviewRequests, 2); scenarios.push(stage);
   stage = 'disconnect'; await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   await expect(page.locator('.event-table, .goal-section, .funnel-section')).toHaveCount(0);

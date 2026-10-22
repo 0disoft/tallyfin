@@ -7,6 +7,7 @@ import type { WorkflowDimensionRow } from './workflow-breakdown.ts';
 import type { FunnelCountRow } from './funnel-query.ts';
 import type { FunnelDimensionRow } from './funnel-breakdown.ts';
 import { listSchemas, publishSchema } from './schema.ts';
+import { projectOverview } from './overview.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
 import { collectionRejections } from './rejections.ts';
@@ -24,6 +25,9 @@ export class D1Queries implements AdminStore {
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = { ...options }; }
+  overview(principal: AdminPrincipal, ids: readonly string[], source: 'browser' | 'server', now: number, options: { signal?: AbortSignal } = {}) {
+    return projectOverview(this.db, principal, ids, source, now, { ...this.options, ...options });
+  }
   publishers(principal: AdminPrincipal, id: string, limit: number, cursor: string) {
     return listProjectPublishers(this.db, principal, id, limit, cursor);
   }

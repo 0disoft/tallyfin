@@ -52,9 +52,9 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       const path = new URL(request.url).pathname;
       const route = /^\/v1\/projects\/([^/]+)\/(batches|server-batches)$/.exec(path);
       if (!route) {
-        if (path === '/v1/health' || path === '/v1/identity' || path === '/v1/projects' || path.startsWith('/v1/projects/')) {
+        if (path === '/v1/overview' || path === '/v1/health' || path === '/v1/identity' || path === '/v1/projects' || path.startsWith('/v1/projects/')) {
           operation = 'administrator';
-          if (path === '/v1/health' || path === '/v1/identity') headers.set('Vary', 'Authorization');
+          if (path === '/v1/overview' || path === '/v1/health' || path === '/v1/identity') headers.set('Vary', 'Authorization');
           const result = await administrator(request, options.admin, receivedAt);
           return finish(Response.json(result, { headers }));
         }

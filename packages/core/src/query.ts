@@ -31,6 +31,8 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  overview?(principal: AdminPrincipal, ids: readonly string[], source: 'browser' | 'server', now: number,
+    options?: { signal?: AbortSignal }): Promise<import('./overview.ts').OverviewResponse>;
   changePublisher(principal: AdminPrincipal, projectId: string, change: PublisherChange, now: number): Promise<PublisherChangeResult>;
   publishers(principal: AdminPrincipal, projectId: string, limit: number, cursor: string): Promise<ProjectPublisherPage>;
   changes(principal: AdminPrincipal, projectId: string, limit: number, cursor: string, now: number): Promise<AdminChangePage>;

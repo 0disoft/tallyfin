@@ -425,6 +425,64 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+    OverviewRow:
+      type: object
+      additionalProperties: false
+      required: [projectId, version, latestReceivedAt, events, previousEvents, workflowLabel, completion, previousCompletion, workflowUnavailable, rejected, rejectionUnavailable, error, accessDenied]
+      properties:
+        projectId:
+          $ref: "#/components/schemas/ProjectId"
+        version:
+          anyOf:
+            - { type: integer, minimum: 1, maximum: 2147483647 }
+            - { type: "null" }
+        latestReceivedAt:
+          anyOf:
+            - { type: string, format: date-time }
+            - { type: "null" }
+        events:
+          anyOf:
+            - { type: integer, minimum: 0, maximum: 9007199254740991 }
+            - { type: "null" }
+        previousEvents:
+          anyOf:
+            - { type: integer, minimum: 0, maximum: 9007199254740991 }
+            - { type: "null" }
+        workflowLabel:
+          anyOf:
+            - { type: string, minLength: 1, maxLength: 80 }
+            - { type: "null" }
+        completion:
+          anyOf:
+            - { type: number, minimum: 0, maximum: 100 }
+            - { type: "null" }
+        previousCompletion:
+          anyOf:
+            - { type: number, minimum: 0, maximum: 100 }
+            - { type: "null" }
+        workflowUnavailable: { type: boolean }
+        rejected:
+          anyOf:
+            - { type: integer, minimum: 0, maximum: 9007199254740991 }
+            - { type: "null" }
+        rejectionUnavailable: { type: boolean }
+        error: { type: boolean }
+        accessDenied:
+          type: boolean
+          description: Missing and inaccessible projects both return true with error and all metrics null.
+    OverviewResponse:
+      type: object
+      additionalProperties: false
+      required: [source, generatedAt, data]
+      properties:
+        source: { type: string, enum: [browser, server] }
+        generatedAt: { type: string, format: date-time }
+        data:
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/OverviewRow"
     SettingsHash:
       type: string
       pattern: ^[0-9a-f]{64}$
@@ -1946,6 +2004,74 @@ components:
           items:
             $ref: "#/components/schemas/CollectionRejectionDay"
 paths:
+  /v1/overview:
+    get:
+      tags: [Administration]
+      operationId: getProjectOverview
+      summary: Read a bounded page of service metrics
+      description: >
+        One to five unique project IDs in request order. Each project uses its latest active schema,
+        local recent seven days including today and the preceding seven days; rejection totals use
+        the latest seven UTC dates across the project. Browser completion uses the first registered workflow.
+        Missing and inaccessible projects are indistinguishable error rows with accessDenied true and null metrics.
+        Corrupt project analytics fail only that row; corrupt workflow/rejection data fail only that panel.
+        No active schema produces null metrics. Shared database failures return 503. Metadata and aggregate reads
+        require the current grant; changed schema/time zone between batches fails the affected row.
+        Custom hosts without the optional overview port return 503. All responses use no-store and Vary Authorization.
+      security:
+        - adminBearer: []
+      parameters:
+        - in: query
+          name: projectIds
+          required: true
+          description: Comma-separated unique project IDs, maximum five.
+          schema:
+            type: string
+            maxLength: 244
+            pattern: ^[a-z][a-z0-9-]{0,47}(,[a-z][a-z0-9-]{0,47}){0,4}$
+        - in: query
+          name: source
+          schema: { type: string, enum: [browser, server], default: browser }
+      responses:
+        "200":
+          description: Ordered service rows with isolated failures.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverviewResponse"
+        "400":
+          description: Invalid, duplicate, empty or excessive IDs, source or query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Administrator authentication is required before input or database reads.
+          headers:
+            WWW-Authenticate:
+              schema: { type: string, const: Bearer }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "405":
+          description: Only GET is allowed.
+          headers:
+            Allow:
+              schema: { type: string, const: GET }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Shared storage failed or the host has no overview port.
+          headers:
+            Retry-After:
+              schema: { type: string, const: "1" }
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /v1/health:
     get:
       tags: [Administration]

@@ -42,6 +42,8 @@ import { parseFunnelBreakdown, type FunnelBreakdown } from './funnel-breakdown.t
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
 import { parseAdminHealth, type AdminHealth } from './admin-health-contract.ts';
 import { awaitRequest } from './request-lifecycle.ts';
+import { parseOverview, validateOverviewIds } from './overview-contract.ts';
+import type { OverviewResponse } from './overview-contract.ts';
 import { readResponseJson } from './response-body.ts';
 import { createReadScheduler, type ReadLease } from './read-scheduler.ts';
 
@@ -235,6 +237,20 @@ export class ApiClient {
   async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {
     const params = { limit: clampLimit(options.limit), cursor: options.cursor ?? undefined };
     return this.#parse(await this.#request('/projects', params, options.signal), parseProjectPage);
+  }
+
+  async getProjectOverview(ids: readonly string[], source: EventSource, options: { signal?: AbortSignal } = {}): Promise<OverviewResponse> {
+    ids = [...ids];
+    validateOverviewIds(ids);
+    if (!['browser', 'server'].includes(source)) throw new ApiError('invalid_request', KIND_MESSAGE.invalid_request);
+    const result = this.#parse(await this.#request('/overview', { projectIds: ids.join(','), source }, options.signal), parseOverview);
+    if (result.source !== source || result.data.length !== ids.length || result.data.some((row, i) => row.projectId !== ids[i]))
+      throw new ApiError('contract', '통합 현황의 프로젝트나 출처가 요청과 달라요.');
+    for (const row of result.data) if (row.accessDenied) {
+      try { this.#onAnalyticsAccessDenied?.(row.projectId, new ApiError('forbidden', KIND_MESSAGE.forbidden, { status: 403 })); }
+      catch { /* An observer cannot replace the server result. */ }
+    }
+    return result;
   }
 
   async getSchema(projectId: string, schemaVersion: number, options: { signal?: AbortSignal } = {}): Promise<Registry> {
@@ -534,9 +550,10 @@ export class ApiClient {
     const notifyDenial = (error: ApiError) => {
       // Owner-only settings/grant failures do not revoke reader access to analytics.
       const match = body === undefined && !method && path.match(/^\/projects\/([a-z][a-z0-9-]{0,47})\/(?:schemas\/[0-9]+|summary|(?:events|workflows|funnels)\/[^/]+\/(?:daily|breakdown))$/);
-      if (!match || notified || signal?.aborted || this.#destroyed) return;
+      const targets = path === '/overview' && typeof params.projectIds === 'string' ? params.projectIds.split(',') : match ? [match[1]!] : [];
+      if (!targets.length || notified || signal?.aborted || this.#destroyed) return;
       notified = true;
-      this.#onAnalyticsAccessDenied?.(match[1]!, error);
+      for (const id of targets) this.#onAnalyticsAccessDenied?.(id, error);
     };
     try {
       checkRequest();

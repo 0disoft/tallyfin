@@ -33,7 +33,7 @@ function fixture(onAccessLost) {
       limits: { requestsPerMinute: 120, newReceiptsPerUtcDay: 100000 }, settingsHash: 'a'.repeat(64), canEdit: config.owner });
     if (url.includes('/schemas?')) {
       const versions = [...schemas.keys()].sort((a, b) => b - a);
-      return response(200, { projectId: 'sample', latestVersion: versions[0] ?? null, data: versions.map(metadata), page: { limit: 25, beforeVersion: null } });
+      return response(200, { projectId: 'sample', latestVersion: versions[0] ?? null, latestActiveVersion: versions[0] ?? null, data: versions.map(metadata), page: { limit: 25, beforeVersion: null } });
     }
     const version = Number(url.split('/').at(-1));
     return schemas.has(version) ? response(200, registry(version, schemas.get(version))) : response(404, { error: { code: 'not_found' } });
@@ -205,6 +205,7 @@ test('schema client uses explicit POST/PUT and checks response identity/hash wit
   assert.deepEqual(JSON.parse(write.init.body), { ...definitions(), expectedLatestVersion: 1, privacyReviewed: true });
   assert.equal(write.init.credentials, 'omit'); assert.equal(write.init.cache, 'no-store'); assert.equal(write.init.referrerPolicy, 'no-referrer');
   assert.equal(f.editor.state.snapshot.page.latestVersion, 2); assert.equal(f.editor.state.target, '3');
+  assert.equal(f.editor.state.snapshot.page.latestActiveVersion, 2);
   f.config.write = async () => response(200, { projectId: 'sample', ...metadata(3), definitionHash: 'b'.repeat(64) });
   await assert.rejects(f.client.publishSchema('sample', 3, { ...definitions(), expectedLatestVersion: 2, privacyReviewed: true }), e => e instanceof ApiError && e.kind === 'contract');
   f.editor.destroy(); f.client.destroy();

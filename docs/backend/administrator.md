@@ -1,5 +1,22 @@
 # 관리자 조회·설정 경계 (apps/collector)
 
+## 서비스 통합 조회
+
+`GET /v1/overview?projectIds=sembom,other&source=browser`는 인증 후 중복 없는 1~5개 ID와
+browser/server 출처만 받는다. 요청 순서대로 최신 활성 스키마의 최근/직전 7일 이벤트,
+브라우저 첫 작업 흐름의 완료율, 최근 수신과 최근 UTC 7일 거부 합계를 반환한다.
+기간은 서버가 프로젝트 시간대로 계산한다. 사용 중지된 최신 버전은 선택하지 않는다.
+
+메타데이터 한 번과 권한 재검사·집계 batch 한 번으로 최대 17개 SQL을 실행한다.
+모든 집계에 grant 조건을 적용하고 두 batch 사이의 활성 버전·정의·시간대 변경은
+그 서비스의 조회 실패로 처리한다. 미등록과 권한 없음은 같은 accessDenied 오류 행이며
+수치는 모두 null이다. 활성 스키마가 없으면 오류 없이 null이고 실제 집계 0과 구분한다.
+잘못된 집계 결과는 행 또는 작업 흐름/거부 패널로 격리하지만 SQL 실행 자체의 실패는
+전체 503이다. 커스텀 AdminStore의 선택적 overview 포트가 없으면 503이며 자동으로
+개별 요청을 반복하지 않는다. 응답은 no-store·Vary: Authorization이며 CORS를 허용하지 않는다.
+취소 신호는 첫 읽기 전·batch 완료 후·다음 batch 시작 전에 확인하고 새 읽기를 중단한다.
+이미 시작한 D1 실행 자체를 취소할 수 있다고 보장하지 않는다.
+
 ## 현재 로그인 계정 확인
 
 `GET /v1/identity`는 관리자 access token의 서명·issuer·audience·유효기간을 검증한

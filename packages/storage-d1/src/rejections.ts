@@ -35,7 +35,8 @@ function decode(json: string, minute: number): RejectionCounts {
 
 /** Project grant and minute rows are read in one transactional batch, with a bounded seven-day scan. */
 export async function collectionRejections(db: SqlDatabase, principal: AdminPrincipal, projectId: string, from: string, to: string, now: number): Promise<RejectionResponse> {
-  const dates = rejectionRange(projectId, from, to, now), start = dateMillis(from), end = dateMillis(to) + DAY;
+  rejectionRange(projectId, from, to, now);
+  const start = dateMillis(from), end = dateMillis(to) + DAY;
   const result = await db.batch<{ id: string; allowed: number } | { minute_start: number; rejections_json: string }>([
     db.prepare(`SELECT id, CASE WHEN ${access} THEN 1 ELSE 0 END AS allowed FROM projects WHERE id = ?`)
       .bind(projectId, principal.issuer, principal.subject, projectId),
@@ -47,7 +48,13 @@ export async function collectionRejections(db: SqlDatabase, principal: AdminPrin
   const project = result[0]!.results[0] as { id: string; allowed: number } | undefined;
   if (!project) throw new CollectionError('not_found', 404);
   if (project.allowed !== 1) throw new CollectionError('forbidden', 403);
-  const rows = result[1]!.results as { minute_start: number; rejections_json: string }[];
+  return rejectionResponse(projectId, from, to, now, result[1]!.results as RejectionMinuteRow[]);
+}
+
+export interface RejectionMinuteRow { minute_start: number; rejections_json: string }
+/** Shared bounded decoder for detailed and overview reads. */
+export function rejectionResponse(projectId: string, from: string, to: string, now: number, rows: RejectionMinuteRow[]): RejectionResponse {
+  const dates = rejectionRange(projectId, from, to, now), start = dateMillis(from), end = dateMillis(to) + DAY;
   if (rows.length > 10080) return invalid();
   const daily = new Map(dates.map(date => [date, empty()])), total = empty(), seen = new Set<number>();
   for (const row of rows) {

@@ -1,4 +1,5 @@
-import { CollectionError } from '@tallyfin/core';
+import { CollectionError, validateOverviewInput } from '@tallyfin/core';
+import { parameters } from './admin-input.ts';
 import { awaitDependency } from './dependency-lifetime.ts';
 import { OidcDependencyError } from '@tallyfin/auth-oidc';
 import type { AdminPrincipal, AdminStore } from '@tallyfin/core';
@@ -18,6 +19,14 @@ export async function administrator(request: Request, access: AdministratorAcces
   const context = { request, url, access: access!, principal, now };
   if (url.pathname === '/v1/health') return healthRoute(context);
   if (url.pathname === '/v1/identity') return identityRoute(context);
+  if (url.pathname === '/v1/overview') {
+    if (request.method !== 'GET') throw new CollectionError('invalid_request', 405);
+    parameters(url, ['projectIds', 'source']);
+    const ids = (url.searchParams.get('projectIds') ?? '').split(','), source = url.searchParams.get('source') ?? 'browser';
+    validateOverviewInput(ids, source);
+    if (!access!.store.overview) throw new CollectionError('storage_unavailable', 503);
+    return access!.store.overview(principal, ids, source, now, { signal: request.signal });
+  }
   const changes = /^\/v1\/projects\/([^/]+)\/changes$/.exec(url.pathname);
   if (changes) return changesRoute(context, changes[1]!);
   const publishers = /^\/v1\/projects\/([^/]+)\/publishers$/.exec(url.pathname);
