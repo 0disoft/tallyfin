@@ -44,3 +44,27 @@ test('denied origins cannot write counters or exhaust the next valid request quo
     assert.equal(observations.length, 6);
   } finally { await f.mf.dispose(); }
 });
+
+
+test('unresolved limiter calls cannot consume database capacity for authenticated administrator reads', async () => {
+  const pending: ((value: { success: boolean }) => void)[] = []; let enter!: () => void, dbCalls = 0;
+  const worker = createWorker(async () => ({ issuer: 'https://issuer.example.invalid', subject: 'operator' }), undefined,
+    { maxDatabaseOperations: 2, maxPublicOperations: 2 });
+  const bindings = { DB: {
+    prepare() { return { bind() { return this; } }; },
+    async batch(statements: unknown[]) { dbCalls++; return statements.map(() => ({ success: true, results: [], meta: { changes: 0 } })); },
+  }, BROWSER_INGEST_LIMITER: { limit() { enter(); return new Promise<{ success: boolean }>(resolve => pending.push(resolve)); } } };
+  const admin = () => worker.fetch(new Request('https://collector.example.invalid/v1/projects', { headers: { Authorization: 'Bearer synthetic-test' } }), bindings);
+  assert.equal((await admin()).status, 200);
+  try {
+    for (let n = 0; n < 2; n++) {
+      const ready = new Promise<void>(resolve => { enter = resolve; }), controller = new AbortController();
+      const response = worker.fetch(new Request(url, { method: 'POST', signal: controller.signal }), bindings);
+      await ready; controller.abort(); assert.equal((await response).status, 503);
+    }
+    const before = dbCalls;
+    assert.equal((await worker.fetch(new Request(url), bindings)).status, 503);
+    assert.equal(dbCalls, before);
+    assert.equal((await admin()).status, 200); assert.ok(dbCalls > before);
+  } finally { for (const resolve of pending) resolve({ success: true }); }
+});
