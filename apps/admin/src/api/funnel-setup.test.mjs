@@ -1,3 +1,4 @@
+import { BROWSER_SIZE_BUDGET } from '../../../../tools/browser/size-policy.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -107,5 +108,5 @@ test('the generated browser factory with its endpoint and schema fits the SDK in
       }));
     } }] });
   const gzipBytes = gzipSync(result.outputFiles[0].contents).length;
-  assert.ok(gzipBytes <= 3072, `Generated SDK integration is ${gzipBytes} gzip bytes; budget is 3072`);
+  assert.ok(gzipBytes <= BROWSER_SIZE_BUDGET.integration, `Generated SDK integration is ${gzipBytes} gzip bytes; budget is ${BROWSER_SIZE_BUDGET.integration}`);
 });

@@ -1,3 +1,4 @@
+import { BROWSER_SIZE_BUDGET } from './size-policy.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -32,9 +33,9 @@ for (const [name, entry] of Object.entries({ sdk: 'packages/browser/src/index.ts
     ? 'packages/browser/src/funnels.ts' : 'packages/browser/src/index.ts')), 'another task profile entered the bundle');
   sizes[name] = { bytes: bytes.length, gzipBytes: gzipSync(bytes).length };
 }
-console.log(JSON.stringify({ budgetGzipBytes: 3328, standaloneBudgetGzipBytes: 3072, ...sizes }, null, 2));
-assert.ok(sizes.sdkWithSembom.gzipBytes <= 3328, 'SDK + integration + required schema exceeds the 3.25 KiB integration budget');
-assert.ok(sizes.sdkWithFunnel.gzipBytes <= 3328, 'Funnel SDK + integration + required schema exceeds the 3.25 KiB integration budget');
-assert.ok(sizes.sdkWithGeneratedFunnel.gzipBytes <= 3328, 'Generated funnel SDK + endpoint + required schema exceeds the 3.25 KiB integration budget');
+console.log(JSON.stringify({ budgetGzipBytes: BROWSER_SIZE_BUDGET.integration, standaloneBudgetGzipBytes: BROWSER_SIZE_BUDGET.standalone, ...sizes }, null, 2));
+assert.ok(sizes.sdkWithSembom.gzipBytes <= BROWSER_SIZE_BUDGET.integration, 'SDK + integration + required schema exceeds the 3.25 KiB integration budget');
+assert.ok(sizes.sdkWithFunnel.gzipBytes <= BROWSER_SIZE_BUDGET.integration, 'Funnel SDK + integration + required schema exceeds the 3.25 KiB integration budget');
+assert.ok(sizes.sdkWithGeneratedFunnel.gzipBytes <= BROWSER_SIZE_BUDGET.integration, 'Generated funnel SDK + endpoint + required schema exceeds the 3.25 KiB integration budget');
 
-assert.ok(sizes.sdk.gzipBytes <= 3072 && sizes.funnelSdk.gzipBytes <= 3072, 'Standalone SDK exceeds the 3 KiB budget');
+assert.ok(sizes.sdk.gzipBytes <= BROWSER_SIZE_BUDGET.standalone && sizes.funnelSdk.gzipBytes <= BROWSER_SIZE_BUDGET.standalone, 'Standalone SDK exceeds the 3 KiB budget');
