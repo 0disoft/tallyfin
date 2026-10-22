@@ -152,6 +152,8 @@ await client.send([completed]);
 
 취소는 토큰 획득·요청·응답 읽기·재시도 대기를 모두 덮는다. 중간에 취소되면
 `aborted`/`aborted`이고 `retryable: false`다.
+호출자가 abort(reason)으로 전달한 원래 객체는 토큰 획득·전송·본문·대기 단계의
+의존성 신호에도 그대로 전달한다. 공개 DeliveryResult에는 취소 이유 객체를 넣지 않는다.
 
 토큰 획득은 호스트 함수라 동기 작업이면 이벤트 루프를 점유한다. 그래서 SDK는 요청을 보내기
 전에 `host.monotonicNow()`로 시도 기한(`min(전체 재시도 기한, 시도 시작 + requestTimeoutMs)`)을

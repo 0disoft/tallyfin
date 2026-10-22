@@ -164,7 +164,7 @@ async function limited<T>(work: (signal: AbortSignal) => Promise<T>, millisecond
   let stop = () => {};
   try {
     return await new Promise<T>((resolve, reject) => {
-      stop = () => { controller.abort(); reject(aborted); };
+      stop = () => { controller.abort(parent?.reason); reject(aborted); };
       if (parent?.aborted) { stop(); return; }
       parent?.addEventListener('abort', stop, { once: true });
       cancelTimer = schedule(() => { controller.abort(); reject(timedOut); }, milliseconds);
