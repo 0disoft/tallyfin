@@ -95,11 +95,13 @@ test('native HTTP receipts cannot prove delivery after synchronous response proc
   const address = server.address();
   if (!address || typeof address === 'string') throw Error('No loopback port');
   for (const stage of ['headers', 'body'] as const) {
-    let slow = true;
-    const block = () => { if (!slow) return; const end = performance.now() + 100;
-      while (performance.now() < end) { /* Simulate CPU work preventing timeout callbacks. */ } };
+    let slow = true, elapsed = 0;
+    // Keep native HTTP, but control processing time instead of depending on a
+    // 50ms network race and CPU busy-wait under parallel Miniflare load.
+    const block = () => { if (slow) elapsed += 100; };
     const host: ServerPlatform = {
-      now: () => Date.now(), monotonicNow: () => performance.now(), uuid: () => crypto.randomUUID(),
+      now: () => Date.now(), monotonicNow: () => elapsed, uuid: () => crypto.randomUUID(),
+      timer: () => () => {}, // Exercise the monotonic checks before timer callbacks can run.
       wait: async () => { throw Error('No retry expected'); },
       fetch: async (input, init) => {
         const response = await fetch(input, init);
