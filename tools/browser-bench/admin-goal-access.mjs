@@ -92,6 +92,9 @@ try {
   await expect(overview.locator('tbody tr')).toHaveCount(2);
   assert.equal(overviewRequests, 1);
   await expect(overview).not.toContainText('조회하지 못했어요');
+  await expect(overview).toContainText('현재 성공 1 / 시작 1 · 진행 중 0');
+  await expect(overview).toContainText('직전 성공 1 / 시작 1 · 진행 중 0');
+  await expect(overview).toContainText('집계 중 · 비교 보류');
   scenarios.push(stage);
   stage = 'schema-free-overview-diagnostics';
   await local.db.prepare("UPDATE project_schemas SET status='retired' WHERE project_id='access-other'").run();

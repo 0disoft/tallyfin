@@ -425,10 +425,34 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+    OverviewWorkflowSample:
+      type: object
+      additionalProperties: false
+      required: [startedAttempts, succeededAttempts, failedAttempts, pendingAttempts, provisional]
+      properties:
+        startedAttempts: { type: integer, minimum: 0, maximum: 9007199254740991 }
+        succeededAttempts: { type: integer, minimum: 0, maximum: 9007199254740991 }
+        failedAttempts:
+          anyOf:
+            - { type: integer, minimum: 0, maximum: 9007199254740991 }
+            - { type: "null" }
+        pendingAttempts: { type: integer, minimum: 0, maximum: 9007199254740991 }
+        provisional:
+          type: boolean
+          description: At least one cohort date is still within the existing local day-end plus two-day update window.
+    OverviewWorkflowStats:
+      type: object
+      additionalProperties: false
+      required: [current, previous]
+      properties:
+        current:
+          $ref: "#/components/schemas/OverviewWorkflowSample"
+        previous:
+          $ref: "#/components/schemas/OverviewWorkflowSample"
     OverviewRow:
       type: object
       additionalProperties: false
-      required: [projectId, version, latestReceivedAt, events, previousEvents, workflowLabel, completion, previousCompletion, workflowUnavailable, rejected, rejectionUnavailable, error, accessDenied]
+      required: [projectId, version, latestReceivedAt, events, previousEvents, workflowLabel, completion, previousCompletion, workflowUnavailable, workflowStats, rejected, rejectionUnavailable, error, accessDenied]
       properties:
         projectId:
           $ref: "#/components/schemas/ProjectId"
@@ -461,6 +485,10 @@ components:
             - { type: number, minimum: 0, maximum: 100 }
             - { type: "null" }
         workflowUnavailable: { type: boolean }
+        workflowStats:
+          anyOf:
+            - $ref: "#/components/schemas/OverviewWorkflowStats"
+            - { type: "null" }
         rejected:
           anyOf:
             - { type: integer, minimum: 0, maximum: 9007199254740991 }

@@ -54,6 +54,10 @@ test('period totals and workflow rates match existing reads across local midnigh
   }
   const store = new D1Queries(fixture.db), body = await store.overview(principal, ['sembom'], 'browser', now), row = body.data[0]!;
   assert.equal(row.events, 9); assert.equal(row.previousEvents, 4); assert.equal(row.completion, 75); assert.equal(row.previousCompletion, 25);
+  assert.deepEqual(row.workflowStats, {
+    current: { startedAttempts: 4, succeededAttempts: 3, failedAttempts: null, pendingAttempts: 1, provisional: true },
+    previous: { startedAttempts: 4, succeededAttempts: 1, failedAttempts: null, pendingAttempts: 3, provisional: false },
+  });
   const from = new Date(Date.parse(date) - 6 * DAY).toISOString().slice(0, 10);
   const summary: any = await store.query(principal, { projectId: 'sembom', version: 1, kind: 'summary', from, to: date }, now);
   const workflow: any = await store.query(principal, { projectId: 'sembom', version: 1, kind: 'workflow', name: registry.workflows[0]!.id, from, to: date }, now);
@@ -64,6 +68,7 @@ test('period totals and workflow rates match existing reads across local midnigh
   const rejection = await store.rejections(principal, 'sembom', new Date(Date.parse(utcTo) - 6 * DAY).toISOString().slice(0, 10), utcTo, now);
   const server = await store.overview(principal, ['sembom'], 'server', now);
   assert.equal(server.data[0]!.events, 0); assert.equal(server.data[0]!.workflowLabel, null);
+  assert.equal(server.data[0]!.workflowStats, null);
   assert.equal(server.data[0]!.rejected, rejection.summary.rejectedRequests); assert.equal(server.data[0]!.rejected, 3);
 });
 test('missing and foreign projects are identical denials; empty active schemas remain distinct', async () => {

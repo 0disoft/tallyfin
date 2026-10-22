@@ -120,9 +120,12 @@ function fillWorkflow(row: OverviewRow, plan: Plan, entries: WorkflowRow[], sour
         timeZone: plan.state.time_zone, generatedAt: new Date(now).toISOString(), latestReceivedAt: row.latestReceivedAt, coverage: 'observed-only' as const };
       const response = queryResponse(plan.registry, { projectId: row.projectId, version: plan.registry.schemaVersion, kind: 'workflow', name: definition.id },
         meta, queryDates(from, to, plan.state.time_zone, now), entries.filter(e => e.cohort_date >= from && e.cohort_date <= to), now);
-      if (!('summary' in response) || !response.summary || !('completionRate' in response.summary)) return invalid();
-      return response.summary.completionRate;
+      if (!('workflowId' in response) || !('days' in response) || !response.summary) return invalid();
+      const { completionRate, ...counts } = response.summary;
+      return { completionRate, sample: { ...counts, provisional: response.days.some(day => day.provisional) } };
     };
-    row.completion = load(plan.split, plan.to); row.previousCompletion = load(plan.from, shift(plan.split, -1));
-  } catch { row.workflowUnavailable = true; row.completion = null; row.previousCompletion = null; }
+    const current = load(plan.split, plan.to), previous = load(plan.from, shift(plan.split, -1));
+    row.completion = current.completionRate; row.previousCompletion = previous.completionRate;
+    row.workflowStats = { current: current.sample, previous: previous.sample };
+  } catch { row.workflowUnavailable = true; row.completion = null; row.previousCompletion = null; row.workflowStats = null; }
 }

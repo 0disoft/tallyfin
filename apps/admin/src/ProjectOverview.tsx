@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiClient } from './api/client';
 import type { EventSource, Project } from './api/types';
-import { countChange, rateChange } from './api/period-comparison';
+import { countChange } from './api/period-comparison';
 import { projectOverview, OVERVIEW_PAGE_SIZE, type ServiceRow } from './api/project-overview';
-import { formatCount, formatRate } from './data';
+import { formatCount } from './data';
+import OverviewWorkflowCell from './OverviewWorkflowCell';
 
 export default function ProjectOverview({ client, projects, source, onSelectProject, hasMore, onLoadMore, loadingMore }: {
   client: ApiClient; projects: Project[]; source: EventSource; onSelectProject: (id: string) => void;
@@ -39,17 +40,16 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
         <th>서비스</th><th>최근 수신(프로젝트 전체)</th><th>이벤트 / 직전 기간 변화</th><th>작업 완료율 / 변화</th><th>거부 요청</th>
       </tr></thead><tbody>{rows.map(row => {
         const change = row.events === null || row.previousEvents === null ? null : countChange(row.events, row.previousEvents);
-        const delta = rateChange(row.completion, row.previousCompletion);
         return <tr key={row.project.id}><th scope="row"><button className="text-button" onClick={() => onSelectProject(row.project.id)}>{row.project.name}</button>
           <div>{row.project.status === 'paused' ? '일시정지' : '운영 중'} · {row.project.timeZone} · {row.error ? '조회 실패' : row.version === null ? '활성 스키마 없음' : `v${row.version}`}</div></th>
           {row.error ? <td colSpan={4}>조회하지 못했어요. 권한과 연결을 확인한 뒤 다시 조회해 주세요.</td> : <>
             <td>{row.latestReceivedAt ? new Date(row.latestReceivedAt).toLocaleString('ko-KR', { timeZone: row.project.timeZone }) : '수신 기록 없음 또는 미조회'}</td>
             <td>{row.events === null ? '—' : formatCount(row.events)} / {change === null ? '비교 불가' : `${change.toFixed(1)}%`}</td>
-            <td>{row.workflowUnavailable ? '완료율 조회 실패' : <>{row.version === null ? '활성 스키마 없음' : row.workflowLabel ?? '작업 흐름 없음'}<div>{formatRate(row.completion)} / {delta === null ? '비교 불가' : `${delta.toFixed(1)}%p`}</div></>}</td>
+            <td><OverviewWorkflowCell row={row} /></td>
             <td>{row.rejectionUnavailable ? '조회 실패' : row.rejected === null ? '—' : formatCount(row.rejected)}</td>
           </>}</tr>;
       })}</tbody></table></div>}
-      <p className="context-note">한 번에 최대 5개 서비스만 읽으며 자동 반복 조회는 하지 않아요. 수집기 앞단에서 차단한 요청은 거부 건수에 포함되지 않아요. 수신 기록이 없다는 이유만으로 장애로 판단하지 않아요.</p>
+      <p className="context-note">한 번에 최대 5개 서비스만 읽으며 자동 반복 조회는 하지 않아요. 완료율 변화는 두 기간이 집계 중이 아니고 각각 시작 30건 이상일 때 표시해요. 이는 통계적 유의성이나 장애 판정 기준은 아니에요. 수집기 앞단에서 차단한 요청은 거부 건수에 포함되지 않아요. 수신 기록이 없다는 이유만으로 장애로 판단하지 않아요.</p>
     </>}
   </section>;
 }

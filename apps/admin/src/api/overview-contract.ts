@@ -1,15 +1,18 @@
 import { ContractError } from './validate.ts';
 import type { EventSource } from './types.ts';
+import { parseWorkflowStats } from './overview-workflow.ts';
+import type { WorkflowStats } from './overview-workflow.ts';
 
 export const OVERVIEW_PAGE_SIZE = 5;
 export type OverviewRow = { projectId: string; version: number | null; latestReceivedAt: string | null;
   events: number | null; previousEvents: number | null; workflowLabel: string | null;
   completion: number | null; previousCompletion: number | null; workflowUnavailable: boolean;
+  workflowStats?: WorkflowStats | null;
   rejected: number | null; rejectionUnavailable: boolean; error: boolean; accessDenied: boolean };
 export type OverviewResponse = { source: EventSource; generatedAt: string; data: OverviewRow[] };
 const fail = (): never => { throw new ContractError('Service overview response is inconsistent.'); };
-function object(value: unknown, keys: string[]): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== keys.length || keys.some(k => !Object.hasOwn(value, k))) fail();
+function object(value: unknown, keys: string[], optional: string[] = []): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k) && !optional.includes(k)) || keys.some(k => !Object.hasOwn(value, k))) fail();
   return value as Record<string, unknown>;
 }
 function stamp(value: unknown): value is string {
@@ -23,7 +26,7 @@ export function parseOverview(value: unknown): OverviewResponse {
   if (!['browser', 'server'].includes(String(r.source)) || !stamp(r.generatedAt) || !Array.isArray(r.data) || r.data.length < 1 || r.data.length > OVERVIEW_PAGE_SIZE) fail();
   const data = (r.data as unknown[]).map(value => {
     const row = object(value, ['projectId', 'version', 'latestReceivedAt', 'events', 'previousEvents', 'workflowLabel',
-      'completion', 'previousCompletion', 'workflowUnavailable', 'rejected', 'rejectionUnavailable', 'error', 'accessDenied']);
+      'completion', 'previousCompletion', 'workflowUnavailable', 'rejected', 'rejectionUnavailable', 'error', 'accessDenied'], ['workflowStats']);
     if (typeof row.projectId !== 'string' || !/^[a-z][a-z0-9-]{0,47}$/.test(row.projectId) ||
       row.version !== null && (typeof row.version !== 'number' || !Number.isInteger(row.version) || row.version < 1 || row.version > 2147483647) ||
       row.latestReceivedAt !== null && !stamp(row.latestReceivedAt) ||
@@ -40,6 +43,11 @@ export function parseOverview(value: unknown): OverviewResponse {
       row.workflowLabel === null && (row.completion !== null || row.previousCompletion !== null) ||
       row.rejectionUnavailable && row.rejected !== null ||
       r.source === 'server' && (row.workflowLabel !== null || row.workflowUnavailable)) fail();
+    if (Object.hasOwn(row, 'workflowStats')) {
+      const unavailable = row.error || row.version === null || row.workflowUnavailable || row.workflowLabel === null || r.source === 'server';
+      if (unavailable ? row.workflowStats !== null : row.workflowStats === null) fail();
+      if (!unavailable) return { ...row, workflowStats: parseWorkflowStats(row.workflowStats, row.completion as number | null, row.previousCompletion as number | null) } as OverviewRow;
+    }
     return row as OverviewRow;
   });
   if (new Set(data.map(row => row.projectId)).size !== data.length) fail();
