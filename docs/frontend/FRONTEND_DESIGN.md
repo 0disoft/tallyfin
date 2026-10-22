@@ -1,5 +1,14 @@
 # Tallyfin 프론트엔드 설계
 
+## 취소 뒤 응답 본문 폐기 — 2026-10-23
+
+기본 fetch wrapper는 body를 보존하고, ApiClient는 전송 완료 시 응답을 기억한다.
+취소 뒤 도착한 응답과 헤더 수신 정각의 시간 초과로 JSON 읽기를 시작하지 않은 본문도
+폐기를 요청한다. 같은 응답의 폐기 요청은 한 번만 보내고 cancel 실패/무한 대기는
+호출자의 취소 이유·기한 오류를 덮거나 반환을 지연시키지 않는다. fetch/json이 실제로
+끝나기 전에는 읽기 슬롯을 반환하지 않는다. 주입 전송의 body는 선택적이라 기존
+json-only 계약과 GET 실행/대기 한도·쓰기 우회를 유지한다.
+
 ## 관리자 API native fetch 응답 메모리 보호 — 2026-10-12
 
 `apps/admin/src/api/response-body.ts`의 `readResponseJson`은 기본 native fetch 경로에서만

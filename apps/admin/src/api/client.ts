@@ -150,17 +150,22 @@ export type FetchOption = {
   body?: string;
 };
 
+type FetchResponse = {
+  ok: boolean; status: number; json: () => Promise<unknown>;
+  body?: ReadableStream<Uint8Array> | null;
+};
+
 export type FetchLike = (
   input: string,
   init?: FetchOption,
-) => Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>;
+) => Promise<FetchResponse>;
 
-async function defaultFetch(input: string, init?: FetchOption): Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }> {
+async function defaultFetch(input: string, init?: FetchOption): Promise<FetchResponse> {
   // Invoke fetch as a property of globalThis so the receiver is the global
   // object, not this ApiClient instance (browsers reject that with
   // "Illegal invocation").
   const response = await globalThis.fetch(input, init as RequestInit);
-  return { ok: response.ok, status: response.status, json: () => readResponseJson(response, init?.signal) };
+  return { ok: response.ok, status: response.status, body: response.body, json: () => readResponseJson(response, init?.signal) };
 }
 
 export class ApiClient {
@@ -517,6 +522,12 @@ export class ApiClient {
     const checkRequest = () => { enforceDeadline(); controller.signal.throwIfAborted(); };
     const timeout = setTimeout(() => controller.abort(new ApiError('timeout', KIND_MESSAGE.timeout)), this.#requestTimeoutMs);
     let observedStatus: number | undefined;
+    let response: FetchResponse | undefined, discarded = false;
+    const discardResponse = () => {
+      if (discarded || !response?.body) return;
+      discarded = true;
+      try { void response.body.cancel().catch(() => {}); } catch { /* Cleanup cannot replace or delay the result. */ }
+    };
     let lease: ReadLease | undefined;
     const track = <T>(operation: () => Promise<T>) => lease ? lease.track(operation) : operation();
     let notified = false;
@@ -552,9 +563,9 @@ export class ApiClient {
       }
       checkRequest();
       if (bearer) headers.Authorization = `Bearer ${bearer}`;
-      let response: { ok: boolean; status: number; json: () => Promise<unknown> };
+      let received: FetchResponse;
       try {
-        response = await awaitRequest(controller.signal, () => track(() => this.#fetch(url, {
+        received = await awaitRequest(controller.signal, () => track(() => this.#fetch(url, {
           method: method ?? (body === undefined ? 'GET' : 'PATCH'),
           ...(body === undefined ? {} : { body }),
           headers,
@@ -564,21 +575,26 @@ export class ApiClient {
           referrerPolicy: 'no-referrer',
           // An API redirect must not replay credentials or a mutation at another route.
           redirect: 'error',
+        }).then(value => {
+          response = value;
+          // A transport can ignore abort and settle after this request's finally.
+          if (controller.signal.aborted) discardResponse();
+          return value;
         })));
       } catch (error) {
         if (controller.signal.aborted || (error as { name?: string })?.name === 'AbortError') throw error;
         throw new ApiError('network', KIND_MESSAGE.network, { cause: error });
       }
-      observedStatus = response.status;
+      observedStatus = received.status;
       checkRequest();
       // The status alone confirms denial; do not retain data while its body stalls.
       if (observedStatus === 401 || observedStatus === 403) {
         const kind = STATUS_KIND[observedStatus]!;
         notifyDenial(new ApiError(kind, KIND_MESSAGE[kind], { status: observedStatus }));
       }
-      if (!response.ok) throw await awaitRequest(controller.signal, () => track(() => this.#toApiError(response)));
+      if (!received.ok) throw await awaitRequest(controller.signal, () => track(() => this.#toApiError(received)));
       try {
-        const result = await awaitRequest(controller.signal, () => track(() => response.json()));
+        const result = await awaitRequest(controller.signal, () => track(() => received.json()));
         checkRequest();
         return result;
       } catch (error) {
@@ -600,6 +616,7 @@ export class ApiClient {
       if (error instanceof ApiError && (error.status === 401 || error.status === 403)) notifyDenial(error);
       throw error;
     } finally {
+      discardResponse();
       lease?.close();
       clearTimeout(timeout);
       // Keep the controller registered until the body is read so destroy()

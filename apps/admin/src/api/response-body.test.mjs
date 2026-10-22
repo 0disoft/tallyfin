@@ -77,3 +77,33 @@ test('abort cancels stalled native bodies without letting incomplete JSON prove 
   await assert.rejects(pending, error => error.name === 'AbortError');
   assert.equal(canceled, 1);
 });
+
+for (const native of [true, false]) test(`${native ? 'default' : 'injected'} transport discards late headers once and keeps capacity until fetch settles`, async t => {
+  let finish, canceled = 0, calls = 0;
+  const transport = () => {
+    calls++;
+    return calls === 1 ? new Promise(resolve => { finish = resolve; }) : Promise.resolve(Response.json(page));
+  };
+  if (native) t.mock.method(globalThis, 'fetch', transport);
+  const client = new ApiClient({ maxConcurrentReads: 1, ...(native ? {} : { fetchImpl: transport }) });
+  t.after(() => client.destroy());
+  const caller = new AbortController(), reason = new Error('caller canceled');
+  const first = client.listProjects({ signal: caller.signal }); caller.abort(reason);
+  await assert.rejects(first, error => error === reason);
+  const next = client.listProjects(); await new Promise(resolve => setImmediate(resolve)); assert.equal(calls, 1);
+  finish(new Response(new ReadableStream({ cancel() { canceled++; return new Promise(() => {}); } })));
+  assert.deepEqual(await next, page); assert.equal(canceled, 1); assert.equal(calls, 2);
+});
+
+for (const throwing of [false, true]) test(`headers at the exact deadline discard unread bodies despite ${throwing ? 'throwing' : 'stalled'} cleanup`, async t => {
+  let elapsed = 0, canceled = 0, reads = 0;
+  t.mock.method(performance, 'now', () => elapsed);
+  const client = new ApiClient({ requestTimeoutMs: 100, fetchImpl: async () => {
+    elapsed = 100;
+    return { ok: true, status: 200, json: async () => { reads++; return page; },
+      body: { cancel() { canceled++; if (throwing) throw Error('private cleanup failure'); return new Promise(() => {}); } } };
+  } });
+  t.after(() => client.destroy());
+  await assert.rejects(client.listProjects(), { kind: 'timeout' });
+  assert.equal(canceled, 1); assert.equal(reads, 0);
+});
