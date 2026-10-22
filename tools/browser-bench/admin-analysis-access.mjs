@@ -90,11 +90,19 @@ try {
   stage = 'time-zone-recovery'; invalidProjectZone = false;
   await page.getByRole('button', { name: '다시 시도', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
+  stage = 'project-overview';
+  await page.getByRole('button', { name: '통합 현황 불러오기', exact: true }).click();
+  const overview = page.getByRole('table').filter({ hasText: '최근 수신(프로젝트 전체)' });
+  await overview.locator('tbody tr').first().waitFor();
+  assert.equal(await overview.locator('tbody tr').count(), 2);
+  assert.ok((await overview.innerText()).includes('v2'));
+  await page.screenshot({ path: resolve(directory, 'project-overview.png'), fullPage: true });
+  await page.getByRole('button', { name: '통합 현황 닫기', exact: true }).click();
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
-  trackingEventReads = true;
   await page.getByRole('button', { name: '이벤트 분석', exact: true }).click();
   const csv = page.getByRole('button', { name: 'CSV 내려받기', exact: true });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  trackingEventReads = true;
   stage = 'mismatched-event-time-zone';
   await page.getByRole('button', { name: 'tool_view', exact: true }).click();
   const detail = page.locator('.event-detail');
@@ -140,6 +148,8 @@ try {
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
   assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '1');
+  await page.getByRole('checkbox', { name: '스키마 자동 선택', exact: true }).check();
+  await page.waitForFunction(() => document.querySelector('[aria-label="스키마 버전"]')?.value === '2');
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
   stage = 'late-denial';
@@ -157,17 +167,20 @@ try {
   assert.equal(await page.getByRole('heading', { name: '이 프로젝트를 볼 권한이 없어요', exact: true }).count(), 0);
   stage = 'disconnect'; await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
-  assert.equal(await csv.count(), 0); assert.equal(await page.locator('.event-table').count(), 0);
-  assert.equal(routeError, false); assert.equal(pageErrors, 0);
-  assert.equal(eventWorkflowReads, 0);
-  const report = { latestActiveSchemaSelected: true, projectVersionSelectionsIsolated: true, eventWorkflowReads, verified: true, browser: browser.version(), oversizedReads, oversizedResponseRecovery: true, invalidZoneReads, invalidZoneRecovery: true,
+  stage = 'disconnect-csv'; assert.equal(await csv.count(), 0);
+  stage = 'disconnect-tables'; assert.equal(await page.locator('.event-table').count(), 0);
+  stage = 'route-errors'; assert.equal(routeError, false);
+  stage = 'page-errors'; assert.equal(pageErrors, 0);
+  stage = 'event-workflow-count'; assert.equal(eventWorkflowReads, 0);
+  const report = { latestActiveSchemaSelected: true, projectVersionSelectionsIsolated: true, automaticVersionRestored: true, projectOverviewVerified: true, eventWorkflowReads, verified: true, browser: browser.version(), oversizedReads, oversizedResponseRecovery: true, invalidZoneReads, invalidZoneRecovery: true,
     mismatchedEventZoneReads, mismatchedEventZoneBlocked: true, eventTimeZoneRecovery: true, deniedReads, deniedSummaryCleared: true, deniedCsvDisabled: true,
     otherProjectExportIsolated: true, recovery: true, lateDeniedReadIgnored: true, heldReads, disconnectClears: true, routeError, pageErrors, ...local.counts };
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
-} catch {
+} catch (error) {
+  const assertion = error?.name === 'AssertionError' ? { actual: typeof error.actual === 'number' || typeof error.actual === 'boolean' ? error.actual : null, expected: typeof error.expected === 'number' || typeof error.expected === 'boolean' ? error.expected : null, operator: error.operator } : null;
   if (directory) {
-    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, verified: false }) + '\n');
+    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, verified: false, assertion }) + '\n');
     await page?.screenshot({ path: resolve(directory, 'failure.png'), fullPage: true }).catch(() => {});
   }
-  process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage }));
+  process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, assertion }));
 } finally { clearTimeout(watchdog); held?.release.resolve(); await browser?.close(); await server?.close(); await local?.mf.dispose(); }
