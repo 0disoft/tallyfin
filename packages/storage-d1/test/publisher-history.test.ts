@@ -19,8 +19,8 @@ test('0008 preserves history and project rows, rebuilds guards, and records owne
     await db.batch([adminChangeStatement(db, 'sembom', owner, { action: 'project.created' }, now - 1, 'always')]);
     const before = (await db.prepare('SELECT * FROM admin_changes').all()).results;
     const projects = (await db.prepare('SELECT * FROM projects').all()).results;
-    assert.deepEqual(await initialize(db, false), { migrations: ['0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql'], applied: true });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql'], applied: true });
     assert.deepEqual(await initialize(db, true), { migrations: [], applied: false });
     assert.deepEqual((await db.prepare('SELECT * FROM admin_changes').all()).results, before);
     assert.deepEqual((await db.prepare('SELECT * FROM projects').all()).results, projects.map(row => ({ ...row, grant_revision: 0 })));

@@ -8,7 +8,7 @@ export const now = Date.parse('2026-10-08T15:00:15Z');
 export const registry = validateRegistry(example('registry'));
 export const batch = () => example('browser-batch');
 export function migrationStatements(): string[] {
-  const sql = ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql'].map(name =>
+  const sql = ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql'].map(name =>
     readFileSync(new URL(`../../../db/migrations/${name}`, import.meta.url), 'utf8').replace(/^--.*$/gm, '')).join('\n');
   // This migration contains no quoted semicolons; preserve complete trigger bodies.
   return [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());

@@ -1,7 +1,7 @@
 # 저장 계약과 마이그레이션 상태
 
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0009`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
+마이그레이션 `0002`~`0011`이 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
@@ -276,3 +276,24 @@ Existing grant rows remain unchanged. Grant insert/delete/role-update triggers a
 and return `grant_conflict`. No-op readback remains available for exact retries.
 Older admin builds must be upgraded to edit grants. Offline plans also compare this
 revision. Local initialization refuses a revision column without all three triggers.
+
+## 0011_analytics_lookup.sql
+
+Adds event and funnel lookup indexes without changing rows, keys or query responses.
+The event index places event_name before the date range, removing the daily query's
+temporary sort. The funnel index places funnel_id before the date range and orders
+steps for daily grouping. Breakdown still sorts dimension/step within a cohort date.
+No workflow index is added: the existing primary key already supports that query plan.
+
+Apply both CREATE INDEX statements as one D1 batch after 0010. Before applying, verify
+backups, current row counts and index absence; schedule the build for a quiet period.
+Index creation scans existing aggregates, consumes storage and blocks other work on
+the database; additional ingest writes must maintain both indexes. No production
+latency or index-build duration is claimed by the local EXPLAIN QUERY PLAN checks.
+After applying, verify both index definitions, unchanged row counts, foreign keys and
+event/funnel results. Local initialization detects complete indexes and refuses partial
+or changed definitions. The installation schema checker includes both indexes.
+
+Rollback leaves the indexes in place with older code. To reclaim space, drop both
+indexes in one batch; row data and older query behavior remain intact. Reapplying
+0011 restores them. Remote application has not been performed.

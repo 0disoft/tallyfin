@@ -27,7 +27,8 @@ Table funnel_daily_counts {
   reached_count bigint [not null, default: 0, note: 'Nonnegative safe integer; SQL trigger enforces neighbor invariant']
   updated_at bigint [not null]
   indexes { (project_id, schema_version, cohort_date, funnel_id, dimension_key, step_index) [pk]
-    (project_id, cohort_date) }
+    (project_id, cohort_date)
+    (project_id, schema_version, funnel_id, cohort_date, step_index, dimension_key) [name: 'funnel_daily_counts_lookup'] }
 }
 Ref: funnel_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)
 
@@ -188,6 +189,7 @@ Table event_daily_counts {
   indexes {
     (project_id, schema_version, source, event_date, event_name, dimension_key) [pk]
     (project_id, event_date)
+    (project_id, schema_version, source, event_name, event_date, dimension_key) [name: 'event_daily_counts_lookup']
   }
 }
 Ref: event_daily_counts.(project_id, schema_version) > project_schemas.(project_id, version)
