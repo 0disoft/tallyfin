@@ -92,12 +92,14 @@ test('offline operator records changes without claiming a human identity; stale 
   assert.equal(records.find(r => r.action === 'project.settings_changed')!.fields_json, '["name"]');
   await f.db.prepare("CREATE TRIGGER reject_history BEFORE INSERT ON admin_changes BEGIN SELECT RAISE(ABORT, 'test-history-failure'); END").run();
   try {
-    await assert.rejects(tool.apply(await tool.plan('grant', { projectId: 'new-product', ...owner, role: 'reader' }), now), { code: 'apply_conflict' });
+    await assert.rejects(tool.apply(await tool.plan('grant', { projectId: 'new-product', ...owner, role: 'reader' }), now),
+      (error: unknown) => error instanceof Error && (error as { code?: string }).code === 'database_unavailable' && error.cause instanceof Error);
     assert.equal(await f.db.prepare('SELECT count(*) FROM project_grants WHERE project_id=? AND subject=?').bind('new-product', owner.subject).first('count(*)'), 0);
     assert.equal((await rows()).length, records.length);
     const projectBefore = await f.db.prepare("SELECT * FROM projects WHERE id='new-product'").first();
     input.schemaVersion = 2; input.project.name = 'rolled back';
-    await assert.rejects(tool.apply(await tool.plan('register', input), now), { code: 'apply_conflict' });
+    await assert.rejects(tool.apply(await tool.plan('register', input), now),
+      (error: unknown) => error instanceof Error && (error as { code?: string }).code === 'database_unavailable' && error.cause instanceof Error);
     assert.deepEqual(await f.db.prepare("SELECT * FROM projects WHERE id='new-product'").first(), projectBefore);
     assert.equal(await f.db.prepare("SELECT count(*) FROM project_schemas WHERE project_id='new-product' AND version=2").first('count(*)'), 0);
   } finally { await f.db.prepare('DROP TRIGGER reject_history').run(); }

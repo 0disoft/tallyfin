@@ -40,7 +40,8 @@ test('native administration requests reject redirects without replaying reads or
     const callsBefore = methods.length;
     await assert.rejects(method === 'GET' ? client.listProjects()
       : client.updateSettings('sample', { expectedSettingsHash: initial.settingsHash, name: 'Changed' }),
-    error => error instanceof ApiError && error.kind === 'network' && error.status === 0 && !error.cause);
+    error => error instanceof ApiError && error.kind === 'network' && error.status === 0 && error.cause instanceof Error
+      && !Object.keys(error).includes('cause') && !JSON.stringify(error).includes('unexpected redirect'));
     assert.deepEqual(methods.slice(callsBefore), [method]);
     assert.equal(targetRequests, 0);
   });
