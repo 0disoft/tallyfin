@@ -144,3 +144,36 @@ test("emits the files required by Sites packaging", async () => {
   await access(new URL("../dist/server/index.js", import.meta.url));
   await access(new URL("../dist/.openai/hosting.json", import.meta.url));
 });
+
+test('fallback cancels the discarded asset body on success, exception and cancellation without awaiting cleanup', async () => {
+  for (const outcome of ['success', 'throw', 'reject', 'abort']) {
+    for (const cleanup of ['resolve', 'reject', 'stall', 'throw']) {
+      let calls = 0, canceled = 0;
+      const error = outcome === 'abort' ? new DOMException('Canceled', 'AbortError') : Error('fallback failed');
+      const assets = { fetch() {
+        if (++calls === 1) return { status: 404, body: { cancel() {
+          canceled++;
+          if (cleanup === 'throw') throw Error('cleanup failed');
+          if (cleanup === 'reject') return Promise.reject(Error('cleanup failed'));
+          if (cleanup === 'stall') return new Promise(() => {});
+          return Promise.resolve();
+        } } };
+        if (outcome === 'throw') throw error;
+        if (outcome !== 'success') return Promise.reject(error);
+        return new Response('app');
+      } };
+      const response = worker.fetch(new Request('https://example.test/deep/link', { headers: { accept: 'text/html' } }), { ASSETS: assets });
+      if (outcome === 'success') assert.equal(await (await response).text(), 'app');
+      else await assert.rejects(response, failure => failure === error);
+      assert.equal(canceled, 1); assert.equal(calls, 2);
+    }
+  }
+});
+
+test('forwarded asset streams are left for the caller to consume or cancel', async () => {
+  let canceled = 0;
+  const original = new Response(new ReadableStream({ cancel() { canceled++; } }), { status: 404 });
+  const response = await worker.fetch(new Request('https://example.test/assets/missing.js'), { ASSETS: { fetch: async () => original } });
+  assert.equal(response, original); assert.equal(canceled, 0);
+  await response.body.cancel(); assert.equal(canceled, 1);
+});

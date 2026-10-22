@@ -1,5 +1,13 @@
 # 검증
 
+## 관리자 fallback 응답 수명 (2026-10-23)
+
+SPA fallback에서 버리는 404 본문은 관리자 Worker의 finally에서 즉시 취소한다.
+정상 반환되는 asset/fallback 본문은 호출자가 소유하며, 취소의 예외·거부·끝나지 않는
+정리 Promise가 fallback 응답이나 원래 오류를 바꾸지 않는다. 성공/동기 예외/비동기
+실패/AbortError와 cleanup 네 가지 조합을 포함한 Sites Worker 검사 11/11 및 diff
+검사를 통과했다. API·DB·의존성·CI 변경은 없다.
+
 ## OIDC 외부 조회와 대기 수명 제한 (2026-10-23)
 
 verifier마다 JWKS 외부 조회를 최대 2개, 대기자를 최대 32개로 제한한다. 대기는 각

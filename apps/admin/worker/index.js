@@ -24,10 +24,15 @@ export default {
       return response;
     }
 
-    const indexUrl = new URL(request.url);
-    indexUrl.pathname = "/index.html";
-    indexUrl.search = "";
-    return env.ASSETS.fetch(new Request(indexUrl, request));
+    try {
+      const indexUrl = new URL(request.url);
+      indexUrl.pathname = "/index.html";
+      indexUrl.search = "";
+      return env.ASSETS.fetch(new Request(indexUrl, request));
+    } finally {
+      // This 404 is discarded. The returned fallback stream belongs to the caller.
+      try { void response.body?.cancel().catch(() => {}); } catch { /* Preserve the fallback outcome. */ }
+    }
   },
 };
 
