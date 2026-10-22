@@ -9,7 +9,7 @@ export interface PublishedSchema {
   projectId: string; schemaVersion: number; schemaStatus: 'active' | 'retired'; definitionHash: string; publishedAt: string;
 }
 export interface SchemaPage {
-  projectId: string; latestVersion: number | null;
+  projectId: string; latestVersion: number | null; latestActiveVersion: number | null;
   data: { schemaVersion: number; schemaStatus: 'active' | 'retired'; publishedAt: string }[];
   page: { limit: number; beforeVersion: number | null };
 }

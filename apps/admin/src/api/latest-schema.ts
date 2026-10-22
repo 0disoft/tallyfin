@@ -11,6 +11,8 @@ export async function latestSchema(client: Pick<ApiClient, 'listSchemas'>, proje
     if (beforeVersion === null) latest = page.latestVersion;
     if (page.projectId !== projectId || page.data.some(row => beforeVersion !== null && row.schemaVersion >= beforeVersion))
       throw new ContractError('스키마 목록의 프로젝트·버전 순서가 맞지 않아요.');
+    if (beforeVersion === null && page.latestActiveVersion !== undefined)
+      return { active: page.latestActiveVersion, latest };
     const active = page.data.find(row => row.schemaStatus === 'active');
     if (active) return { active: active.schemaVersion, latest };
     const next = page.page.beforeVersion;

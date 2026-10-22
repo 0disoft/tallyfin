@@ -121,15 +121,23 @@ test('schema listing is bounded, newest first, rechecks grants and keeps retired
   const get = (query = '') => handler()(request(null, `/v1/projects/sembom/schemas${query}`, 'GET'));
   const first = await (await get('?limit=2')).json() as any;
   assert.equal(first.latestVersion, 4); assert.deepEqual(first.data.map((s: any) => s.schemaVersion), [4, 2]); assert.equal(first.page.beforeVersion, 2);
+  assert.equal(first.latestActiveVersion, 4);
   const next = await (await get('?limit=2&beforeVersion=2')).json() as any;
   assert.deepEqual(next.data.map((s: any) => s.schemaVersion), [1]); assert.equal(next.data[0].schemaStatus, 'retired'); assert.equal(next.page.beforeVersion, null);
+  assert.equal(next.latestActiveVersion, 4);
+  await fixture.db.prepare("UPDATE project_schemas SET status='retired' WHERE version=4").run();
+  const active = await (await get('?limit=1')).json() as any;
+  assert.equal(active.latestActiveVersion, 2); assert.equal(active.latestVersion, 4);
+  await fixture.db.prepare("UPDATE project_schemas SET status='retired'").run();
+  assert.equal((await (await get()).json() as any).latestActiveVersion, null);
   for (const query of ['?limit=101', '?beforeVersion=0', '?limit=2&limit=2', '?private=1']) assert.equal((await get(query)).status, 400);
   await fixture.db.prepare('DELETE FROM project_grants').run(); assert.equal((await get()).status, 403);
 });
 test('empty schema project can publish its first version; revision failure rolls back insertion', async () => {
   await fixture.db.prepare('DELETE FROM project_schemas').run();
   const list = await handler()(request(null, '/v1/projects/sembom/schemas', 'GET'));
-  assert.equal((await list.json() as any).latestVersion, null);
+  const empty = await list.json() as any;
+  assert.equal(empty.latestVersion, null); assert.equal(empty.latestActiveVersion, null);
   assert.equal((await handler()(request({ ...input(), expectedLatestVersion: null }, '/v1/projects/sembom/schemas/1'))).status, 200);
   await fixture.db.prepare('UPDATE projects SET ingest_revision=9007199254740991').run();
   assert.equal((await handler()(request())).status, 503);

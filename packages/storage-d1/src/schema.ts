@@ -15,19 +15,22 @@ export async function listSchemas(db: SqlDatabase, principal: AdminPrincipal, id
     throw new CollectionError('invalid_request', 400);
   const identity = [principal.issuer, principal.subject];
   const access = grant("'reader','owner'");
-  const result = await db.batch<{ latest_version: number | null } | PublishedRow>([
-    db.prepare(`SELECT (SELECT MAX(version) FROM project_schemas WHERE project_id = p.id) AS latest_version
+  type Versions = { latest_version: number | null; latest_active_version: number | null };
+  const result = await db.batch<Versions | PublishedRow>([
+    db.prepare(`SELECT (SELECT MAX(version) FROM project_schemas WHERE project_id = p.id) AS latest_version,
+      (SELECT MAX(version) FROM project_schemas WHERE project_id = p.id AND status = 'active') AS latest_active_version
       FROM projects p WHERE p.id = ? AND ${access}`).bind(id, ...identity),
     db.prepare(`SELECT s.version, s.status, s.published_at FROM project_schemas s JOIN projects p ON p.id = s.project_id
       WHERE p.id = ? AND ${access} AND (? IS NULL OR s.version < ?) ORDER BY s.version DESC LIMIT ?`).bind(id, ...identity, before, before, limit + 1),
   ]);
   if (result.length !== 2 || result.some(r => !r.success || !Array.isArray(r.results))) throw new CollectionError('storage_unavailable', 503);
-  const project = result[0]!.results[0] as { latest_version: number | null } | undefined;
+  const project = result[0]!.results[0] as Versions | undefined;
   if (!project) throw new CollectionError('forbidden', 403);
   if (project.latest_version !== null && !integer(project.latest_version, 1, 2147483647)) throw new CollectionError('storage_unavailable', 503);
+  if (project.latest_active_version !== null && (!integer(project.latest_active_version, 1, project.latest_version ?? 0))) throw new CollectionError('storage_unavailable', 503);
   const rows = result[1]!.results as PublishedRow[];
   if (rows.length > limit + 1) throw new CollectionError('storage_unavailable', 503);
-  return { projectId: id, latestVersion: project.latest_version, data: rows.slice(0, limit).map(metadata),
+  return { projectId: id, latestVersion: project.latest_version, latestActiveVersion: project.latest_active_version, data: rows.slice(0, limit).map(metadata),
     page: { limit, beforeVersion: rows.length > limit ? rows[limit - 1]!.version : null } };
 }
 export async function publishSchema(db: SqlDatabase, principal: AdminPrincipal, id: string, version: number,

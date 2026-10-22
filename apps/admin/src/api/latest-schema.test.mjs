@@ -4,6 +4,14 @@ import { latestSchema } from './latest-schema.ts';
 const signal = () => new AbortController().signal;
 const page = (data, beforeVersion = null) => ({ projectId: 'sample', latestVersion: 5, data, page: { beforeVersion } });
 const row = (schemaVersion, schemaStatus = 'active') => ({ schemaVersion, schemaStatus });
+test('active metadata avoids scanning retired pages, including no active version', async () => {
+  for (const active of [3, null]) {
+    let calls = 0;
+    const client = { listSchemas: async () => { calls++; return { ...page([row(5, 'retired')], 5), latestActiveVersion: active }; } };
+    assert.deepEqual(await latestSchema(client, 'sample', signal()), { active, latest: 5 });
+    assert.equal(calls, 1);
+  }
+});
 test('latest active schema scans retired pages and preserves the latest historical version', async () => {
   const calls = [];
   const client = { listSchemas: async (_id, options) => {

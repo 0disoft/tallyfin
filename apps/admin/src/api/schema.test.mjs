@@ -302,6 +302,9 @@ test('response validators reject inconsistent reports, unordered/foreign cursors
   for (const input of [{ valid: true, issues: [{ path: '', code: 'duplicate' }], privacyReviewRequired: true },
     { valid: false, issues: [{ path: '/private-input', code: 'duplicate' }], privacyReviewRequired: true }]) assert.throws(() => parseSchemaValidation(input));
   assert.throws(() => parseSchemaPage({ projectId: 'sample', latestVersion: 2, data: [metadata(1), metadata(2)], page: { limit: 25, beforeVersion: null } }));
+  const page = { projectId: 'sample', latestVersion: 2, data: [metadata(2)], page: { limit: 25, beforeVersion: null } };
+  assert.equal(parseSchemaPage({ ...page, latestActiveVersion: 2 }).latestActiveVersion, 2);
+  for (const latestActiveVersion of [null, 1, 3, 0, '2']) assert.throws(() => parseSchemaPage({ ...page, latestActiveVersion }));
 });
 
 test('event form edits preserve properties, workflows and unsupported event keys without repairing the draft', () => {

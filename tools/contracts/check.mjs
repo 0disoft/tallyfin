@@ -415,7 +415,7 @@ check('schema publication requires reviewed definitions and listing/publication 
   const metadata = { schemaVersion: 2, schemaStatus: 'active', publishedAt: '2026-10-09T00:00:00.000Z' };
   const published = { ...metadata, projectId: 'sembom', definitionHash: 'a'.repeat(64) };
   assert.ok(validate('PublishedSchema', published));
-  const page = { projectId: 'sembom', latestVersion: 2, data: [metadata], page: { limit: 25, beforeVersion: null } };
+  const page = { projectId: 'sembom', latestVersion: 2, latestActiveVersion: 2, data: [metadata], page: { limit: 25, beforeVersion: null } };
   assert.ok(validate('SchemaPage', page));
   assert.equal(validate('SchemaPage', { ...page, data: Array(101).fill(metadata) }), false);
   const operation = spec.paths['/v1/projects/{projectId}/schemas/{schemaVersion}'].put;

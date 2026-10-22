@@ -4,7 +4,7 @@ export type SchemaDraft = { events: unknown[]; workflows: unknown[]; funnels?: u
 export type SchemaIssueCode = 'invalid_definition' | 'definition_limit' | 'duplicate' | 'cardinality_limit' | 'browser_event_required' | 'invalid_reference' | 'dimension_mismatch';
 export type SchemaValidation = { valid: boolean; issues: { path: string; code: SchemaIssueCode }[]; privacyReviewRequired: true };
 export type SchemaMetadata = { schemaVersion: number; schemaStatus: 'active' | 'retired'; publishedAt: string };
-export type SchemaPage = { projectId: string; latestVersion: number | null; data: SchemaMetadata[]; page: { limit: number; beforeVersion: number | null } };
+export type SchemaPage = { projectId: string; latestVersion: number | null; latestActiveVersion?: number | null; data: SchemaMetadata[]; page: { limit: number; beforeVersion: number | null } };
 export type PublishedSchema = SchemaMetadata & { projectId: string; definitionHash: string };
 export type SchemaPublication = SchemaDraft & { expectedLatestVersion: number | null; privacyReviewed: true };
 function fail(): never { throw new ContractError('Schema response is invalid.'); }
@@ -23,12 +23,16 @@ function metadata(value: unknown): SchemaMetadata {
   return { schemaVersion: version(r.schemaVersion), schemaStatus: r.schemaStatus, publishedAt: r.publishedAt };
 }
 export function parseSchemaPage(value: unknown): SchemaPage {
-  const r = object(value, ['projectId', 'latestVersion', 'data', 'page']), page = object(r.page, ['limit', 'beforeVersion']);
+  const r = object(value, ['projectId', 'latestVersion', 'data', 'page'], ['latestActiveVersion']), page = object(r.page, ['limit', 'beforeVersion']);
   if (typeof page.limit !== 'number' || !Number.isInteger(page.limit) || page.limit < 1 || page.limit > 100 || !Array.isArray(r.data) || r.data.length > page.limit) fail();
   const data = r.data.map(metadata), latestVersion = nullableVersion(r.latestVersion), cursor = nullableVersion(page.beforeVersion);
   if (data.some((row, i) => latestVersion === null || row.schemaVersion > latestVersion || (i > 0 && row.schemaVersion >= data[i - 1]!.schemaVersion)) ||
     (cursor !== null && (data.length !== page.limit || cursor !== data.at(-1)?.schemaVersion))) fail();
-  return { projectId: projectId(r.projectId), latestVersion, data, page: { limit: page.limit, beforeVersion: cursor } };
+  const active = Object.hasOwn(r, 'latestActiveVersion') ? nullableVersion(r.latestActiveVersion) : undefined;
+  if (active !== undefined && ((active !== null && (latestVersion === null || active > latestVersion)) ||
+    data.some(row => row.schemaStatus === 'active' && (active === null || row.schemaVersion > active!)) ||
+    data.some(row => row.schemaVersion === active && row.schemaStatus !== 'active'))) fail();
+  return { projectId: projectId(r.projectId), latestVersion, ...(active !== undefined ? { latestActiveVersion: active } : {}), data, page: { limit: page.limit, beforeVersion: cursor } };
 }
 export function parseSchemaValidation(value: unknown): SchemaValidation {
   const r = object(value, ['valid', 'issues', 'privacyReviewRequired']);

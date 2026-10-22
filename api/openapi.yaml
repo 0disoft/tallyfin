@@ -1187,11 +1187,18 @@ components:
     SchemaPage:
       type: object
       additionalProperties: false
-      required: [projectId, latestVersion, data, page]
+      required: [projectId, latestVersion, latestActiveVersion, data, page]
       properties:
         projectId:
           $ref: "#/components/schemas/ProjectId"
         latestVersion:
+          anyOf:
+            - type: integer
+              minimum: 1
+              maximum: 2147483647
+            - type: "null"
+        latestActiveVersion:
+          description: Highest active version in the same snapshot, independent of the page cursor; null when none is active.
           anyOf:
             - type: integer
               minimum: 1
