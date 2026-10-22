@@ -55,7 +55,7 @@ export function validateFailureReasonDefinition(response: WorkflowResponse, defi
         response.failureReasons.buckets.some((bucket, index) => bucket.value !== values[index])))) invalid();
   } else if (response.failureReasons !== undefined && response.failureReasons !== null) invalid();
 }
-export function failureReasonAvailability(value: FailureReasons | null | undefined) {
+export function failureReasonAvailability(value: FailureReasons | null | undefined): 'unavailable' | 'not_configured' | 'partial' | 'complete' | 'unmeasured' | 'no_failed_attempts' {
   if (value === undefined) return 'unavailable';
   if (value === null) return 'not_configured';
   if (value.measuredFailures) return value.unmeasuredFailures ? 'partial' : 'complete';

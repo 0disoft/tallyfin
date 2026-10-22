@@ -430,6 +430,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         if (previous.key !== mainKey || previous.status !== 'ready' || !previous.data) return previous;
         return { ...previous, data: { ...previous.data, ...recoverWorkflow(previous.data, previous.data.registry, load) } };
       })} range={data.range}
+        periodComparison={currentComparison ?? undefined}
         previous={compare && !comparisonError ? previousRange(data.range) : null} compare={compare} comparisonError={comparisonError} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
 
     </>}

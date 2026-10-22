@@ -1,3 +1,6 @@
+import WorkflowFailureReasonComparison from './WorkflowFailureReasonComparison';
+import type { Load } from './api/load-state';
+import type { PeriodSnapshot } from './api/period-comparison';
 import WorkflowFailureReasons from './WorkflowFailureReasons';
 import WorkflowFailurePanel from './WorkflowFailurePanel';
 import type { ApiClient } from './api/client';
@@ -9,12 +12,13 @@ import WorkflowPropertyBreakdown from './WorkflowPropertyBreakdown';
 import LiveFunnels from './LiveFunnels';
 import WorkflowDuration from './WorkflowDuration';
 
-export default function LiveGoals({ client, registry, workflows, workflowErrors, onRecovered, range, previous, context, onState, compare, comparisonError }: {
+export default function LiveGoals({ client, registry, workflows, workflowErrors, onRecovered, range, previous, context, onState, compare, comparisonError, periodComparison }: {
   client: ApiClient; registry: Registry; workflows: WorkflowLoad[]; range: DateRange; previous: DateRange | null;
   workflowErrors: WorkflowFailure[]; onRecovered: (load: WorkflowLoad) => void;
   context: string; onState: (id: string, state: WorkflowGroupingState) => void;
-  compare: boolean; comparisonError: string | null;
+  compare: boolean; comparisonError: string | null; periodComparison?: Load<PeriodSnapshot>;
 }) {
+  const before = new Map(periodComparison?.status === 'ready' ? periodComparison.data?.workflows.map(load => [load.definition.id, load]) : []);
   const loaded = new Map(workflows.map(load => [load.definition.id, load]));
   const failed = new Map(workflowErrors.map(failure => [failure.definition.id, failure]));
   return <>
@@ -36,6 +40,8 @@ export default function LiveGoals({ client, registry, workflows, workflowErrors,
           <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
           <WorkflowDuration duration={load.response.duration} provisional={load.response.days.some(day => day.provisional)} />
           <WorkflowFailureReasons definition={definition} reasons={load.response.failureReasons} failed={load.response.summary.failedAttempts} provisional={load.response.days.some(day => day.provisional)} />
+          {compare && !comparisonError && <WorkflowFailureReasonComparison registry={registry} current={load} previous={before.get(definition.id)}
+            status={!periodComparison || periodComparison.status === 'idle' || periodComparison.status === 'loading' ? 'loading' : periodComparison.status} />}
           <WorkflowPropertyBreakdown key={`${context}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={range} previous={previous} context={context} onState={onState} />
         </section>; }))}
     <LiveFunnels client={client} registry={registry} range={range} context={context} previous={previous} compare={compare} comparisonError={comparisonError} />

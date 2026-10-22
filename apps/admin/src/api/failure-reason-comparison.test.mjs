@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { createRequire } from 'node:module';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { build } from 'esbuild';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { compareFailureReasons } from './failure-reason-comparison.ts';
 import { analyticsCsv, CSV_COLUMNS } from './csv-export.ts';
 
@@ -96,4 +101,23 @@ test('CSV uses the shared comparisons, appends columns, and records provisional 
   previous.response.days[0].failureReasons = structuredClone(previous.response.failureReasons);
   rows = csv(); reason = rows.find(row => row.record_type === 'workflow_failure_reason_comparison' && row.failure_reason === 'range');
   assert.equal(reason.change, ''); assert.equal(reason.previous_count, '2'); assert.equal(reason.availability, 'incomplete_measurement');
+});
+test('actual comparison view renders shared rates, blocked changes, loading and failed prior loads', async () => {
+  const require = createRequire(import.meta.url);
+  const bundle = await build({ entryPoints: [fileURLToPath(new URL('../WorkflowFailureReasonComparison.tsx', import.meta.url))], bundle: true, write: false,
+    format: 'esm', platform: 'node', jsx: 'automatic', plugins: [{ name: 'shared-react', setup(build) {
+      build.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
+    } }] });
+  const { default: View } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);
+  const f = fixture(), props = { ...f, status: 'ready' };
+  const render = changes => renderToStaticMarkup(createElement(View, { ...props, ...changes }));
+  let html = render(); assert.match(html, /전체 실패율/); assert.match(html, /40.0%/); assert.match(html, /\+25.0%p/);
+  assert.match(html, /10/); assert.match(html, /20/); assert.match(html, /원인 누락/);
+  assert.doesNotMatch(render({ status: 'loading' }), /<table/); assert.match(render({ status: 'loading' }), /조회하는 중/);
+  assert.doesNotMatch(render({ status: 'error' }), /<table/); assert.match(render({ status: 'error' }), /비교 다시 시도/);
+  assert.match(render({ previous: undefined }), /직전 기간을 읽지 못해/);
+  f.previous.response.failureReasons.unmeasuredFailures++; f.previous.response.failureReasons.measuredFailures--; f.previous.response.failureReasons.missingReasonFailures--;
+  f.previous.response.days[0].failureReasons = structuredClone(f.previous.response.failureReasons);
+  f.current.response.days[0].provisional = true;
+  html = render(); assert.match(html, /원인 변화 비교를 보류/); assert.match(html, /집계 중인 시작일/); assert.doesNotMatch(html, /\+25.0%p/);
 });

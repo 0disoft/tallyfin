@@ -15,7 +15,7 @@ const deferred = () => { let resolve; const promise = new Promise(done => { reso
 const subject = 'synthetic-login-operator';
 let local, server, browser, page, directory, watchdog, fault, stage = 'fixture', routeError = false, pageErrors = 0;
 const scenarios = [], observed = [];
-let workflowDailyUnavailable = true;
+let workflowDailyUnavailable = true, reasonPriorUnavailable = false;
 const tableCells = rows => rows.map(row => [...row.querySelectorAll('th,td')].map(cell => cell.textContent.trim()));
 try {
   const { values } = parseArgs({ options: { channel: { type: 'string', default: 'chromium' }, help: { type: 'boolean' } } });
@@ -64,6 +64,8 @@ try {
   await context.route('**/*', async route => {
     const url = new URL(route.request().url()), active = fault && !fault.used && url.origin === origin && fault.matches(url) ? fault : null;
     try {
+      if (reasonPriorUnavailable && url.pathname === '/v1/projects/access-other/workflows/calculation/daily' && url.searchParams.get('to') < today)
+        return await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'storage_unavailable' } }) });
       if (workflowDailyUnavailable && url.pathname === '/v1/projects/sembom/workflows/calculation/daily')
         return await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: { code: 'storage_unavailable' } }) });
       if (!active) return await local.route(route);
@@ -310,6 +312,58 @@ try {
   await page.setViewportSize({ width: 390, height: 844 }); await reasonPanel.scrollIntoViewIfNeeded();
   await page.screenshot({ path: resolve(directory, 'failure-reasons-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 }); scenarios.push(stage);
+  stage = 'failure-reason-period-comparison';
+  for (const error of ['range', 'required', 'required', undefined]) {
+    const at = now - 7 * 86400000, occurredAt = new Date(at).toISOString();
+    const attempt = { workflowId: 'calculation', attemptId: crypto.randomUUID(), startedAt: occurredAt };
+    const events = ['input_start', 'validation_error'].map(name => ({ eventId: crypto.randomUUID(), name, occurredAt, attempt,
+      properties: { tool: 'loan', ...(name === 'validation_error' && error !== undefined ? { error } : {}) } }));
+    const batch = parseBatch(JSON.stringify({ schemaVersion: 2, source: 'browser', events }));
+    await store.commit(await prepareBatch(batch, reasonRegistry, at), reasonRegistry);
+  }
+  const failureComparison = page.locator('.workflow-failure-comparison');
+  reasonPriorUnavailable = true; await comparison.check();
+  await expect(failureComparison).toContainText('직전 기간을 읽지 못해');
+  await expect(reasonPanel).toContainText('측정 3건 · 원인 누락 1건 · 미측정 실패 1건');
+  await expect(failureComparison.locator('table')).toHaveCount(0); await expect(workflowCsv).toBeDisabled();
+  reasonPriorUnavailable = false;
+  await page.getByRole('button', { name: '비교 다시 시도', exact: true }).click();
+  await expect(failureComparison).toContainText('원인 변화 비교를 보류');
+  const reasonComparisonTable = failureComparison.getByRole('region', { name: '실패 원인 직전 기간 비교 표', exact: true });
+  await expect(reasonComparisonTable.locator('tbody tr')).toHaveCount(4);
+  assert.deepEqual(await reasonComparisonTable.locator('tbody tr').evaluateAll(tableCells),
+    [['range', '1', '1', '25.0%', '25.0%', '—'], ['required', '1', '2', '25.0%', '50.0%', '—'],
+      ['원인 누락', '1', '1', '25.0%', '25.0%', '—'], ['미측정', '1', '0', '25.0%', '0.0%', '—']]);
+  await expect(workflowCsv).toBeEnabled();
+  pendingDownload = page.waitForEvent('download'); await workflowCsv.click();
+  downloaded = await pendingDownload; contents = await readFile(await downloaded.path(), 'utf8');
+  const comparisonRecords = text => {
+    const lines = text.replace(/^\uFEFF/, '').trimEnd().split('\r\n'), columns = cells(lines.shift());
+    return lines.map(line => { const row = cells(line); return Object.fromEntries(columns.map((key, i) => [key, row[i]])); });
+  };
+  assert.ok(comparisonRecords(contents).filter(row => row.record_type === 'workflow_failure_reason_comparison')
+    .every(row => row.change === '' && row.failure_reason_comparison_status === 'incomplete_measurement'));
+  // Test-only late measurement for the historical failure, preserving the failed/started totals.
+  await local.db.prepare("UPDATE workflow_daily_counts SET failure_reason_counts_json=json_set(failure_reason_counts_json,'$[32]',2) WHERE project_id='access-other' AND schema_version=2 AND cohort_date=?")
+    .bind(today).run();
+  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await expect(failureComparison).toContainText('원인 측정: 현재 측정 완료 · 직전 측정 완료');
+  assert.deepEqual(await reasonComparisonTable.locator('tbody tr').evaluateAll(tableCells),
+    [['range', '1', '1', '25.0%', '25.0%', '0.0%p'], ['required', '1', '2', '25.0%', '50.0%', '-25.0%p'],
+      ['원인 누락', '2', '1', '50.0%', '25.0%', '+25.0%p'], ['미측정', '0', '0', '0.0%', '0.0%', '0.0%p']]);
+  assert.deepEqual(await failureComparison.getByRole('region', { name: '전체 실패율 직전 기간 비교', exact: true }).locator('tbody tr').evaluateAll(tableCells),
+    [['전체 실패율', '100.0%', '100.0%', '0.0%p'], ['확정 실패 / 시작 시도', '4 / 4', '4 / 4', '—']]);
+  await expect(failureComparison).toContainText('집계 중인 시작일 코호트');
+  await expect(workflowCsv).toBeEnabled(); pendingDownload = page.waitForEvent('download'); await workflowCsv.click();
+  downloaded = await pendingDownload; contents = await readFile(await downloaded.path(), 'utf8');
+  const comparable = comparisonRecords(contents).filter(row => row.record_type === 'workflow_failure_reason_comparison');
+  assert.equal(comparable.find(row => row.failure_reason === 'required').change, '-25');
+  assert.equal(comparable.find(row => row.metric === 'missing').change, '25');
+  assert.equal(comparisonRecords(contents).find(row => row.record_type === 'workflow_failure_rate_comparison').change, '0');
+  await failureComparison.scrollIntoViewIfNeeded(); await page.screenshot({ path: resolve(directory, 'failure-reason-comparison-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 }); await failureComparison.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: resolve(directory, 'failure-reason-comparison-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 }); scenarios.push(stage);
   stage = 'bulk-overview-access-revocation';
   await page.getByRole('button', { name: '개요', exact: true }).click();
   await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
@@ -327,7 +381,7 @@ try {
   await expect(page.locator('.event-table, .goal-section, .funnel-section')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /CSV 내려받기/ })).toHaveCount(0);
   assert.equal(routeError, false); assert.equal(pageErrors, 0); assert.equal(observed.length, 7);
-  const report = { verified: true, browser: browser.version(), scenarios, observed, seededEvents: 22, csvCounts, failureReasonEditorVerified: true, failureReasonDistributionVerified: true,
+  const report = { verified: true, browser: browser.version(), scenarios, observed, seededEvents: 30, failureReasonComparisonVerified: true, csvCounts, failureReasonEditorVerified: true, failureReasonDistributionVerified: true,
     displayedComparisonVerified: true, downloadedComparisonVerified: true,
     signedLocalIdentity: true, actualD1Revocation: true, staleTablesCleared: true, exportsBlocked: true,
     explicitRecovery: true, otherProjectExportIsolated: true, lateDenialIgnored: true, disconnectClears: true,
