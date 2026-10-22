@@ -32,17 +32,20 @@ export class D1Store implements ServerCollectionStore {
   async admit(projectId: string, receivedAt: number, limit: number): Promise<boolean> {
     if (!PROJECT_ID.test(projectId) || !integer(receivedAt, 0, 8_640_000_000_000_000) || !integer(limit, 1, COLLECTION_POLICY.maxRequestsPerMinute)) throw new CollectionError('invalid_request', 400);
     const minute = Math.floor(receivedAt / 60_000) * 60_000;
-    const result = await this.db.batch<{ request_count: number }>([this.db.prepare(`
+    const result = await this.db.batch<{ request_count: number; current_limit: number }>([this.db.prepare(`
       INSERT INTO ingest_minute_usage (project_id, minute_start, request_count) VALUES (?, ?, 1)
       ON CONFLICT(project_id, minute_start) DO UPDATE SET request_count = min(request_count + 1, 601),
-        rejections_json = CASE WHEN request_count >= ? THEN json_set(rejections_json, '$.minute_limit',
+        rejections_json = CASE WHEN request_count >= (SELECT requests_per_minute FROM projects WHERE id = ?) THEN json_set(rejections_json, '$.minute_limit',
           json_object('count', min(coalesce(json_extract(rejections_json, '$.minute_limit.count'), 0) + 1, 9007199254740991),
             'lastRejectedAt', max(coalesce(json_extract(rejections_json, '$.minute_limit.lastRejectedAt'), 0), ?)))
           ELSE rejections_json END
-      RETURNING request_count`).bind(projectId, minute, limit, receivedAt)]);
+      RETURNING request_count, (SELECT requests_per_minute FROM projects WHERE id = ?) AS current_limit`).bind(projectId, minute, projectId, receivedAt, projectId)]);
     const count = result[0]?.results[0]?.request_count;
     if (count === undefined) throw new CollectionError('storage_unavailable', 503);
-    return count <= limit;
+    // The input limit remains a validated compatibility hint, never write authority.
+    const currentLimit = result[0]?.results[0]?.current_limit;
+    if (!integer(currentLimit, 1, COLLECTION_POLICY.maxRequestsPerMinute)) throw new CollectionError('storage_unavailable', 503);
+    return count <= currentLimit;
   }
   /** One update for an admitted, rejected request; no retry or request material retained. */
   async recordRejection(projectId: string, receivedAt: number, reason: RejectionReason): Promise<void> {
@@ -50,7 +53,7 @@ export class D1Store implements ServerCollectionStore {
       throw new CollectionError('invalid_request', 400);
     const path = `$.${reason}`;
     const result = await this.db.batch([this.db.prepare(`UPDATE ingest_minute_usage SET rejections_json =
-      json_set(rejections_json, ?, json_object('count', min(coalesce(json_extract(rejections_json, ?), 0) + 1, COLLECTION_POLICY.maxRequestsPerMinute),
+      json_set(rejections_json, ?, json_object('count', min(coalesce(json_extract(rejections_json, ?), 0) + 1, ${COLLECTION_POLICY.maxRequestsPerMinute}),
         'lastRejectedAt', max(coalesce(json_extract(rejections_json, ?), 0), ?)))
       WHERE project_id = ? AND minute_start = ?`).bind(path, `${path}.count`, `${path}.lastRejectedAt`, receivedAt,
         projectId, Math.floor(receivedAt / 60_000) * 60_000)]);

@@ -121,6 +121,7 @@ test('full 20-event batch respects D1 binding limits', async () => {
 });
 test('minute admission is shared across instances, saturates, and resets at UTC minute boundary', async () => {
   const second = new D1Store(fixture.db);
+  await fixture.db.prepare('UPDATE projects SET requests_per_minute=2').run();
   assert.equal(await fixture.store.admit('sembom', now, 2), true);
   assert.equal(await second.admit('sembom', now, 2), true);
   assert.equal(await fixture.store.admit('sembom', now, 2), false);

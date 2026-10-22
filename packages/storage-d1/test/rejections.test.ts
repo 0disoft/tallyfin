@@ -30,6 +30,7 @@ test('migration preserves existing admission counters, upgrades once and applies
 test('minute quota uses one existing admission statement and other failures update only an existing admitted minute', async () => {
   const f = await setup();
   try {
+    await f.db.prepare('UPDATE projects SET requests_per_minute=2').run();
     let statements = 0;
     const store = new D1Store({ prepare: sql => f.db.prepare(sql), batch: async <T>(queries: Parameters<typeof f.store.db.batch>[0]) => {
       statements += queries.length; return f.db.batch<T>(queries as Parameters<typeof f.db.batch>[0]);
@@ -48,9 +49,12 @@ test('minute quota uses one existing admission statement and other failures upda
 test('admission never decreases on limit changes and concurrent rejection writes preserve counts and the latest timestamp', async () => {
   const f = await setup();
   try {
+    await f.db.prepare('UPDATE projects SET requests_per_minute=2').run();
     assert.equal(await f.store.admit('sembom', now, 2), true);
     assert.equal(await f.store.admit('sembom', now, 2), true);
+    await f.db.prepare('UPDATE projects SET requests_per_minute=1').run();
     assert.equal(await f.store.admit('sembom', now, 1), false);
+    await f.db.prepare('UPDATE projects SET requests_per_minute=2').run();
     assert.equal(await f.store.admit('sembom', now, 2), false);
     assert.equal(await f.db.prepare('SELECT request_count FROM ingest_minute_usage').first('request_count'), 4);
     await Promise.all(Array.from({ length: 12 }, (_, index) => f.store.recordRejection('sembom', now + 12 - index, 'invalid_event')));
@@ -63,6 +67,7 @@ test('project-scoped UTC rejection summary merges multiple minutes and quota sco
   const f = await setup();
   try {
     await grant(f.db); await seed(f.db, 'other');
+    await f.db.prepare('UPDATE projects SET requests_per_minute=1').run();
     await f.store.admit('sembom', now, 1); await f.store.recordRejection('sembom', now, 'daily_limit');
     await f.store.admit('sembom', now + 1, 1);
     await f.store.admit('sembom', now + 60_000, 1); await f.store.recordRejection('sembom', now + 60_000, 'origin_denied');
@@ -107,5 +112,20 @@ test('cleanup retains only rejection minutes within seven UTC dates, is bounded 
     await f.store.cleanup('sembom', 'Asia/Seoul', now);
     assert.equal(await f.db.prepare("SELECT count(*) FROM ingest_minute_usage WHERE project_id='sembom'").first('count(*)'), 1);
     assert.equal(await f.db.prepare("SELECT count(*) FROM ingest_minute_usage WHERE project_id='other'").first('count(*)'), 3);
+  } finally { await f.mf.dispose(); }
+});
+
+test('admission uses the transactional current limit after a caller has read stale settings', async () => {
+  const f = await setup();
+  try {
+    const old = await f.store.loadProject('sembom');
+    await f.db.prepare('UPDATE projects SET requests_per_minute=1').run();
+    assert.equal(await f.store.admit('sembom', now, old!.limits.requestsPerMinute), true);
+    assert.equal(await f.store.admit('sembom', now, old!.limits.requestsPerMinute), false);
+    await f.db.prepare('UPDATE projects SET requests_per_minute=3').run();
+    assert.equal(await f.store.admit('sembom', now, 1), true);
+    assert.equal(await f.store.admit('sembom', now, 1), false);
+    const reasons = JSON.parse(await f.db.prepare('SELECT rejections_json FROM ingest_minute_usage').first<string>('rejections_json') as string);
+    assert.equal(reasons.minute_limit.count, 2);
   } finally { await f.mf.dispose(); }
 });
