@@ -1,5 +1,20 @@
 # 관리자 API 연결
 
+## 실패 원인의 직전 기간 비교 계산
+
+관리자는 기존 두 기간 workflow daily를 재사용한다. compareFailureReasons는 두 응답의
+프로젝트·버전·시간대·작업 흐름·인접 동일 일수와 일별/기간 합계를 검증한다. 원인 비중은
+전체 확정 실패, 전체 실패율은 시작 시도를 분모로 쓴다. 두 기간 모두 원인 측정이 완전하고
+실패 분모가 있을 때만 원인 비중 차이(%p)를 제공한다. 미측정이 남으면 원인 변화는 보류하고
+관측 건수를 유지한다. 전체 미측정이나 구 응답의 원인 건수는 0으로 만들지 않는다.
+
+CSV는 기존 열 뒤에 previous_count·previous_share_percent·failure_reason_comparison_status를
+추가한다. comparison 기간의 workflow_failure_reason_comparison 행은 원인/누락/미측정,
+workflow_failure_rate_comparison 행은 전체 실패율이다. 이전 기간의 측정 범위와 분모는
+기존 previous 기간 workflow_total/day 행에 남는다. 집계 중 표시는 두 기간 중 하나라도
+집계 중이면 유지하며 새 API·DB 계약이나 요청은 없다.
+
+
 ## 실패 원인 응답
 
 workflow.failureReasonProperty는 실패 이벤트의 enum 속성만 선택한다. workflow daily와

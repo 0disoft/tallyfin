@@ -1,3 +1,4 @@
+import { compareFailureReasons } from './failure-reason-comparison.ts';
 import { failureReasonAvailability, type FailureReasons } from './workflow-failure-reasons.ts';
 import { analyzeEventSeries } from './event-analysis.ts';
 import { compareEventProperties } from './event-property-comparison.ts';
@@ -21,7 +22,8 @@ export const CSV_COLUMNS = ['project_id', 'project_name', 'schema_version', 'tim
   'provisional', 'availability', 'previous_from', 'previous_to', 'previous_value', 'change', 'change_unit', 'query_source',
   'duration_range', 'duration_measured_attempts', 'duration_unmeasured_attempts', 'duration_availability',
   'failure_reason_property', 'failure_reason', 'failure_reason_measured_failures', 'failure_reason_missing_failures',
-  'failure_reason_unmeasured_failures', 'failure_reason_availability'] as const;
+  'failure_reason_unmeasured_failures', 'failure_reason_availability',
+  'previous_count', 'previous_share_percent', 'failure_reason_comparison_status'] as const;
 
 /** Quoted UTF-8 CSV for spreadsheet viewing. Protect text cells, never alter numeric negatives. */
 export function csvCell(value: Cell): string {
@@ -127,6 +129,25 @@ export function analyticsCsv(input: ExportInput): { filename: string; text: stri
   addPeriod(current, 'current');
   if (previous) {
     addPeriod(previous, 'previous');
+    if (view === 'goals') {
+      const before = new Map(previous.workflows.map(flow => [flow.definition.id, flow]));
+      for (const flow of current.workflows) {
+        const prior = before.get(flow.definition.id); if (!prior) invalid();
+        const result = compareFailureReasons(flow, prior, registry);
+        const base: Row = { name: flow.definition.id, label: flow.definition.label, cohort_basis: flow.response.cohortBasis,
+          previous_from: prior.response.meta.from, previous_to: prior.response.meta.to, provisional: result.provisional };
+        emit(flow.response.meta, 'comparison', { ...base, record_type: 'workflow_failure_rate_comparison', metric: 'failure_rate',
+          ...workflowFields(flow.response.summary), share_percent: result.currentFailureRate, previous_share_percent: result.previousFailureRate,
+          previous_value: result.previousFailureRate, previous_count: prior.response.summary.failedAttempts,
+          change: result.failureRateChange, change_unit: 'percentage_point', availability: result.failureRateChange === null ? 'not_available' : 'available' });
+        for (const row of result.rows) emit(flow.response.meta, 'comparison', { ...base, record_type: 'workflow_failure_reason_comparison',
+          metric: row.kind, failure_reason: row.value, ...reasonFields(flow.response.failureReasons, flow.definition.failureReasonProperty),
+          count: row.currentCount, previous_count: row.previousCount, share_percent: row.currentShare, previous_share_percent: row.previousShare,
+          previous_value: row.previousShare, change: row.shareChange, change_unit: 'percentage_point',
+          failure_reason_comparison_status: result.status, availability: result.status });
+      }
+    }
+
     for (const row of comparisonRows({ ...current, workflows: visibleWorkflows(current) }, { ...previous, workflows: visibleWorkflows(previous) }, view)) {
       const change = row.rate ? rateChange(row.current, row.previous) : countChange(row.current, row.previous);
       emit(current.summary.meta, 'comparison', { record_type: 'comparison_metric', name: row.key, label: row.label,
