@@ -1,5 +1,6 @@
 import useSchemaVersion from './useSchemaVersion';
 import useProjectPages from './useProjectPages';
+import ProjectPicker from './ProjectPicker';
 import { useMainAnalysis, usePeriodComparison, useEventSeries } from './useAnalysis';
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserLogin } from './auth/client';
@@ -23,7 +24,7 @@ import useEventPropertyComparison from './useEventPropertyComparison';
 import { eventContext, eventPropertyNames, selectedGrouping } from './api/event-analysis';
 import type { EventGrouping } from './api/event-analysis';
 import { comparisonRangeError, periodRange, rangeError, rangeLabel, todayInZone, type DateRange } from './api/dates';
-import type { EventSource, ProjectSettings, Registry } from './api/types';
+import type { EventSource, Project, ProjectSettings, Registry } from './api/types';
 import { DraftExitGuard } from './api/draft-exit-guard';
 
 type ActiveProject = { name: string; timeZone: string };
@@ -117,7 +118,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     });
     return next;
   }, [session]);
-  const { projects, nextCursor, more, pageError, loadMore, invalidatePages, resetProjects, updateProject, addProject } = useProjectPages(client, refreshTick);
+  const { projects, nextCursor, more, pageError, loadMore, invalidatePages, resetProjects, updateProject, addProject, rememberProject } = useProjectPages(client, refreshTick, projectId);
   const clientRef = useRef<ApiClient | null>(null);
   clientRef.current = client;
   const draftExit = useMemo(() => new DraftExitGuard<ApiClient>(), []);
@@ -221,8 +222,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     setShowCreate(false); setNewProjectId(null);
     setToken('');
   }
-  function switchProject(next: string | null) {
+  function switchProject(next: string | null, project?: Project) {
     if (next === projectId || !confirmDraftExit()) return;
+    if (project) rememberProject(project);
     setProjectId(next); setSelectedEvent(null); setGrouping(null);
   }
   function disconnect() {
@@ -338,7 +340,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
 
   return <>
     <div className="toolbar api-toolbar">
-      <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => switchProject(event.target.value || null)} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
+      <ProjectPicker client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
+        hasMore={!!nextCursor} loadingMore={more} onLoadMore={loadMore} onSelect={project => switchProject(project.id, project)} />
       <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       <label className="comparison-toggle"><input type="checkbox" checked={automaticVersion} disabled={!projectId || versionLoading}
         onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} />스키마 자동 선택</label>
@@ -349,7 +352,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
       {view !== 'settings' && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
-      {nextCursor && <button className="secondary-button" type="button" onClick={loadMore} disabled={more}>{more ? '불러오는 중…' : '프로젝트 더 불러오기'}</button>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
     </div>
     {view !== 'settings' && customPeriod && currentRange && projectToday && <DateRangePicker

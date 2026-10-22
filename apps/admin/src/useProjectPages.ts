@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { DEFAULT_PAGE_LIMIT, type ApiClient } from './api/client';
 import { toApiError, type Load } from './api/load-state';
 import { appendPage, shouldApplyPage } from './api/pagination';
+import { firstProjectPage } from './api/project-page';
 import type { Project } from './api/types';
 
 /** Owns list requests, pagination and the generation that invalidates late pages. */
-export default function useProjectPages(client: ApiClient | null, refreshTick: number) {
+export default function useProjectPages(client: ApiClient | null, refreshTick: number, selectedId: string | null = null) {
+  const selectedRef = useRef(selectedId);
+  selectedRef.current = selectedId;
   const [more, setMore] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
   const [projects, setProjects] = useState<Load<Project[]>>({ status: 'idle' });
@@ -30,6 +33,10 @@ export default function useProjectPages(client: ApiClient | null, refreshTick: n
   const updateProject = useCallback((project: Project) => {
     setProjects(previous => previous.data ? { ...previous, data: previous.data.map(item => item.id === project.id ? project : item) } : previous);
   }, []);
+  const rememberProject = useCallback((project: Project) => {
+    setProjects(previous => previous.status === 'ready' && previous.data
+      ? { ...previous, data: appendPage(previous.data, { data: [project], page: { nextCursor: null } }).items } : previous);
+  }, []);
   const addProject = useCallback((project: Project) => {
     invalidatePages();
     setProjects(previous => ({ status: 'ready', data: [...(previous.data ?? []).filter(p => p.id !== project.id), project].sort((a, b) => a.id.localeCompare(b.id)) }));
@@ -44,7 +51,7 @@ export default function useProjectPages(client: ApiClient | null, refreshTick: n
     setProjects({ status: 'loading' });
     projectsControllerRef.current = controller;
     setPageError(null);
-    client.listProjects({ limit: DEFAULT_PAGE_LIMIT, signal: controller.signal })
+    firstProjectPage(client, selectedRef.current, controller.signal)
       .then(page => {
         if (controller.signal.aborted) return;
         setProjects({ status: 'ready', data: page.data });
@@ -81,5 +88,5 @@ export default function useProjectPages(client: ApiClient | null, refreshTick: n
       }
     }
   }
-  return { projects, nextCursor, more, pageError, loadMore, invalidatePages, resetProjects, updateProject, addProject };
+  return { projects, nextCursor, more, pageError, loadMore, invalidatePages, resetProjects, updateProject, addProject, rememberProject };
 }

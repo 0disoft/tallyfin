@@ -50,6 +50,7 @@ import { createReadScheduler, type ReadLease } from './read-scheduler.ts';
 export const API_BASE_PATH = '/v1';
 export const MAX_PAGE_LIMIT = 100;
 export const DEFAULT_PAGE_LIMIT = 25;
+export const MAX_PROJECT_SEARCH_CHARS = 80;
 
 export const CROSS_ORIGIN_NOTICE =
   '이 프로토타입은 같은 출처(same-origin)에만 연결해요. 다른 출처는 이번 범위가 아니라 연결하지 않아요. ' +
@@ -234,8 +235,10 @@ export class ApiClient {
     return this.#parse(await this.#request('/health', {}, options.signal), parseAdminHealth);
   }
 
-  async listProjects(options: { limit?: number; cursor?: string | null; signal?: AbortSignal } = {}): Promise<ProjectPage> {
-    const params = { limit: clampLimit(options.limit), cursor: options.cursor ?? undefined };
+  async listProjects(options: { limit?: number; cursor?: string | null; q?: string; signal?: AbortSignal } = {}): Promise<ProjectPage> {
+    if (options.q !== undefined && (typeof options.q !== 'string' || options.q.length > MAX_PROJECT_SEARCH_CHARS || /[\x00-\x1f\x7f]/.test(options.q)))
+      throw new ApiError('invalid_request', '프로젝트 검색어는 제어 문자 없이 80자 이내로 입력해 주세요.');
+    const params = { limit: clampLimit(options.limit), cursor: options.cursor ?? undefined, q: options.q?.trim() || undefined };
     return this.#parse(await this.#request('/projects', params, options.signal), parseProjectPage);
   }
 
