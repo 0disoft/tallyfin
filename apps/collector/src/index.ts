@@ -9,6 +9,7 @@ export type { PublisherAccess } from './publisher.ts';
 import type { AdministratorAccess } from './admin.ts';
 import type { PublisherAccess } from './publisher.ts';
 import { runCleanup, cleanupPageLimit } from './cleanup.ts';
+import { cleanupFailed } from './cleanup-report.ts';
 import { logRequestObservation } from './request-observation.ts';
 import { checkAdministratorStorageRead } from './readiness.ts';
 import { databaseCapacity, requestDatabase } from './dependency-lifetime.ts';
@@ -45,12 +46,15 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
   // Structural host port, matching Workers' ScheduledController. Await all work.
   async scheduled(controller: { scheduledTime: number }, bindings: CollectorBindings): Promise<void> {
     const runId = crypto.randomUUID();
+    const scheduleLagMs = Math.max(0, Date.now() - controller.scheduledTime);
     const lifetime = requestDatabase(bindings.DB, new AbortController().signal, capacity, 30_000);
     try {
       const report = await runCleanup(new D1Maintenance(lifetime.db), controller.scheduledTime,
-        { signal: lifetime.signal, maxPages: cleanupMaxPages });
-      console.log(JSON.stringify({ runId, code: 'retention_cleanup', ...report }));
-      if (report.failed || !report.cursorAdvanced) throw Error('retention cleanup incomplete');
+        { signal: lifetime.signal, maxPages: cleanupMaxPages, onReport: report => {
+          console.log(JSON.stringify({ runId, code: 'retention_cleanup', ...report,
+            execution: { ...report.execution, scheduleLagMs } }));
+        } });
+      if (cleanupFailed(report)) throw Error('retention cleanup incomplete');
     } catch (cause) {
       // Do not log DB errors, IDs, content or configuration from rejected work.
       console.warn(JSON.stringify({ runId, code: 'retention_cleanup_failed' }));

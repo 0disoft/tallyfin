@@ -6,6 +6,8 @@ import { Miniflare, Log, LogLevel } from 'miniflare';
 import { runCleanup, CLEANUP_ROW_LIMIT, CLEANUP_BUDGET_MS, CLEANUP_RUN_PROJECT_LIMIT, CLEANUP_PROJECT_LIMIT } from '../src/cleanup.ts';
 import { D1Maintenance } from '@tallyfin/storage-d1';
 import { createWorker } from '../src/index.ts';
+import { cleanupFailed } from '../src/cleanup-report.ts';
+import type { CleanupRunReport } from '../src/cleanup-report.ts';
 import { migrationStatements, seed, now } from '../../../packages/storage-d1/test/helpers.ts';
 
 test('failed projects do not block later cleanup or cursor progress', async () => {
@@ -18,9 +20,10 @@ test('failed projects do not block later cleanup or cursor progress', async () =
       if (zone === 'Invalid/Zone') throw Error('private DB detail');
     },
     advanceCleanupCursor: async value => { assert.equal(value, page); return true; },
-  }, now);
+  }, now, { clock: () => 0 });
   assert.deepEqual(seen, ['bad', 'good']);
-  assert.deepEqual(report, { attempted: 2, completed: 1, failed: 1, cursorAdvanced: true });
+  assert.deepEqual(report, { attempted: 2, completed: 1, failed: 1, cursorAdvanced: true,
+    execution: { elapsedMs: 0, stopReason: 'page_limit', interruptedProjects: 0, checkpointedProjects: 2 } });
   assert.ok(!JSON.stringify(report).includes('private DB detail'));
 });
 
@@ -72,12 +75,68 @@ test('budget boundaries persist only the attempted prefix and leave the next pro
     }, now, { clock: () => time });
     const expected = elapsed < CLEANUP_BUDGET_MS ? 1 : 0;
     assert.equal(report.attempted, expected); assert.equal(report.cursorAdvanced, expected === 1);
+    assert.equal(report.execution.stopReason, 'time_budget'); assert.equal(cleanupFailed(report), false);
     assert.deepEqual(f.checkpoints.flat(), f.seen); assert.equal(f.reads(), 1);
     if (expected) {
       const next = await runCleanup(f.store, now, { clock: () => 0, maxPages: 4 });
       assert.equal(next.attempted, 7); assert.equal(f.seen[1], 'project-01');
     }
   }
+});
+
+test('terminal reports distinguish traversal limits, empty pages, cycles and cursor conflicts', async () => {
+  for (const [count, reason] of [[7, 'cycle_complete'], [17, 'page_limit']] as const) {
+    const f = paged(count), report = await runCleanup(f.store, now, { clock: () => 4, maxPages: 4 });
+    assert.equal(report.execution.stopReason, reason); assert.equal(report.execution.elapsedMs, 0);
+    assert.equal(report.execution.checkpointedProjects, report.attempted); assert.equal(cleanupFailed(report), false);
+  }
+  const empty = await runCleanup({ ...paged(1).store, nextCleanupPage: async () => ({ projects: [], revision: 0 }), advanceCleanupCursor: async () => true }, now);
+  assert.equal(empty.execution.stopReason, 'empty_page'); assert.equal(empty.execution.checkpointedProjects, 0);
+  const conflict = await runCleanup({ ...paged(9).store, advanceCleanupCursor: async () => false }, now);
+  assert.equal(conflict.execution.stopReason, 'cursor_conflict'); assert.equal(conflict.execution.checkpointedProjects, 0);
+  assert.equal(cleanupFailed(conflict), true);
+});
+
+test('scan/checkpoint errors and cancellation report confirmed progress once and preserve the original rejection', async () => {
+  const cause = { privateDetail: 'must not enter a report' };
+  for (const phase of ['scan', 'checkpoint', 'cleanup'] as const) {
+    const f = paged(9), controller = new AbortController(); let time = 0, checkpoints = 0;
+    const reports: CleanupRunReport[] = [];
+    const store = { ...f.store,
+      async nextCleanupPage(limit: number) { if (phase === 'scan') throw cause; return f.store.nextCleanupPage(limit); },
+      async cleanup(id: string) {
+        time += 3;
+        if (phase === 'cleanup') { controller.abort(cause); throw cause; }
+        await f.store.cleanup(id);
+      },
+      async advanceCleanupCursor(page: Parameters<typeof f.store.advanceCleanupCursor>[0]) {
+        if (phase === 'checkpoint' && ++checkpoints === 2) throw cause;
+        return f.store.advanceCleanupCursor(page);
+      },
+    };
+    await assert.rejects(runCleanup(store, now, { signal: controller.signal, clock: () => time, maxPages: 4,
+      onReport: report => { reports.push(report); } }), error => error === cause);
+    assert.equal(reports.length, 1); const report = reports[0]!;
+    assert.equal(report.execution.stopReason, phase === 'cleanup' ? 'cancelled' : 'storage_error');
+    assert.equal(report.execution.elapsedMs, phase === 'scan' ? 0 : phase === 'cleanup' ? 3 : 24);
+    assert.equal(report.execution.interruptedProjects, phase === 'cleanup' ? 1 : 0);
+    assert.equal(report.execution.checkpointedProjects, phase === 'checkpoint' ? 4 : 0);
+    assert.equal(report.attempted, report.completed + report.failed + report.execution.interruptedProjects);
+    assert.equal(cleanupFailed(report), true); assert.ok(!JSON.stringify(report).includes('privateDetail'));
+  }
+});
+
+test('observer failures and mutation cannot change cleanup results or cancellation reasons', async () => {
+  const report = await runCleanup(paged(1).store, now, { onReport: snapshot => {
+    snapshot.attempted = 99; snapshot.execution.stopReason = 'storage_error'; throw Error('broken sink');
+  } });
+  assert.equal(report.attempted, 1); assert.equal(report.execution.stopReason, 'page_limit');
+  const controller = new AbortController(), reason = { cancelled: true }; controller.abort(reason);
+  let called = 0;
+  await assert.rejects(runCleanup(paged(1).store, now, { signal: controller.signal, onReport: snapshot => {
+    called++; assert.equal(snapshot.execution.stopReason, 'cancelled'); throw Error('broken sink');
+  } }), cause => cause === reason);
+  assert.equal(called, 1);
 });
 
 test('cursor conflict stops before the next page; cancellation preserves its cause without advancing', async () => {

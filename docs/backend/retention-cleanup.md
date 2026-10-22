@@ -1,5 +1,20 @@
 # 만료 데이터 자동 정리
 
+## 실행 결과와 중단 원인
+
+정상 종료와 예외·취소 모두 최종 보고서에 execution을 남긴다. elapsedMs는 단조 시계로
+측정한 실행 시간, stopReason은 page_limit·time_budget·cycle_complete·empty_page·
+cursor_conflict·cancelled·storage_error 중 하나다. 페이지·시간 한도는 다음 실행으로
+이월한 상태이며 전체 데이터가 정리됐다는 뜻은 아니다. 삭제 실패 건수는 별도로 센다.
+예약 실행은 시작할 때만 측정한 scheduleLagMs를 더한다. 예약보다 일찍 시작한 시계
+오차는 0으로 표시하며, 삭제 기준 시각은 계속 scheduledTime을 쓴다.
+
+interruptedProjects는 결과를 확인하지 못한 진행 중 작업 수이고, checkpointedProjects는
+커서 CAS로 진행을 확인한 시도 수다. 실패한 프로젝트도 기존 정책대로 커서를 진행하므로
+이 수치는 삭제 성공 건수가 아니다. 마지막 CAS의 불리언만으로 전체 진행을 판단하지 않는다.
+취소는 이미 실행 중인 D1 작업의 롤백을 보장하지 않는다. runCleanup의 선택적 onReport는
+최종 스냅샷을 한 번 받으며 관측 실패나 전달 객체 변경은 원본 결과·예외에 영향을 주지 않는다.
+
 상태: Worker `scheduled` 핸들러와 D1 순회 위치 저장을 로컬에서 구현·검증했다.
 원격 DB 적용·Cron Trigger 등록·배포는 하지 않았다.
 
