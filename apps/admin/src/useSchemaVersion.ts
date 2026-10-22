@@ -24,6 +24,15 @@ export default function useSchemaVersion(client: ApiClient | null, projectId: st
     if (!client || !projectId) return;
     setManual(previous => ({ client, values: { ...(previous?.client === client ? previous.values : {}), [projectId]: value } }));
   }, [client, projectId]);
-  return { versionInput, setVersionInput, loading: !!client && !!projectId && chosen === undefined && !current,
+  const selectAutomatic = useCallback(() => {
+    if (!client || !projectId) return;
+    setAutomatic(null);
+    setManual(previous => {
+      if (previous?.client !== client) return null;
+      const values = { ...previous.values }; delete values[projectId];
+      return { client, values };
+    });
+  }, [client, projectId]);
+  return { versionInput, setVersionInput, selectAutomatic, automatic: chosen === undefined, loading: !!client && !!projectId && chosen === undefined && !current,
     error: chosen === undefined ? current?.error : undefined };
 }

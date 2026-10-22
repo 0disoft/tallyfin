@@ -123,7 +123,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const registerDraft = useCallback((scope: ApiClient, project: string | null, check: () => boolean) =>
     draftExit.register(scope, project, check), [draftExit]);
 
-  const { versionInput, setVersionInput, loading: versionLoading, error: versionError } = useSchemaVersion(client, projectId, refreshTick);
+  const { versionInput, setVersionInput, loading: versionLoading, error: versionError, selectAutomatic, automatic: automaticVersion } = useSchemaVersion(client, projectId, refreshTick);
   const versionText = versionInput.trim();
   const version = /^[0-9]+$/.test(versionText) ? Number(versionText) : Number.NaN;
   const validVersion = Number.isInteger(version) && version >= 1 && version <= MAX_SCHEMA_VERSION;
@@ -337,6 +337,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     <div className="toolbar api-toolbar">
       <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={projectId ?? ''} onChange={event => switchProject(event.target.value || null)} disabled={projects.status !== 'ready' || !projects.data?.length}>{(projects.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><CaretDown size={16} /></div></label>
       <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
+      <label className="comparison-toggle"><input type="checkbox" checked={automaticVersion} disabled={!projectId || versionLoading}
+        onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} />스키마 자동 선택</label>
       {(view === 'overview' || view === 'events') && <label className="api-field"><span>발행 출처</span>
         <select className="text-input" aria-label="발행 출처" value={source} onChange={event => {
           setSelectedSource(event.target.value === 'server' ? 'server' : 'browser'); setSelectedEvent(null); setGrouping(null);
