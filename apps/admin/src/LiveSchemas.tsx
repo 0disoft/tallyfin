@@ -14,6 +14,7 @@ import { funnelIssueTarget } from './api/schema-funnel-form.ts';
 import useUnloadWarning from './useUnloadWarning.ts';
 import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
 import SchemaDraftFiles from './SchemaDraftFiles.tsx';
+import SchemaVersionComparison from './SchemaVersionComparison.tsx';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름·퍼널 각각 최대 10개, 퍼널 단계 2~10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -89,6 +90,8 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     </table></div>
     {snapshot.page.page.beforeVersion !== null && <button className="secondary-button" disabled={!unlocked} onClick={() => { void editorRef.current?.loadMore(); }}>{state.more ? '불러오는 중…' : '이전 버전 더 보기'}</button>}
     <p className="field-help">버전을 불러오면 편집기의 내용을 바꿔요. 초안을 보관하려면 떠나기 전에 파일로 저장해 주세요.</p>
+    <SchemaVersionComparison key={projectId} client={client} projectId={projectId} versions={snapshot.page.data}
+      enabled={unlocked && !state.blocked} refreshTick={refreshTick} />
     {editorRef.current && <SchemaDraftFiles editor={editorRef.current} editable={editable} projectId={projectId} />}
     {state.message && <p className="settings-message" role="status">{state.message}</p>}
     {state.phase === 'review' && <section className="settings-recovery" aria-label="스키마 충돌과 발행 결과 확인">

@@ -1,0 +1,10 @@
+.schema-version-comparison { min-width: 0; margin-block: 1.5rem; padding-block: 1rem; border-block: 1px solid var(--border, #e3e9f1); }
+.schema-version-comparison h3 { margin-top: 0; font-size: 1.125rem; }
+.schema-compare-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; margin-block: 1rem; }
+.schema-compare-controls .settings-field { flex: 1 1 10rem; min-width: 0; }
+.schema-compare-controls select { width: 100%; }
+.schema-definition-diff pre { min-width: 10rem; max-width: 30rem; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: .875rem/1.6 ui-monospace, Consolas, monospace; }
+@media (max-width: 600px) {
+  .schema-compare-controls { align-items: stretch; }
+  .schema-compare-controls .settings-field, .schema-compare-controls button { flex-basis: 100%; }
+}
