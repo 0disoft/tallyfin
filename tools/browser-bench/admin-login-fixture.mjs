@@ -98,6 +98,8 @@ export async function adminLoginFixture(directory, { profile = 'login', allowCre
             else if (dropResponse && profile === 'access' && allowAuthorityChanges &&
               ['/v1/projects/sembom/grants', '/v1/projects/sembom/publishers'].includes(url.pathname))
               assert.equal(request.method(), 'PUT');
+            else if (profile === 'access' && url.pathname === '/v1/projects/sembom/schemas/draft')
+              assert.equal(request.method(), 'PUT');
             else {
               assert.equal(request.method(), 'PATCH');
               assert.ok(['/v1/projects/sembom', '/v1/projects/access-other'].includes(url.pathname));

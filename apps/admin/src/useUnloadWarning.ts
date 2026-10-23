@@ -1,7 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
-export function installUnloadWarning(target: EventTarget): () => void {
+export function installUnloadWarning(target: EventTarget, shouldWarn: () => boolean = () => true): () => void {
   const warn = (event: Event) => {
+    if (!shouldWarn()) return;
     event.preventDefault();
     (event as BeforeUnloadEvent).returnValue = '';
   };
@@ -9,6 +10,7 @@ export function installUnloadWarning(target: EventTarget): () => void {
   return () => target.removeEventListener('beforeunload', warn);
 }
 
-export default function useUnloadWarning(active: boolean): void {
-  useEffect(() => active ? installUnloadWarning(window) : undefined, [active]);
+export default function useUnloadWarning(active: boolean, shouldWarn?: () => boolean): void {
+  const check = useRef(shouldWarn); check.current = shouldWarn;
+  useEffect(() => active ? installUnloadWarning(window, () => check.current?.() ?? active) : undefined, [active]);
 }

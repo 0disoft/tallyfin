@@ -43,6 +43,7 @@ import { parseOverview, validateOverviewIds } from './overview-contract.ts';
 import type { OverviewResponse } from './overview-contract.ts';
 import { ApiError, KIND_MESSAGE } from './api-error.ts';
 import { API_BASE_PATH, AdminTransport, type AdminTransportOptions } from './transport.ts';
+import { parseDraftSnapshot, validateDraftInput, type SaveDraft, type DraftSnapshot } from './saved-draft-contract.ts';
 export { ApiError, type ApiErrorKind } from './api-error.ts';
 export { API_BASE_PATH, type FetchLike, type FetchOption } from './transport.ts';
 
@@ -78,6 +79,20 @@ export function resolveApiEndpoint(input: string, currentOrigin: string): { base
 }
 
 export class ApiClient {
+  async getSchemaDraft(projectId: string, options: { signal?: AbortSignal } = {}): Promise<DraftSnapshot> {
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas/draft`, {}, options.signal), parseDraftSnapshot);
+    if (result.projectId !== projectId) throw new ApiError('contract', '서버 초안 프로젝트가 요청과 달라요.');
+    return result;
+  }
+  async saveSchemaDraft(projectId: string, input: SaveDraft, options: { signal?: AbortSignal } = {}): Promise<DraftSnapshot> {
+    try { validateDraftInput(projectId, input); }
+    catch { throw new ApiError('invalid_request', '초안 파일 예산 128KiB와 버전 입력 32자 한도를 확인해 주세요.'); }
+    const body = JSON.stringify(input), submitted = JSON.parse(body) as SaveDraft;
+    const result = this.#parse(await this.#request(`/projects/${encodeURIComponent(projectId)}/schemas/draft`, {}, options.signal, body, 'PUT'), parseDraftSnapshot);
+    if (result.projectId !== projectId || !result.draft || result.draft.draftText !== submitted.draftText || result.draft.targetVersion !== submitted.targetVersion || result.draft.revision === submitted.expectedRevision)
+      throw new ApiError('contract', '서버 초안 저장 결과가 요청과 달라요. 최신 상태를 확인해 주세요.');
+    return result;
+  }
   #transport: AdminTransport;
   constructor(options: AdminTransportOptions = {}) { this.#transport = new AdminTransport(options); }
   get hasToken(): boolean { return this.#transport.hasToken; }

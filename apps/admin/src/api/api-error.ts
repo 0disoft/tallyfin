@@ -7,6 +7,7 @@ export type ApiErrorKind =
   | 'admin_api_unavailable'
   | 'settings_conflict'
   | 'schema_conflict'
+  | 'schema_draft_conflict'
   | 'project_conflict'
   | 'project_limit_reached'
   | 'grant_conflict'
@@ -41,6 +42,7 @@ export const KIND_MESSAGE: Record<ApiErrorKind, string> = {
   admin_api_unavailable: '관리 API에 연결하지 못했어요. 잠시 후 다시 시도해 주세요. (HTTP 503)',
   settings_conflict: '다른 변경 사항이 있어요. 최신 설정을 확인해 주세요. (HTTP 409)',
   schema_conflict: '발행된 스키마가 바뀌었어요. 최신 버전을 확인해 주세요. (HTTP 409)',
+  schema_draft_conflict: '다른 곳에서 서버 초안을 저장했어요. 최신 초안을 확인해 주세요. (HTTP 409)',
   project_conflict: '이미 사용 중이거나 다른 내용으로 생성된 프로젝트 ID예요. (HTTP 409)',
   project_limit_reached: '프로젝트 생성 개수 한도에 도달했어요. 운영자에게 한도를 확인해 주세요. (HTTP 409)',
   grant_conflict: '계정 권한이 바뀌었어요. 최신 목록을 확인한 뒤 다시 선택해 주세요. (HTTP 409)',
@@ -75,7 +77,7 @@ export async function responseApiError(response: { status: number; json: () => P
     // Body is not JSON; keep the fixed status-based message.
   }
   const kind = response.status === 503 && code === 'admin_api_unavailable' ? 'admin_api_unavailable'
-    : response.status === 409 && code && ['schema_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'publisher_conflict', 'last_owner'].includes(code)
+    : response.status === 409 && code && ['schema_conflict', 'schema_draft_conflict', 'project_conflict', 'project_limit_reached', 'grant_conflict', 'publisher_conflict', 'last_owner'].includes(code)
     ? code as ApiErrorKind : STATUS_KIND[response.status] ?? 'http';
   const message = kind === 'http' ? `요청이 실패했어요. (HTTP ${response.status})` : KIND_MESSAGE[kind];
   return new ApiError(kind, message, { status: response.status, code, requestId });

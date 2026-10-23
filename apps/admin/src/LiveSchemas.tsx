@@ -15,6 +15,7 @@ import useUnloadWarning from './useUnloadWarning.ts';
 import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
 import SchemaDraftFiles from './SchemaDraftFiles.tsx';
 import SchemaVersionComparison from './SchemaVersionComparison.tsx';
+import ServerSchemaDraft from './ServerSchemaDraft.tsx';
 
 const ISSUE_TEXT: Record<SchemaIssueCode, string> = {
   invalid_definition: '필수 항목·자료형·이름·허용 값을 확인해 주세요.', definition_limit: '이벤트 1~50개, 작업 흐름·퍼널 각각 최대 10개, 퍼널 단계 2~10개, 정의 32KiB 한도를 확인해 주세요.',
@@ -27,7 +28,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   const [state, setState] = useState<SchemaState | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
-  useUnloadWarning(Boolean(editorRef.current?.hasUnsavedChanges));
+  useUnloadWarning(Boolean(editorRef.current?.hasUnsavedChanges), () => Boolean(editorRef.current?.hasUnsavedChanges));
   const previousVersion = useRef<number | null | undefined>(undefined);
   const activeScope = useRef({ client, projectId }); activeScope.current = { client, projectId };
   const accessCallbackRef = useRef(onAccessLost); accessCallbackRef.current = onAccessLost;
@@ -93,6 +94,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     <SchemaVersionComparison key={projectId} client={client} projectId={projectId} versions={snapshot.page.data}
       enabled={unlocked && !state.blocked} refreshTick={refreshTick} />
     {editorRef.current && <SchemaDraftFiles editor={editorRef.current} editable={editable} projectId={projectId} />}
+    {editorRef.current && <ServerSchemaDraft key={projectId} editor={editorRef.current} client={client} projectId={projectId} editable={editable} />}
     {state.message && <p className="settings-message" role="status">{state.message}</p>}
     {state.phase === 'review' && <section className="settings-recovery" aria-label="스키마 충돌과 발행 결과 확인">
       <h3>발행 결과 확인</h3>

@@ -108,6 +108,27 @@ test('file import preserves unfinished work, requires replacement consent, reset
   } finally { f.editor.destroy(); }
 });
 
+test('confirmed server content clears only the matching unsaved input and never bypasses replacement or publication gates', async () => {
+  const f = fixture();
+  try {
+    await ready(f.editor); f.editor.edit('target', '3'); await f.editor.validate(); f.editor.setPrivacy(true);
+    const { draft, target, validatedKey } = f.editor.state;
+    assert.equal(f.editor.hasUnsavedChanges, true);
+    f.editor.markServerDraft({ targetVersion: target, draftText: draft });
+    assert.equal(f.editor.hasUnsavedChanges, false); assert.equal(f.editor.hasDraftInputChanges, true);
+    assert.equal(f.editor.state.validatedKey, validatedKey); assert.equal(f.editor.state.privacyReviewed, true);
+    assert.equal(f.editor.importDraft(schemaDraftFile('sample', '4', '{}').text), false);
+    f.editor.edit('draft', draft + '\n'); assert.equal(f.editor.hasUnsavedChanges, true);
+    f.editor.markServerDraft({ targetVersion: target, draftText: draft }); assert.equal(f.editor.hasUnsavedChanges, true);
+    f.editor.markServerDraft(null); assert.equal(f.editor.hasUnsavedChanges, true);
+    f.editor.edit('target', 'a\nb'); f.editor.edit('draft', 'c');
+    f.editor.markServerDraft({ targetVersion: 'a', draftText: 'b\nc' }); assert.equal(f.editor.hasUnsavedChanges, true);
+    assert.equal(f.editor.importDraft(schemaDraftFile('sample', '', '{unfinished').text, { discardDraft: true, source: 'server' }), true);
+    assert.equal(f.editor.state.privacyReviewed, false); assert.equal(f.editor.state.validatedKey, null);
+    assert.match(f.editor.state.message, /서버 초안/);
+  } finally { f.editor.destroy(); }
+});
+
 test('file controls respect reader, busy, revoked and destroyed editor lifetimes', async () => {
   const f = fixture(), file = schemaDraftFile('sample', '2', '{');
   try {

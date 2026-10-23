@@ -26,6 +26,7 @@ export class SchemaEditor {
   #controller: AbortController | null = null;
   #generation = 0; #destroyed = false;
   #draftBaseline = '';
+  #serverDraftKey: string | null = null;
   #client: ApiClient; #projectId: string;
   #knownOwner = false;
   #onAccessLost?: () => void;
@@ -59,9 +60,16 @@ export class SchemaEditor {
   get canEdit() { return !this.state.blocked && (this.state.latest ?? this.state.snapshot)?.settings.canEdit === true; }
   get hasDraftChanges() { return this.state.draft !== this.#draftBaseline; }
   get hasUnsavedChanges(): boolean {
-    return !this.#destroyed && Boolean(this.state.snapshot && (this.hasDraftChanges ||
-      this.state.target !== nextVersion(this.state.snapshot.page.latestVersion) || this.state.pending ||
-      this.state.phase === 'publishing'));
+    return !this.#destroyed && Boolean(this.state.snapshot && (this.state.pending || this.state.phase === 'publishing' ||
+      this.hasDraftInputChanges && JSON.stringify([this.state.target, this.state.draft]) !== this.#serverDraftKey));
+  }
+  get hasDraftInputChanges(): boolean {
+    return Boolean(this.state.snapshot && (this.hasDraftChanges || this.state.target !== nextVersion(this.state.snapshot.page.latestVersion) || this.state.pending || this.state.phase === 'publishing'));
+  }
+  markServerDraft(content: { targetVersion: string; draftText: string } | null) {
+    const key = content ? JSON.stringify([content.targetVersion, content.draftText]) : null;
+    if (this.#destroyed || key === this.#serverDraftKey) return;
+    this.#serverDraftKey = key; this.#set({});
   }
   #key() { return this.state.target + '\n' + this.state.draft; }
   #input(): { draft: SchemaDraft; version: number } | null {
@@ -121,12 +129,13 @@ export class SchemaEditor {
     if (this.#destroyed || this.state.phase !== 'ready' || this.state.more || !this.canEdit) return null;
     return schemaDraftFile(this.#projectId, this.state.target, this.state.draft);
   }
-  importDraft(text: string, options: { discardDraft?: boolean } = {}) {
+  importDraft(text: string, options: { discardDraft?: boolean; source?: 'server' } = {}) {
     if (this.#destroyed || this.state.phase !== 'ready' || this.state.more || !this.canEdit) return false;
     const file = parseSchemaDraftFile(text, this.#projectId);
-    if (this.hasUnsavedChanges && options.discardDraft !== true) return false;
+    if (this.hasDraftInputChanges && options.discardDraft !== true) return false;
     this.#set({ draft: file.draftText, target: file.targetVersion, report: null, validatedKey: null, privacyReviewed: false,
-      formError: null, message: '초안 파일을 불러왔어요. 버전과 정의를 검증하고 개인정보 검토를 다시 확인해 주세요.' });
+      formError: null, message: options.source === 'server' ? '서버 초안을 불러왔어요. 버전과 정의를 검증하고 개인정보 검토를 다시 확인해 주세요.'
+        : '초안 파일을 불러왔어요. 버전과 정의를 검증하고 개인정보 검토를 다시 확인해 주세요.' });
     return true;
   }
   setPrivacy(value: boolean) { if (this.state.phase === 'ready' && this.canEdit) this.#set({ privacyReviewed: value }); }

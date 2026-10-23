@@ -42,7 +42,7 @@ export default function SchemaDraftFiles({ editor, editable, projectId }: { edit
       const text = await readSchemaDraftFile(file, { signal: controller.signal });
       if (pendingRead.current !== controller || controller.signal.aborted) return;
       parseSchemaDraftFile(text, projectId);
-      if (editor.hasUnsavedChanges && !window.confirm('작성 중인 초안을 파일 내용으로 바꿀까요? 현재 초안과 발행할 버전 입력은 사라져요.')) {
+      if (editor.hasDraftInputChanges && !window.confirm('작성 중인 초안을 파일 내용으로 바꿀까요? 현재 초안과 발행할 버전 입력은 사라져요.')) {
         setStatus({ error: false, text: '초안 교체를 취소했어요. 기존 입력과 검토 상태는 그대로예요.' }); return;
       }
       if (!controller.signal.aborted && !editor.importDraft(text, { discardDraft: true }))
