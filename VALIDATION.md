@@ -22,6 +22,18 @@ Tallyfin의 변경을 어떤 명령으로 확인할지 고르는 안내다. 아�
 
 검증 결과에 적는 범위는 그 명령이 실제로 본 범위와 같아야 한다요. 관련 suite만 돌렸다면 그 suite를, 일부 경로만 확인했다면 그 경로를 기록한다요.
 
+## 초안 파일 읽기 수명·UTF-8 검사 — 2026-10-24
+
+브라우저 파일 읽기를 `api/read-schema-draft-file.ts`로 분리했다. 128KiB 초과는 읽기 전에
+거부하고, ArrayBuffer를 UTF-8 fatal 모드로 해석해 잘못된 바이트를 대체 문자로 복원하지 않는다.
+UTF-8 BOM은 허용하며 초안 본문은 그대로 보존한다. 성공·실패·취소·10초 시간 초과 모두
+timer·이벤트 핸들러·AbortSignal listener를 해제하고 진행 중 FileReader를 중단한다.
+
+- `node --test apps/admin/src/api/read-schema-draft-file.test.mjs apps/admin/src/api/schema-draft-file.test.mjs`: 9/9 통과.
+- 신규 읽기 테스트는 정확히 128KiB/직후, 미완성 한글/BOM, 잘못된 UTF-8, 취소 후 늦은 콜백,
+  timeout, 파일 오류/동기 예외의 cause, 사전 취소와 빈 파일을 확인했다.
+- 화면 연결과 실제 브라우저 검증은 다음 단위다. API·DB·의존성·CI·원격 변경은 없다.
+
 ## 스키마 버전 간 정의 비교 — 2026-10-24
 
 발행 정의 비교를 React·I/O 없는 `schema-comparison.ts` 계산과 두 버전 읽기로 나눴다.
