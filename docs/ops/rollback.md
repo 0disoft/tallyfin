@@ -44,6 +44,10 @@ node node_modules/wrangler/bin/wrangler.js rollback <version-id> --config .tmp/i
 | `0008_publisher_history.sql` | 새 action을 모르는 예전 관리자 이력 리더 | 예전 리더로 되돌리지 않음. action을 아는 리더를 유지 |
 | `0009_publisher_generations.sql` | 예전 CLI의 `createdAt` CAS 회수는 같은 밀리초 재부여를 지울 수 있음 | 예전 발행자 writer 차단. `grant_id` 기준 코드 유지 |
 | `0009` + 관리자 화면 | 새 API 뒤 예전 화면의 `expectedCreatedAt` DELETE는 400 | 자산과 API를 맞춘다. 예전 자산만 올리지 않음 |
+| `0010_grant_revision.sql` | 예전 관리자·CLI가 `grant_revision`·`expectedRevision`을 보내지 않거나 읽지 못하면 grant 쓰기가 거부되거나 호환되지 않음 | revision 열과 세 트리거는 남긴다. 새 관리자/API를 유지하고 예전 grant writer를 차단 |
+| `0011_analytics_lookup.sql` | 인덱스를 지우면 조회 계획·지연이 달라질 수 있고 재생성은 기존 집계를 다시 스캔함 | 인덱스는 남긴다. 공간을 회수해야 할 때만 두 인덱스를 한 batch로 지우고, 0011 재적용으로 복원 |
+| `0012_workflow_duration.sql` | 예전 Collector는 계속 동작하지만 새 완료의 소요시간을 집계하지 않아 미측정이 늘어남 | 열은 남긴다. 이전 완료를 역산·backfill하지 않는다 |
+| `0013_workflow_failure_reasons.sql` | 예전 Collector는 새 실패 원인 슬롯을 쓰지 않아 미측정이 늘어남 | 열은 남긴다. 과거 실패 원인을 역산하지 않고 새 Collector를 앞으로 수정 |
 
 발행 권한 회수의 호환 경로는 두지 않는다. 새 화면은 `grantId` CAS를 쓰고 예전 `expectedCreatedAt`
 요청은 400으로 거부된다.
@@ -54,6 +58,9 @@ node node_modules/wrangler/bin/wrangler.js rollback <version-id> --config .tmp/i
   `admin_changes`, 0009 `project_publishers`)과 호환되는지 확인하기 전에는 쓰기를 재개하지 않는다.
 - 재생성 구간에는 Cron과 관련 writer를 전역으로 멈춘다. server 전용 쓰기만 있어도 백업과 행
   무결성 확인이 필요하다.
+- 0010 적용 뒤에는 grant 수정 경로를 새 revision 계약에 맞춘 상태로 유지한다. 0012·0013은
+  열을 유지한 채 코드를 되돌릴 수 있지만 새 측정값은 늘지 않는다. 0011 인덱스는 코드 롤백의
+  대상이 아니다.
 - Cron만 멈추면 수집이 멈추지 않는다. 프로젝트 일시 중지로도 관리자 읽기·쓰기와 신뢰된 CLI는
   막히지 않는다. 외부 호스트 ingress와 writer를 호스트 운영에서 함께 막는다.
 

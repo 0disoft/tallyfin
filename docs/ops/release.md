@@ -11,8 +11,8 @@
 
 한 릴리스는 코드 번들, 설치 묶음(다섯 파일), DB 스키마를 함께 묶는다.
 
-- 마이그레이션: `0001`~`0009` 아홉 개, 애플리케이션 테이블 16개. 이 문서의 기준 마이그레이션 head는
-  `0009`이다. 이벤트 스키마 버전(`schema_version`)은 마이그레이션 번호와 별개로 프로젝트 스키마
+- 마이그레이션: `0001`~`0013` 열세 개, 애플리케이션 테이블 16개. 이 문서의 기준 마이그레이션 head는
+  `0013_workflow_failure_reasons.sql`이다. 이벤트 스키마 버전(`schema_version`)은 마이그레이션 번호와 별개로 프로젝트 스키마
   발행 흐름에서 정한다.
 - 설치 묶음: `install:prepare`가 만드는 `collector.wrangler.json`·`admin.wrangler.json`·
   `admin-login.json`·`oidc-registration.json`·`installation.json`. 대화형 터미널에서는
@@ -45,7 +45,7 @@ npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 | 검사 | 명령 | 확인하는 것 | 확인하지 않는 것 |
 | --- | --- | --- | --- |
 | 공개 제공자 | `npm run install:check -- --dir .tmp/installation` | 준비 묶음 재검증, 공개 OIDC discovery·JWKS, token endpoint 진단 OPTIONS | 실제 로그인·코드 교환·토큰 발급·클라이언트 등록 |
-| 원격 DB 메타데이터 | `npm run install:database-check -- --remote --dir .tmp/installation` | 원격 `sqlite_master`와 `0001`~`0009` 기준 스키마 비교. `d1_migrations`는 비교에서 제외된다 | 데이터 무결성·정리 Cron·백업·런타임 |
+| 원격 DB 메타데이터 | `npm run install:database-check -- --remote --dir .tmp/installation` | 원격 `sqlite_master`와 `0001`~`0013` 기준 스키마 비교. `d1_migrations`는 비교에서 제외된다 | 데이터 무결성·정리 Cron·백업·런타임 |
 | 관리자 읽기 접근 | `npm run install:access-check -- --dir .tmp/installation --token-stdin` | 검토한 관리자 출처의 `GET /v1/identity` → `GET /v1/health` → `GET /v1/projects?limit=1` 3단계 게이트. `/v1/health`는 `projects`·`project_grants` 읽기까지다 | 토큰 발급·갱신·최초 owner/생성자 권한·수집 쓰기·Cron·전체 저장 정상 |
 
 세 보고서 모두 `operationalReadinessVerified`가 false다. 필수 검사 통과만으로 준비 완료를
@@ -92,7 +92,7 @@ node node_modules/wrangler/bin/wrangler.js d1 migrations apply DB --remote --con
 
 | 상황 | 절차 |
 | --- | --- |
-| 빈 새 DB | `0001`부터 `0009`까지 순서대로 적용한다. 테이블 복사 대상이 비어 있다. |
+| 빈 새 DB | `0001`부터 `0013`까지 순서대로 적용한다. 테이블 복사 대상이 비어 있다. |
 | 기존 DB 업그레이드 | 마지막 적용 번호를 먼저 확인한다. 이미 적용한 마이그레이션을 다시 돌리지 않는다. |
 | 전체 백업 SQL 복원 | 빈 DB에 백업 SQL 전체를 넣는다. 같은 마이그레이션을 먼저 중복 적용하지 않는다. |
 
@@ -105,6 +105,24 @@ node node_modules/wrangler/bin/wrangler.js d1 migrations apply DB --remote --con
 | `0008_publisher_history.sql` | `admin_changes` | 관리자 API·CLI 쓰기, Cron |
 | `0009_publisher_generations.sql` | `project_publishers` | 발행자 CLI·HTTP 쓰기, Cron |
 
+`0010_grant_revision.sql`은 기존 grant 행을 바꾸지 않고 `projects.grant_revision`과
+grant insert/delete/role-update 트리거를 한 batch로 더한다. 관리자 목록의 `grantRevision`을
+`expectedRevision`으로 보내는 새 API·화면보다 먼저 적용하고, 예전 관리자 편집 화면은 grant
+수정에 쓰지 않는다. 일부 트리거만 있거나 revision 열이 없는 상태는 로컬 초기화가 거부한다.
+
+`0011_analytics_lookup.sql`은 event·funnel 조회 인덱스 두 개만 추가한다. 기존 행·key·응답은
+바꾸지 않으며 인덱스 생성이 기존 집계를 스캔한다. 적용 전 백업·행 수·인덱스 부재를 확인하고
+한가한 시간에 두 문장을 한 batch로 적용한다. 적용 뒤 두 정의·행 수·외래 키·기존 조회 결과를
+확인한다.
+
+`0012_workflow_duration.sql`은 `workflow_daily_counts`에 12칸 소요시간 배열을 더하고,
+`0013_workflow_failure_reasons.sql`은 `workflow_attempts.failure_reason_slot`과 33칸
+실패 원인 배열을 더한다. 0012 다음 0013을 적용하고 새 Collector·관리자를 올린다. 확장만
+하는 마이그레이션이라 이전 Collector도 명시한 기존 열로 수집·완료 건수 갱신을 계속할 수
+있지만 새 소요시간·실패 원인 측정은 남기지 않는다. 전환 전 완료와 과거 실패는 미측정으로
+남는다. 적용 뒤 배열 길이·정수·합계 제약, 실패 슬롯의 terminal failure 조건, 외래 키와
+재실행 시 변경 없음까지 확인한다.
+
 - 적용 전: 마이그레이션 head, 재생성 대상 행 수, 적용 전 백업 존재, 진행 중 쓰기 소진.
 - 적용 후: 행 수가 같은지, 열·CHECK·인덱스·트리거·외래 키가 있는지, `PRAGMA foreign_key_check`
   위반이 없는지.
@@ -113,6 +131,7 @@ node node_modules/wrangler/bin/wrangler.js d1 migrations apply DB --remote --con
   막히지 않는다. 외부 호스트 ingress와 writer를 호스트 운영에서 함께 막는다.
 - 0008의 새 action(`publisher.granted`·`publisher.revoked`)을 모르는 예전 리더는 새 행 위에서
   호환되지 않는다. 0009는 `grant_id` 기준 회수를 요구하고 예전 `expectedCreatedAt` 경로는 없다.
+  0010 이후의 관리자 목록·쓰기는 `grantRevision`/`expectedRevision`을 함께 다뤄야 한다.
 
 원격 적용의 파일 단위 원자성은 로컬에서만 확인했고 운영 실행은 검증 전이다. 일반
 `wrangler d1 migrations apply`를 파일별 원자적 재구성의 증거로 쓰지 않는다. 리허설로 승인한

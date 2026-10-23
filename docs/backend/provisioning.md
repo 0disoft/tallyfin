@@ -28,7 +28,7 @@ npm run provision -- publisher-revoke --local --state-dir .tmp/provision-db --fi
 
 ## init
 
-`init --apply`가 저장소 마이그레이션 `0001_initial.sql`부터 `0009_publisher_generations.sql`까지 중 아직 적용되지 않은 것을 로컬 DB에 적용한다. 0006은 재생성 테이블 대신 `project_publishers` 존재로, 0008은 확장 action, 0009는 32자 hex `grant_id`·UNIQUE·CHECK와 `immutable_publisher_generation` 트리거로 적용 여부를 판단한다. `project_publishers_next`가 남아 있거나 0009의 제약·트리거가 빠지면 `partial_database`로 멈춘다. 적용할 마이그레이션이 없으면 변경하지 않는다.
+`init --apply`가 저장소 마이그레이션 `0001_initial.sql`부터 `0013_workflow_failure_reasons.sql`까지 13개 중 아직 적용되지 않은 것을 로컬 DB에 적용한다. 0006은 재생성 테이블 대신 `project_publishers` 존재로, 0008은 확장 action, 0009는 32자 hex `grant_id`·UNIQUE·CHECK와 `immutable_publisher_generation` 트리거로 적용 여부를 판단한다. 0010은 grant revision 열과 트리거, 0011은 두 조회 인덱스, 0012·0013은 소요시간·실패 원인 열과 제약도 검사한다. 재생성 중간 테이블이나 일부만 적용된 열·제약·인덱스·트리거가 있으면 `partial_database`로 멈춘다. 적용할 마이그레이션이 없으면 변경하지 않는다.
 
 ## register
 
@@ -73,8 +73,9 @@ issuer·subject 형식은 코어 `validGrantIdentity`로 검사한다. 프로젝
   `planHash`다. 원본 issuer·subject는 출력에 넣지 않는다. 출력 해시는 비교용이고 암호화가
   아니다. 계획은 도구 인스턴스 내부 WeakMap에만 두고 적용 시 지우므로 같은 프로세스에서
   만든 계획만 적용된다.
-- 발행 권한 변경은 관리자 변경 이력(`admin_changes`)에 기록하지 않는다. 이 이력의 action
-  형식은 프로젝트·설정·스키마·관리자 grant만 다룬다.
+- 실제 발행 권한 변경은 같은 D1 batch에서 관리자 변경 이력(`admin_changes`)에
+  `publisher.granted`·`publisher.revoked`로 기록한다. 신뢰된 CLI 작업자의 actor는 비워 두며
+  대상 issuer·subject를 기록한다. no-op에는 이력을 추가하지 않는다.
 - 0009 마이그레이션이 `project_publishers`를 재생성해 `grant_id`를 더한다. 표를 직접 UPDATE할
   수 없으므로 회수는 지우기, 부여는 다시 넣기로만 한다.
 

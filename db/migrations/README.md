@@ -16,8 +16,9 @@ PRAGMA foreign_key_check, 슬롯 합계 <= failed_count, 반복 initialize 결�
 
 
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0013`가 있다. 모두 로컬 Miniflare 저장 테스트에서만 적용했고
-원격 D1에는 어느 것도 적용하지 않았다.
+마이그레이션 `0002`~`0013`가 있다. 현재 head는 `0013_workflow_failure_reasons.sql`이고,
+총 13개 마이그레이션과 애플리케이션 테이블 16개다. 모두 로컬 Miniflare 저장 테스트에서만
+적용했고 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
 [이벤트 계약](../../docs/backend/event-contract.md), 구현 상태와 만료 정리는
@@ -63,8 +64,8 @@ admission·이벤트/목표 일별 집계 테이블을 만든다. 값 CHECK, 프
 이번 범위에서 실행하지 않았다. 만료 정리는 어댑터의 `cleanup`과 로컬 구현한 Worker
 스케줄러가 담당한다. 원격 활성화는 별도 작업이다.
 
-검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001·0002·0003·0004·0005·0006·0007·0008·0009를 로드해 제약·트리거·CAS·
-할당량·정리를 확인한다.
+검증은 저장 어댑터·수집기 테스트가 Miniflare D1에 0001부터 0013까지 13개 마이그레이션을
+순서대로 로드해 제약·트리거·CAS·할당량·정리를 확인한다.
 
 ## 0002_retention_cleanup.sql
 
@@ -297,7 +298,7 @@ upgraded 경로를 나눠 기존 행 보존과 ID 생성을 확인한다.
 CAS를 쓰므로 같은 밀리초 재부여에서 stale 회수가 다시 가능해진다. 되돌리는 대신 `grant_id`
 기준 코드를 유지하고 앞으로 고치는 편을 우선한다.
 
-## 0010 administrator grant revision
+## 0010_grant_revision.sql
 
 Apply `0010_grant_revision.sql` atomically before updating the Collector and admin.
 Existing grant rows remain unchanged. Grant insert/delete/role-update triggers advance

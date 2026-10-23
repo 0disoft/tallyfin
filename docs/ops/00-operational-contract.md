@@ -23,7 +23,7 @@
 
 | 계층 | 대상 | 로컬 증거 | 운영 상태 |
 | --- | --- | --- | --- |
-| 1 | D1(저장) | 저장 어댑터·마이그레이션 `0001`~`0009` Miniflare 검증 | 원격 DB 미적용 |
+| 1 | D1(저장) | 저장 어댑터·마이그레이션 `0001`~`0013` Miniflare 검증 | 원격 DB 미적용 |
 | 1 | OIDC 검증(인증) | 임시 서명 토큰·로컬 D1 검증 | 실제 provider 없음 |
 | 2 | 수집기 Worker | 로컬 workerd 검증 | 원격 배포 없음 |
 | 2 | 관리자 Worker·프록시 | 로컬 프록시·스모크 검증 | 원격 배포 없음 |
@@ -32,8 +32,11 @@
 
 ## 현재 로컬 전용 증거
 
-- 마이그레이션 `0001`~`0009` 아홉 개·애플리케이션 테이블 16개, Miniflare에서만 적용.
-- 복구 연습 `verify:restore`는 로컬 합성 DB만 사용한다. 운영 RTO 근거가 아니다.
+- 마이그레이션 `0001`~`0013` 열세 개·애플리케이션 테이블 16개, 현재 head는
+  `0013_workflow_failure_reasons.sql`이며 Miniflare에서만 적용.
+- 복구 연습 `verify:restore`는 로컬 합성 DB만 사용한다. 성공 20초·실패 3초 시도의 집계,
+  `error=range` 종료 먼저 도착 순서, 복원·재전송 뒤 관리자 workflow 조회 일치를 로컬 D1에서
+  통과했다(7c2fab8). 운영 RTO·RPO 근거는 아니다.
 - 설치·검사 도구(`install:prepare`·`install:check`·`install:database-check`·
   `install:access-check`)는 로컬·fixture 검증까지다. 실제 provider·원격 DB·원격 쓰기는 없다.
 - 운영 로그는 완료 관측 한 줄과 정리 로그다. 대시보드·알림 수신자는 없다.
@@ -46,7 +49,8 @@
 ## 릴리스 차단 조건
 
 - 준비 묶음 SHA-256 불일치 또는 수정·이동.
-- 마이그레이션 head 불명 또는 로컬·원격 불일치.
+- 마이그레이션 head 불명 또는 로컬·원격 불일치. 현재 기준 head는
+  `0013_workflow_failure_reasons.sql`이다.
 - 적용 전 백업 미확인.
 - 개인정보·비밀값 노출.
 - 인증·권한 게이트(issuer·audience·PKCE·owner/reader·테넌트) 실패.
