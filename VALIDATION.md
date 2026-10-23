@@ -22,6 +22,27 @@ Tallyfin의 변경을 어떤 명령으로 확인할지 고르는 안내다. 아�
 
 검증 결과에 적는 범위는 그 명령이 실제로 본 범위와 같아야 한다요. 관련 suite만 돌렸다면 그 suite를, 일부 경로만 확인했다면 그 경로를 기록한다요.
 
+## 서버 초안 기존 DB 업그레이드·문서 마무리 — 2026-10-24
+
+기존 설치 DB에 0014 초안 테이블을 들이는 경로와 초안 저장 동작을 확인하고, 서버 초안
+작업의 제품·운영 문서를 마무리했다. 제품 스펙, 로드맵, 프론트엔드 설계, 위험 등록부,
+마이그레이션 README를 현재 구현에 맞췄다. 초안 API·DB 추가 계약은 앞선 두 커밋에서
+구현했으며, 이번 마무리 변경은 테스트와 문서에 한정한다.
+
+- `node --test --test-timeout=30000 apps/collector/test/saved-schema-draft.test.ts`: 7/7 통과.
+  0014 테이블이 없는, 기존 project/schema 행이 있는 DB에서 dry-run·적용·재초기화 no-op,
+  기존 행 보존, `GET draft=null`을 확인했다.
+- `npm run check --prefix tools/contracts`: 69/69 통과.
+- 이전 실행 `npm run verify:restore`: 초안 행을 포함한 17개 테이블의 export/restore 통과.
+- 관리자 375/375, 타입·빌드·bundle 2/2, 브라우저 8개 시나리오는 바로 아래
+  `서버 초안 화면·동시 편집 복구` 기록의 실행 결과를 따른다.
+
+앞선 전체 백엔드 병렬 실행에서는 provision CLI와 restore-fingerprint가 30초 제한을
+각각 한 번씩 넘겼다. 같은 검사를 단독으로 다시 실행했을 때 provision CLI는
+`--test-timeout=90000`에서, restore-fingerprint는 2/2로 통과했지만 전체 백엔드 통과로
+세지 않는다. 실 OIDC·원격 D1·원격 migration·푸시·배포는 실행하지 않았고 운영 동작은
+미검증이다. 의존성·CI·저장소 위생 변경은 없다.
+
 ## 서버 초안 화면·동시 편집 복구 — 2026-10-24
 
 설정의 ServerSchemaDraft에서 owner가 명시적으로 확인/저장/불러온다. 새 조회 전에는

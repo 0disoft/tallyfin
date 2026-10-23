@@ -4,6 +4,7 @@ import { parseSaveSchemaDraft, SAVED_SCHEMA_DRAFT_POLICY } from '@tallyfin/core'
 import { D1Queries } from '@tallyfin/storage-d1';
 import { setup, seed, now } from '../../../packages/storage-d1/test/helpers.ts';
 import { createCollector } from '../src/handler.ts';
+import { initialize } from '../../../tools/provision/local.ts';
 
 let fixture: Awaited<ReturnType<typeof setup>>;
 const principal = { issuer: 'https://identity.example.invalid', subject: 'draft-owner' };
@@ -89,4 +90,15 @@ test('new storage constraints reject malformed envelopes and project deletion re
   await fixture.db.prepare("DELETE FROM project_schemas WHERE project_id='sembom'").run();
   await fixture.db.prepare("DELETE FROM projects WHERE id='sembom'").run();
   assert.equal(await fixture.db.prepare('SELECT count(*) AS n FROM project_schema_drafts').first('n'), 0);
+});
+
+test('additive upgrade of a populated prior database preserves projects and published definitions and applies once', async () => {
+  await fixture.db.prepare('DROP TABLE project_schema_drafts').run();
+  const project = await fixture.db.prepare('SELECT * FROM projects').first(), schema = await fixture.db.prepare('SELECT * FROM project_schemas').first();
+  assert.deepEqual(await initialize(fixture.db, false), { migrations: ['0014_saved_schema_drafts.sql'], applied: false });
+  assert.deepEqual(await initialize(fixture.db, true), { migrations: ['0014_saved_schema_drafts.sql'], applied: true });
+  assert.deepEqual(await initialize(fixture.db, true), { migrations: [], applied: false });
+  assert.deepEqual(await fixture.db.prepare('SELECT * FROM projects').first(), project);
+  assert.deepEqual(await fixture.db.prepare('SELECT * FROM project_schemas').first(), schema);
+  assert.deepEqual(await (await api()(request())).json(), { projectId: 'sembom', draft: null });
 });
