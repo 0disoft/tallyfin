@@ -3,16 +3,14 @@ import { Miniflare } from 'miniflare';
 import { D1Store } from '../src/index.ts';
 import { parseBatch, prepareBatch, schemaDefinitions, validateRegistry } from '@tallyfin/core';
 import type { SchemaDefinitions } from '@tallyfin/core';
+import { loadMigrations } from '../../../tools/provision/migrations.ts';
 
 export const example = (name: string) => JSON.parse(readFileSync(new URL(`../../../api/examples/${name}.json`, import.meta.url), 'utf8'));
 export const now = Date.parse('2026-10-08T15:00:15Z');
 export const registry = validateRegistry(example('registry'));
 export const batch = () => example('browser-batch');
 export function migrationStatements(): string[] {
-  const sql = ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql'].map(name =>
-    readFileSync(new URL(`../../../db/migrations/${name}`, import.meta.url), 'utf8').replace(/^--.*$/gm, '')).join('\n');
-  // This migration contains no quoted semicolons; preserve complete trigger bodies.
-  return [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
+  return loadMigrations().flatMap(migration => migration.statements);
 }
 export async function setup() {
   const mf = new Miniflare({ modules: true, script: 'export default {fetch() { return new Response(null, {status:404}); }}',

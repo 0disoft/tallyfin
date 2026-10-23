@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, mkdtemp, writeFile, readFile, readdir } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile, readFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
@@ -11,6 +11,7 @@ import { seedRestoreFixture, DRILL_TIME } from './restore-fixture.ts';
 import { restoreFingerprint, restoreIntegrity } from './restore-fingerprint.ts';
 import { verifyRestoredPublishers } from './restore-publishers.ts';
 import { verifyRestoredWorkflows } from './restore-workflows.ts';
+import { loadMigrations } from '../provision/migrations.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const execute = promisify(execFile);
@@ -91,8 +92,7 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
     const publisherRecovery = await verifyRestoredPublishers(recovered, fixture);
     await restoreIntegrity(recovered);
     const migrations = [];
-    for (const name of (await readdir(resolve(root, 'db/migrations'))).filter(name => /^\d{4}_[a-z_]+\.sql$/.test(name)).sort())
-      migrations.push({ name, hash: await sha256(await readFile(resolve(root, 'db/migrations', name), 'utf8')) });
+    for (const { name, sql } of loadMigrations()) migrations.push({ name, hash: await sha256(sql) });
     const report = { schemaVersion: 'tallyfin.restore-drill/v1', local: true, syntheticData: true, remoteChanges: false,
       existingDatabasesAccessed: false, node: process.version,
       wrangler: JSON.parse(await readFile(resolve(root, 'node_modules/wrangler/package.json'), 'utf8')).version,

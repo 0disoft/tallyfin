@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { Miniflare, Log, LogLevel } from 'miniflare';
 import { installation } from '../installation.ts';
 import { initialize } from '../../provision/local.ts';
+import { MIGRATION_NAMES } from '../../provision/migrations.ts';
 import { remoteCreatorQuery } from '../../provision/remote-wrangler.ts';
 import { DATABASE_SCHEMA_SQL, compareDatabaseSchema, expectedDatabaseSchema, runInstallDatabaseCheckCli } from '../install-database-check.ts';
 
@@ -17,7 +18,7 @@ const response = (rows: unknown[]) => [{ success: true, results: rows }];
 
 test('current migrations match all metadata and missing/changed/extra objects fail without exposing SQL', async () => {
   const expected = await expectedDatabaseSchema();
-  assert.equal(expected.migrations.length, 11);
+  assert.deepEqual(expected.migrations, [...MIGRATION_NAMES]);
   assert.equal(expected.rows.filter(row => row.type === 'table').length, 16);
   const good = await compareDatabaseSchema(expected.rows, response([...expected.rows].reverse()));
   assert.equal(good.databaseSchemaMatches, true); assert.equal(good.expectedSchemaHash, good.observedSchemaHash);

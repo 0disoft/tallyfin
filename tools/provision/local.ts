@@ -1,8 +1,8 @@
-import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Miniflare, Log, LogLevel } from 'miniflare';
 import type { SqlDatabase } from '@tallyfin/storage-d1';
 import { ProvisionError } from './input.ts';
+import { loadMigrations } from './migrations.ts';
 
 export async function openLocal(stateDir: string) {
   const mf = new Miniflare({ modules: true, script: 'export default { fetch() { return new Response(null, {status:404}); } }',
@@ -14,10 +14,8 @@ export async function openLocal(stateDir: string) {
 
 export async function initialize(db: SqlDatabase, apply: boolean): Promise<{ migrations: string[]; applied: boolean }> {
   const migrations: { name: string; statements: string[]; tables: string[]; columns: { table: string; name: string }[] }[] = [];
-  for (const name of ['0001_initial.sql', '0002_retention_cleanup.sql', '0003_project_creation.sql', '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql', '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql']) {
-    const sql = (await readFile(new URL(`../../db/migrations/${name}`, import.meta.url), 'utf8')).replace(/^--.*$/gm, '');
-    // Repository-owned migrations have no quoted semicolons; keep complete trigger bodies.
-    const statements = [...sql.matchAll(/\s*(CREATE TRIGGER[\s\S]*?END;|[^;]+;)/g)].map(match => match[1]!.trim());
+  for (const { name, sql: source, statements } of loadMigrations()) {
+    const sql = source.replace(/^--.*$/gm, '');
     // Rebuilt tables already existed; only the stable publisher table marks migration 0006.
     const tables = name === '0006_server_collection.sql' ? ['project_publishers'] : ['0008_publisher_history.sql', '0009_publisher_generations.sql', '0010_grant_revision.sql', '0011_analytics_lookup.sql'].includes(name) ? [] :
       [...sql.matchAll(/CREATE TABLE ([a-z_]+)/g)].map(match => match[1]!);
