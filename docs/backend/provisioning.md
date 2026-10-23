@@ -30,6 +30,10 @@ npm run provision -- publisher-revoke --local --state-dir .tmp/provision-db --fi
 
 `init --apply`가 저장소 마이그레이션 `0001_initial.sql`부터 `0013_workflow_failure_reasons.sql`까지 13개 중 아직 적용되지 않은 것을 로컬 DB에 적용한다. 0006은 재생성 테이블 대신 `project_publishers` 존재로, 0008은 확장 action, 0009는 32자 hex `grant_id`·UNIQUE·CHECK와 `immutable_publisher_generation` 트리거로 적용 여부를 판단한다. 0010은 grant revision 열과 트리거, 0011은 두 조회 인덱스, 0012·0013은 소요시간·실패 원인 열과 제약도 검사한다. 재생성 중간 테이블이나 일부만 적용된 열·제약·인덱스·트리거가 있으면 `partial_database`로 멈춘다. 적용할 마이그레이션이 없으면 변경하지 않는다.
 
+초기화·저장 테스트 fixture·복원 드릴은 `tools/provision/migrations.ts`의 검토된 목록을
+함께 사용한다. 디렉터리와 목록의 SQL 이름이 다르면 DB 조회·적용 전에 중단한다.
+새 SQL 등록과 문장 분리 규칙은 [마이그레이션 카탈로그 안내](../../db/migrations/README.md)에 둔다.
+
 ## register
 
 [registry.json](../../api/examples/registry.json) 형태를 받는다. 초기화된 DB가 필요하다. 프로젝트 이름·상태·origin·limit을 바꾼다. active/retired 스키마를 지원한다. 시간대와 이미 발행된 스키마 정의는 바꿀 수 없고, 새 버전은 기존 최대 버전보다 커야 한다.

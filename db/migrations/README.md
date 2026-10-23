@@ -26,6 +26,21 @@ PRAGMA foreign_key_check, 슬롯 합계 <= failed_count, 반복 initialize 결�
 [DEVELOPMENT.md](../../DEVELOPMENT.md), 현재 검증 상태는
 [VALIDATION.md](../../VALIDATION.md)에 있다.
 
+## 마이그레이션 카탈로그와 초기화 판정 — 2026-10-23
+
+`tools/provision/migrations.ts`의 검토된 13개 이름 목록이 init, storage D1 테스트
+fixture, 복원 드릴의 SQL 해시가 함께 쓰는 단일 출처다. `loadMigrations`는 디렉터리의
+SQL 파일 이름이 카탈로그와 정확히 같지 않으면 DB 조회·적용 전에 중단한다. 호출마다
+이름·SQL·분할 문장 배열을 새로 만들므로 한 호출의 배열 수정이 다음 초기화로 이어지지
+않는다.
+
+문장 분할은 저장소 SQL의 기존 규칙만 지원한다. 전체 줄 `--` 주석을 지우고,
+`CREATE TRIGGER ... END;` 본문을 하나로 유지하며, 문장 끝 `;`로 나눈다. 일반 SQL
+파서가 아니므로 문자열·식별자 안의 세미콜론이나 블록 주석은 이 규칙 밖이다. 새 SQL은
+카탈로그에 이름을 추가하고 필수 스키마 검사(테이블·열·제약·트리거·인덱스)를 함께
+갱신해야 적용된다. 이 문서 변경으로 기존 마이그레이션 SQL을 바꾸거나 원격 D1에
+적용하지 않았다.
+
 ## 0012_workflow_duration.sql
 
 기존 workflow_daily_counts에 고정 길이 12칸 JSON 정수 배열을 추가한다. 구간 순서는

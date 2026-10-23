@@ -1,0 +1,377 @@
+# 검증 이력 13
+
+원문의 구간 순서를 유지한 과거 기록이다. 명령과 코드 경로는 저장소 루트 기준이다.
+
+## 브라우저 SDK
+`packages/browser`(SDK 본체), `examples/sembom` 예제, 배포 크기 검사는 루트 npm 명령으로 확인한다.
+
+```sh
+npm run test:browser
+npm run build:browser
+npm run check:browser-size
+```
+
+- `test:browser`는 결정적 `FakeBrowser` 호스트로 배치 상한·재시도·Retry-After·숨김 전송·`destroy`를 검사하고, 네이티브 어댑터가 `credentials: omit`·`referrerPolicy: no-referrer`·keepalive로 전송하는지 확인한다.
+- `apps/collector` 테스트는 Sembom 예제가 여섯 이벤트와 작업 흐름을 Worker→D1로 전달하고 재전송이 duplicate로만 계산되는지 통합 확인한다.
+- `check:browser-size`는 `examples/sembom/browser-schema.json`이 `api/examples/registry.json`의 browser 투영과 같은지 검사하고, esbuild 번들에 런타임 임포트나 `packages/core`·`packages/storage-d1`·`apps/collector` 코드가 들어가지 않았는지 확인한 뒤 gzip 예산 3072 bytes를 검사한다. 실측 크기는 위 2026-10-08 기록에 있다.
+
+브라우저 SDK 변경은 API·DB 계약을 바꾸지 않는다. SDK는 네이티브 `sendBeacon`을 쓰지 않고 keepalive fetch로 credentials/referrer를 생략하며, 서버 코어·D1 런타임을 번들에 포함하지 않는다.
+
+## 프로토타입
+`prototypes/admin/`에는 `typecheck`·`test`·`build` 명령이 있다. UI smoke와 디자인
+비교는 [design-qa.md](../../prototypes/admin/design-qa.md)에 기록한다.
+
+2026-10-08 API 연결 모드 검증: `npm run typecheck`, `npm test` 19/19,
+`npm run build`, `npm run test:sites` 4/4 통과. 클라이언트는 같은 출처 `/v1`만
+조회하고 응답의 프로젝트·버전·기간·이벤트·작업 흐름을 요청과 대조한다. 연결 해제 시
+토큰과 데이터를 지우고 헤더 및 본문을 읽는 중인 요청도 취소한다. 최초 테스트 실패
+1개는 유효한 빈 프로젝트 목록을 형식 오류로 기대한 테스트를 수정해 해결했다.
+
+로컬 Miniflare D1(5188)과 Vite 프록시(5187), 모킹한 검증기 포트로 브라우저에서
+수집 이벤트 3건·시작 1건·성공 1건·완료율 100%, 일별 시계열과 `tool=loan` 버킷,
+목표·읽기 전용 설정, 빈/잘못된 버전 입력, 존재하지 않는 버전의 404,
+토큰 없는 401, 연결 해제 후 초기화와 재연결을 확인했다. 증명은 로컬 무시 파일
+`.tmp/admin-api-d1-local-20261008.jpg`다. 실제 인증 제공자·서명 검증·운영 로그인은
+시험하지 않았다. 403·503·응답 계약 오류는 관리자/클라이언트 테스트에서 확인했고
+브라우저에서 별도 재현하지 않았다. 편집 중 이전 HMR 실패 로그가 남아 있었지만
+최종 타입 검사·빌드와 정상 API 화면을 확인했다.
+
+관리자 JS 번들은 약 653kB(압축 전)로 chunk-size 경고가 남는다. SDK gzip 3KiB
+예산과 별개이며 운영 UI의 코드 분할·폰트 최적화는 후속이다. API/DB 계약과 루트
+러너·의존성은 이 화면 슬라이스에서 바꾸지 않았고 프로토타입 테스트 명령에 API
+클라이언트 검사를 추가했다. 원격 푸시·배포·마이그레이션은 실행하지 않았다.
+
+## 포맷·문서·스캐폴드
+
+2026-10-08 OIDC 로그인 연결 검증: `prototypes/admin`의 `npm run typecheck`,
+`npm test` 31/31, `npm run build`, `npm run test:sites` 4/4 통과. 기존 28개에
+요청별 현재 bearer 조회·갱신 실패의 고정 401·공유 갱신 대기 중 취소/연결 해제
+검증 3개를 추가했다. PKCE 클라이언트 9개는 생성한 키로 ID 서명·state/nonce·
+중복 코드 교환·회전 갱신·만료·늦은 응답 취소를 검사한다.
+
+로컬 Vite 5180 브라우저에서 설정 없음, 직접 연결 접기/펼치기, 다른 출처 거부,
+실패 콜백 쿼리 제거·대기 종료, 샘플 모드 복귀/재진입을 확인했고 콘솔 오류는
+수집되지 않았다. 증거는 `.tmp/admin-oidc-login-20261008.png`다. 실제 제공자
+로그인/CORS·운영 access token·운영 배포는 설정이 없어 실행하지 않았다.
+전체 접근성 감사와 부하 테스트는 이번 로그인 연결 범위에서 실행하지 않았다.
+프로토타입에는 lint 스크립트가 없으며 `git diff --check`를 통과했다.
+
+로그인 코드는 지연 로드 청크 30.65kB/gzip 10.85kB로 분리됐다. 메인 청크는
+657.25kB/gzip 191.91kB로 기존 크기 경고가 남는다. API/OpenAPI·DB·루트 러너와
+의존성 계약은 이번 화면 연결에서 변경하지 않았다. 설정/보관/갱신 조건은
+`docs/backend/oidc.md`, 화면 책임은 `docs/frontend/FRONTEND_DESIGN.md`에 반영했다.
+스캐폴드 `ssealed update . --yes`와 `ssealed doctor . --strict`도 통과했다.
+원격 푸시·배포·마이그레이션은 실행하지 않았다.
+
+- `format`: `git diff --check`로 공백 오류를 확인한다.
+- `docs`: 변경 문서의 상대 Markdown 링크와 계획/구현 상태의 일관성을 확인한다.
+- `check`(스캐폴드): 외부 CLI의 `ssealed doctor . --strict`로 상태를 확인한다. 의도적인
+  문서 수정은 `ssealed update . --yes`로 인정한 후 확인한다. 파일 내용을 덮어쓰는
+  `--force`는 사용하지 않는다.
+
+## 2026-10-08 통합 개발 실행
+
+루트 `npm run check`(타입 검사·116/116 테스트·브라우저 크기 예산), 관리자
+`npm run typecheck`·`npm test` 32/32·`npm run build` 통과. supervisor 테스트는
+정상 종료·예기치 않은 종료·시작 실패 시 자식 정리를 확인한다. 실제 스택 통합
+테스트는 초기화된 로컬 D1, 관리자 페이지·로그인 콜백 SPA, `/v1/projects`의
+수집기 401 JSON 응답, 종료 후 양쪽 리스너 해제를 확인했다. 프록시 테스트는
+경로·쿼리·헤더 전달, `/auth/callback`·`/v10` 제외와 비루프백 주소 거부를 확인했다.
+
+브라우저에서 5190/5198 스택의 샘플 화면·API 연결 전환·실패 콜백의 SPA 처리와
+OIDC 미설정 상태의 직접 연결 화면을 확인했다. 확인용 스택은 종료했다.
+관리자 빌드의 기존 청크 크기 경고는 남는다. 실제 OIDC 제공자 로그인·원격
+리소스·운영 배포·부하 시험은 설정이 없거나 이번 범위 밖이어서 실행하지 않았다.
+
+API/OpenAPI·DB·의존성 계약은 변경하지 않았다. 루트 `dev` 러너, 관리자 테스트
+명령, 로컬 프록시·IPC 종료 처리를 추가했다. 실행 문서는 `docs/backend/runtime.md`,
+`DEVELOPMENT.md`, `prototypes/admin/README.md`에 반영했다. 원격 푸시·배포는 하지 않았다.
+계약·문서 링크 검사 27/27과 `git diff --check` 통과. 종료 후 5190·5198에
+리스너가 남지 않은 것을 확인했다.
+
+## 2026-10-08 브라우저 SDK 측정과 배치 경계 수정
+
+첫 실제 Chrome 실행에서 20개 배치 뒤의 완료 이벤트 저장이 503으로 실패했다.
+시작과 완료가 다른 배치에 있는 회귀 테스트 2개가 동일하게 실패하는 것을 확인했다.
+SQLite INSERT의 CHECK가 충돌 처리 전에 적용되므로 완료만 있는 증가분을 신규 행으로
+넣을 수 없었다. 같은 CAS 가드·원자적 write batch 안에서 유효한 0 집계 행을 준비하고
+기존 값에 증가분을 더하도록 수정했다. 스키마·마이그레이션·API 계약은 변경하지 않았다.
+수정 후 저장/수집기 테스트 35/35, 루트 타입 검사·브라우저 크기 예산과 JS 구문 검사 통과.
+
+`npm run bench:browser -- --channel chrome --samples 2`로 복구를 확인하고 최종
+`--samples 5`를 실행했다. 비활성/활성 5회씩과 실제 수집기 종료 화면 1회를 확인했다.
+DB의 이벤트 120건과 시작/성공 각각 55건, 각 화면의 계산 11회·필수 입력 오류·복구,
+비활성 수집 0건, 활성 200 응답, 장애 503 재시도와 destroy 이후 중단을 검사했다.
+Origin 존재, Cookie·Authorization·Referer 부재와 배치 16KiB 상한도 통과했다.
+도구가 소유한 서버·브라우저·임시 DB는 실행 후 정리됐고, 원시 결과는
+`.tmp/browser-bench/1791469967935.json`에 남겼다. 수치와 조건은
+`docs/engineering/03-performance-budget.md`에 기록했다.
+
+루트에 선택 명령 `bench:browser`, 타입 검사에 측정 도구를 추가했다. Playwright ^1은
+`tools/browser-bench` 개발 패키지/lockfile로 분리했고 운영 SDK 번들은 바꾸지 않았다.
+새 CI나 기본 테스트 반복을 추가하지 않았다. 기존 서비스·운영 데이터·자격 증명·
+원격 리소스를 사용하지 않았다. 실제 서비스/모바일/원격 부하·운영 OIDC는 범위 밖이므로
+실행하지 않았다. 전체 CWV/성능 trace 감사도 이 동기 호출 측정 범위에 포함하지 않았다.
+문서는 `DEVELOPMENT.md`, `docs/backend/browser-sdk.md`, 성능 예산과 로드맵을 갱신했다.
+계약·문서 링크 검사 27/27, 측정 명령 `--help`, `git diff --check` 통과.
+푸시·배포는 하지 않았다.
+
+## 2026-10-09 프로젝트 설정 조회·변경 API
+
+`GET /v1/projects/{projectId}`와 owner 전용 `PATCH`를 로컬 구현했다. 이름·상태·
+허용 출처·수집 한도를 부분 변경한다. 읽은 설정의 `expectedSettingsHash`를 필수로
+받고, 저장 SQL에서 기존 설정과 owner grant를 다시 확인한다. 설정이 바뀌면
+`settings_conflict` 409, 권한이 없거나 저장 전에 취소되면 403이다. 이벤트 수집의
+revision 증가만으로 설정 저장을 거부하지 않는다. 설정 저장은 수집 guard revision을
+늘리며, 기존 데이터·정의 버전·소비한 한도를 유지한다.
+
+`npm run typecheck`, `npm test` 127/127, `npm run check --prefix tools/contracts`
+30/30, `npm run lint --prefix tools/contracts`, `npm run check:browser-size`,
+`git diff --check` 통과. 새 설정 테스트 9개는 owner 성공·reader 거부·잘못된 인증·
+닫힌 입력·본문 상한·동시 수정·저장 직전 권한 취소·수집과 설정 간 충돌·로컬 HTTP
+제약을 확인했다. 기존 실제 Worker 런타임 테스트에도 설정 조회·PATCH 저장을 추가했다.
+첫 관련 테스트 실행은 일시정지 시 거부 코드의 기대값을 잘못 지정해 17/18이었다.
+실제 `project_unavailable` 거부에 맞춰 수정한 뒤 위 전체 테스트를 통과했다.
+브라우저 SDK+연동 예제는 gzip 2,949 bytes로 3KiB 예산을 통과했다.
+
+API source of truth `api/openapi.yaml`, 제품 source of truth
+`docs/product/02-spec.md`, 관리자·이벤트 계약과 로드맵을 갱신했다. DB 구조·
+마이그레이션·의존성·러너·CI 설정은 변경하지 않았다. 운영 인증 제공자·원격 D1·
+배포 smoke는 운영 설정이 없어 실행하지 않았다. 관리자 화면의 쓰기 연결과 브라우저
+측정·부하 시험은 이번 API 범위 밖이어서 실행하지 않았다. 화면에서는 아직 기존
+조회 기능만 사용한다. 저장 응답이 유실되면 현재 설정을 다시 읽어 결과를 확인해야 한다.
+원격 푸시·배포·Sembom 연동은 실행하지 않았다.
+
+## 2026-10-09 관리자 설정 화면 저장 연결
+
+설정 응답에 서버가 확인한 owner 권한 표시 `canEdit`를 추가했다. reader는 false이고,
+권한 표시는 설정 해시에서 제외하며 PATCH의 저장 시점 권한 검사는 유지한다.
+백엔드 타입 검사·관련 설정 테스트 9/9·OpenAPI lint·계약 검사 30/30 통과.
+
+`LiveSettings`와 프로젝트별 `SettingsEditor`를 연결했다. 변경 항목만 저장하고,
+reader·저장 중·충돌 검토 중에는 편집을 잠근다. 409·저장 응답 유실·권한 취소에서는
+입력을 보존하고 자동 재전송하지 않는다. 최신 값을 읽어 비교한 뒤 서버 값 사용 또는
+내 변경 유지 후 재검토를 명시적으로 고른다. 내가 편집하지 않은 항목은 최신 서버 값을
+유지한다. 프로젝트 전환·연결 해제·언마운트는 요청을 취소하고 늦은 응답을 무시한다.
+설정 편집은 집계 기간이나 선택한 스키마 조회 실패에 의존하지 않는다.
+
+관리자 `npm test` 38/38, `npm run typecheck`, `npm run build`, `npm run test:sites`
+4/4 통과. API/모델 테스트 6개를 추가해 PATCH 전송·응답 검사, 부분 저장·중복 submit,
+409 후 명시적 재검토, 응답 유실 후 조회 복구, reader/권한 취소, 늦은 저장 응답 취소를
+확인했다. 기본 테스트 명령·의존성·러너·CI 설정은 바꾸지 않았다. 기존 메인 청크 크기
+경고는 남으며 빌드 시 673.91kB/gzip 196.36kB였다.
+
+127.0.0.1의 Vite와 격리된 Miniflare/D1를 연결해 인앱 브라우저에서 실제 저장 200과
+DB 반영을 확인했다. 다른 설정 변경 후 409·초안 보존·비교 표·명시적 재검토를 거쳐
+이름만 저장하면서 서버의 분당 한도 55를 유지했다. DB 저장 후 HTTP 응답을 끊어도
+초안과 저장 잠금을 유지하고 재조회로 커밋된 결과를 복구했다. owner를 reader로 바꾼
+테스트에서도 403 이후 입력을 보존했고, 재조회 후 변경 유지 버튼·폼을 비활성화했다.
+스키마 999 조회가 실패한 상태에서도 설정 저장·복구는 동작했다. 빈 이름 오류 시
+`settings-name`으로 포커스가 돌아왔고 CSS viewport 320px에서 가로 넘침이 없었다.
+화면 증거는 `.tmp/admin-settings-conflict.jpg`와 `.tmp/admin-settings-mobile.jpg`다.
+확인은 합성 프로젝트와 검증기 포트로 수행했으며 운영 자격 증명·서비스 데이터는
+사용하지 않았다. 임시 API·D1 테스트 서버를 종료한 뒤 5198에 리스너가 없음을 확인했다.
+Vite 미리보기 5180만 남겼고, 테스트 프록시 없이 샘플 모드로 전환했다.
+
+변경한 source of truth는 `api/openapi.yaml`, `docs/product/02-spec.md`,
+`docs/frontend/FRONTEND_DESIGN.md`이며 관리자 문서·로드맵·검증 기록도 갱신했다.
+DB 스키마·마이그레이션·위생 정책은 변경하지 않았다. 문서 6개의 상대 링크 31개와
+`git diff --check`, `ssealed update . --yes`·`ssealed doctor . --strict`를 확인하고
+스캐폴드 승인 체크섬만 갱신했다.
+실제 OIDC 제공자·운영 저장·원격 배포 smoke는 운영 설정이 없어 실행하지 않았다.
+전체 접근성 감사·부하 시험은 이번 설정 화면 범위 밖이어서 생략했다.
+푸시·배포·Sembom 연동은 실행하지 않았다.
+
+## 2026-10-09 스키마 초안 검증 API
+
+기존 발행 스키마 GET을 유지하고 owner 전용
+`POST /v1/projects/{projectId}/schemas/validate`를 추가했다. 이벤트·흐름 배열만 받아
+등록과 공유하는 코어 검증기로 검사하고 첫 오류의 JSON pointer·코드를 반환한다.
+검증 성공은 개인정보 승인·버전 예약·발행을 뜻하지 않으며 초안을 저장하지 않는다.
+인증·owner grant 조회는 본문 읽기 전에 수행하고 reader·다른 프로젝트·권한 회수는
+403이다. 본문은 UTF-8 32KiB, 기존 수집·설정 본문은 16KiB를 유지한다.
+등록 검증기를 분리하며 문자열이 아닌 이벤트 source를 명시적으로 거부했다.
+
+`npm run typecheck`, 전체 `npm test` 136/136, 계약 검사
+`npm run check --prefix tools/contracts` 31/31, OpenAPI lint와
+`npm run check:browser-size`(SDK+예제 gzip 2,949 bytes), `git diff --check` 통과.
+신규 코어 테스트 3개·수집기 테스트 6개에서 정의/참조/차원/종류 수 제한·권한·본문
+상한·닫힌 입력·저장 실패를 확인했다. 기존 Miniflare 실제 Worker 테스트에 검증 API
+요청도 추가해 200 응답을 확인했다. DB의 프로젝트·발행 정의·사용량 무변경도 확인했다.
+초기 관련 테스트는 DB 응답의 실행 시간 meta까지 비교해 32/33이었고, 실제 행만
+비교하도록 수정했다. 초기 계약 검사는 oneOf 배열 type 누락으로 실패했고 수정 후
+31/31과 lint를 통과했다.
+
+변경한 source of truth는 `api/openapi.yaml`, `docs/product/02-spec.md`다.
+관리자 문서·로드맵·검증 기록을 갱신했다. DB·마이그레이션·의존성·CI·러너·저장소
+위생 정책은 변경하지 않았다. 관리자 편집 화면·발행 API는 후속 범위로 남겼다.
+UI 변경이 없어 브라우저 UI 검증을 생략했고, 운영 설정이 없어 실제 OIDC 제공자·원격
+D1·배포 smoke는 실행하지 않았다. 푸시·배포·Sembom 연동은 실행하지 않았다.
+
+## 2026-10-09 스키마 목록·새 버전 발행 API
+
+`GET /v1/projects/{projectId}/schemas`로 최고 버전과 최신순 메타데이터를 reader/owner에
+반환한다. limit 25/최대 100과 배타적 beforeVersion 커서를 사용하고 매 페이지 grant를
+확인한다. owner 전용 `PUT /v1/projects/{projectId}/schemas/{schemaVersion}`은
+expectedLatestVersion·privacyReviewed=true·events·workflows를 받아 새 active 버전을
+발행한다. 프로젝트·기존 정의·집계·수집 사용량은 유지하고 ingest_revision만 1 증가한다.
+새 버전 정의로 실제 이벤트 저장이 가능한 것도 확인했다.
+
+owner·최고 번호 조건부 INSERT와 revision 갱신을 같은 원자 D1 batch에서 실행한다.
+동시 다른 버전 발행은 한 번만 성공하고 다른 요청은 schema_conflict 409다.
+같은 버전·같은 canonical 내용의 재요청은 200과 기존 메타데이터를 반환하고 추가
+저장·revision 증가가 없다. 이후 버전이 생기거나 해당 버전이 retired여도 재요청은
+기존 상태를 반환하고 재활성화하지 않는다. 저장 직전 권한 회수는 403, revision
+오버플로는 삽입까지 rollback하고 503이다. 본문은 33KiB, 정의 자체는 32KiB 상한이다.
+
+`npm run typecheck`, 전체 `npm test` 144/144, 계약 검사 32/32,
+OpenAPI lint, `git diff --check` 통과. 신규 발행 테스트 8개와 기존 실제 Miniflare
+Worker 테스트를 확장해 발행·재시도·동시 요청·권한 회수·페이지·전송 상한·rollback을
+확인했다. 초기 관련 테스트 7/8은 예전 시도 ID를 재사용한 합성 데이터 오류였고 새
+시도 ID로 수정했다. 초기 전체 143/144는 기존 테스트의 Allow: GET 기대값이 새
+GET, PUT 계약과 달라서 수정했고 최종 144/144를 통과했다.
+
+변경한 source of truth는 `api/openapi.yaml`, `docs/product/02-spec.md`다.
+이벤트·관리자 문서와 로드맵을 갱신했다. DB 스키마·마이그레이션·의존성·CI·러너·
+저장소 위생 정책은 바꾸지 않았다. UI 변경이 없어 브라우저 UI 검증을 생략했고,
+SDK 소스/빌드 경계를 바꾸지 않아 이전 브라우저 크기 검증을 재사용했다.
+실제 OIDC 제공자·원격 DB·운영 배포 smoke는 운영 설정이 없어 실행하지 않았다.
+스키마 편집 화면은 다음 작업이며 푸시·배포·Sembom 연동은 하지 않았다.
+
+## 2026-10-09 관리자 스키마 API·초안 상태 관리
+
+프로토타입 ApiClient에 버전 목록 GET·초안 검증 POST·버전 발행 PUT과 응답 검증을
+추가했다. 발행 응답의 프로젝트·버전·canonical 정의 hash를 요청과 비교한다.
+SchemaEditor는 변경 시 검증·개인정보 검토 확인을 취소하고 reader 쓰기를 막는다.
+409·403·응답 유실 시 초안을 보존하고 자동 재전송 없이 서버를 재조회한다.
+이미 저장된 대상 정의가 제출 내용과 일치할 때만 발행 완료로 확인한다.
+프로젝트 생명주기가 끝나면 요청을 중단하고 늦은 응답을 무시한다.
+
+관리자 `npm run typecheck`, `npm test` 45/45, `git diff --check` 통과.
+추가한 테스트 7개가 보호된 POST/PUT 전송·변경 후 재검증·충돌 검토·응답 유실 복구·
+reader/권한 회수·늦은 응답 취소·잘못된 응답 거부를 확인했다. 관리자 test 명령에
+새 테스트 파일을 추가했으며 의존성·CI·API·DB·위생 정책은 변경하지 않았다.
+프론트엔드 source of truth `docs/frontend/FRONTEND_DESIGN.md`를 갱신했다.
+UI는 다음 슬라이스라 브라우저·빌드 검증을 아직 실행하지 않았다. 운영 인증·
+배포·Sembom 연동·푸시는 실행하지 않았다.
+
+## 2026-10-09 관리자 스키마 편집·검증·발행 화면
+
+API 연결 모드의 설정 아래 LiveSchemas를 연결했다. 버전 목록과 이전 버전 조회,
+명시적 버전 불러오기, 새 번호·JSON 초안 편집, 서버 검증 오류 pointer·포커스,
+개인정보 검토 확인, 검증된 초안 발행을 제공한다. reader textarea는 조회·복사가
+가능한 readOnly이며 수정·검증·발행은 잠긴다. 충돌·응답 유실 후 서버 상태를 읽고
+최신 정의와 초안을 비교한 뒤 명시적으로 선택한다. 비교는 모바일에서 세로 배치한다.
+
+UI·메시지 변경 후 관리자 전체 테스트를 다시 실행해 45/45 통과했다. 관련 스키마 테스트 7/7,
+`npm run typecheck`, `npm run build`, `npm run test:sites` 4/4,
+`git diff --check`를 통과했다. 빌드의 기존 메인 청크 크기 경고는 남으며
+695.19kB/gzip 201.63kB였다. 일반 lint 명령은 프로젝트에 없어서 실행하지 않았다.
+
+기존 127.0.0.1:5180 Vite에 도구가 소유한 격리된 메모리 Miniflare/D1 수집기를
+5188로 연결해 인앱 브라우저에서 오류·실제 v2 발행·409·비교/초안 유지 후 재검증을
+확인했다. 저장 후 HTTP 응답을 끊은 v4 발행은 자동 재전송 없이 대상 버전 재조회로
+복구했고 초안은 유지됐다. owner를 reader로 바꾼 뒤 readOnly/disabled를 확인했다.
+잘못된 초안의 검증 오류에서는 schema-draft로 포커스가 이동했다. 실제 CSS viewport
+320px에서 문서 clientWidth와 scrollWidth가 모두 303px로 페이지 가로 넘침이 없었다.
+뷰포트 조정은 확인 후 해제했다. 화면 증거는 `.tmp/schema-editor-conflict.png`와
+`.tmp/schema-editor-mobile.png`다. 합성 프로젝트와 not-a-credential 검증기 포트만
+사용했으며 실제 서비스 데이터·자격 증명은 사용하지 않았다.
+테스트 수집기를 종료하고 5188 포트에 리스너가 없음을 확인했다. 브라우저의 테스트
+연결도 해제해 메모리 토큰을 지우고 Sample 모드로 복귀했다.
+
+변경한 source of truth는 `docs/frontend/FRONTEND_DESIGN.md`,
+`docs/product/02-spec.md`다. 프로토타입 README·로드맵·검증 기록을 갱신했다.
+API·DB·마이그레이션·의존성·CI·위생 정책은 변경하지 않았다. 서버/SDK 변경이 없어
+백엔드·SDK 크기 검사 결과는 재사용했다. 실제 OIDC 제공자·운영 저장·원격 배포·
+전체 접근성 감사는 이번 범위 밖이라 실행하지 않았다. 푸시·배포·Sembom 연동은 없다.
+
+## 2026-10-09 프로젝트 생성 저장·명시적 생성 권한
+
+코어 생성 입력 검증·D1 원자 생성과 0003 마이그레이션을 추가했다. 프로젝트 설정·
+최초 owner·불변 생성 요청 해시를 함께 저장한다. 기존 owner에게 생성 권한을 자동으로
+주지 않으며 creator-grant/revoke CLI가 issuer/subject별 한도를 관리한다. 생성 이력은
+권한 회수 뒤에도 유지한다. 아직 HTTP 생성 경로는 연결하지 않았다.
+
+관련 저장·CLI 테스트 13/13, 루트 타입 검사와 계약 검사 32/32를 통과했다.
+동시 생성·개수 한도·설정 변경 후 재요청·서로 다른 생성자·권한 회수·중간 실패 rollback을
+실제 로컬 Miniflare D1에서 확인했다. CLI 실행 경로에 생성 권한 미리보기·적용·회수를
+추가한 뒤 CLI 테스트 6/6도 통과했다. DBML·제품 명세·마이그레이션/등록 안내를 갱신했다. 의존성·CI·
+위생 정책·운영 인증·원격 마이그레이션·푸시·배포·Sembom 연동은 변경/실행하지 않았다.
+
+## 2026-10-09 프로젝트 생성 HTTP API
+
+`POST /v1/projects`를 별도 creator 권한에 연결했다. 본문을 읽기 전에 인증·생성 권한을
+확인하고 INSERT에서 권한·개수 한도를 다시 검사한다. ID·이름·IANA 시간대·허용 origin·
+명시적 한도만 받으며 owner·status·스키마를 지정할 수 없다. 생성과 최초 owner 부여는
+원자적이며 새 프로젝트에는 스키마가 없다. 첫 스키마를 기존 PUT으로 발행할 수 있다.
+최초·동일 재요청은 200의 불변 생성 결과이고 설정을 덮어쓰거나 grant를 복원하지 않는다.
+ID/원본 내용 충돌과 생성 개수 한도를 서로 다른 409 코드로 반환한다.
+
+루트 `npm run typecheck`, 전체 `npm test` 156/156, 계약 검사 34/34와 OpenAPI lint가
+통과했다. 관리자/생성 API 관련 14/14에서 본문·미디어·쿼리·인증·권한·한도·재요청·
+첫 스키마 발행을 확인했고 실제 Worker/Miniflare smoke에서 생성·재요청·버전 목록을
+확인했다. 전체 테스트 뒤 기존 DB 업그레이드 테스트를 추가했고 관련 저장 테스트 8/8도
+통과했다. 추가 테스트를 포함한 전체 157개는 재실행하지 않았다. 업그레이드는 기존
+프로젝트·스키마를 보존하고 생성 권한/이력을 backfill하지 않음을 확인했다.
+
+변경한 source of truth는 `api/openapi.yaml`, `docs/product/02-spec.md`다. 앞 슬라이스에서
+`db/schema.dbml`·0003 마이그레이션을 추가했고 이번에는 권한·API 정책·이벤트 계약·
+로드맵·검증 기록을 맞췄다. `git diff --check`를 통과했다. UI·브라우저 SDK·의존성·CI·
+러너·위생 정책은 변경하지 않았다. UI/SDK 변경이 없어 UI 빌드·브라우저 화면·SDK 크기
+검사는 재실행하지 않았다. 운영 설정이 없어 실제 OIDC 제공자·원격 0003 적용·배포 smoke는
+실행하지 않았다. 푸시·배포·Sembom 연동은 하지 않았고 프로젝트 추가 화면이 다음 단계다.
+
+## 아직 실행하지 않음
+
+## 2026-10-09 프로젝트 생성 클라이언트·상태 관리
+
+관리자 ApiClient에 프로젝트 생성 POST·응답 검증과 project_conflict/project_limit_reached
+오류 분류를 추가했다. ProjectCreator는 메모리 입력·동시 제출 차단·명시적 생성 확인·
+설정 조회 재시도·취소를 제공한다. 생성 해시는 실제 코어 함수와 비교했다.
+관리자 npm test 52/52·typecheck·git diff --check 통과. 새 테스트 7개가 응답 유실·
+권한/한도/ID 충돌·잘못된 응답·입력·지연 응답·설정 GET 실패를 확인했다.
+frontend 설계를 갱신했으며 프로토타입 test 명령에 해당 테스트만 추가했다.
+API·DB·의존성·CI·위생 정책은 변경하지 않았다. UI는 다음 슬라이스라 UI build와
+브라우저 검증은 아직 실행하지 않았고 운영 인증·배포·Sembom 연동·푸시는 하지 않았다.
+
+## 아직 실행하지 않음
+- 실제 서비스의 SDK 초기 실행 비용·지연·처리량, 모바일·원격 배포
+- 서버 발행 수집과 실제 인증 제공자 연결, 운영 관리자 조회 배포(로컬 grant 강제는 관리자 테스트로 확인)
+- 원격 D1 마이그레이션과 운영 smoke
+- 원격 만료 정리 예약 등록과 운영 Worker·도메인·인증 제공자
+- 쓰기 처리량·지연 성능 측정
+
+서술(prose) 테스트는 작성하지 않는다.
+
+## 2026-10-09 프로젝트 추가·스키마·SDK 온보딩 화면
+
+API 연결 도구모음에서 프로젝트 추가 화면을 열고 이름·공개 ID·IANA 시간대·허용 출처와
+접힌 수집 한도를 입력한다. 생성 후 목록에 추가·선택하고 설정 화면의 프로젝트 →
+스키마 → SDK 안내로 이동한다. 403·ID 충돌은 입력을 보존하고, 응답 유실은 원본 입력을
+잠근 뒤 명시적인 같은 요청 확인만 허용한다. SDK 안내는 최신 발행 스키마의 브라우저
+정의만 투영하며 수집 서버 출처를 직접 입력받고 관리자 토큰·서버 이벤트를 제외한다.
+
+관리자 `npm test` 53/53, `npm run typecheck`, `npm run build`,
+`npm run test:sites` 4/4를 통과했다. URL 오류 문구 보완과 불필요한 방어 분기 제거 뒤
+관련 생성·SDK 테스트 8/8을 다시 통과했다. 기존 메인 청크 크기 경고는 남으며
+713.10kB/gzip 206.09kB였다. 일반 lint 명령은 없어 실행하지 않았다.
+
+127.0.0.1:5180 관리자와 5188 격리 메모리 Miniflare/D1 수집기를 연결해 인앱 브라우저에서
+정상 생성·403 입력 보존·409 ID 포커스·저장 후 응답 유실과 동일 요청 복구를 확인했다.
+생성 기록은 ui-created/ui-normal 두 건이며 재확인으로 중복 생성되지 않았다.
+첫 스키마를 v2로 검증·발행해 도구모음 버전과 SDK 안내가 v2로 갱신되는 것을 확인했다.
+서버 이벤트가 섞인 정의에서는 브라우저 코드에 서버 이벤트가 없었고 코드 복사도 성공했다.
+서버 이벤트만 있는 초안은 기존 서버 검증이 /events 오류로 거부했다.
+실제 CSS viewport 320px에서 문서 clientWidth/scrollWidth는 모두 303px로 생성 폼의
+페이지 가로 넘침이 없었다. 임시 뷰포트 설정은 해제했다. 화면 증거는
+`.tmp/project-create-sdk.png`, `.tmp/project-create-mobile.png`, `.tmp/project-created.png`다.
+
+테스트 연결을 해제하고 Sample 모드로 복귀했다. 테스트 수집기를 종료하고 5188 포트에
+리스너가 없음을 확인했다. 합성 데이터와 not-a-credential 검증기 포트만 사용했다.
+API·DB·마이그레이션·의존성·CI·러너·위생 정책은 변경하지 않았다.
+변경한 source of truth는 `docs/frontend/FRONTEND_DESIGN.md`, `docs/product/02-spec.md`이며
+프로토타입 README와 로드맵도 갱신했다. `git diff --check`를 통과했다.
+백엔드·브라우저 SDK 소스는 바뀌지 않아 해당
+검증과 SDK 크기 측정은 반복하지 않았다. 실제 OIDC 제공자·운영 DB·원격 배포·전체 접근성
+감사는 이번 범위 밖이며 실행하지 않았다. Sembom 연동·푸시·배포는 하지 않았다.

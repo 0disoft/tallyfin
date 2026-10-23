@@ -498,6 +498,7 @@ check('all changed document relative links resolve', () => {
   const documents=['README.md','DEVELOPMENT.md','VALIDATION.md','ARCHITECTURE.md','docs/README.md','docs/product/02-spec.md','docs/product/01-roadmap.md','docs/adr/0002-contract-source-of-truth.md','docs/adr/0003-minimal-privacy-preserving-events.md','docs/adr/0005-event-and-aggregation-contract.md','docs/backend/event-contract.md','docs/backend/collector.md','docs/backend/README.md','docs/backend/03-persistence-model.md','docs/backend/04-http-api-policy.md','docs/integrations/backend-api.md','docs/integrations/sembom.md','docs/monorepo/package-ownership.md','docs/monorepo/workspace-boundaries.md','db/migrations/README.md'];
   documents.push('docs/frontend/FRONTEND_DESIGN.md', 'docs/backend/browser-sdk.md', 'docs/backend/server-sdk.md', 'docs/backend/server-events.md', 'docs/backend/runtime.md',
     'docs/backend/oidc.md', 'docs/backend/provisioning.md', 'docs/adr/0006-ordered-task-funnels.md');
+  documents.push(...fs.readdirSync(new URL('docs/validation/', root)).filter(name => name.endsWith('.md')).map(name => `docs/validation/${name}`));
   for (const document of documents) for (const match of read(document).matchAll(/\]\(([^)]+)\)/g)) {
     const target=match[1]; if(/^(https?:|#)/.test(target))continue;
     assert.ok(fs.existsSync(fileURLToPath(new URL(target.split('#')[0],new URL(document,root)))),`${document}: ${target}`);
