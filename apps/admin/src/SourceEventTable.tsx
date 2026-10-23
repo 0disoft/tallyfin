@@ -1,8 +1,9 @@
 import { ArrowRight } from '@phosphor-icons/react';
 import { formatCount } from './data';
-import type { EventDefinition, EventSource } from './api/types';
+import type { EventSource } from './api/types';
+import type { EventRow } from './api/dashboard-model';
+export type { EventRow } from './api/dashboard-model';
 
-export type EventRow = { definition: EventDefinition; source: EventSource | null; count: number | null };
 export const sourceLabel = (source: EventSource) => source === 'server' ? '서버' : '브라우저';
 export default function SourceEventTable({ rows, source, selectedEvent, onSelect, total = false }: {
   rows: EventRow[]; source: EventSource; selectedEvent?: string | null; onSelect?: (name: string) => void; total?: boolean;

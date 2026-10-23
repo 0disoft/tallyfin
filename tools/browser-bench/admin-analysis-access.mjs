@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { CSV_COLUMNS } from '../../apps/admin/src/api/csv-export.ts';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -135,7 +136,7 @@ try {
   const downloadPromise = page.waitForEvent('download'); await csv.click();
   const download = await downloadPromise; assert.ok(download.suggestedFilename().startsWith('tallyfin-access-other-'));
   const exported = await readFile(await download.path(), 'utf8');
-  assert.ok(exported.split('\r\n', 1)[0].endsWith(',"query_source"'));
+  assert.equal(exported.split('\r\n', 1)[0], '\uFEFF' + CSV_COLUMNS.map(column => `"${column}"`).join(','));
   assert.ok(exported.includes('"access-other"')); assert.equal(exported.includes('"sembom"'), false);
   stage = 'restore'; await local.setRole('owner');
   await page.getByRole('button', { name: '새로고침', exact: true }).click();

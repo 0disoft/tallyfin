@@ -7,7 +7,7 @@ import type { BrowserLogin } from './auth/client';
 import { CaretDown, ChartBar, Circle, MagnifyingGlass, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import { Trend } from './Dashboard';
 import DeferredPanel from './DeferredPanel';
-import SourceEventTable, { sourceLabel, type EventRow } from './SourceEventTable';
+import SourceEventTable, { sourceLabel } from './SourceEventTable';
 import SourceMetrics from './SourceMetrics';
 import DateRangePicker from './DateRangePicker';
 import LiveIdentity from './LiveIdentity';
@@ -17,7 +17,9 @@ import { API_BASE_PATH, ApiClient, ApiError, resolveApiEndpoint } from './api/cl
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
-import { previousRange, recoverWorkflow, type WorkflowLoad } from './api/period-comparison';
+import { previousRange, recoverWorkflow } from './api/period-comparison';
+import { dashboardEvents, workflowRecords } from './api/dashboard-model';
+import { dashboardExport } from './api/dashboard-export';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import EventPropertyComparison from './EventPropertyComparison';
 import useEventPropertyComparison from './useEventPropertyComparison';
@@ -64,17 +66,6 @@ function describeError(error: ApiError): { title: string; detail: string } {
 function ErrorPanel({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
   const { title, detail } = describeError(error);
   return <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>{title}</h2><p>{detail}</p><div className="state-actions"><button className="secondary-button" type="button" onClick={onRetry}>다시 시도</button></div>{error.requestId && <p className="context-note">requestId: {error.requestId}</p>}</section>;
-}
-
-function workflowRecords(load: WorkflowLoad): DailyRecord[] {
-  const { definition, response } = load;
-  return response.days.map(day => ({
-    date: day.date,
-    events: {
-      [definition.startEvent]: day.startedAttempts,
-      [definition.successEvent]: day.succeededAttempts,
-    },
-  }));
 }
 
 export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate, registerExitCheck }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void; registerExitCheck?: (check: () => boolean) => () => void }) {
@@ -303,40 +294,14 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const primary = data?.workflows[0] ?? null;
   const startDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.startEvent) ?? null : null;
   const successDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.successEvent) ?? null : null;
-  const summaryCounts = new Map((data?.summary.events ?? []).map(item => [item.name, item.count]));
-  const registeredEvents: EventRow[] = registry ? registry.events.map(definition => ({
-    definition,
-    source: definition.source,
-    count: definition.source === source ? summaryCounts.get(definition.name) ?? null : null,
-  })) : [];
-  const unknownEvents: EventRow[] = data && registry
-    ? data.summary.events.filter(item => !registry.events.some(definition => definition.name === item.name))
-      .map(item => ({ definition: { name: item.name, label: '등록에 없음', source: 'browser', properties: {} }, source: null, count: item.count }))
-    : [];
-  const eventRows = [...registeredEvents, ...unknownEvents];
-  const browserCount = registeredEvents.filter(row => row.definition.source === 'browser').length;
-  const serverCount = registeredEvents.filter(row => row.definition.source === 'server').length;
-  const filteredEvents = eventRows.filter(item => `${item.definition.name} ${item.definition.label}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const { rows: eventRows, filtered: filteredEvents, browserCount, serverCount } = dashboardEvents(registry, data?.summary ?? null, source, query);
   const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
   const startLabel = startDefinition?.label ?? '시작 시도';
   const successLabel = successDefinition?.label ?? '성공 시도';
   const currentWorkflowDetails = view === 'goals' ? Object.values(workflowDetails).filter(detail => detail.context === mainKey && detail.groupBy) : [];
-  const exportUnavailable = !data || !validVersion ? '현재 기간 조회를 마쳐야 CSV를 내려받을 수 있어요.'
-    : data.workflowErrors?.length ? '실패한 작업 흐름 조회를 복구해야 전체 CSV를 내려받을 수 있어요.'
-    : compare && currentComparison?.data?.workflowErrors?.length ? '직전 기간의 실패한 작업 흐름을 다시 조회해 주세요.'
-    : compare && comparisonError ? '직전 기간이 보존 범위를 벗어나요. 비교를 끄면 현재 기간 CSV를 내려받을 수 있어요.'
-    : compare && (currentComparison?.status !== 'ready' || !currentComparison.data) ? '직전 기간 비교를 마치거나 비교를 꺼 주세요.'
-    : view === 'events' && selectedEvent && (!analysisEvent || !seriesData) ? '선택한 이벤트 상세 조회를 마치거나 상세를 닫아 주세요.'
-    : view === 'events' && compare && groupBy && propertyComparison.state?.status !== 'ready' ? '이벤트 속성별 기간 비교를 마치거나 비교·분류를 해제해 주세요.'
-    : currentWorkflowDetails.some(detail => detail.status !== 'ready') ? '속성별 완료율 조회를 마치거나 해당 분류를 해제해 주세요.'
-    : compare && currentWorkflowDetails.some(detail => detail.comparisonStatus !== 'ready') ? '속성별 기간 비교를 마치거나 비교를 꺼 주세요.' : null;
-  const exportInput = data && registry && view !== 'settings' ? { registry, current: data, view, source,
-    filter: query, workflowSelections: currentWorkflowDetails.flatMap(detail => detail.status === 'ready' && detail.data ? [detail.data] : []),
-    workflowComparisons: compare ? currentWorkflowDetails.flatMap(detail => detail.comparisonStatus === 'ready' && detail.comparisonData ? [detail.comparisonData] : []) : [],
-    ...(compare && currentComparison?.status === 'ready' ? { previous: currentComparison.data } : {}),
-    ...(view === 'events' && selectedEvent && seriesData ? { selection: { eventName: selectedEvent, groupBy: groupBy || null, series: seriesData,
-      ...(compare && groupBy && propertyComparison.state?.status === 'ready' ? { previousSeries: propertyComparison.state.series } : {}) } } : {}),
-  } : null;
+  const { input: exportInput, unavailable: exportUnavailable } = dashboardExport({ data, validVersion, view, source, query, compare,
+    comparison: currentComparison, comparisonError, selectedEvent, analysisEvent, seriesData, groupBy,
+    propertyComparison: propertyComparison.state, workflowDetails: currentWorkflowDetails });
 
   return <>
     <div className="toolbar api-toolbar">
