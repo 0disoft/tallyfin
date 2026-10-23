@@ -1,5 +1,5 @@
 import { validateFailureReasonDefinition } from './workflow-failure-reasons.ts';
-import { ApiError } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { toApiError } from './load-state.ts';
 import type { ApiClient } from './client.ts';
 import { shiftDate } from './dates.ts';

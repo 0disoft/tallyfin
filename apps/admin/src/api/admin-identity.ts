@@ -1,4 +1,5 @@
-import { ApiError, type ApiClient } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { parseAdminIdentity, type AdminIdentity } from './admin-identity-contract.ts';
 export { parseAdminIdentity, identityJson, type AdminIdentity } from './admin-identity-contract.ts';
 export type IdentityState = { phase: 'idle' | 'loading' | 'ready' | 'error'; identity: AdminIdentity | null; message: string | null };

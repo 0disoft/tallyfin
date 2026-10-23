@@ -149,6 +149,10 @@ test('confirmed denial still clears analytics when headers or body synchronously
 
 test('deadline does not restart between token acquisition and body reading; successful requests clear their timer', async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
+  let elapsed = 0;
+  t.mock.method(performance, 'now', () => elapsed);
+  // Advance both clocks together; real CPU contention must not expire fake-timer requests.
+  const advance = milliseconds => { elapsed += milliseconds; t.mock.timers.tick(milliseconds); };
   const token = deferred(), body = deferred(); let signal, calls = 0;
   const client = new ApiClient({ requestTimeoutMs: 100, getBearer: () => token.promise,
     fetchImpl: async (_url, init) => { calls++; signal = init.signal; return { ok: true, status: 200, json: () => body.promise }; },
@@ -156,15 +160,15 @@ test('deadline does not restart between token acquisition and body reading; succ
   t.after(() => client.destroy());
   const pending = client.listProjects();
   const rejected = assert.rejects(pending, error => error.kind === 'timeout');
-  await turn(); t.mock.timers.tick(60); token.resolve('test-only-header'); await turn();
-  assert.equal(calls, 1); t.mock.timers.tick(40); await rejected;
+  await turn(); advance(60); token.resolve('test-only-header'); await turn();
+  assert.equal(calls, 1); advance(40); await rejected;
   assert.equal(signal.aborted, true); body.resolve(page); await turn();
 
   let doneSignal;
   const done = new ApiClient({ fetchImpl: async (_url, init) => { doneSignal = init.signal; return response(); } });
   t.after(() => done.destroy());
   assert.deepEqual(await done.listProjects(), page);
-  t.mock.timers.tick(120000);
+  advance(120000);
   assert.equal(doneSignal.aborted, false);
 });
 

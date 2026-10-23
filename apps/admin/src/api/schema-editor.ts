@@ -1,4 +1,5 @@
-import { ApiClient, ApiError } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import type { ProjectSettings } from './types.ts';
 import { canonicalDefinitions, readDraft, schemaDefinitions as definitions } from './schema-contract.ts';
 import type { SchemaDraft, SchemaPage, SchemaValidation } from './schema-contract.ts';

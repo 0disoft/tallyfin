@@ -1,5 +1,5 @@
 import type { ApiClient } from './client.ts';
-import { ApiError } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { todayInZone } from './dates.ts';
 import { assertMeta } from './period-comparison.ts';
 import type { EventSource, ProjectSettings, Registry, SummaryResponse } from './types.ts';

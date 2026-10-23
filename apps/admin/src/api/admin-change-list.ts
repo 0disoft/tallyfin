@@ -1,4 +1,5 @@
-import { ApiClient, ApiError } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import type { AdminChangePage } from './admin-changes-contract.ts';
 
 export type AdminChangeListState = {

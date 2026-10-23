@@ -1,4 +1,4 @@
-import { ApiError } from './client.ts';
+import { ApiError } from './api-error.ts';
 
 export type Load<T> = { status: 'idle' | 'loading' | 'ready' | 'error'; data?: T; error?: ApiError };
 

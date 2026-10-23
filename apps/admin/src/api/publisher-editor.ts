@@ -1,4 +1,5 @@
-import { ApiClient, ApiError } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { parsePublisherRequest } from './publishers-contract.ts';
 import type { PublisherMutationResult, PublisherRequest } from './publishers-contract.ts';
 

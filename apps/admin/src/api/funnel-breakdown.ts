@@ -1,4 +1,5 @@
-import { ApiClient, ApiError } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { parseFunnelCounts, parseFunnelHeader, parseFunnelResponse, validateFunnelResponse, type FunnelResponse } from './funnel-contract.ts';
 import type { Registry } from './types.ts';
 import { ContractError } from './validate.ts';

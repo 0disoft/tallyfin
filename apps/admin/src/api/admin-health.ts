@@ -1,4 +1,5 @@
-import { ApiError, type ApiClient } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { parseAdminHealth } from './admin-health-contract.ts';
 
 export type HealthState = { phase: 'idle' | 'loading' | 'ready' | 'error'; checkedAt: string | null; message: string | null };

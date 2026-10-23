@@ -1,4 +1,5 @@
-import { ApiClient, ApiError } from './client.ts';
+import type { ApiClient } from './client.ts';
+import { ApiError } from './api-error.ts';
 import { parseGrantChangeInput } from './grants-contract.ts';
 import type { GrantChange, GrantMutationResult } from './grants-contract.ts';
 
