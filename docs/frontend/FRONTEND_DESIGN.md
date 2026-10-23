@@ -40,7 +40,7 @@ UI는 두 버전 선택과 명시적 비교/재시도, 로딩·오류·동일 �
 작업 흐름 분류(현재, 이어서 비교). 화면 범위·권한·조회 수명은 기존 컨트롤러가 계속
 맡고 화면과 엔드포인트는 바뀌지 않았다.
 
-## 스키마 초안 파일 — 2026-10-23
+## 스키마 초안 파일 — 2026-10-24
 
 `LiveSchemas`의 스키마 편집 영역에 `SchemaDraftFiles`를 추가했다. owner가 편집 가능한
 ready 상태에서 현재 JSON과 발행할 버전을 `tallyfin.schema-draft/v1` 파일로 내려받고
@@ -56,6 +56,18 @@ ready 상태에서 현재 JSON과 발행할 버전을 `tallyfin.schema-draft/v1`
 초안 저장·버전 예약·자동 폴링은 하지 않는다. 불러오기는 ready 상태이고 목록을 더 읽지
 않는 owner 편집 범위에서만 동작하며, loading·validating·publishing·review·목록 더보기·
 reader·권한 상실에서는 파일 버튼을 잠근다. 읽기 진행과 성공·오류는 상태/알림으로 안내한다.
+
+`read-schema-draft-file.ts`가 ArrayBuffer 읽기와 UTF-8 fatal decoding을 맡는다. UTF-8 BOM은
+허용하고 잘못된 바이트는 고정 오류로 안내한다. 128KiB 초과는 FileReader 생성 전에 거부한다.
+성공·실패·사용자 취소·10초 timeout 모두 timer·handler·signal listener를 해제하며 진행 중
+reader를 중단한다. 원래 읽기 오류는 cause로 보존한다.
+
+`SchemaDraftFiles`는 읽는 파일 이름과 취소 버튼을 표시하고 오류 안내에 초점을 옮긴다.
+교체 취소·사용자 읽기 취소는 기존 입력과 검토 상태가 유지됨을 알린다. editor를 동기 구독해
+React가 busy→ready 전이를 묶더라도 진행 중 읽기를 취소한다. editor·프로젝트·editable 변경과
+언마운트도 취소 경계다. 교체 확인은 읽기를 마친 시점의 최신 입력 상태를 사용하고,
+importDraft가 상태 변경으로 거부하면 성공으로 표시하지 않는다. 실패·취소 뒤 같은 파일을
+다시 고를 수 있게 input 값을 즉시 비운다. 파일 가져오기에는 추가 API 호출이 없다.
 
 ## 실패 원인 직전 기간 비교 — 2026-10-23
 

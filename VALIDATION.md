@@ -22,7 +22,7 @@ Tallyfin의 변경을 어떤 명령으로 확인할지 고르는 안내다. 아�
 
 검증 결과에 적는 범위는 그 명령이 실제로 본 범위와 같아야 한다요. 관련 suite만 돌렸다면 그 suite를, 일부 경로만 확인했다면 그 경로를 기록한다요.
 
-## 초안 파일 읽기 수명·UTF-8 검사 — 2026-10-24
+## 초안 파일 가져오기 사용성·읽기 수명 — 2026-10-24
 
 브라우저 파일 읽기를 `api/read-schema-draft-file.ts`로 분리했다. 128KiB 초과는 읽기 전에
 거부하고, ArrayBuffer를 UTF-8 fatal 모드로 해석해 잘못된 바이트를 대체 문자로 복원하지 않는다.
@@ -32,7 +32,30 @@ timer·이벤트 핸들러·AbortSignal listener를 해제하고 진행 중 File
 - `node --test apps/admin/src/api/read-schema-draft-file.test.mjs apps/admin/src/api/schema-draft-file.test.mjs`: 9/9 통과.
 - 신규 읽기 테스트는 정확히 128KiB/직후, 미완성 한글/BOM, 잘못된 UTF-8, 취소 후 늦은 콜백,
   timeout, 파일 오류/동기 예외의 cause, 사전 취소와 빈 파일을 확인했다.
-- 화면 연결과 실제 브라우저 검증은 다음 단위다. API·DB·의존성·CI·원격 변경은 없다.
+- `npm run typecheck:admin`: 통과.
+- `npm run test:admin`: 신규 읽기 테스트 7개를 포함해 366/366 통과.
+- `npm run build:admin`: 통과.
+- `npm run check --prefix tools/contracts`: 68/68 통과. 링크·계약 점검이며 런타임 증거와 구분한다.
+- `npm run verify:admin-onboarding`: Chromium 156.0.8078.4·합성 OIDC·실제 로컬 D1에서 통과.
+  초안 파일은 128KiB 직전/정확히/직후, 빈 파일·잘못된 JSON·다른 프로젝트·잘못된 UTF-8,
+  오류 초점, 같은 파일 재선택, 교체 취소/승인, 미완성 한글·빈 버전 복원을 확인했다.
+  사용자 읽기 취소·실제 10초 timeout·새로고침·owner→reader 재확인에서 총 4번 reader를
+  중단하고, 해제한 handler를 늦게 호출해도 기존 입력·검토 상태를 덮지 않음을 확인했다.
+  파일 읽기 지연/디스크 오류는 브라우저의 통제된 FileReader로 주입했고, 일반 파일 읽기·
+  다운로드와 UTF-8/크기 검사는 실제 브라우저 API를 사용했다. 추가 POST 1회는 명시적
+  초안 검증이며 파일 가져오기는 API를 호출하지 않았다. 첫 이벤트 수집·조회 1건까지 통과했고
+  pageErrors 0·routeError false다. 보고서와 데스크톱/390px 화면은 `.tmp/admin-onboarding-eLHlOd/`에 있다.
+  첫 실행은 초기 지연 로딩 화면에서 로그인 버튼을 기다리다 실패했고, 다른 검사 종료 후
+  같은 명령을 단독 재실행해 통과했다. 시간 제한을 늘리거나 제품 동작을 바꾸지 않았다.
+- `git diff --check`: 통과.
+
+읽는 파일 이름·취소 버튼과 교체 취소 안내를 추가했다. 오류 때 안내에 초점을 옮기며,
+기존 입력·검토는 실패/취소 시 유지한다. editor를 동기 구독해 목록/검증/발행/권한 상태가
+바뀌면 React effect 정리 전에도 읽기를 중단한다. 언마운트·프로젝트·editor 변경도 취소하며
+늦은 완료가 새 읽기의 상태를 지우지 않는다. 가져오기 거부를 성공으로 표시하지 않는다.
+스펙과 프론트엔드 설계를 갱신했다. 파일 형식·API·DB·SDK·의존성·CI 러너·저장소 위생
+설정 변경은 없다. 기존 옵트인 onboarding 브라우저 검사를 확장했고 새 명령은 추가하지 않았다.
+backend/SDK 전체 suite와 원격 인증·배포는 관련 범위가 아니어서 실행하지 않았다.
 
 ## 스키마 버전 간 정의 비교 — 2026-10-24
 

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { expect } from 'playwright/test';
+import { Provisioner } from '../provision/store.ts';
 
 /** Exercises actual download bytes and FileReader through the live schema editor. */
 export async function verifySchemaDraftFiles(page, local, directory, progress = () => {}) {
@@ -32,13 +34,64 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
     ['{', 'Tallyfin에서 저장한 초안 JSON 파일을 선택해 주세요.'],
     [JSON.stringify({ ...JSON.parse(saved), projectId: 'another-project' }), '현재 프로젝트에서 저장한 초안 파일을 선택해 주세요.'],
     [' '.repeat(128 * 1024 + 1), '초안 파일은 128KiB 이하로 선택해 주세요.'],
+    ['', 'Tallyfin에서 저장한 초안 JSON 파일을 선택해 주세요.'],
+    [Buffer.concat([Buffer.from('{"format":"tallyfin.schema-draft/v1","projectId":"onboarding-test","targetVersion":"2","draftText":"'), Buffer.from([0xff]), Buffer.from('"}')]), '초안 파일을 UTF-8로 읽지 못했어요.'],
   ]) {
     progress(`rejected-${message.includes('128') ? 'size' : message.includes('현재') ? 'project' : 'json'}`);
     await choose(text); await page.getByRole('alert').filter({ hasText: message }).waitFor();
+    await expect(page.getByRole('alert').filter({ hasText: message })).toBeFocused();
     assert.equal(await privacy.isChecked(), true); assert.equal(await target.inputValue(), '4');
   }
+  progress('byte-boundaries');
+  for (const size of [128 * 1024 - 1, 128 * 1024]) {
+    const text = saved + ' '.repeat(size - Buffer.byteLength(saved));
+    const cancelBoundary = consent(false); await choose(text); await cancelBoundary;
+    await expect(page.getByText('초안 교체를 취소했어요. 기존 입력과 검토 상태는 그대로예요.', { exact: true })).toBeVisible();
+    assert.equal(await privacy.isChecked(), true); assert.equal(await target.inputValue(), '4');
+  }
+  // Keep native reads for normal cases; deterministic held/error reads exercise real UI lifetimes.
+  await page.evaluate(() => {
+    const NativeReader = FileReader;
+    window.draftFileProbe = { native: NativeReader, mode: null, held: [], aborts: 0 };
+    window.FileReader = class extends NativeReader {
+      get readyState() { return this.controlled ? this.finished ? 2 : 1 : super.readyState; }
+      get result() { return this.controlled ? this.buffer ?? null : super.result; }
+      get error() { return this.controlled ? this.failure ?? null : super.error; }
+      readAsArrayBuffer(blob) {
+        const probe = window.draftFileProbe, mode = probe.mode; probe.mode = null;
+        if (!mode) return super.readAsArrayBuffer(blob);
+        this.controlled = true; const onload = this.onload;
+        probe.held.push({ reader: this, blob, onload });
+        if (mode === 'error') queueMicrotask(() => {
+          this.finished = true; this.failure = new DOMException('Synthetic local disk failure', 'NotReadableError');
+          this.onerror?.(new ProgressEvent('error'));
+        });
+      }
+      abort() {
+        if (!this.controlled) return super.abort();
+        window.draftFileProbe.aborts++; this.finished = true; this.onabort?.(new ProgressEvent('abort'));
+      }
+    };
+  });
+  const hold = async () => { await page.evaluate(() => { window.draftFileProbe.mode = 'held'; }); await choose(saved); };
+  const releaseLate = () => page.evaluate(async () => {
+    const item = window.draftFileProbe.held.at(-1);
+    if (item.reader.onload !== null || item.reader.onerror !== null || item.reader.onabort !== null) throw Error('reader_handlers_not_released');
+    item.reader.buffer = await item.blob.arrayBuffer(); item.reader.finished = true; item.onload.call(item.reader, new ProgressEvent('load'));
+  });
+  progress('explicit-read-cancel'); await hold();
+  await expect(page.getByRole('status').filter({ hasText: '초안 파일을 읽고 있어요: draft.json' })).toBeVisible();
+  await page.getByRole('button', { name: '파일 읽기 취소', exact: true }).click();
+  await expect(page.getByText('파일 읽기를 취소했어요. 기존 입력과 검토 상태는 그대로예요.', { exact: true })).toBeVisible();
+  await releaseLate(); assert.equal(await target.inputValue(), '4'); assert.equal(await privacy.isChecked(), true);
+  progress('read-error'); await page.evaluate(() => { window.draftFileProbe.mode = 'error'; }); await choose(saved);
+  await expect(page.getByRole('alert').filter({ hasText: '초안 파일을 읽지 못했어요.' })).toBeFocused();
+  assert.equal(await privacy.isChecked(), true);
+  progress('read-timeout'); await hold();
+  await expect(page.getByRole('alert').filter({ hasText: '파일 읽기 시간이 길어졌어요.' })).toBeFocused({ timeout: 15000 });
+  await releaseLate(); assert.equal(await target.inputValue(), '4'); assert.equal(await privacy.isChecked(), true);
   progress('cancel'); const canceled = consent(false); await choose(saved); await canceled;
-  assert.equal(dialogs, 1); assert.equal(await target.inputValue(), '4'); assert.equal(await privacy.isChecked(), true);
+  assert.equal(dialogs, 3); assert.equal(await target.inputValue(), '4'); assert.equal(await privacy.isChecked(), true);
   progress('import'); const imported = consent(true); await choose(saved); await imported;
   await page.getByText('초안 파일을 불러왔어요. 버전과 정의를 검증하고 개인정보 검토를 다시 확인해 주세요.', { exact: true }).waitFor();
   assert.equal(await target.inputValue(), '3'); assert.equal(await draft.inputValue(), savedDraft);
@@ -57,10 +110,32 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
   await page.waitForFunction(() => document.querySelector('#schema-draft')?.value === '{unfinished 한글');
   assert.equal(await draft.inputValue(), '{unfinished 한글'); assert.equal(await target.inputValue(), '');
   assert.equal(local.counts.apiWrites, validatedWrites);
+  progress('refresh-during-read'); await hold();
+  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await expect(page.locator('#schema-draft-file')).toBeDisabled(); await releaseLate();
+  assert.equal(await draft.inputValue(), '{unfinished 한글');
+  await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
+  await expect(page.locator('#schema-draft-file')).toBeEnabled();
+  progress('permission-change-during-read');
+  const operator = new Provisioner(local.db), identity = { projectId: 'onboarding-test', issuer: local.issuer, subject: 'synthetic-login-operator' };
+  await operator.apply(await operator.plan('grant', { ...identity, subject: 'synthetic-draft-file-backup', role: 'owner' }));
+  await hold(); await operator.apply(await operator.plan('grant', { ...identity, role: 'reader' }));
+  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await expect(page.locator('#schema-draft-file')).toBeDisabled(); await releaseLate();
+  assert.equal(await draft.inputValue(), '{unfinished 한글');
+  await operator.apply(await operator.plan('grant', { ...identity, role: 'owner' }));
+  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
+  await expect(page.locator('#schema-draft-file')).toBeEnabled();
+  await operator.apply(await operator.plan('revoke', { ...identity, subject: 'synthetic-draft-file-backup' }));
+  const abortedReads = await page.evaluate(() => { window.FileReader = window.draftFileProbe.native; return window.draftFileProbe.aborts; });
+  assert.equal(abortedReads, 4);
   progress('restore'); page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'v1 불러오기', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#schema-event-0-label')?.disabled === false);
   await target.fill('2');
   assert.equal(await page.locator('#schema-event-0-label').inputValue(), 'Action complete');
-  return { schemaDraftFiles: true, draftFileDialogs: dialogs, draftFileExtraWrites: local.counts.apiWrites - writes };
+  return { schemaDraftFiles: true, draftFileDialogs: dialogs, draftFileAbortedReads: abortedReads,
+    draftFileBoundaries: true, draftFileUtf8Rejected: true, draftFileTimeout: true, draftFilePermissionReadCancelled: true,
+    draftFileExtraWrites: local.counts.apiWrites - writes };
 }
