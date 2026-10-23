@@ -14,7 +14,9 @@ export async function restoreExample(name: string) { return JSON.parse(await rea
 /** Uses public example contracts and synthetic principals only, on a newly-created local DB. */
 export async function seedRestoreFixture(db: SqlDatabase) {
   await initialize(db, true);
-  const browser = validateRegistry(await restoreExample('registry'));
+  const browserDefinition = await restoreExample('registry');
+  Object.assign(browserDefinition.workflows[0], { failureEvent: 'validation_error', failureReasonProperty: 'error' });
+  const browser = validateRegistry(browserDefinition);
   const funnel = validateRegistry(await restoreExample('funnel-registry'));
   const registryTool = new Provisioner(db);
   for (const registry of [browser, funnel]) {
@@ -27,6 +29,18 @@ export async function seedRestoreFixture(db: SqlDatabase) {
   const store = new D1Store(db);
   const workflowInput = await restoreExample('browser-batch');
   await store.commit(await prepareBatch(parseBatch(JSON.stringify(workflowInput)), browser, DRILL_TIME), browser);
+  const failureInput = structuredClone(workflowInput), failureId = crypto.randomUUID();
+  failureInput.events.forEach((event: any, index: number) => {
+    event.eventId = crypto.randomUUID(); event.attempt.attemptId = failureId;
+    event.attempt.startedAt = '2026-10-08T14:59:51Z';
+    event.occurredAt = index === 0 ? event.attempt.startedAt : '2026-10-08T14:59:54Z';
+    if (index === 1) { event.name = 'validation_error'; event.properties.error = 'range'; }
+  });
+  // A terminal received before its start must retain its failure reason and 3s duration.
+  for (const index of [1, 0]) {
+    const input = { ...failureInput, events: [failureInput.events[index]] };
+    await store.commit(await prepareBatch(parseBatch(JSON.stringify(input)), browser, DRILL_TIME), browser);
+  }
   const startedAt = '2026-10-08T15:00:00.000Z', runId = crypto.randomUUID();
   const funnelInputs = [0, 1, 2, 3].map(index => {
     const step = funnel.funnels![0]!.steps[index]!;
@@ -51,5 +65,5 @@ export async function seedRestoreFixture(db: SqlDatabase) {
   ]);
   const maintenance = new D1Maintenance(db);
   if (!await maintenance.advanceCleanupCursor(await maintenance.nextCleanupPage(1))) throw Error('cleanup_cursor_not_seeded');
-  return { browser, funnel, workflowInput, funnelInputs, principal };
+  return { browser, funnel, workflowInput, failureInput, funnelInputs, principal };
 }

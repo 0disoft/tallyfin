@@ -10,6 +10,7 @@ import { parseBatch, parseServerBatch, prepareBatch, prepareServerBatch, sha256 
 import { seedRestoreFixture, DRILL_TIME } from './restore-fixture.ts';
 import { restoreFingerprint, restoreIntegrity } from './restore-fingerprint.ts';
 import { verifyRestoredPublishers } from './restore-publishers.ts';
+import { verifyRestoredWorkflows } from './restore-workflows.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const execute = promisify(execFile);
@@ -45,6 +46,7 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
     const to = await localConfig(join(output, 'restored'), crypto.randomUUID());
     source = localDatabase(from.directory, from.id); const db = await source.getD1Database('DB');
     const fixture = await seedRestoreFixture(db);
+    const workflowMeasurements = await verifyRestoredWorkflows(db, fixture);
     await restoreIntegrity(db); const before = await restoreFingerprint(db);
     if (before.tables.length !== 16 || before.tables.some(table => table.rows === 0)) throw Error('fixture_coverage_failed');
     await source.dispose(); source = undefined;
@@ -61,13 +63,17 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
       await writeFile(join(output, 'mismatch.json'), JSON.stringify({ before, after }, null, 2), { flag: 'wx' });
       throw Error('restore_mismatch');
     }
+    if (JSON.stringify(await verifyRestoredWorkflows(recovered, fixture)) !== JSON.stringify(workflowMeasurements))
+      throw Error('restored_workflow_measurements_changed');
     // A restored receipt/run must suppress replay rather than double-counting either source.
     const store = new D1Store(recovered);
     const browser = await store.commit(await prepareBatch(parseBatch(JSON.stringify(fixture.workflowInput)), fixture.browser, DRILL_TIME), fixture.browser);
+    const failure = await store.commit(await prepareBatch(parseBatch(JSON.stringify(fixture.failureInput)), fixture.browser, DRILL_TIME), fixture.browser);
     const last = fixture.funnelInputs[3]!;
     const server = await store.commitServer(await prepareServerBatch(parseServerBatch(JSON.stringify(last)), fixture.funnel, DRILL_TIME), fixture.funnel, fixture.principal);
-    if (browser.accepted !== 0 || browser.duplicates !== 2 || server.accepted !== 0 || server.duplicates !== 1 ||
+    if (browser.accepted !== 0 || browser.duplicates !== 2 || failure.accepted !== 0 || failure.duplicates !== 2 || server.accepted !== 0 || server.duplicates !== 1 ||
       (await restoreFingerprint(recovered)).fingerprint !== after.fingerprint) throw Error('replay_changed_restored_data');
+    await verifyRestoredWorkflows(recovered, fixture);
     const protectedWrites = [
       'UPDATE project_schemas SET definitions_json=definitions_json',
       'UPDATE project_creations SET request_hash=request_hash',
@@ -92,8 +98,8 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
       wrangler: JSON.parse(await readFile(resolve(root, 'node_modules/wrangler/package.json'), 'utf8')).version,
       miniflare: JSON.parse(await readFile(resolve(root, 'node_modules/miniflare/package.json'), 'utf8')).version, migrations,
       backupBytes: bytes.length, backupHash: await sha256(bytes.toString('utf8')), exportMs, restoreMs,
-      elapsedMs: performance.now() - started, restored: after, replay: { browser, server }, protectedWritesRejected: protectedWrites.length,
-      publisherRecovery, integrity: { quickCheck: 'ok', foreignKeyViolations: 0 } };
+      elapsedMs: performance.now() - started, restored: after, replay: { browser, failure, server }, protectedWritesRejected: protectedWrites.length,
+      workflowMeasurements, publisherRecovery, integrity: { quickCheck: 'ok', foreignKeyViolations: 0 } };
     await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2), { flag: 'wx' });
     return { ...report, output };
   } catch {
