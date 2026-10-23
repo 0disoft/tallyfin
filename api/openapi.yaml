@@ -381,6 +381,7 @@ components:
                 - attempt_conflict
                 - settings_conflict
                 - schema_conflict
+                - schema_draft_conflict
                 - project_conflict
                 - project_limit_reached
                 - grant_conflict
@@ -1219,6 +1220,40 @@ components:
             pattern: ^[a-z][a-z0-9_]{0,47}$
             maxLength: 48
           uniqueItems: true
+    SaveSchemaDraft:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, targetVersion, draftText]
+      description: >-
+        Owner-authored shared draft, including unfinished JSON and invalid version input.
+        The equivalent pretty-printed tallyfin.schema-draft/v1 file must fit 131072 UTF-8 bytes.
+        No approval, publication or version reservation. Do not include credentials or personal data.
+      properties:
+        expectedRevision:
+          oneOf:
+            - { type: 'null' }
+            - { type: string, pattern: '^[0-9a-f]{32}$', minLength: 32, maxLength: 32 }
+        targetVersion: { type: string, maxLength: 32 }
+        draftText: { type: string, maxLength: 131072 }
+    SavedSchemaDraft:
+      type: object
+      additionalProperties: false
+      required: [revision, targetVersion, draftText, updatedAt]
+      properties:
+        revision: { type: string, pattern: '^[0-9a-f]{32}$', minLength: 32, maxLength: 32 }
+        targetVersion: { type: string, maxLength: 32 }
+        draftText: { type: string, maxLength: 131072 }
+        updatedAt: { type: string, format: date-time }
+    SchemaDraftSnapshot:
+      type: object
+      additionalProperties: false
+      required: [projectId, draft]
+      properties:
+        projectId: { type: string, pattern: '^[a-z][a-z0-9-]{0,47}$', maxLength: 48 }
+        draft:
+          oneOf:
+            - { type: 'null' }
+            - { $ref: '#/components/schemas/SavedSchemaDraft' }
     SchemaPublication:
       type: object
       description: At least one registered event from either source is required. Server-only definitions use an empty workflow list;
@@ -3619,6 +3654,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /v1/projects/{projectId}/schemas/draft:
+    get:
+      tags: [Administration]
+      operationId: getSharedSchemaDraft
+      summary: Read the shared owner-only schema draft without replacing local edits
+      description: >-
+        Requires owner access, checked before reading the draft and again in the DB batch.
+        Returns draft=null when not saved. One draft per project, retained for the project
+        lifetime and included in backups. No query parameters, CORS, caching or telemetry of contents.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      responses:
+        '200':
+          description: Current shared draft or null
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SchemaDraftSnapshot' }
+        '400':
+          description: Invalid project or query
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Administrator authentication required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Owner access required; missing projects are not disclosed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503':
+          description: Draft storage unavailable
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+    put:
+      tags: [Administration]
+      operationId: saveSharedSchemaDraft
+      summary: Explicitly save a shared schema draft using optimistic concurrency
+      description: >-
+        Authentication and owner access precede body reading. JSON request limit 132096 UTF-8 bytes,
+        identity encoding only; the downloadable file envelope must also fit 131072 bytes.
+        expectedRevision=null creates only if absent; updates require the last-read opaque revision.
+        Grant check and conditional write execute in one DB transaction. Each successful save gets
+        a fresh revision; stale or replayed saves return schema_draft_conflict (409), even for the
+        same content. No automatic retry or Idempotency-Key. After an uncertain response, explicitly
+        read back the draft; never replay blindly. Does not publish, reserve versions, retain approval,
+        modify aggregates/settings, or log draft contents. No query parameters or public CORS.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveSchemaDraft' }
+      responses:
+        '200':
+          description: Saved draft with new revision
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SchemaDraftSnapshot' }
+        '400':
+          description: Invalid closed envelope or revision
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '401':
+          description: Administrator authentication required
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '403':
+          description: Owner access missing or revoked before the write
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '409':
+          description: Shared draft changed; read and review before another explicit save
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '413':
+          description: Request or downloadable file envelope exceeds its byte limit
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '415':
+          description: Unsupported encoding or media type
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
+        '503':
+          description: Draft storage unavailable; read back before retry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorResponse' }
   /v1/projects/{projectId}/schemas/validate:
     post:
       tags: [Administration]

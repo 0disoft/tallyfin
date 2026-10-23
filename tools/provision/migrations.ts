@@ -6,7 +6,7 @@ export const MIGRATION_NAMES = Object.freeze([
   '0004_collection_rejections.sql', '0005_admin_changes.sql', '0006_server_collection.sql',
   '0007_task_funnels.sql', '0008_publisher_history.sql', '0009_publisher_generations.sql',
   '0010_grant_revision.sql', '0011_analytics_lookup.sql', '0012_workflow_duration.sql',
-  '0013_workflow_failure_reasons.sql',
+  '0013_workflow_failure_reasons.sql', '0014_saved_schema_drafts.sql',
 ] as const);
 
 export function assertMigrationCatalog(files: readonly string[]): void {

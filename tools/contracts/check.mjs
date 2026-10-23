@@ -21,6 +21,18 @@ const example = name => JSON.parse(read(`api/examples/${name}.json`));
 let checks = 0;
 const check = (name, action) => { action(); checks++; console.log(`OK ${name}`); };
 
+check('shared schema drafts are owner-only closed CAS envelopes without approval or automatic publication', () => {
+  const input = { expectedRevision: null, targetVersion: '', draftText: '{unfinished 한글' };
+  assert.ok(validate('SaveSchemaDraft', input));
+  for (const invalid of [{ ...input, privacyReviewed: true }, { ...input, expectedRevision: '' }, { ...input, targetVersion: 'x'.repeat(33) }])
+    assert.equal(validate('SaveSchemaDraft', invalid), false);
+  assert.ok(validate('SchemaDraftSnapshot', { projectId: 'sample', draft: null }));
+  assert.ok(validate('SchemaDraftSnapshot', { projectId: 'sample', draft: { revision: 'a'.repeat(32), targetVersion: '', draftText: '{', updatedAt: '2026-10-24T00:00:00Z' } }));
+  const route = spec.paths['/v1/projects/{projectId}/schemas/draft'];
+  assert.match(route.get.description, /owner/i); assert.match(route.put.description, /transaction/);
+  assert.ok(route.put.responses['409']); assert.ok(spec.components.schemas.ErrorResponse.properties.error.properties.code.enum.includes('schema_draft_conflict'));
+});
+
 check('failure reasons are optional, nullable, closed enum distributions without raw messages', () => {
   const counts = emptyFailureReasonCounts(); counts[0] = 1;
   const reasons = failureReasonDistribution({ property: 'error', values: ['0-error'] }, counts, 2);
@@ -277,7 +289,7 @@ check('response totals and denominators agree', () => {
 const database = new Parser().parse(read('db/schema.dbml'),'dbml');
 check('DBML parses with project-scoped storage and no raw visitor tables', () => {
   const tables=database.schemas.flatMap(schema=>schema.tables);
-  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_publishers','project_creators','project_creations','project_schemas','admin_changes','event_receipts','workflow_attempts','funnel_runs','funnel_daily_counts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
+  assert.deepEqual(tables.map(t=>t.name).sort(),['projects','project_grants','project_publishers','project_creators','project_creations','project_schemas','project_schema_drafts','admin_changes','event_receipts','workflow_attempts','funnel_runs','funnel_daily_counts','ingest_daily_usage','ingest_minute_usage','event_daily_counts','workflow_daily_counts','retention_cleanup_state'].sort());
   assert.deepEqual(tables.find(t=>t.name==='funnel_runs').fields.map(f=>f.name).sort(),
     ['project_id','run_id','schema_version','funnel_id','started_at','cohort_date','dimension_key','step_times_json','expires_at'].sort());
   assert.deepEqual(tables.find(t=>t.name==='funnel_daily_counts').fields.map(f=>f.name).sort(),

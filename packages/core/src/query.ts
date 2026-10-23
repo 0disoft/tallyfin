@@ -31,6 +31,8 @@ export interface QueryMeta {
   timeZone: string; generatedAt: string; latestReceivedAt: string | null; coverage: 'observed-only';
 }
 export interface AdminStore {
+  schemaDraft?(principal: AdminPrincipal, projectId: string): Promise<import('./saved-schema-draft.ts').SchemaDraftSnapshot>;
+  saveSchemaDraft?(principal: AdminPrincipal, projectId: string, input: import('./saved-schema-draft.ts').SaveSchemaDraft, now: number): Promise<import('./saved-schema-draft.ts').SchemaDraftSnapshot>;
   overview?(principal: AdminPrincipal, ids: readonly string[], source: 'browser' | 'server', now: number,
     options?: { signal?: AbortSignal }): Promise<import('./overview.ts').OverviewResponse>;
   changePublisher(principal: AdminPrincipal, projectId: string, change: PublisherChange, now: number): Promise<PublisherChangeResult>;

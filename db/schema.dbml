@@ -109,6 +109,14 @@ Table project_creations {
   Note: 'Control plane only. Retained for the project lifetime; creation permission revocation does not reset quota history.'
 }
 
+Table project_schema_drafts {
+  project_id text [pk, not null, ref: > projects.id]
+  revision text [not null, note: '32 lowercase hex characters. Fresh opaque revision on each CAS write.']
+  payload_json text [not null, note: 'Owner-only control plane: targetVersion and draftText, including unfinished JSON. Bounded by the 128KiB downloadable draft envelope. No approval, credentials or visitor payload fields.']
+  updated_at bigint [not null]
+  Note: 'One shared draft per project, retained for its lifetime. No version reservation or automatic publication. Permission checked in the same transaction as CAS; project deletion cascades. Backup includes this administrator-authored text.'
+}
+
 Table project_schemas {
   project_id text [not null, ref: > projects.id]
   version integer [not null]

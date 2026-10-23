@@ -27,6 +27,9 @@ export async function seedRestoreFixture(db: SqlDatabase) {
   await creatorTool.apply(await creatorTool.plan('creator-grant', { ...principal, maxProjects: 5 }), DRILL_TIME);
   await publisherTool.apply(await publisherTool.plan('publisher-grant', { projectId: funnel.project.id, ...principal }), DRILL_TIME);
   const store = new D1Store(db);
+  const { D1Queries } = await import('@tallyfin/storage-d1');
+  await new D1Queries(db).saveSchemaDraft(principal, browser.project.id,
+    { expectedRevision: null, targetVersion: '2', draftText: '{unfinished restore draft 한글' }, DRILL_TIME);
   const workflowInput = await restoreExample('browser-batch');
   await store.commit(await prepareBatch(parseBatch(JSON.stringify(workflowInput)), browser, DRILL_TIME), browser);
   const failureInput = structuredClone(workflowInput), failureId = crypto.randomUUID();

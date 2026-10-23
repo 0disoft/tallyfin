@@ -5,6 +5,7 @@ import { OidcDependencyError } from '@tallyfin/auth-oidc';
 import type { AdminPrincipal, AdminStore } from '@tallyfin/core';
 import { healthRoute, identityRoute, changesRoute, rejectionsRoute, schemasRoute, listRoute, queryRoute } from './admin-read.ts';
 import { publishersRoute, grantsRoute, createRoute, draftRoute, publishRoute, settingsRoute } from './admin-write.ts';
+import { savedSchemaDraftRoute } from './saved-schema-draft.ts';
 
 /** The host must verify signature, issuer, audience and expiry before returning a principal. */
 export interface AdministratorAccess {
@@ -40,6 +41,8 @@ export async function administrator(request: Request, access: AdministratorAcces
   const schemas = /^\/v1\/projects\/([^/]+)\/schemas$/.exec(url.pathname);
   if (schemas) return schemasRoute(context, schemas[1]!);
   const draft = /^\/v1\/projects\/([^/]+)\/schemas\/validate$/.exec(url.pathname);
+  const savedDraft = /^\/v1\/projects\/([^/]+)\/schemas\/draft$/.exec(url.pathname);
+  if (savedDraft) return savedSchemaDraftRoute(context, savedDraft[1]!);
   if (draft) return draftRoute(context, draft[1]!);
   const publication = /^\/v1\/projects\/([^/]+)\/schemas\/([^/]+)$/.exec(url.pathname);
   if (request.method === 'PUT' && publication) return publishRoute(context, publication[1]!, publication[2]!);

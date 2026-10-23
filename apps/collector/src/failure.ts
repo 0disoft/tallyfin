@@ -7,6 +7,7 @@ export const messages: Record<ErrorCode, string> = {
   event_conflict: 'Event ID conflicts with a previous event.', attempt_conflict: 'Attempt conflicts with previous state.',
   settings_conflict: 'Project settings changed. Reload before saving.',
   schema_conflict: 'Schema version conflicts. Reload and review before publishing.',
+  schema_draft_conflict: 'Shared schema draft changed. Reload before saving.',
   project_conflict: 'Project ID conflicts with an existing project.',
   project_limit_reached: 'Project creation limit reached.',
   grant_conflict: 'Project grant changed. Reload before saving.',

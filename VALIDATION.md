@@ -22,6 +22,22 @@ Tallyfin의 변경을 어떤 명령으로 확인할지 고르는 안내다. 아�
 
 검증 결과에 적는 범위는 그 명령이 실제로 본 범위와 같아야 한다요. 관련 suite만 돌렸다면 그 suite를, 일부 경로만 확인했다면 그 경로를 기록한다요.
 
+## 공유 서버 초안 저장 계약·DB·API — 2026-10-24
+
+ADR 0008에 따라 owner 전용 GET/PUT schemas/draft와 0014 테이블을 추가했다. 인증·권한은
+본문 전에 확인하고, CAS INSERT/UPDATE 안에서도 권한과 expectedRevision을 확인한다.
+한 프로젝트에 한 행이며 미완성 JSON/빈 버전을 보존하고 새 revision으로 경합을 막는다.
+초안 원문·검토 확인을 로그/관리 이력에 넣지 않고 발행·집계·설정·ingest revision을 바꾸지 않는다.
+
+- `node --test --test-timeout=30000 apps/collector/test/saved-schema-draft.test.ts tools/provision/test/migrations.test.ts`: 8/8 통과.
+  서로 다른 Collector 인스턴스의 동시 생성/수정은 각각 1건 성공·3건 409이며, 권한 race,
+  reader 거부, 128KiB 파일 경계, 미완성 한글/빈 값, DB 제약·연쇄 삭제를 확인했다.
+- `npm run typecheck`: 통과.
+- `npm run check --prefix tools/contracts`: 69/69 통과.
+- `npm run lint --prefix tools/contracts`: 통과.
+- 복구 fixture도 초안 행을 포함한 17개 테이블로 확장했다. 실제 export/restore와 관리자 화면은
+  후속 단위에서 확인한다. 원격 DB·배포·의존성·CI 변경은 없다.
+
 ## 초안 파일 가져오기 사용성·읽기 수명 — 2026-10-24
 
 브라우저 파일 읽기를 `api/read-schema-draft-file.ts`로 분리했다. 128KiB 초과는 읽기 전에

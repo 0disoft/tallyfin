@@ -49,7 +49,7 @@ export async function runRestoreDrill(signal: AbortSignal = new AbortController(
     const fixture = await seedRestoreFixture(db);
     const workflowMeasurements = await verifyRestoredWorkflows(db, fixture);
     await restoreIntegrity(db); const before = await restoreFingerprint(db);
-    if (before.tables.length !== 16 || before.tables.some(table => table.rows === 0)) throw Error('fixture_coverage_failed');
+    if (before.tables.length !== 17 || before.tables.some(table => table.rows === 0)) throw Error('fixture_coverage_failed');
     await source.dispose(); source = undefined;
     phase = 'export'; const backup = join(output, 'backup.sql');
     const exportStart = performance.now(); await wrangler(from, ['export', 'DB', '--output', backup], signal);

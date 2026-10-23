@@ -7,6 +7,7 @@ import type { WorkflowDimensionRow } from './workflow-breakdown.ts';
 import type { FunnelCountRow } from './funnel-query.ts';
 import type { FunnelDimensionRow } from './funnel-breakdown.ts';
 import { listSchemas, publishSchema } from './schema.ts';
+import { schemaDraft, saveSchemaDraft } from './saved-schema-draft.ts';
 import { projectOverview } from './overview.ts';
 import { projectSettings, updateProjectSettings } from './settings.ts';
 import { createProject, projectCreationAccess } from './creation.ts';
@@ -22,6 +23,8 @@ const access = "EXISTS (SELECT 1 FROM project_grants g WHERE g.project_id = ? AN
 interface ProjectState extends ProjectRow { latest_received_at: number | null }
 
 export class D1Queries implements AdminStore {
+  schemaDraft(principal: AdminPrincipal, id: string) { return schemaDraft(this.db, principal, id); }
+  saveSchemaDraft(principal: AdminPrincipal, id: string, input: import('@tallyfin/core').SaveSchemaDraft, now: number) { return saveSchemaDraft(this.db, principal, id, input, now); }
   readonly db: SqlDatabase;
   readonly options: { allowLocalHttp?: boolean };
   constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) { this.db = db; this.options = { ...options }; }

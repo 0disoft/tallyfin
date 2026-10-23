@@ -1,5 +1,18 @@
 # 저장 계약과 마이그레이션 상태
 
+## 0014_saved_schema_drafts.sql
+
+0013 다음에 프로젝트별 초안 테이블 하나를 추가한다. 기존 행·집계·스키마를 수정하거나
+역산하지 않는다. 프로젝트 소유자만 미완성 JSON과 버전 입력을 명시적으로 저장/조회한다.
+한 프로젝트에 한 행만 보존하고 저장마다 새 revision을 만든다. 조건부 저장과 권한 검사는
+같은 DB batch에서 수행한다. 발행·버전 예약·검토 확인을 저장하지 않는다.
+
+운영 적용 순서는 DB 확장 → Collector → 관리자 화면이다. 이전 코드로 되돌릴 때 테이블을
+남겨 초안을 보존한다. 삭제 롤백은 초안을 잃으므로 별도 백업과 승인이 필요하다. 프로젝트가
+삭제되면 초안도 삭제되며 그 전까지 백업에 포함한다. 적용 전후 기존 테이블 행 수와
+PRAGMA foreign_key_check, 두 번 initialize 결과, 초안 생성/수정 CAS·읽기 권한을 확인한다.
+로컬에서만 적용·검증하며 원격 D1은 변경하지 않는다.
+
 ## 0013_workflow_failure_reasons.sql
 
 0012 다음 적용한다. workflow_attempts.failure_reason_slot과 workflow_daily_counts의
@@ -16,8 +29,8 @@ PRAGMA foreign_key_check, 슬롯 합계 <= failed_count, 반복 initialize 결�
 
 
 상태: [DBML](../schema.dbml) 논리 계약과 초기 빈 DB용 SQL `0001_initial.sql`, 추가·확장
-마이그레이션 `0002`~`0013`가 있다. 현재 head는 `0013_workflow_failure_reasons.sql`이고,
-총 13개 마이그레이션과 애플리케이션 테이블 16개다. 모두 로컬 Miniflare 저장 테스트에서만
+마이그레이션 `0002`~`0014`가 있다. 현재 head는 `0014_saved_schema_drafts.sql`이고,
+총 14개 마이그레이션과 애플리케이션 테이블 17개다. 모두 로컬 Miniflare 저장 테스트에서만
 적용했고 원격 D1에는 어느 것도 적용하지 않았다.
 
 저장 구조는 [schema.dbml](../schema.dbml), 의미는
