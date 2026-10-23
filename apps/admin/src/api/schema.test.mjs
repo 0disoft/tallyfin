@@ -10,6 +10,7 @@ import { changeWorkflowForm, readWorkflowForm, workflowDimensionChoices, workflo
 import { validateSchemaDraft } from '../../../../packages/core/src/schema.ts';
 import { changeFunnelForm } from './schema-funnel-form.ts';
 import { parseRegistry } from './validate.ts';
+import { schemaDraftFile } from './schema-draft-file.ts';
 
 test('representative form selection preserves hashes, follows rename and unsets only when selected workflow is removed', async () => {
   const draft = workflowDraft(), text = JSON.stringify(draft), id = draft.workflows[0].id;
@@ -85,6 +86,45 @@ function fixture(onAccessLost) {
   return { client, editor, calls, schemas, config };
 }
 const ready = async editor => { await editor.load(); await editor.validate(); editor.setPrivacy(true); };
+
+test('file import preserves unfinished work, requires replacement consent, resets approval and never calls the API', async () => {
+  const f = fixture();
+  try {
+    await ready(f.editor);
+    f.editor.edit('target', '3');
+    await f.editor.validate(); f.editor.setPrivacy(true);
+    const before = f.editor.state, calls = f.calls.length;
+    const file = schemaDraftFile('sample', '', '{unfinished');
+    assert.equal(f.editor.importDraft(file.text), false); assert.equal(f.editor.state, before);
+    assert.throws(() => f.editor.importDraft(schemaDraftFile('other', '3', '{}').text, { discardDraft: true }));
+    assert.equal(f.editor.state, before);
+    assert.equal(f.editor.importDraft(file.text, { discardDraft: true }), true);
+    assert.equal(f.editor.state.draft, '{unfinished'); assert.equal(f.editor.state.target, '');
+    assert.equal(f.editor.state.validatedKey, null); assert.equal(f.editor.state.report, null);
+    assert.equal(f.editor.state.privacyReviewed, false); assert.equal(f.editor.hasUnsavedChanges, true);
+    assert.equal(f.editor.exportDraft().text, file.text);
+    await f.editor.publish(); assert.equal(f.calls.length, calls);
+    await f.editor.validate(); assert.equal(f.calls.length, calls); assert.ok(f.editor.state.formError);
+  } finally { f.editor.destroy(); }
+});
+
+test('file controls respect reader, busy, revoked and destroyed editor lifetimes', async () => {
+  const f = fixture(), file = schemaDraftFile('sample', '2', '{');
+  try {
+    assert.equal(f.editor.exportDraft(), null); assert.equal(f.editor.importDraft(file.text), false);
+    f.config.owner = false; await f.editor.load();
+    assert.equal(f.editor.exportDraft(), null); assert.equal(f.editor.importDraft(file.text), false);
+    f.config.owner = true; await f.editor.load();
+    let release;
+    f.config.validate = () => new Promise(resolve => { release = resolve; });
+    const validation = f.editor.validate();
+    assert.equal(f.editor.exportDraft(), null); assert.equal(f.editor.importDraft(file.text), false);
+    release(response(200, { valid: true, issues: [], privacyReviewRequired: true })); await validation;
+    f.config.read = () => response(403, { error: { code: 'forbidden' } }); await f.editor.refresh();
+    assert.equal(f.editor.exportDraft(), null); assert.equal(f.editor.importDraft(file.text), false);
+    f.editor.destroy(); assert.equal(f.editor.exportDraft(), null); assert.equal(f.editor.importDraft(file.text), false);
+  } finally { f.editor.destroy(); }
+});
 
 test('unload protection covers target edits and unconfirmed publication without warning after confirmation', async () => {
   const f = fixture();

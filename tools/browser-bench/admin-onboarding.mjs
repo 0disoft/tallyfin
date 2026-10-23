@@ -7,6 +7,7 @@ import { createServer } from 'vite';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { adminLoginFixture } from './admin-login-fixture.mjs';
+import { verifySchemaDraftFiles } from './schema-draft-files.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 let local, server, browser, page, watchdog, directory, stage = 'arguments', sdkBundle;
@@ -16,7 +17,7 @@ try {
   assert.ok(['chromium', 'chrome', 'msedge'].includes(values.channel));
   if (values.help) console.log('npm run verify:admin-onboarding -- [--channel chromium|chrome|msedge] [--lost-responses]\nLocal signed login, empty-project onboarding, generated browser SDK and real D1 count; no remote service.\n--lost-responses loses creation/publication responses after real commits and verifies explicit recovery.');
   else {
-    watchdog = setTimeout(() => { void browser?.close(); }, 90000);
+    watchdog = setTimeout(() => { void browser?.close(); }, 120000);
     await mkdir(resolve(root, '.tmp'), { recursive: true });
     directory = await mkdtemp(resolve(root, '.tmp/admin-onboarding-'));
     stage = 'fixture'; local = await adminLoginFixture(directory, { profile: 'onboarding' });
@@ -136,6 +137,8 @@ try {
     await page.waitForFunction(() => document.querySelector('#schema-event-0-label')?.disabled === false);
     assert.equal(replacementDialogs, 3);
     page.off('dialog', unexpectedDialog);
+    stage = 'schema-draft-files';
+    const draftFiles = await verifySchemaDraftFiles(page, local, directory, step => { stage = `schema-draft-files/${step}`; });
     stage = 'sdk'; await page.locator('#sdk-origin').fill(origin);
     const snippet = await page.getByRole('textbox', { name: '브라우저 SDK 연결 코드', exact: true }).inputValue();
     // Compile exactly the UI-generated connection code against the freshly built local SDK.
@@ -170,7 +173,7 @@ try {
     const report = { verified: true, browser: browser.version(), emptyProjectCreated: true, schemaPublished: true,
       generatedSdkExecuted: true, firstEventCount: await count(), correctOnboardingStep: true, eventVisible: true,
       lostResponseRecovery: values['lost-responses'], droppedResponses: dropped,
-      schemaDraftReplacement: true, replacementDialogs,
+      schemaDraftReplacement: true, replacementDialogs, ...draftFiles,
       routeError, pageErrors, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n');
     console.log(JSON.stringify(report));

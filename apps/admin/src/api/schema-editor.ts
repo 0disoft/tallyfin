@@ -2,6 +2,7 @@ import { ApiClient, ApiError } from './client.ts';
 import type { ProjectSettings } from './types.ts';
 import { canonicalDefinitions, readDraft, schemaDefinitions as definitions } from './schema-contract.ts';
 import type { SchemaDraft, SchemaPage, SchemaValidation } from './schema-contract.ts';
+import { parseSchemaDraftFile, schemaDraftFile } from './schema-draft-file.ts';
 
 type Snapshot = { settings: ProjectSettings; page: SchemaPage; definitions: SchemaDraft };
 type Pending = { version: number; definitions: SchemaDraft };
@@ -114,6 +115,18 @@ export class SchemaEditor {
   edit(field: 'draft' | 'target', value: string) {
     if (this.#destroyed || this.state.phase !== 'ready' || this.state.more || !this.canEdit) return;
     this.#set({ [field]: value, report: null, validatedKey: null, privacyReviewed: false, message: null, formError: null });
+  }
+  exportDraft() {
+    if (this.#destroyed || this.state.phase !== 'ready' || this.state.more || !this.canEdit) return null;
+    return schemaDraftFile(this.#projectId, this.state.target, this.state.draft);
+  }
+  importDraft(text: string, options: { discardDraft?: boolean } = {}) {
+    if (this.#destroyed || this.state.phase !== 'ready' || this.state.more || !this.canEdit) return false;
+    const file = parseSchemaDraftFile(text, this.#projectId);
+    if (this.hasUnsavedChanges && options.discardDraft !== true) return false;
+    this.#set({ draft: file.draftText, target: file.targetVersion, report: null, validatedKey: null, privacyReviewed: false,
+      formError: null, message: '초안 파일을 불러왔어요. 버전과 정의를 검증하고 개인정보 검토를 다시 확인해 주세요.' });
+    return true;
   }
   setPrivacy(value: boolean) { if (this.state.phase === 'ready' && this.canEdit) this.#set({ privacyReviewed: value }); }
   async selectVersion(version: number, options: { discardDraft?: boolean } = {}) {
