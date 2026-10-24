@@ -26,7 +26,9 @@ export default {
 
     try {
       const indexUrl = new URL(request.url);
-      indexUrl.pathname = "/index.html";
+      // ASSETS canonicalizes /index.html to / with a redirect, losing OIDC codes.
+      // Fetch the canonical root internally, leaving the browser callback URL intact.
+      indexUrl.pathname = "/";
       indexUrl.search = "";
       return env.ASSETS.fetch(new Request(indexUrl, request));
     } finally {
