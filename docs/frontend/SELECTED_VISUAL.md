@@ -1,41 +1,41 @@
-# 선택한 디자인 기준
+# Selected Design Criteria
 
-2026-10-08 사용자가 선택한 프로젝트 개요 시안이다. 원본을 참고 이미지로 저장했다. 아래 글자 크기와 색상은 구현 시작값이며 이미지에서 정밀 측정한 값은 아니다. 실행 가능한 샘플 UI는 [관리자 프로토타입](../../prototypes/admin/README.md)에 구현했다.
+This is the project overview mockup selected by the user on 2026-10-08. The original was saved as a reference image. The font sizes and colors below are starting values for implementation and are not precise measurements from the image. A runnable sample UI has been implemented in the [admin prototype](../../prototypes/admin/README.md).
 
-![선택한 프로젝트 개요 시안](./assets/project-overview-selected.png)
+![Selected project overview mockup](./assets/project-overview-selected.png)
 
-## 확정 화면
-- 밝은 흰색/오프화이트 바탕, 왼쪽에 차분한 쿨블루 사이드바.
-- Tallyfin 심볼(파란 지느러미/물결)과 굵은 검정 워드마크.
-- 프로젝트 선택기와 인접 프로젝트 링크: ModuFile, Sembom, Orchid Pass.
-- 내비게이션: 개요, 이벤트 분석, 목표, 설정.
-- 넓은 오른쪽 작업 영역, 화면 제목은 좌상단, 기간과 시간대는 우상단.
-- 네 개의 열린 지표는 큰 검정 숫자로 표시하고 세로 헤어라인으로 구분하며 개별 카드로 감싸지 않는다. 완료율은 분자/분모를 함께 표기.
-- 전체 폭 파란 선과 옅은 파란 영역 차트.
-- 아래에 옅은 배경의 헤더의 이벤트 표, 행은 헤어라인으로 구분.
-- 평평한 면, 6px 정도의 은은한 모서리, 과한 테두리/그림자/카드 중첩은 피한다.
+## Confirmed Screen
+- Bright white/off-white background with a calm cool-blue sidebar on the left.
+- The Tallyfin symbol (blue fin/wave) and a bold black wordmark.
+- Project selector and adjacent project links: ModuFile, Sembom, Orchid Pass.
+- Navigation: Overview, Event Analytics, Goals, Settings.
+- A wide right-hand workspace, with the screen title in the upper left and the period and time zone in the upper right.
+- The four open metrics are displayed as large black numbers, separated by vertical hairlines, and are not wrapped in individual cards. Completion rate displays both numerator and denominator.
+- A full-width chart with a blue line and a pale blue area.
+- Below, an event table with a light-background header, with rows separated by hairlines.
+- Use flat surfaces and subtle corners of about 6px, and avoid excessive borders/shadows/card nesting.
 
-## 토큰 초기 후보
-| 항목 | 값 |
+## Initial Token Candidates
+| Item | Value |
 |---|---|
-| 메인 강조 | #155EEF |
-| 페이지 | #FFFFFF |
-| 내비게이션 | #F8FAFC |
-| 본문 | #0F172A |
-| 보조 텍스트 | #64748B |
-| 구분선 | #E2E8F0 |
+| Primary accent | #155EEF |
+| Page | #FFFFFF |
+| Navigation | #F8FAFC |
+| Body | #0F172A |
+| Secondary text | #64748B |
+| Divider | #E2E8F0 |
 
-본문/표/차트 라벨 최소 16px(16-18px 목표), 제목 32-36px, KPI 40-48px. 사이드바 약 240px, 데스크톱 메인 패딩 32-40px, 화면 전체를 고정하지 않고 반응형으로 둔다. 위 값은 구현 시 이미지와 대조해 확인해야 하며, 폰트 스택/프레임워크/아이콘/차트 라이브러리는 아직 미정이다.
+Use a minimum of 16px for body/table/chart labels (target 16-18px), 32-36px for headings, and 40-48px for KPIs. The sidebar is about 240px, desktop main padding is 32-40px; do not fix the entire screen, and keep it responsive. The values above must be checked against the image during implementation, and the font stack/framework/icons/chart library are still undecided.
 
-## 지켜야 할 기준
-- 선택한 시안의 위계, 여백, 가독성을 유지한다.
-- 내비게이션과 프로젝트 전환이 실제로 동작해야 한다.
-- ModuFile 변환 필드를 일반 UI에 박아 넣지 않는다. 노출 지표와 이벤트 표는 프로젝트 설정을 따른다.
-- 캡처의 지표/날짜는 가상이며, 2026.10.02-10.08은 실제 기본값이 아니다. 시리즈와 집계는 프로토타입에서 일치해야 한다.
-- 가짜 실시간 상태는 두지 않고, 실제 백엔드 전까지 샘플 라벨만 쓴다.
-- 모바일 320px: 접이식 드로어, 지표 그리드 줄바꿈, 표는 가로 스크롤하고 글자를 줄이지 않는다.
-- 키보드/선택 상태/포커스/대비는 구현 시 점검한다.
+## Criteria to Follow
+- Maintain the selected mockup's hierarchy, spacing, and readability.
+- Navigation and project switching must actually work.
+- Do not hard-code ModuFile conversion fields into the general UI. Exposed metrics and the event table follow project settings.
+- The metrics/dates in the capture are fictional, and 2026.10.02-10.08 is not an actual default. Series and aggregates must match in the prototype.
+- Do not include fake real-time status; use only sample labels until the real backend is available.
+- Mobile 320px: collapsible drawer, metric grid wrapping, and tables that scroll horizontally without reducing text size.
+- Check keyboard/selection state/focus/contrast during implementation.
 
-누락/알 수 없음/로딩/오류/오래됨/권한 없음 처리는 [FRONTEND_DESIGN.md](./FRONTEND_DESIGN.md)를 따르고, 초기 범위에 고유 사용자 분석·고급 퍼널·사용자 식별 기능을 추가하지 않는다. 제품 사양은 [02-spec.md](../product/02-spec.md)를 참고한다.
+Handling for missing/unknown/loading/error/stale/no-permission states follows [FRONTEND_DESIGN.md](./FRONTEND_DESIGN.md), and do not add unique-user analytics, advanced funnels, or user identification features to the initial scope. For the product specification, refer to [02-spec.md](../product/02-spec.md).
 
-샘플 UI는 시안의 열린 지표·사이드바·선 차트·표 구조를 따르며, 시안에 없던 수치 보기와 상태 확인을 추가했다. 실제 구현은 제목 44px·지표 56px을 사용하며 모바일에서 줄인다. 비교와 검증 결과는 [디자인 QA](../../prototypes/admin/design-qa.md)에 기록한다.
+The sample UI follows the mockup's open metrics, sidebar, line chart, and table structure, and adds numeric views and status checks that were not in the mockup. The actual implementation uses a 44px title and 56px metrics and reduces them on mobile. Comparison and verification results are recorded in [Design QA](../../prototypes/admin/design-qa.md).

@@ -1,445 +1,154 @@
-# Tallyfin 제품 스펙
-
-상태: 초기 설계 기준 문서. 아래 기능은 운영 활성화 전 계획이며, 코어 검증·D1 저장 어댑터·최소 브라우저 수집기·브라우저 SDK·관리자 조회/설정 API는 로컬에서 구현·검증했다. 구현/배포 상태는 [수집기 구현](../backend/collector.md)·[관리자 조회·설정 경계](../backend/administrator.md)·[브라우저 SDK](../backend/browser-sdk.md)에 정리한다.
-
-## 범위와 방향
-
-Tallyfin은 Rodisoft의 여러 서비스에서 사용하는 범용 제품 이벤트 분석 플랫폼이다. Sembom은 첫 적용 사례이며, 프로젝트별 설정으로 회원가입·파일 변환·구매·계산 같은 서로 다른 행동을 분석한다.
-
-전송·조회 API와 논리 DB 계약은 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)와 [전송·집계 계약](../backend/event-contract.md)에 확정했다. 코어 검증·D1 저장 어댑터·최소 브라우저 수집기·브라우저 SDK·관리자 조회·설정 API는 로컬에서 구현·검증했고, 실제 인증 제공자·운영 배포는 아직 없다. 도메인, 운영 인증 제공자, 라이선스와 악용 방지용 IP 정책은 미정이다(UNDECIDED).
-
-## 기술 방향
-
-다단계 퍼널과 브라우저/서버 작업 연결은 [ADR 0006](../adr/0006-ordered-task-funnels.md)의
-작업별 무작위 ID와 순서 단계 계약을 따른다. OpenAPI의 독립 타입과 코어 검증·진행 계획·
-집계 계산을 로컬 구현했다. 선택 funnels의 버전별 등록·검증·발행·정의 조회와 관리자
-JSON 편집/발행 보존도 연결했다. 연결 이벤트 수집과 D1 연결 상태·단계 집계 저장·정리도
-로컬에서 구현·검증했다. 서버 SDK의 연결 전송·서버 스키마 투영과 Node·Worker·D1 통합도
-구현·검증했다. 브라우저 SDK의 퍼널 연결 전송도 선택 프로필 `@tallyfin/browser/funnels`로
-로컬 구현·검증했다. 관리자 SDK 코드 생성은 출처별 표준·퍼널 프로필과 서버 설정을
-만들도록 로컬 구현·검증했고, reader/owner 퍼널 일별 조회 API도 로컬 구현·검증했다.
-관리자 퍼널 분석 화면·CSV는 로컬 연결했고 퍼널 전용 단계 편집 폼도 로컬에서 구현·검증했다.
-기존 브라우저 workflow 완료율의 의미와 전송 형식은 유지한다.
-
-관리자 인증은 호스트의 검증기 포트를 유지하고 기본 OIDC JWT access token 검증은
-`packages/auth-oidc`로 분리한다. `jose ^6`은 서버용 의존성으로만 사용한다.
-실제 인증 제공자·로그인 흐름은 미정이며 [OIDC 어댑터](../backend/oidc.md)의 정책을 따른다.
-
-초기 아키텍처는 TypeScript를 기준으로 한다. 브라우저 SDK는 의존성 없이(dependency-free) 배포하며 서버 코어·D1 런타임을 번들에 넣지 않는다. 수집 엔드포인트는 Cloudflare Worker의 네이티브 fetch로 처리하고 D1은 별도 어댑터로 분리한다. 코어는 사설 ZDP나 Cloudflare 의존성을 갖지 않는 이식 가능한(portable) 형태로 유지한다. 수집기에는 Hono, Gin, Elysia 같은 웹 프레임워크를 추가하지 않는다. 관리자는 React/Vite 기반 `apps/admin` 워크스페이스로 구현하며 [ADR 0007](../adr/0007-admin-application.md)을 따른다.
-
-브라우저를 우선 구현한다. 서버 측 제품 이벤트는 일반 계약과 `packages/server`의 dependency-free 서버 SDK로 다룬다. 서버 계약은 언어 중립적인 이벤트 형태라 같은 스키마를 재사용한다. 인프라 텔레메트리, 세션 리플레이, 과금, AI, 광고 어트리뷰션, PostHog 동등성은 범위 밖이다.
-
-## 프로젝트 레지스트리와 스키마
-
-작업 흐름에 선택 failureReasonProperty로 실패 이벤트의 enum 속성 하나를 지정한다.
-최초 확정 실패의 원인만 시작일·버전별로 집계하며 원문 오류는 저장하지 않는다.
-원인 누락과 과거 미측정 실패를 구별하고 비율은 전체 확정 실패를 분모로 사용한다.
-시도 정리 뒤에도 일별 집계 보존 기간에는 분포가 남는다.
-설정에서 원인 속성을 선택·해제하고 새 버전으로 발행한다. 목표 화면과 CSV에 원인별
-건수·전체 확정 실패 대비 비율·누락·미측정·집계 중 상태를 표시한다. 구 응답의 정보
-없음과 실제 실패 없음도 구별한다.
-원인별 직전 같은 길이 기간 비교는 같은 프로젝트·스키마·작업 흐름의 기존 응답을 재사용한다.
-원인별 건수·전체 확정 실패 중 비중과 비중 차이(%p)를 제공한다. 미측정 실패가 하나라도
-있는 기간은 관측 건수·비중만 제공하고 원인 변화는 보류한다. 구 응답의 정보 없음은
-0이 아니다. 전체 실패율은 확정 실패/시작 시도로 별도 계산하며 원인 비중 변화와 구별한다.
-목표의 기존 기간 비교 스위치에 화면과 CSV를 연결했다. 직전 조회 실패 시 현재 분포는
-유지하고 재시도하며, 집계 중인 코호트의 수치는 바뀔 수 있음을 알린다.
-
-작업 흐름 일별 응답은 시작과 종료를 모두 관측한 시도의 완료 소요시간을 1초·5초·30초·
-2분·10분 경계의 6개 고정 구간으로 제공한다. 성공과 실패를 구분하며 시작일·버전별로
-집계한다. 이전 완료 기록은 미측정으로 구분하고 브라우저 시각으로 계산한 시간을 서버
-처리시간으로 설명하지 않는다. 대기 시도는 소요시간 분포에 넣지 않는다.
-목표 화면과 CSV에 분포·측정/미측정 건수·집계 상태를 연결했다. 미측정과 완료 없음은
-구분하며 과거 응답에 필드가 없을 때도 값을 만들어 표시하지 않는다.
-
-관리자 프로젝트 목록은 선택 검색어 `q`로 접근 가능한 이름·ID를 서버에서 부분 검색한다.
-최대 80자, 영문 ASCII 대소문자 무시, 기호는 문자 그대로 비교하며 기존 ID 정렬과
-페이지 커서를 유지한다. 검색어 변경 시 첫 페이지부터 읽고 페이지마다 권한을 다시 검사한다.
-관리자 선택 화면에 검색·결과 페이지·오류 재시도를 연결했다. 검색은 현재 선택이나 설정
-초안을 바꾸지 않으며, 첫 목록 밖에서 고른 프로젝트도 새로고침 때 권한을 재확인해 유지한다.
-
-스키마 목록은 페이지 커서와 독립인 `latestActiveVersion`을 같은 권한 검사·DB 스냅샷에서
-반환한다. 활성 버전이 없으면 null이다. 관리자는 이 값으로 자동 선택하고, 해당 필드가
-없는 이전 서버 응답에만 기존 페이지 탐색을 사용한다.
-
-관리자 통합 현황은 현재 페이지의 최대 5개 서비스를 일괄 조회한다. 기간과 활성 스키마는
-서버가 선택하고 서비스별 권한·부분 실패·요청 순서를 보존한다. 대표 작업 흐름은 선택한
-스키마 버전의 `representativeWorkflowId`가 가리키는 browser workflow다. 이 필드가 없으면
-대표 없음이며 첫 등록 workflow를 대신 쓰지 않는다. 기존 첫 workflow 선택은 이전 구현
-동작이고 새 스키마 계약에는 적용하지 않는다. 활성 스키마가 없거나 모든 버전이
-폐기된 경우에도 프로젝트 최근 수신·최근 UTC 7일 거부 건수는 계속 표시한다. 이벤트와
-완료율은 null로 유지해 실제 집계 0과 구분한다.
-
-통합 완료율은 두 기간의 시작·성공·진행 중 건수와 집계 중 여부를 함께 제공한다.
-관리자는 집계 중·시작 30건 미만·분모 없음의 변화 비교를 보류하며 자동 장애 경고는
-추가하지 않는다. 실제 완료율 계산과 기존 작업 흐름 일별 조회의 집계 기간은 유지한다.
-
-통합 현황에는 서버 조회 기준 시각과 서비스별 실제 현재/직전 기간·거부 기록 UTC 범위를
-표시한다. 표를 연 채 현지/UTC 날짜가 달라지면 수동 새로고침을 안내하며 자동 조회는
-추가하지 않는다. 기기 시계는 이 안내에만 사용하고 서버 조회 범위를 결정하지 않는다.
-
-관리자 `GET /v1/identity`는 검증한 access token의 호출자 issuer/subject만 반환한다.
-초기 권한 등록 전에도 자기 계정을 확인할 수 있으며 프로젝트 grant는 요구하지 않는다.
-DB 접근·권한 부여·프로필·다른 계정·토큰 반환은 없다. no-store·Vary Authorization과
-기존 관리자 인증을 적용한다. 실제 제공자 로그인·운영 권한 등록은 후속이다.
-
-서비스별 독립 프로젝트에 이벤트·속성 스키마 버전·출처·권한·수집 한도를 설정한다. 조회는 신뢰하는 검증기가 확인한 관리자 issuer/subject와 프로젝트 grant를 요구하며 인증 제공자 미설정 배포는 닫는다. 설정 조회는 reader/owner, 변경은 owner grant를 요구하고 조회 시 받은 settingsHash로 동시 변경을 막는다. 관리자 설정 화면은 이 조회·변경을 로컬에서 연결해 owner가 이름·상태·허용 출처·수집 한도를 편집·저장하고, 응답의 canEdit가 false인 grant는 읽기 전용으로 연다. 프로젝트는 CLI 또는 별도 생성 권한을 요구하는 API로 만들고 관리자 화면에서도 생성한다. grant 부여·역할 변경·회수는 owner 전용 PUT·DELETE API로도 처리하고 provisioning CLI는 대안으로 유지한다. 새 스키마 버전은 owner 전용 API로도 발행한다. 수집기는 활성 상태·등록 스키마·정확한 오리진·한도를 검사한다. 공개 브라우저에는 관리자 토큰을 넣지 않는다. 서버 수집은 관리자 audience와 분리한 전용 발행자 bearer 인증으로만 열고, owner/reader 관리자 grant로는 발행 권한을 얻지 못한다.
-
-권한 목록은 현재 프로젝트 owner 전용 `GET /v1/projects/{projectId}/grants`에서 페이지로
-조회한다. 목록에는 등록된 issuer/subject·reader/owner 역할·최초 생성 시각을 표시하고,
-페이지마다 owner 권한을 다시 검사한다. grant 부여·역할 변경·회수는 owner 전용
-PUT·DELETE API로 로컬 구현했고 provisioning CLI는 대안으로 유지한다. API 연결 모드의
-설정 화면에는 owner만 읽는 권한
-목록을 연결했다. 한 페이지 25건을 보여주고 새로고침·다음 페이지를 제공하며, 권한 회수나
-조회 실패·프로젝트/연결 전환 때 이전 목록을 비운다. reader는 권한 목록 API를 호출하지 않는다.
-
-권한 변경도 현재 프로젝트 owner만 `PUT`/`DELETE /v1/projects/{projectId}/grants`로
-한다. PUT은 `{issuer,subject,role,expectedRole}`를 받아 reader/owner를 등록·변경하고,
-DELETE는 `{issuer,subject,expectedRole}`로 회수한다. expectedRole은 마지막으로 본
-역할이며 대상이 이미 원하는 상태면 다시 쓰지 않고 200 `changed=false`로 성공한다.
-역할이 expectedRole과 다르면 `grant_conflict`(409), 마지막 owner를 내리거나 회수하면
-`last_owner`(409)다. 성공 응답은
-`{projectId,issuer,subject,role,createdAt,canManage,changed}`다. 관리자 화면의
-권한 변경 UI는 로컬에서 구현·검증했고, 저장 전 확인·불명확 결과의 같은 요청 재확인·권한
-상실 시 잠금을 따른다. DB·마이그레이션 변경은 없다.
-
-관리자 변경 이력은 프로젝트별 append-only 기록으로 남긴다. 프로젝트 생성·설정 변경·스키마
-발행·grant 변경은 관리자 API가, register·grant·revoke는 오프라인 provisioning CLI가 각각
-같은 D1 batch에서 기록하며, 한 동작이 여러 종류를 바꾸면 종류마다 한 행이 남는다. actor는
-API가 검증한 issuer/subject이고 CLI는 인증된 사람이 없어 NULL 식별자이므로 변경 대상 계정을
-실행자로 추정하지 않는다. 설정은 바뀐 필드명만, 스키마는 동작과 버전 번호만, grant는 대상과
-이전/이후 역할만 남기며 원문 요청 body·설정값·스키마 정의·토큰·방문자 자료는 저장하지
-않는다. 값이 없는 재요청·실패·실제 값이 바뀌지 않은 설정 요청은 이력을 추가하지 않는다.
-기록은 `admin_changes`(0005)에 90일 rolling으로 보존하고 정리에서 프로젝트당 최대
-500행(직접 호출 시 1000행)씩 지운다. 현재 owner는 `GET /v1/projects/{projectId}/changes`로
-읽는다. owner 권한과 기록을 같은 D1 batch에서 확인하며, 응답은
-`{projectId,generatedAt,retentionDays:90,coverage,data,page}`로 id·occurredAt·actor·change만
-담고 설정값·정의·본문·토큰은 넣지 않는다. change는 action별로 필요한 값만 담는다. limit은
-기본 25·최대 100, occurredAt 내림차순·기록 UUID 내림차순이고 커서는 프로젝트에 묶인
-위치값이다. 조회 창은 90일 rolling으로 cutoff를 포함하고 미래 기록은 제외하며, 물리 정리 전
-만료 행은 숨긴다. coverage는 기록된 변경만 담는다는 뜻이다. 직접 SQL 쓰기·creator
-권한·시스템 정리·방문자 활동은 기록하지 않는다. API 연결 설정 화면의 소유자 전용
-변경 이력에 한 페이지 25건을 표시한다. 처음부터 새로고침·다음 페이지·실패 페이지
-재시도를 제공하고 설정·권한 저장 뒤 첫 페이지를 갱신한다. reader는 이력 API를 호출하지
-않으며 401·403이면 기록을 지우고 권한 상실을 부모 설정 화면에 알린다. 프로젝트/연결
-전환과 언마운트 때 요청을 취소하고 늦은 응답을 폐기한다. 자동 폴링은 하지 않는다.
-
-프로젝트 ID는 공개 라우팅 정보이며 인증 수단이 아니다. 허용 오리진만으로 봇·위조 이벤트를 막을 수 없다. 프로젝트 간 스키마·데이터·설정은 분리하고, 한 프로젝트의 정의를 다른 프로젝트에 암묵적으로 재사용하지 않는다.
-
-SDK는 일반적인 수동 이벤트 훅을 제공한다. 계산기 엔진 의존성이 없고, 암시적 DOM 캡처나 자동 수집도 하지 않는다. 각 서비스는 자기 저장소에서 의미 있는 이벤트 이름과 통합을 정의한다. 제품 예시로는 가입, 파일 변환, 결제 상태(이메일/파일/주문 ID/금액은 제외), 계산 등이 있을 수 있다.
-
-닫힌 이벤트 집합은 전역 여섯 이름이 아니라 프로젝트별로 등록·검토된 스키마를 뜻한다. 이벤트 이름과 속성 키의 타입, 허용 enum, 범위, 개수, 길이, 카디널리티 한도를 등록·검토하고, 수집기는 알 수 없는 이름/키/버전과 유효하지 않은 데이터를 거부한다. 속성은 불리언/enum/카운터 같은 최소 형태를 허용하고, 숫자 지표는 경계가 있고 프라이버시 검토를 통과한 정의가 있을 때만 선택적으로 둔다. 임의의 자유 텍스트는 허용하지 않는다.
-
-이벤트 정의는 버전으로 관리하여 호환되지 않는 변경이 집계에서 섞이지 않게 한다. 각 행동마다 브라우저/서버 중 성공을 확정하는 출처를 지정해 이중 집계를 피한다. 전송 재시도의 중복 제거와 두 출처가 같은 업무를 기록하는 의미상 중복은 별도로 다룬다.
-
-서버 이벤트 코어는 `ServerBatch`·`ServerEvent` 형태, 등록 source와 속성, 배치 한도와
-시각을 검사하고 정규화·source별 해시와 순수 집계 계획을 만든다. 서버 이벤트에는
-브라우저 attempt를 받지 않고 작업 흐름 상태를 만들지 않는다. 기존 browser 배치와
-해시 형식은 유지한다. 저장 어댑터는 서버 이벤트를 출처별 영수증·이벤트 집계에 반영하며
-관리자 grant와 독립인 `project_publishers` 권한을 읽기·저장 시점에 다시 검사한다. 0006은
-기존 browser 기록을 보존하고 발행 권한을 자동 부여하지 않는다. UTC 일일 신규 수신
-한도와 분당 admission은 프로젝트 전체가 공유한다. 전용
-`POST /v1/projects/{projectId}/server-batches`와 발행자 OIDC 검증기·`PUBLISHER_*`
-런타임 설정 키를 로컬 구현했다. 이 경로는 `application/json` 16KiB 배치만 받고 `POST`·
-조회 파라미터 없음만 허용하며 CORS와 `Origin` 인증을 쓰지 않는다. 인증과
-`project_publishers` 검사가 프로젝트 읽기·admission보다 앞선다. 발행자 권한은 오프라인
-provisioning CLI 또는 owner 전용 `PUT`·`DELETE /v1/projects/{projectId}/publishers`와 설정의
-발행자 관리 화면에서 프로젝트·issuer·subject로만 부여·회수하고 역할이나 관리자 grant를 주지
-않는다. 목록·변경은 불변 부여 ID `grantId`를 함께 다뤄 같은 밀리초에 재부여된 권한을 회수하지
-않는다. `summary`와 `events/{eventName}/daily`는 선택 `source`(기본 browser)로 한 출처만 읽고
-server 정의도 daily 속성 분류를 지원하며 workflow 조회는 browser 전용이다. 서버 출처 조회
-화면은 로컬에서 연결했고 server 정의만 있는 레지스트리도 허용한다. server 전용 스키마는
-빈 workflows, 프로젝트는 빈 allowedOrigins로 등록할 수 있다. 빈 출처 목록은 browser 수집을
-차단하며 server의 발행 인증·권한을 대신하지 않는다. 관리자 SDK 안내는 browser/server를
-선택해 같은 출처의 최신 정의만 코드로 만들고 서버 전용이면 server를 기본 선택한다.
-browser는 표준·퍼널 프로필을 고르고, 출처가 참여하는 등록 퍼널이 있을 때만 퍼널 예제를
-붙인다. server 코드는 서버 단계는 이름, browser 단계는 `null` 자리로 둔 서버 규칙을 싣고
-자격 증명은 호스트의 getToken 함수로 받는다.
-수집 진단도 서버 전용이면 server를 기본 조회하며 출처를 명시적으로 바꿀 수 있다.
-
-발행된 스키마 목록·정의 조회, owner 전용 초안 검증·새 버전 발행 API를 로컬 구현·검증했다. 초안은 이벤트·작업 흐름을 필수로, 퍼널과 대표 작업 흐름 ID를 선택으로 받아 실제 등록과 같은 규칙으로 검증하고 첫 오류 위치와 코드를 반환한다. 발행은 owner의 개인정보 검토 확인과 조회한 최신 번호를 요구하고 저장 때 권한·최신 번호를 다시 확인한다. 같은 버전·같은 내용의 재요청은 추가 저장 없이 성공하며 다른 내용·동시 발행은 409다. 이전 버전·집계·프로젝트 설정은 유지하고 SDK 버전은 자동 전환하지 않는다. 관리자 API 연결 모드의 설정 화면에서 버전 조회·JSON 초안 편집·검증·개인정보 검토 확인·발행을 지원한다. 충돌·응답 유실 시 초안을 보존하고 재조회한 서버 정의와 비교해 명시적으로 선택한다. 서버 초안 저장은 아래 별도 흐름으로 지원하며, 버전 예약은 지원하지 않는다.
-
-대신 현재 JSON 초안과 발행할 버전을 `tallyfin.schema-draft/v1` 파일로 내려받고 다시 읽을 수 있다. 파일은 정확히 `format`·`projectId`·`targetVersion`·`draftText` 네 필드이며, 현재 프로젝트와 다른 `projectId`나 여분 필드는 거부한다. `draftText`는 미완성 JSON을 포함해 원문 그대로 보존한다. `targetVersion`은 32자 이하 문자열이면 빈 값·0처럼 숫자 범위를 벗어나거나 유효하지 않은 값을 그대로 보존하며, 내부 JSON과 버전의 발행 가능 여부는 기존 검증이 판정한다. 파일 전체는 UTF-8 기준 128KiB 이하여야 한다.
-
-파일 다운로드와 읽기는 ready 상태이고 목록을 더 읽지 않는 owner 편집 가능 범위에서 브라우저 안에서만 이루어진다. loading·검증 중·발행 중·충돌/결과 확인 중·목록 더보기 중에는 파일 가져오기를 허용하지 않는다. 편집기 기준선과 다른 정의나 버전이 있으면 가져오기 전에 명시적 교체 확인을 거친다. 가져오기는 이전 검증 결과와 개인정보 검토를 지우며 자동 검증·발행을 하지 않는다. 파일 가져오기 자체는 서버에 초안을 업로드하거나 보관하지 않고 버전을 예약하지 않는다.
-
-파일은 UTF-8로 엄격하게 읽으며 UTF-8 BOM은 허용한다. 잘못된 바이트를 대체 문자로 바꾸어
-가져오지 않는다. 읽는 파일 이름과 취소 버튼을 표시하고, 오류 때 오류 안내로 초점을 옮긴다.
-읽기 취소·교체 취소·읽기 실패·10초 시간 초과는 기존 입력과 검토 상태를 유지한다. 읽는 도중
-목록/권한 확인·검증·발행 등으로 편집 상태가 바뀌면 바로 읽기를 취소하고 늦은 결과를 버린다.
-
-### 서버 초안 저장
-
-설정의 서버 초안 영역에서 owner가 프로젝트별 공유 초안 한 개를 명시적으로 확인·저장·
-불러온다. reader와 publisher는 읽거나 쓸 수 없다. GET/PUT
-`/v1/projects/{projectId}/schemas/draft`는 미완성 JSON·빈 버전 입력을 보존하며, 기존 초안
-파일 예산 128KiB를 적용한다. 자동 저장·자동 불러오기·발행·버전 예약은 하지 않는다.
-현재 입력은 서버 조회만으로 바뀌지 않고, 불러올 때 기존 정의/버전 입력과 다르면 교체를
-확인한 뒤 검증 결과·개인정보 검토를 지운다.
-
-첫 저장은 조회 결과 draft=null에 대해 expectedRevision=null을 보내며, 수정에는 조회한
-revision이 필요하다. 권한 재검사와 조건부 저장은 같은 DB batch에서 수행한다. 다른
-소유자·기기의 변경과 충돌하면 409이며 현재 입력을 유지한다. 서버 초안을 다시 확인한
-후 서버 내용을 불러오거나 현재 입력을 유지해 다음 저장을 검토한다. 검토 버튼은 저장하지
-않으며 실제 저장은 다시 눌러야 한다.
-
-응답 유실·timeout·취소가 저장 여부를 확정하지 못하면 자동 재전송하지 않는다. 명시적
-재조회가 제출한 내용과 일치할 때 저장을 확인한다. 저장 중 새로 편집한 입력은 예전 요청의
-성공으로 저장 처리하지 않는다. 서버에 현재 입력 전체가 있으면 새로고침/이탈 경고를 풀되,
-발행 미확정은 계속 보호한다. 입력 교체 확인과 발행 검증·개인정보 검토는 그대로 유지한다.
-
-초안은 관리자가 작성한 control-plane 원문으로 다른 owner와 공유되며, 한 행을 프로젝트
-수명 동안 유지하고 백업에 포함한다. 개인정보·비밀값을 넣지 않도록 저장 전에 안내한다.
-방문자 이벤트 원문·통계·로그에는 포함하지 않는다. 프로젝트 삭제 시 연쇄 삭제하며, 초안
-삭제 API·과거 초안 이력·자동 병합·버전 예약은 후속이다. 저장 계약은
-[ADR 0008](../adr/0008-shared-schema-drafts.md)에 둔다.
-
-스키마 정의의 선택 문자열 필드 `representativeWorkflowId`는 서비스 통합 현황과 개별 서비스
-개요가 표시할 browser 작업 흐름을 정한다. 값은 `^[a-z][a-z0-9_]{0,47}$`를 따르고 같은
-정의의 browser `workflows`에 있는 ID여야 한다. 생략하면 대표 없음이며 첫 workflow로 대체하지
-않는다. 목표 화면은 대표 선택과 관계없이 전체 workflow를 조회한다. 발행된 버전의 선택을
-바꾸려면 새 스키마 버전을 발행한다. 저장·정의 해시·같은 버전 재요청 비교에는 필드가 있을
-때만 포함하므로 필드가 없는 기존 발행 스키마와 해시는 바이트 단위로 유지된다. 기존
-스키마 JSON 저장을 쓰며 새 DB 컬럼·마이그레이션은 없고 `settingsHash`와 SQL 예산도
-바뀌지 않는다.
-
-관리자 스키마 섹션에는 이벤트 폼(`SchemaEventForm`)도 둔다. 이벤트를 폼으로
-추가·삭제하고 name(48자)·label(80자)·출처(browser/server)를 입력하며, 새 이벤트는
-browser 출처와 빈 properties로 만든다. 폼과 JSON은 같은 초안 한 원본을 쓰고 폼 변경도
-검증·개인정보 검토 확인을 초기화한다. 기존 properties·workflows·추가 키는 보존하고,
-작업 흐름에 연결된 이벤트는 이름·출처·삭제를 잠근다. 속성은 이벤트별 속성 폼에서
-편집하고, 작업 흐름은 작업 흐름 폼에서 편집한다.
-
-이벤트 폼은 이벤트마다 접히는 속성 폼(`SchemaPropertyForm`)을 함께 두어 속성 편집을
-폼으로 옮겼다. 속성을 이벤트마다 최대 4개까지 추가·삭제하고 이름(48자)·자료형
-(boolean/enum/integer)·필수 여부·수집 목적(240자)·enum 허용 값(한 줄에 하나, 32종)·정수
-범위를 편집한다. 새 속성은 아직 쓰지 않은 `property_N` 이름과 boolean·필수 아님·빈
-목적으로 만들고, 자료형을 바꾸면 이전 자료형의 전용 필드만 대체하며 수집 목적·필수
-여부·추가 키는 보존한다. 쓰던 이름으로 중복 변경은 거부한다. 정수 칸의 빈 값·범위 밖
-값과 enum 허용 값의 빈 줄·중복은 자동으로 고치지 않고 초안에 그대로 남겨 서버 검증
-전에는 발행할 수 없다. 허용 값 32종·가능한 조합 256개 한도는 폼에서 미리 계산해
-안내하고 최종 판정은 서버가 한다. 작업 흐름 `dimensions`에 쓰는 속성은 수집 목적만
-편집하고 나머지 필드와 삭제를 잠근다. 수집 목적에는 원시 입력값 대신 용도와 허용
-범주만 적도록 안내한다.
-
-관리자 스키마 섹션에는 작업 흐름 폼(`SchemaWorkflowForm`)도 두어 작업 흐름 편집을
-폼으로 옮겼다. 작업 흐름을 최대 10개까지 추가·삭제하고 ID(48자)·표시 이름(80자)·시작·
-성공·실패 이벤트·비교 기준 속성을 편집한다. 이벤트 선택은 browser 출처 이벤트만
-보여주고, 등록되지 않은 선택 문자열은 `(사용할 수 없음)` 옵션으로, 빈 문자열은 자리 표시자로 보존한다.
-실패 이벤트의 `null`은 `실패 단계 없음`, 빈 문자열은 별도 자리 표시자로 구분한다. 비교
-기준은 단계 이벤트의 필수 속성과 이미 선택된 항목의 합집합에서 최대 4개까지 고르고,
-4개가 차면 새 항목만 비활성화해 이미 선택한 항목은 해제할 수 있다. 단계 중복과 비교
-기준의 자료형·허용 값 불일치는 실시간 경고로 알리고 최종 판정은 서버 검증이 한다. ID
-중복은 로컬에서 거부하고 문제 입력으로 초점을 옮기며, 작업 흐름 검증 오류도 해당 폼
-필드로 초점을 옮긴다. 초안이 파싱되지 않거나 표현할 수 없으면 폼을 막고 원문을 보존한
-채 JSON 편집으로 안내하고, reader는 읽기 전용이다.
-
-## 프로젝트 생성
-
-프로젝트 생성은 별도의 issuer/subject 생성 권한과 관리자별 개수 한도로 제한한다.
-기존 프로젝트 owner 권한만으로는 생성할 수 없다. 운영자가 CLI로 생성 권한을 부여·
-회수한다. 프로젝트·불변 생성 요청 해시·인증된 생성자의 최초 owner grant를 원자적으로
-저장하고, 생성 기록은 프로젝트 수명 동안 유지한다. 같은 ID·같은 초기 정의의 재요청은
-설정 수정 후에도 기존 생성 결과로 확인하며 다른 정의·다른 생성자의 ID 재사용은 충돌이다.
-`POST /v1/projects`를 로컬 구현·검증했다. 이름·ID·시간대·허용 출처·수집 한도를
-명시적으로 받아 active 상태로 만들며, 스키마는 발행하지 않는다. 이후 owner가 첫
-스키마를 검증·발행해야 이벤트를 받을 수 있다. 200 응답은 최초 생성 시각·ID·원본
-요청 해시다. 관리자 화면의 `프로젝트 추가`에서 같은 입력으로 생성하며, 생성 권한은
-owner 권한으로 추론하지 않는다. 요청 본문 16KiB·닫힌 JSON·출처/시간대 검증을
-적용하며 소유자를 본문에서 지정할 수 없다.
-
-## 프라이버시
-
-원시 입력값/결과, 건강·금융 금액, 이메일, 계정·주문·파일 ID, 전체 URL·쿼리·해시·리퍼러, DOM·지문·영구 식별자·분석 쿠키·localStorage/sessionStorage·요청 바디 로그는 금지한다. 무작위 eventId·작업별 attemptId는 메모리에 두며 방문자 식별자로 재사용하지 않는다. 서버에는 중복 영수증 48시간·최소 시도 상태 72시간만 둔다. 관리자 grant의 issuer/subject는 방문자 분석과 분리된 제어 영역이다. 악용 방지용 IP 정책은 미정이다.
-
-## 카운트와 워크플로 의미
-
-MVP는 등록 이벤트의 건수·추이·허용 속성별 집계와 설정된 작업 흐름의 완료/오류를 제공한다. 작업 흐름은 시작/성공/실패를 정의하고, 같은 프로젝트/작업 흐름/버전/시간 기준/발행 출처에서 시작한 시도당 한 번만 센다. 완료율의 분자는 그 시작 시도 중 성공한 시도다. 단순 성공 이벤트 수 ÷ 시작 이벤트 수로 계산하거나 이벤트 이름만으로 전역 완료율을 추론하지 않는다. 분모가 0이면 “알 수 없음”으로 표시한다. 단순 행동 집계에는 작업 흐름이 필요 없다. 조회 화면은 시간대·정의 버전·집계 대상·발행 출처를 확인할 수 있어야 한다.
-
-관리자 설정 화면에 읽기 전용 수집 상태 진단을 제공한다. 기존 설정·선택 스키마·오늘의
-요약 API를 사용하며 마지막 신규 수신 시각은 기간·스키마와 무관한 프로젝트 전체
-기록이다. 수집 허용/일시정지, 활성/중지 스키마, 분당 요청·UTC 하루 신규 수신 한도를
-보여준다. 한도는 설정값이며 사용량·잔여량이나 거부율이 아니다. 설정의 수집 상태 진단 화면은
-거부 요약·일별 내역까지 함께 읽고, 조회 실패는 확인 불가로 둔다. 수신 기록이 없거나 오래됐다는
-이유만으로 장애로 판단하지 않는다. 입력한 서비스 주소의 출처는 탭 안에서 허용
-목록과 비교만 하고 전송·저장하지 않는다. 자동 폴링·테스트 이벤트는 없다.
-
-수집 거부 진단은 별도의 프로젝트 전체 API에서 UTC 수신일 기준 최근 7일의 고정 원인
-10종·거부 요청 수·마지막 거부 요청의 수신 시각·일별 내역을 제공한다. 원문·Origin·IP·
-토큰·requestId·이벤트/시도 ID는 보관하지 않는다. 분당 한도 초과는 기존 admission
-SQL에서 같이 기록하고 다른 거부는 admission 통과 요청에만 한 번 추가 기록한다.
-정상 요청의 DB 왕복을 늘리지 않고 추가 기록은 분당 최대 600회다. 요청 카운터를 601에서
-포화시켜 설정 한도가 바뀌어도 같은 분의 카운터가 줄어들지 않게 한다. 알 수 없는 프로젝트,
-관리자 API 실패와 admission 저장소 실패는 이 집계에 포함하지 않는다. OPTIONS/잘못된
-메서드 거부는 포함될 수 있으며 거부 이벤트 수·방문자 수·거부율·할당량 사용량과 다르다.
-Worker는 waitUntil으로 응답 뒤 기록을 추적하고 호스트에 그 기능이 없으면 await한다.
-진단 기록 실패는 원래 HTTP 응답에 영향을 주지 않고 재시도하지 않는다. coverage는
-best-effort이며 0은 기록된 거부가 없다는 뜻이다. 마이그레이션 이전 이력은 채우지 않는다.
-거부 분만 7개 UTC 날짜에 보존하고 기존 빈 분은 2분 뒤 정리한다. reader/owner grant는
-집계와 같은 D1 batch에서 다시 검사하며 설정 진단 화면에 연결했다.
-
-관리자 이벤트 분석 화면은 선택한 출처(기본 browser)의 등록 이벤트에서 속성 하나를 분류 기준으로
-골라 그 값별 건수·비중과 선택한 값의 일별 추이를 본다. 비중의 분모는 선택한 이벤트의
-전체 건수이며 값이 차지한 비중이지 전환율이 아니다. 분모가 0이면 “알 수 없음”(`—`)으로
-두고 합계나 값을 지어내지 않는다. true·false·null은 각각 참·거짓·값 없음으로 구분한다.
-프로젝트·스키마 버전·이벤트가 바뀌거나 그 속성이 정의에서 사라지면 이전 선택을 버린다.
-직전 기간 비교를 켜면 같은 분류로 바로 앞 같은 길이의 기간을 기존 일별 API로 한 번 더
-조회해 값별 현재·직전 건수와 증감률, 비중과 그 차이(%p)를 별도 표로 더한다.
-API·DB·의존성·CI·위생·운영 계약은 바꾸지 않는다.
-
-초기 완료율은 같은 브라우저 메모리에 남아 있는 작업 흐름을 대상으로 한다. 페이지 새로고침·기기를 가로지르는 workflow 연결은 후속 설계다. 브라우저/서버를 가로지르는 퍼널 연결은 [ADR 0006](../adr/0006-ordered-task-funnels.md)의 작업 퍼널 계약으로 로컬 구현·검증했고, 브라우저 SDK의 퍼널 연결 전송도 선택 프로필로 동작한다. reader/owner 퍼널 일별 조회 API는 로컬 구현·검증했다. 관리자 목표 화면의 퍼널 분석·CSV는 단계별 도달·전환과 일별 내역·단계 값을 로컬 연결했고 퍼널 전용 단계 편집 폼도 로컬 구현·검증 완료다. 검증 오류·실행 실패·수집 거부/누락은 구분한다. 구매/가입 성공은 출처에서 성공을 확인한 뒤 기록하고 버튼 클릭을 완료로 세지 않는다. 정확한 고유/재방문 사용자 수와 호환되지 않는 정의 간 전환율 비교는 초기 범위 밖이다.
-
-## 전송과 SDK
-
-SDK 단독 gzip 3KiB·한 서비스의 연동 코드·필수 설정 합계 gzip 3.25KiB 이하를 목표로 하며 참조 예제 측정도 예산 안이다(값은 [검증](../../VALIDATION.md)에 있다). 2026-10-23 전달 진단 추가 후 gzip은 퍼널 SDK 3028 B·퍼널+참조 예제 3157 B·고정 endpoint를 포함한 관리자 생성 코드 3182 B·기본 SDK 2903 B·Sembom 3179 B다. 메모리 버퍼 40개·20개/16KiB 배치·5초 전송·최대 2회/10분 재시도를 계약으로 정했고 `packages/browser`에 로컬 구현·검증했다. 일반 이벤트는 발생일, 목표는 시작일 기준이며 시간대와 버전을 분리한다. 수집기에서 중복 제거와 원자적 집계를 처리한다. 업무와 렌더링은 전송 완료를 기다리지 않는다. SDK는 네이티브 `sendBeacon`을 쓰지 않고 keepalive fetch로 `credentials: omit`·no-referrer를 유지한다. 관리자 화면은 최신 활성 스키마에서 출처별 연결 코드를 안내한다(브라우저 표준·퍼널 프로필, 서버 규칙). 공개 패키지 전까지 로컬 빌드를 쓰게 한다. 초기 실행 비용과 실브라우저 지연·처리량은 [검증 기록](../../VALIDATION.md)의 합성 화면 측정과 실제 서비스 파일럿을 구분한다.
-
-별도 D1의 90일 일별 집계를 우선하고 Worker 메모리를 영속 저장으로 쓰지 않는다. 속성은 최대 4개·정의별 32종 이하·가능 조합 256 이하로 제한한다. API·논리 DB 예제는 v0.1 계약으로 교체했다. D1 원자 저장과 CAS 가드는 로컬에서 구현·검증했고, 쓰기 처리량·지연과 실제 인증·IP 보호는 구현·측정 후 검증한다. 라이선스는 미정이다.
-
-## 관리자 저장소 읽기 확인
-
-관리자 전용 `GET /v1/health`는 검증된 관리자 bearer와 호스트 읽기 포트를 사용한다. 두
-제어 테이블(`projects`·`project_grants`)을 읽기만 하며, 프로젝트 grant가 없어도 상태 확인은
-가능하다. 응답은 `{status:"ok",scope:"administrator_storage_read"}` 두 필드만 담고 원문 행·
-identity는 반환하지 않는다. 수집 쓰기·전체 스키마·정리 상태를 확인하는 경로는 아니다.
-인증·오류·읽기 범위는 [운영 관측](../ops/observability.md)과 OpenAPI를 따른다.
-
-## 참고
-
-작업 흐름 속성별 완료율 조회는 시작 시점의 등록 dimensions 한 속성으로 나누고
-각 값의 성공 시도/시작 시도를 반환한다. 발생일 기준 이벤트 비율과 구분한다.
-기존 차원 집계를 사용하며 원본 저장이나 DB 변경은 없다. 관찰된 최대32개 값과
-31일 시작일 코호트만 조회하고 시도0의 완료율은 null이다. API 계약은 OpenAPI에 있다.
-관리자 목표 화면에서 속성을 선택하고 값별 수치와 일별 내역을 보며, 선택한 분류를
-CSV로 내보낸다. 속성별 조회 실패는 전체 목표 결과를 유지하고 분류 해제나 재시도를
-제공한다. 완료하지 않은 속성 조회가 있으면 CSV를 잠근다.
-
-직전 기간 비교를 켜면 같은 등록 분류로 바로 앞 같은 길이의 기간을 기존 속성별 API로
-한 번 더 조회해 값별로 비교한다. 현재 기간 표는 그대로 두고 별도 비교 표를 더해 값마다
-현재·직전 시작/성공 수와 완료율, 완료율 차이(%p)를 보여준다. 값은 두 기간에 관찰된 것을
-자료형이 같은 키로 합집합해 정렬한다. 한쪽 기간에 관찰되지 않은 값의 건수는 0으로 두고
-시작이 0인 기간의 완료율과 그 차이는 계산 불가(null)다. 직전 조회가 실패해도 현재 기간
-결과는 유지하고 비교만 다시 시도한다. 값별 일별 내역은 현재 기간만 보여준다.
-현재·직전 응답의 generatedAt은 다를 수 있어 하나로 맞추지 않는다.
-
-이벤트 분석의 속성 분류도 같은 비교 스위치로 정확히 바로 앞 같은 길이의 기간을 한 번 더
-조회하며 임의 기간은 받지 않는다. 현재 기간 표는 그대로 두고 별도 표를 더해 값마다
-현재·직전 건수와 증감률(%), 비중과 비중 차이(%p)를
-보여준다. 값은 두 기간에 관찰된 값을 자료형이 같은 키로 합집합하고 null·false·0을 서로
-다른 값으로 구분한다. 한쪽 기간에 없는 값의 건수는 0이고, 그 기간 선택 이벤트 전체 건수가
-0보다 크면 비중도 0이다. 전체 건수가 0이면 비중과 그 차이는 계산 불가(null)이고 직전
-건수가 0이면 증감률도 null이다. 비중의 분모는 그 기간 선택 이벤트 전체 건수이며 전환율이
-아니다. 분류 기준을 고르지 않은 조회에는 직전 기간 속성 조회를 보내지 않는다. 값별 일별
-추이와 차트는 현재 기간만 보여준다. 직전 조회가 실패해도 현재 기간 결과·차트는 유지하고
-비교만 별도로 다시 시도한다. 이벤트·분류 속성·기간·프로젝트·스키마 버전·화면 또는 비교
-스위치가 바뀌면 진행 중 조회를 취소해 늦은 응답이 화면을 덮지 않는다. CSV는 속성 값 행을
-현재·직전 기간으로 나눠 담고 값별 비교 지표 행(property_comparison, 건수·비중 지표와
-previous_value·change·change_unit)을 더한다. 값 없음은 빈 칸으로 두고 자료형을 보존한다.
-선택한 분류의 비교가 준비되지 않았거나 실패하면 내보내기를 잠근다. 분류를 해제하면
-속성별 상세·비교 행을 제외하고 전체 이벤트 기간 비교는 유지한다. 비교를 끄면 현재 기간
-행만 내보낸다.
-
-관리자 API 연결 모드의 개요·이벤트 분석·목표는 이미 조회해 검증한 조건과 결과를
-CSV로 내려받는다. 기간·버전·시간대·검색·분류 조건, 합계·일별·속성 값과 활성 비교를
-행 종류별로 구분한다. 목표의 속성별 분류를 켰으면 값별 현재·직전 행과 값별 비교 지표
-행(workflow_property_comparison, 시작·성공 건수 증감률 %, 완료율 %p)을 더한다.
-상세/비교가 조회 중이거나 실패하면
-다운로드를 잠그고 해당 조건을 해제하거나 조회를 완료하게 한다. 비교를 켠 동안 준비되지
-않은 분류가 있으면 내보내기를 거부하고, 비교를 끄면 현재 기간 행만 내보낸다.
-내보내기는 추가 조회 없이 브라우저에서
-이루어진다. 서식 없는 수치와 빈 값, 속성 값 자료형을 보존하고 UTF-8 BOM과 CSV
-이스케이프를 사용한다. Sample 모드와 설정 화면은 내보내기 대상에서 제외한다.
-
-관리자 API 연결 화면은 최근 7·14·30일과 시작일·종료일 직접 선택을 지원한다.
-직접 선택은 프로젝트 시간대의 오늘을 기준으로 최근 90일 안에서 최대 31일(양끝 포함)을
-조회하며 입력 중에는 기존 결과를 유지하고 기간 적용 때만 반영한다. 빈 값·잘못된 날짜·
-역순·미래·보존 범위 초과는 적용하지 않는다. 적용한 기간은 개요·이벤트·목표·속성별
-상세·CSV가 함께 사용한다. 프로젝트·시간대·기본 기간 변경이나 재연결 시 직접 선택은
-초기화하며 날짜 초안과 적용 값은 메모리에만 둔다. 설정과 Sample 모드는 직접 선택 대상이 아니다.
-직전 기간 비교는 선택적으로 켜며 바로 앞 같은 길이의 기간을 동일한 스키마·프로젝트
-시간대로 조회한다. 이전 기간이 보존 범위를 벗어나면 조회 전에 안내하고 현재 결과는
-유지한다. 목표의 속성별 완료율과 이벤트 분석의 속성 분류도 같은 스위치로 비교하며,
-이때는 같은 분류로 기존 API를 한 번 더 조회한다. 이때 비교를 끄면 현재 기간의 CSV를
-내려받을 수 있다.
-수신된 이벤트 건수는 상대 증감률, 시작일 기준 작업 흐름 완료율은 퍼센트포인트 차이로
-표시한다. 이전 건수 0의 증감률과 시도 없는 기간의 완료율 차이는 계산 불가다.
-오늘은 집계 중이고 확정 전 코호트의 완료율은 변경될 수 있다. 비교 조회가 실패하면
-현재 결과를 유지하고 별도 재시도를 제공한다. 서로 다른 버전의 집계·전환율 비교는 후속이며,
-설정의 정의 비교는 집계 수치를 비교하지 않는다.
-
-### 발행된 스키마 버전 간 정의 비교
-
-설정의 이벤트 스키마에서 reader·owner가 서로 다른 두 발행 버전을 선택해 정의 차이를
-조회한다. 사용 중지된 버전도 포함하며, 이전 목록은 기존 페이지 나누기로 읽는다. 비교는
-기존 버전별 정의 읽기 API 두 번만 사용하고 초안·발행할 버전·검증 결과·개인정보 검토를
-바꾸거나 새 버전을 발행하지 않는다.
-
-이벤트 이름·작업 흐름/퍼널 ID로 정의를 대응해 추가·삭제·필드 변경을 보여준다. 이벤트의
-출처·표시 이름, 속성의 자료형·필수 여부·용도·허용 값·수치 범위, 흐름의 단계 이벤트·실패
-원인 속성·분류 기준, 퍼널의 단계 출처·순서·분류 기준과 대표 흐름을 비교한다. 같은 구성원의
-표시 순서 변경도 별도 표시한다. 객체 키 순서는 무시하고 배열 순서는 보존하며, 생략한
-funnels와 빈 배열은 같다. 발행일·사용 상태·프로젝트 설정은 정의 차이에 포함하지 않는다.
-
-선택·프로젝트·세션 변경과 목록/권한 재확인은 진행 중인 비교를 취소하고 이전 결과를
-숨긴다. 오류 때 이전 표를 남기지 않으며 명시적으로 다시 비교한다. 한쪽 실패는 나머지
-조회도 취소한다. 비교는 호환성 판정이나 다른 버전의 집계·전환율 비교를 제공하지 않으며,
-같은 이름이어도 정의에 따라 측정 의미가 다를 수 있음을 안내한다.
-
-### 다단계 퍼널 속성별 분류
-
-다단계 퍼널의 속성 분류 읽기 API `/v1/projects/{projectId}/funnels/{funnelId}/breakdown`을
-로컬에서 구현·검증했다. groupBy는 등록된 필수 시작일 차원 하나이며 기존 차원별 저장
-카운트에서 최대 32개 값의 요약·일별 단계 수치를 읽는다. 프로젝트 reader/owner 권한·
-최근 90일/최대 31일·조합/단계/행/안전 정수 제한을 적용한다. 속성별로 합치기 전에 각
-원래 조합의 단계 순서를 검사한다. 원시 이벤트·작업 ID는 반환하지 않고 DB는 바꾸지 않는다.
-관리자 목표 화면에서 등록 분류를 선택하면 값별 시작·완료·완료율과 선택 값의 단계·일별
-내역을 조회한다. 분류 전에는 추가 요청하지 않고 실패 시 전체 결과는 보존하며 분류 재시도를
-제공한다. 분류 조회 중·실패 때 CSV를 잠그고 해제하면 전체 결과를 내보낼 수 있다.
-CSV는 group_by·property_type·property_value와 property_summary/property_daily 행으로
-분류를 구분한다. 기간 비교를 켜면 같은 등록 차원의 직전 같은 길이 시작일 코호트도 조회해
-값별 시작·완료·단계 수치와 증감률/비율 차이를 비교한다. 두 기간 값의 합집합을 자료형까지
-구분하고 관측되지 않은 값은 건수 0·비율 null로 처리한다. 이전 0건의 증감률과 분모 없는
-비율 차이는 계산하지 않는다. 비교 실패 때 현재 분류 결과를 보존하며 재시도를 제공하고,
-분류 해제·기간/컨텍스트 변경·비교 해제 때 요청을 취소하고 늦은 응답을 버린다.
-CSV는 실제 관측된 값의 양 기간 property_summary/property_daily 행과 값별
-property_comparison 지표를 구분한다. 분류 비교 중/실패 때 CSV는 잠긴다. 전체 조회와
-분류 조회는 서로 다른 시각의 응답이므로 합계 일치를 강제하지 않는다.
-
-### 다단계 퍼널 기간 비교
-
-목표의 기간 비교 스위치는 선택한 다단계 퍼널에도 적용한다. 동일한 프로젝트·버전·정의의
-직전 같은 일수 시작일 코호트를 기존 퍼널 API로 추가 조회한다. 시작·완료·단계 도달 건수는
-증감률(%), 완료율·도달률·전환율은 차이(%p)다. 이전 0건과 분모 없는 비율 차이는 null로
-남긴다. 두 기간 중 잠정 코호트가 있으면 안내한다. 비교 실패는 현재 결과를 유지하고 비교만
-재시도한다. 선택/연결/컨텍스트 전환·비교 해제에서는 이전 조회를 취소하고 늦은 응답을 버린다.
-비교가 준비되지 않으면 퍼널 CSV를 잠그고, 비교를 끄면 기존 현재 기간 CSV를 내보낸다.
-비교 CSV는 기존 열에 period·metric·current_value·previous_value·change·change_unit을 더해
-현재/직전 요약·일별 행과 비교 지표 행을 구분한다. 각 기간의 생성 시각을 따로 보존한다.
-퍼널만 있는 프로젝트에서도 스위치를 제공하며 작업 흐름 전체 비교 조회는 하지 않는다.
-원시 입력·추가 저장·API·DB 변경은 없다.
-
-### 로컬 운영 로그 보고서
-
-보존 정리의 선택적 execution 진단이 있으면 중단 이유별 실행 수·최대 실행 시간·최대 예약
-지연·결과 미확인 작업과 커서 진행 확인량을 표시한다. 시간·페이지 한도로 다음 실행에 넘긴
-상태와 삭제 실패를 구분하고, 예전 로그에는 시간·중단 이유를 만들어 넣지 않는다.
-
-API 연결 설정에서 사용자가 가진 `logs:summary` v2 JSON을 선택해 관측 응답·가중 요청 어림·
-진단·작업별 HTTP 응답과 지연 구간·정리 실행/처리 횟수를 표로 읽는다. 이 보고서는 수집기
-전체 로그의 요약이며 프로젝트·기간 필터와 구분한다. 파일은 8MiB 이하이고 Worker에서
-검증하며 네트워크 전송·브라우저 저장소 기록·자동 폴링은 없다. 형식·여분 필드·표본 가중치·
-합계·진단 불일치를 거부한다. 긴 HTTP 응답 목록은 페이지로 나누고 누락을 0으로 해석하지
-않는다. 새 파일·닫기·화면 이탈·재연결에서는 이전 읽기/결과를 지운다. 운영 로그 확보와
-원격 모니터링·알림은 후속이며 사용법은 [로컬 보고서 안내](../ops/local-report-viewer.md)에 둔다.
-
-- Sembom 파일럿 예시: [sembom.md](../integrations/sembom.md)
-- 프론트엔드 설계: [FRONTEND_DESIGN.md](../frontend/FRONTEND_DESIGN.md)
-
-## 전달 진단과 용량 예산 — 2026-10-23
-
-브라우저 SDK는 선택적 동기 onDelivery(state, events) 콜백으로 HTTP 수락·재시도·
-최종 실패·기한 초과·큐 초과·destroy 폐기·호스트 beacon 큐 수락을 구분한다. 이벤트
-내용이나 ID는 전달하지 않는다. 콜백 예외/재진입은 전송 상태를 바꾸지 않는다.
-SDK 단독 예산은 gzip 3KiB를 유지한다. 전달 진단 코드가 포함된 대표 연동 코드·필수
-설정 합계 예산은 3.25KiB(3,328B)로 조정한다. 기존 참조 예제가 3KiB에 근접해 있어
-진단을 빼거나 검증을 줄이는 대신 약 130B의 추가 코드 비용을 명시적으로 허용한다.
-이 단락이 앞선 3KiB 전체 연동 목표와 과거 측정값보다 우선한다.
+# Tallyfin Product Specification
+
+Status: Initial design baseline. The features below are planned before operational activation; core validation, the D1 storage adapter, the minimal browser collector, the browser SDK, and the administrator query/configuration API have been implemented and verified locally. Implementation and deployment status are documented in [Collector Implementation](../backend/collector.md), [Administrator Query and Configuration Boundary](../backend/administrator.md), and [Browser SDK](../backend/browser-sdk.md).
+
+## Scope and Direction
+
+Tallyfin is a general-purpose product event analytics platform for use across Rodisoft services. Sembom is the first application, and project-specific configuration analyzes different actions such as sign-up, file conversion, purchase, and calculation.
+
+The transport and query APIs and the logical DB contract are fixed in [ADR 0005](../adr/0005-event-and-aggregation-contract.md) and [Transport and Aggregation Contract](../backend/event-contract.md). Core validation, the D1 storage adapter, the minimal browser collector, the browser SDK, and the administrator query/configuration API have been implemented and verified locally; an actual authentication provider and operational deployment do not exist yet. The domain, operational authentication provider, license, and IP policy for abuse prevention are undecided (UNDECIDED).
+
+## Technical Direction
+
+Multi-step funnels and browser/server task linkage follow the per-task random ID and ordered-step contract in [ADR 0006](../adr/0006-ordered-task-funnels.md). The independent types in OpenAPI and the core validation, progress planning, and aggregation calculation have been implemented locally. Versioned registration, validation, publication, and definition lookup for optional funnels, as well as preserving administrator JSON edits and publications, have also been connected. Linked event collection and D1 linked-state storage, step aggregation storage, and cleanup have also been implemented and verified locally. The server SDK's link transport, server schema projection, and Node, Worker, and D1 integration have also been implemented and verified. The browser SDK's funnel link transport has also been implemented and verified locally through the optional profile `@tallyfin/browser/funnels`. Administrator SDK code generation has been implemented and verified locally to produce per-source standard and funnel profiles and server configuration, and the reader/owner funnel daily query API has also been implemented and verified locally. The administrator funnel analysis screen and CSV have been connected locally, and the funnel-specific step editing form has also been implemented and verified locally. The meaning and transport format of the existing browser workflow completion rate are retained.
+
+Administrator authentication retains the host's verifier port, and default OIDC JWT access token verification is separated into `packages/auth-oidc`. `jose ^6` is used only as a server-side dependency. The actual authentication provider and login flow are undecided and follow the policy in the [OIDC Adapter](../backend/oidc.md).
+
+The initial architecture is based on TypeScript. The browser SDK is distributed dependency-free and does not include the server core or D1 runtime in its bundle. The collection endpoint is handled by a Cloudflare Worker's native fetch, and D1 is separated into a separate adapter. The core remains portable, with no private ZDP or Cloudflare dependency. Do not add web frameworks such as Hono, Gin, or Elysia to the collector. The administrator is implemented as the React/Vite-based `apps/admin` workspace, following [ADR 0007](../adr/0007-admin-application.md).
+
+The browser is implemented first. Server-side product events use the general contract and the dependency-free server SDK in `packages/server`. The server contract has a language-neutral event shape, so it reuses the same schemas. Infrastructure telemetry, session replay, billing, AI, advertising attribution, and PostHog equivalence are out of scope.
+
+## Project Registry and Schemas
+
+An optional failureReasonProperty on a workflow designates one enum property of the failure event. Only the cause of the first confirmed failure is aggregated by start date and version, and raw error text is not stored. Missing causes are distinguished from past unmeasured failures, and the denominator for rates is all confirmed failures. The distribution remains for the daily aggregation retention period after attempts are cleaned up. Select or clear the cause property in settings and publish a new version. The goals screen and CSV show counts by cause, the share of all confirmed failures, and missing, unmeasured, and aggregating status. They also distinguish the absence of information in an older response from the genuine absence of failures. Previous-period comparison by cause for the same length of time reuses the existing response for the same project, schema, and workflow. It provides counts by cause, the share of all confirmed failures, and the share difference (%p). For a period with any unmeasured failure, provide only the observed count and share and defer the cause change. Missing information in an older response is not 0. The overall failure rate is calculated separately as confirmed failures divided by started attempts and is distinct from the change in cause share. The screen and CSV are connected to the existing period comparison switch in Goals. If the previous query fails, retain the current distribution and retry, and notify that figures for a cohort still aggregating may change.
+
+The workflow daily response provides completion durations, measured at both start and end, in 6 fixed buckets with boundaries of 1 second, 5 seconds, 30 seconds, 2 minutes, and 10 minutes. It distinguishes success from failure and aggregates by start date and version. Earlier completion records are marked unmeasured, and times calculated from browser clocks are not described as server processing time. Waiting attempts are excluded from the duration distribution. The distribution, measured and unmeasured counts, and aggregation status are connected to the goals screen and CSV. Unmeasured is distinguished from no completion, and no value is fabricated when a field is absent from an older response.
+
+The administrator project list performs a partial server-side search of accessible names and IDs using the optional search term `q`. The term is at most 80 characters; English ASCII case is ignored; symbols are compared literally; and the existing ID ordering and page cursor are retained. When the search term changes, reading starts from the first page and permission is checked again on every page. Search, result paging, and error retry are connected to the administrator selection screen. Searching does not change the current selection or settings draft, and a project selected from outside the first list is retained across refresh only after its permission is checked again.
+
+The schema list returns `latestActiveVersion`, independent of the page cursor, from the same permission check and DB snapshot. It is null when there is no active version. The administrator uses this value for automatic selection and uses existing page navigation only for older server responses without the field.
+
+The administrator integration status batches queries for up to 5 services on the current page. The server selects the period and active schema and preserves per-service permissions, partial failures, and request order. The representative workflow is the browser workflow referenced by `representativeWorkflowId` in the selected schema version. If the field is absent, there is no representative, and the first registered workflow is not used as a substitute. The previous first-workflow selection is legacy implementation behavior and does not apply to the new schema contract. Even when there is no active schema or all versions have been retired, the project's latest receipt time and rejected count for the last 7 UTC days continue to be displayed. Events and completion rate remain null to distinguish them from an actual aggregate of 0.
+
+The integration completion rate provides start, success, and in-progress counts for both periods along with whether aggregation is in progress. The administrator defers change comparison while aggregating, when there are fewer than 30 starts, or when there is no denominator, and does not add automatic failure alerts. The actual completion rate calculation and the aggregation period of the existing workflow daily query are retained.
+
+Integration status displays the server query reference time and each service's actual current and previous periods and rejected-record UTC range. If the local/UTC date changes while the table is open, it instructs the user to refresh manually and does not add automatic querying. The device clock is used only for this notice and does not determine the server query range.
+
+The administrator `GET /v1/identity` returns only the issuer/subject of the caller from the verified access token. It allows users to inspect their own account before initial permission registration and does not require a project grant. It has no DB access, grants permissions, returns no profile, other accounts, or tokens. Apply no-store, Vary Authorization, and existing administrator authentication. Actual provider login and operational permission registration are follow-up work.
+
+Configure event and property schema versions, sources, permissions, and collection limits in an independent project per service. Queries require an administrator issuer/subject verified by a trusted verifier and a project grant, and deployments without an authentication provider configured are closed. Configuration reads require a reader/owner grant and changes require an owner grant; the settingsHash returned by the read prevents concurrent changes. The administrator settings screen connects these reads and writes locally so an owner can edit and save the name, status, allowed origins, and collection limits, while grants whose response has canEdit set to false open read-only. Projects are created by the CLI or by an API that requires a separate creation permission, and can also be created from the administrator screen. Grant, role change, and revocation are also handled by owner-only PUT and DELETE APIs, with the provisioning CLI retained as an alternative. New schema versions are also published through an owner-only API. The collector checks active state, registered schema, exact origin, and limits. Administrator tokens are never placed in public browsers. Server collection is opened only through dedicated publisher bearer authentication separated from the administrator audience, and owner/reader administrator grants do not confer publishing permission.
+
+The grant list is read from the current project's owner-only `GET /v1/projects/{projectId}/grants`, page by page. The list displays the registered issuer/subject, reader/owner role, and initial creation time, and owner permission is checked again on every page. Local implementation of grant creation, role changes, and revocation through owner-only PUT and DELETE APIs is complete, with the provisioning CLI retained as an alternative. The API-connected settings screen connects a grant list readable only by the owner. It displays 25 items per page and provides refresh and next-page controls, and clears the previous list on revocation, query failure, or project/connection switch. A reader does not call the grant list API.
+
+Only the current project owner can change grants through `PUT` and `DELETE /v1/projects/{projectId}/grants`. PUT accepts `{issuer,subject,role,expectedRole}` to register or change a reader/owner, and DELETE accepts `{issuer,subject,expectedRole}` to revoke one. expectedRole is the role last seen; if the target is already in the desired state, do not write again and return 200 with `changed=false`. If the role differs from expectedRole, return `grant_conflict` (409); removing or revoking the last owner returns `last_owner` (409). A successful response is `{projectId,issuer,subject,role,createdAt,canManage,changed}`. The administrator screen's permission-change UI has been implemented and verified locally and follows confirmation before saving, rechecking an unclear result with the same request, and locking after permission loss. There are no DB or migration changes.
+
+Administrator change history is kept as an append-only record per project. The administrator API records project creation, settings changes, schema publication, and grant changes, while the offline provisioning CLI records register, grant, and revoke; each record is made in the same D1 batch. If one action changes multiple kinds, one row remains for each kind. The actor is the issuer/subject verified by the API; the CLI has no authenticated person, so it uses a NULL identifier and never infers the changed account as the actor. Settings record only changed field names, schemas record only the action and version number, and grants record only the target and previous/next role. Raw request bodies, setting values, schema definitions, tokens, and visitor data are not stored. Re-requests without values, failures, and settings requests whose actual values did not change do not add history. Records are retained for a rolling 90 days in `admin_changes` (0005), and cleanup deletes at most 500 rows per project (1000 rows for direct calls) at a time. The current owner reads them through `GET /v1/projects/{projectId}/changes`. Owner permission and records are checked in the same D1 batch. The response is `{projectId,generatedAt,retentionDays:90,coverage,data,page}` and contains only id, occurredAt, actor, and change; it contains no settings values, definitions, request bodies, or tokens. change carries only the values required for each action. limit defaults to 25 and is at most 100; ordering is by occurredAt descending and then record UUID descending, and the cursor is a position value bound to the project. The query window is a rolling 90 days inclusive of the cutoff, excludes future records, and hides expired rows before physical cleanup. coverage means that only recorded changes are included. Direct SQL writes, creator permission, system cleanup, and visitor activity are not recorded. The API-connected settings screen's owner-only change history displays 25 items per page. It provides refresh, next-page, and failed-page retry from the beginning and refreshes the first page after settings or permission saves. A reader does not call the history API; on 401 or 403, clear the records and notify the parent settings screen of the permission loss. Cancel requests and discard late responses on project/connection switch and unmount. Do not poll automatically.
+
+The project ID is public routing information, not an authentication mechanism. Allowed origins alone cannot prevent bots or forged events. Schemas, data, and settings are separated between projects, and one project's definitions are not implicitly reused in another project.
+
+The SDK provides generic manual event hooks. It has no calculator engine dependency and performs no implicit DOM capture or automatic collection. Each service defines meaningful event names and integrations in its own repository. Product examples may include sign-up, file conversion, payment status (excluding email, files, order IDs, and amounts), and calculations.
+
+The closed event set means schemas registered and reviewed per project, rather than six global names. Register and review event names and property key types, allowed enums, ranges, counts, lengths, and cardinality limits, and have the collector reject unknown names, keys, or versions and invalid data. Properties may take minimal forms such as boolean, enum, and counter; numeric metrics are optional only when a definition with boundaries has passed a privacy review. Arbitrary free text is not allowed.
+
+Event definitions are versioned so that incompatible changes are not mixed into one aggregation. For each action, designate the source that confirms success, browser or server, to avoid double counting. Deduplication of transport retries and semantic duplication where two sources record the same task are handled separately.
+
+The server event core validates `ServerBatch` and `ServerEvent` shapes, registered sources and properties, batch limits, and timestamps; normalizes them; computes per-source hashes; and builds a pure aggregation plan. Server events do not accept browser attempts and do not create workflow state. The existing browser batch and hash formats are retained. The storage adapter applies server events to per-source receipts and event aggregation and rechecks the `project_publishers` permission, independent of administrator grants, at read and save time. 0006 preserves existing browser records and does not automatically grant publishing permission. The UTC daily new-receipt limit and per-minute admission are shared by the whole project. The dedicated `POST /v1/projects/{projectId}/server-batches`, publisher OIDC verifier, and `PUBLISHER_*` runtime configuration keys have been implemented locally. This path accepts only `application/json` batches up to 16KiB and allows only `POST` with no query parameters; it does not use CORS or `Origin` authentication. Authentication and the `project_publishers` check precede project reads and admission. Publisher permission is granted and revoked only by project, issuer, and subject through the offline provisioning CLI or the owner-only `PUT` and `DELETE /v1/projects/{projectId}/publishers` and the publisher management screen in settings; it grants no role or administrator grant. Listing and changes handle the immutable grant ID `grantId` together so a permission re-granted in the same millisecond is not revoked. `summary` and `events/{eventName}/daily` read only one source through the optional `source` (default browser), and server definitions also support daily property breakdown while workflow queries are browser-only. The server-source query screen has been connected locally, and registries with only server definitions are allowed. A server-only schema can be registered with empty workflows, and a project with empty allowedOrigins. An empty source list blocks browser collection and does not replace server publishing authentication or permission. The administrator SDK guide lets you choose browser/server, generates code only from the latest definition of the same source, and defaults to server for a server-only project. For browser, choose the standard or funnel profile, and attach funnel examples only when a registered funnel exists in which the source participates. Server code includes server rules with server steps identified by name and browser steps as `null` placeholders, and receives credentials through the host's getToken function. Collection diagnostics also default to server for a server-only project and allow explicitly changing the source.
+
+Published schema listing and definition lookup, plus owner-only draft validation and new-version publishing APIs, have been implemented and verified locally. A draft requires events and workflows, optionally accepts funnels and a representative workflow ID, validates them with the same rules used for actual registration, and returns the first error location and code. Publishing requires the owner's personal-data review confirmation and the latest version number from the lookup, and rechecks permission and the latest number when saving. A re-request with the same version and same content succeeds without an additional save; different content or concurrent publication returns 409. Previous versions, aggregates, and project settings are retained, and the SDK version is not switched automatically. In API-connected administrator settings, users can query versions, edit a JSON draft, validate it, confirm the personal-data review, and publish. On a conflict or lost response, preserve the draft and compare it with a re-fetched server definition before making an explicit choice. Server draft saving is supported by the separate flow below, and version reservation is not supported.
+
+Instead, you can download the current JSON draft and its intended version as a `tallyfin.schema-draft/v1` file and read it back. The file has exactly four fields: `format`, `projectId`, `targetVersion`, and `draftText`. It rejects a `projectId` different from the current project or extra fields. `draftText` is preserved exactly, including incomplete JSON. `targetVersion` is preserved exactly when it is a string of 32 characters or fewer, even if it is empty or outside the numeric range, such as 0; existing validation determines whether the internal JSON and version can be published. The entire file must be 128KiB or less in UTF-8.
+
+File download and reading are ready and occur only in the browser, within the owner's editable scope before the list is exhausted. File import is disabled while loading, while validating or publishing, while resolving a conflict or result, or while loading more items. If the definition or version differs from the editor baseline, require explicit replacement confirmation before importing. Import clears previous validation results and personal-data review and does not validate or publish automatically. File import itself does not upload or retain a server draft or reserve a version.
+
+Files are read strictly as UTF-8, with a UTF-8 BOM permitted. Invalid bytes are not replaced with replacement characters and imported. Display the file name being read and a cancel button, and move focus to the error message on failure. Canceling a read, canceling a replacement, a read failure, or a 10-second timeout retains the existing input and review state. If the editing state changes during a read because of a list or permission check, validation, or publishing, cancel the read immediately and discard the late result.
+
+### Server Draft Storage
+
+In the server draft area of settings, an owner explicitly confirms, saves, and loads one shared draft per project. Readers and publishers cannot read or write it. GET/PUT `/v1/projects/{projectId}/schemas/draft` preserves incomplete JSON and empty version input and applies the existing 128KiB draft file budget. It does not autosave, autoload, publish, or reserve versions. The current input does not change merely because the server is queried; when loading, if it differs from the existing definition or version input, confirm replacement and then clear validation results and personal-data review.
+
+The first save sends expectedRevision=null against a lookup result of draft=null, and later modifications require the revision that was read. Permission rechecks and the conditional save occur in the same DB batch. A conflict with a change from another owner or device returns 409 and retains the current input. After rechecking the server draft, either load the server content or keep the current input and review the next save. The review button does not save; the user must click save again for an actual write.
+
+If a lost response, timeout, or cancellation leaves the save outcome unknown, do not resend automatically. Confirm the save when an explicit re-query matches the submitted content. New edits made during saving are not marked as saved by the earlier request's success. If the server contains the complete current input, release the refresh/leave warning but continue protecting against an unconfirmed publication. Keep the input replacement confirmation, publication validation, and personal-data review unchanged.
+
+The draft is administrator-authored control-plane text shared with other owners; one row is retained for the project's lifetime and included in backups. Warn before saving not to enter personal information or secrets. It is not included in raw visitor events, statistics, or logs. Project deletion cascades to it; a draft deletion API, historical draft revisions, automatic merge, and version reservation are follow-up work. The storage contract is in [ADR 0008](../adr/0008-shared-schema-drafts.md).
+
+The optional string field `representativeWorkflowId` in a schema definition determines the browser workflow displayed by service integration status and individual service overviews. Its value follows `^[a-z][a-z0-9_]{0,47}$` and must identify an ID in the same definition's browser `workflows`. If omitted, there is no representative and the first workflow is not used as a substitute. The goals screen queries all workflows regardless of the representative selection. To change the selection of a published version, publish a new schema version. Saving, definition hashing, and same-version re-request comparison include the field only when present, so existing published schemas without the field and their hashes remain byte-for-byte identical. It uses existing schema JSON storage; there are no new DB columns or migrations, and `settingsHash` and the SQL budget do not change.
+
+The administrator schema section also has an event form (`SchemaEventForm`). Add and delete events through the form and enter name (48 characters), label (80 characters), and source (browser/server); new events are created with the browser source and empty properties. The form and JSON use the same single draft source, and form changes also clear validation and personal-data review confirmation. Preserve existing properties, workflows, and extra keys, and lock the name, source, and deletion of events used by workflows. Properties are edited in the per-event property form, and workflows in the workflow form.
+
+The event form includes a collapsible property form (`SchemaPropertyForm`) for each event so that property editing happens in forms. Add and delete up to 4 properties per event and edit name (48 characters), data type (boolean/enum/integer), required status, collection purpose (240 characters), enum allowed values (one per line, 32 types), and integer range. New properties are created with an unused `property_N` name, boolean, not required, and an empty purpose; changing the data type replaces only the previous type's dedicated fields and preserves collection purpose, required status, and extra keys. Changing a name to one already in use is rejected. Empty or out-of-range integer fields and blank lines or duplicates in enum allowed values are not corrected automatically and remain in the draft, blocking publication before server validation. The limits of 32 allowed values and 256 possible combinations are calculated and indicated in the form, and the server makes the final decision. For properties used in workflow `dimensions`, only the collection purpose is editable; other fields and deletion are locked. The collection purpose guidance says to describe the use and allowed category rather than raw input values.
+
+The administrator schema section also has a workflow form (`SchemaWorkflowForm`) so that workflow editing happens in forms. Add and delete up to 10 workflows and edit ID (48 characters), display name (80 characters), start, success, and failure events, and comparison dimension properties. Event selection shows only browser-source events; an unregistered selected string is preserved as an `Unavailable` option, and an empty string is preserved as a placeholder. For the failure event, `null` is distinguished as `No failure step`, while an empty string is a separate placeholder. Comparison dimensions are selected up to 4 from the union of required properties from step events and already selected items; when 4 are selected, only new items are disabled while already selected items remain removable. Duplicate steps and data type or allowed-value mismatches in comparison dimensions are shown in real-time warnings, with server validation making the final decision. Duplicate IDs are rejected locally and focus moves to the problematic input; workflow validation errors also move focus to the corresponding form field. If the draft cannot be parsed or represented, block the form, preserve the original text, and direct the user to JSON editing; readers are read-only.
+
+## Project Creation
+
+Project creation is restricted by a separate issuer/subject creation permission and a per-administrator count limit. Existing project owner permission alone cannot create projects. An operator grants and revokes creation permission through the CLI. Store the project, immutable creation request hash, and initial owner grant for the authenticated creator atomically, and retain the creation record for the project's lifetime. A re-request with the same ID and same initial definition resolves to the existing creation result even after settings changes; reuse of the ID with a different definition or by a different creator is a conflict. `POST /v1/projects` has been implemented and verified locally. It explicitly accepts name, ID, time zone, allowed origins, and collection limits and creates the project in active state without publishing a schema. The owner must then validate and publish the first schema before events can be received. The 200 response contains the initial creation time, ID, and original request hash. The `Add project` control in the administrator screen creates with the same input, and creation permission is not inferred from owner permission. It applies a 16KiB request body, closed JSON, and origin/time-zone validation, and the owner cannot be specified in the body.
+
+## Privacy
+
+The following are prohibited: raw input values and results; health or financial amounts; email; account, order, or file IDs; full URLs, query strings, hashes, or referrers; DOM, fingerprints, persistent identifiers, analytics cookies, localStorage/sessionStorage, and request-body logs. Random event IDs and per-task attempt IDs stay in memory and are not reused as visitor identifiers. The server retains duplicate receipts for 48 hours and minimal attempt state for 72 hours. Issuer/subject values on administrator grants are control-plane data separated from visitor analytics. The IP policy for abuse prevention is undecided.
+
+## Counts and Workflow Semantics
+
+The MVP provides counts and trends for registered events, aggregation by allowed properties, and completion/error reporting for configured workflows. A workflow defines start/success/failure and counts once per attempt started in the same project/workflow/version/time basis/publishing source. The completion-rate numerator is successful attempts among those started attempts. Do not calculate it as a simple success event count divided by a start event count or infer a global completion rate from event names alone. If the denominator is 0, display “Unknown.” Simple action aggregation does not require a workflow. Query screens must make the time zone, definition version, aggregation target, and publishing source identifiable.
+
+The administrator settings screen provides a read-only collection-status diagnostic. It uses the existing settings, selected schema, and today's summary APIs; the last new-receipt time is a project-wide record independent of the period and schema.
+It shows whether collection is allowed or paused, whether the schema is active or stopped, and the per-minute request limit and UTC daily new-receipt limit. The limits are configured values, not usage, remaining capacity, or rejection rate. The collection-status diagnostic in settings also reads the rejection summary and daily breakdown, and a failed query remains unverifiable. Do not judge the service unhealthy solely because receipts are absent or old. An origin from an entered service address is compared only with the allowed list in the tab and is not transmitted or stored. There is no automatic polling or test event.
+
+Collection rejection diagnostics use a separate project-wide API to provide 10 fixed causes, rejected request counts, the receipt time of the last rejected request, and a daily breakdown for the last 7 days based on UTC receipt date. Raw text, Origin, IP, tokens, requestId, and event/attempt IDs are not retained. Per-minute limit excesses are recorded in the existing admission SQL, and other rejections are recorded once more only for requests that passed admission. Normal requests do not incur an additional DB round trip, and additional recording is capped at 600 per minute. The request counter saturates at 601 so that a configuration limit change does not reduce the counter within the same minute. Unknown projects, administrator API failures, and admission storage failures are excluded from this aggregate. OPTIONS and invalid-method rejections may be included and are distinct from rejected event count, visitor count, rejection rate, and quota usage. The Worker tracks recording after the response with waitUntil and awaits it when the host lacks that feature. Diagnostic recording failures do not affect the original HTTP response and are not retried. coverage is best-effort, and 0 means no rejections were recorded. History before the migration is not backfilled. Only rejection minutes are retained for 7 UTC dates, and existing empty minutes are cleaned up after 2 minutes. Reader/owner grants are checked again in the same D1 batch as the aggregate, and this is connected to the settings diagnostics screen.
+
+The administrator event analysis screen chooses one property from registered events of the selected source (default browser) as the breakdown dimension and shows counts and shares by value plus the daily trend for the selected value. The denominator of the share is the total count of the selected event; it is the share held by the value, not a conversion rate. If the denominator is 0, use “Unknown” (`—`) and do not invent a total or value. true, false, and null are distinguished as true, false, and no value, respectively. Discard the previous selection when the project, schema version, or event changes or the property disappears from the definition. Turning on previous-period comparison queries the immediately preceding equal-length period with the same breakdown once more through the existing daily API and adds a separate table with current/previous counts and change rate by value, plus share and its difference (%p). Do not change API, DB, dependency, CI, hygiene, or operational contracts.
+
+Initial completion rates target workflows retained in the same browser memory. Linking workflows across page refreshes or devices is follow-up design. Browser/server funnel linkage has been implemented and verified locally under the task-funnel contract in [ADR 0006](../adr/0006-ordered-task-funnels.md), and funnel link transport in the browser SDK works through an optional profile. The reader/owner funnel daily query API has been implemented and verified locally. Funnel analysis and CSV on the administrator goals screen have been connected locally for step reach, conversion, daily detail, and step values, and the funnel-specific step editing form has also been implemented and verified locally. Validation errors, execution failures, collection rejection, and missing collection are distinguished. Purchase/sign-up success is recorded only after the source confirms success, and button clicks are not counted as completion. Exact unique/returning user counts and conversion-rate comparison between incompatible definitions are outside the initial scope.
+
+## Transport and SDK
+
+Targets are 3KiB gzip for the SDK alone and 3.25KiB gzip or less for a service's integration code plus required configuration; reference example measurements are also within budget (values are in [Validation](../../VALIDATION.md)). After the 2026-10-23 delivery diagnostics addition, gzip sizes are 3028 B for the funnel SDK, 3157 B for funnel plus reference example, 3182 B for administrator-generated code including a fixed endpoint, 2903 B for the basic SDK, and 3179 B for Sembom. The contract specifies a 40-item memory buffer, 20-item/16KiB batches, 5-second delivery, and up to 2 retries per 10 minutes, and this has been implemented and verified locally in `packages/browser`. General events use occurrence date and goals use start date, with time zone and version kept separate. The collector handles deduplication and atomic aggregation. Business work and rendering do not wait for delivery. The SDK does not use native `sendBeacon`; it uses keepalive fetch with `credentials: omit` and no-referrer. The administrator screen shows per-source integration code from the latest active schema (browser standard/funnel profiles and server rules). Until public packages are available, use local builds. Initial execution cost and real-browser latency and throughput distinguish the synthetic-screen measurements in the [Validation Record](../../VALIDATION.md) from actual service pilots.
+
+Prioritize 90-day daily aggregation in a separate D1 and do not use Worker memory as persistent storage. Limit properties to at most 4, 32 types or fewer per definition, and 256 or fewer possible combinations. API and logical DB examples have been replaced with the v0.1 contract. D1 atomic storage and CAS guards have been implemented and verified locally; write throughput, latency, actual authentication, and IP protection will be verified after implementation and measurement. The license is undecided.
+
+## Administrator Storage Read Check
+
+The administrator-only `GET /v1/health` uses a verified administrator bearer and the host read port. It only reads the two control tables (`projects` and `project_grants`), and health checks work even without a project grant. The response contains only the two fields `{status:"ok",scope:"administrator_storage_read"}` and returns no raw rows or identities. This is not a path for checking collection writes, the full schema, or cleanup status. Authentication, errors, and read scope follow [Operational Observability](../ops/observability.md) and OpenAPI.
+
+## Reference
+
+Workflow completion-rate queries by property split by one of the registered dimensions at the start time and return successful/started attempts for each value. This is distinct from event rates based on occurrence date. It uses existing dimension aggregation and makes no raw storage or DB changes. It queries only up to 32 observed values and start-date cohorts of up to 31 days, and the completion rate for 0 attempts is null. The API contract is in OpenAPI. The administrator goals screen selects a property, shows figures by value and daily detail, and exports the selected breakdown as CSV. A property query failure retains the overall goals result and offers clearing the breakdown or retrying. Lock CSV while an incomplete property query exists.
+
+Turning on previous-period comparison queries the immediately preceding equal-length period with the same registered breakdown once more through the existing property API and compares by value. Keep the current-period table unchanged and add a separate comparison table that shows current/previous start and success counts and completion rate for each value, plus completion-rate difference (%p). Values are sorted by the union of values observed in both periods with keys of the same data type. A value not observed in one period has a count of 0, and the completion rate and its difference for a period with 0 starts are not computable (null). If the previous query fails, retain the current-period result and retry only the comparison. Per-value daily detail shows only the current period. generatedAt may differ between current and previous responses, and they are not aligned into one.
+
+Event analysis property breakdown also uses the same comparison switch to query exactly the immediately preceding equal-length period once more and does not accept an arbitrary period. Keep the current-period table unchanged and add a separate table that shows current/previous counts and change rate (%) and share and share difference (%p) for each value. Values are the union of values observed in both periods with keys of the same data type, distinguishing null, false, and 0 as different values. A value absent in one period has a count of 0; if the total count of the selected event in that period is greater than 0, its share is also 0. If the total count is 0, the share and its difference are not computable (null), and if the previous count is 0, the change rate is also null. The denominator of the share is the total count of the selected event for that period; it is not a conversion rate. Do not send a previous-period property query when no breakdown dimension is selected. Per-value daily trends and charts show only the current period. If the previous query fails, retain the current-period results and charts and retry only the comparison. If the event, breakdown property, period, project, schema version, screen, or comparison switch changes, cancel in-progress queries so late responses do not overwrite the screen. CSV contains property-value rows split by current and previous periods and adds per-value comparison metric rows (property_comparison, count/share metrics, and previous_value/change/change_unit). Leave no value as an empty cell and preserve data types. Lock export when the selected breakdown comparison is not ready or has failed. Clearing the breakdown removes property detail and comparison rows while retaining the overall event period comparison. Turning comparison off exports only current-period rows.
+
+In API-connected administrator mode, Overview, Event Analysis, and Goals download already queried and verified conditions and results as CSV. Rows distinguish period, version, time zone, search, breakdown condition, total, daily, property values, and active comparison by row kind. If Goals property breakdown is enabled, add per-value current and previous rows and per-value comparison metric rows (workflow_property_comparison, start/success count change rate %, and completion-rate %p). If detail or comparison is loading or failed, lock download and require clearing the condition or completing the query. If any breakdown is not ready while comparison is enabled, refuse export; turning comparison off exports only current-period rows. Export happens in the browser without an additional query. Preserve unformatted numeric values, empty values, and property value data types, and use a UTF-8 BOM and CSV escaping. Sample mode and settings screens are excluded from export.
+
+The API-connected administrator screen supports recent 7, 14, and 30 days and direct start/end date selection. Direct selection queries up to 31 days (inclusive) within the last 90 days based on today in the project time zone; it retains existing results while the dates are being entered and applies them only when the period is applied. Empty values, invalid dates, reversed order, future dates, and dates beyond the retention range are not applied. The applied period is shared by Overview, Events, Goals, property detail, and CSV. Direct selection resets when the project, time zone, or default period changes or on reconnection; date drafts and applied values remain only in memory. Settings and Sample mode are not targets for direct selection. Enable previous-period comparison optionally and query the immediately preceding equal-length period with the same schema and project time zone. If the previous period falls outside retention, notify before querying and retain current results. Goals property completion rate and Event Analysis property breakdown use the same switch, and in that case the existing API is queried once more with the same breakdown. Turning comparison off then allows downloading the current-period CSV. Received event counts are shown as relative change rate, and start-date-based workflow completion rates as percentage-point difference. The change rate for a previous count of 0 and the completion-rate difference for a period with no attempts are not computable. Today is still aggregating, and completion rates for unfinalized cohorts may change. If a comparison query fails, retain current results and provide a separate retry. Aggregate/conversion comparison across different versions is follow-up, and definition comparison in settings does not compare aggregate figures.
+
+### Comparing Definitions Between Published Schema Versions
+
+In settings' event schema, a reader or owner selects two different published versions and queries their definition differences. Retired versions are included, and the previous list is read through existing pagination. The comparison uses only two calls to the existing per-version definition read API and does not change the draft, version to publish, validation results, or personal-data review, or publish a new version.
+
+Definitions are matched by event name and workflow/funnel ID to show additions, deletions, and field changes. Compare event source and display name; property data type, required status, purpose, allowed values, and numeric range; workflow step events, failure-cause property, and breakdown dimensions; funnel step sources, order, breakdown dimensions, and representative workflow. Show display-order changes of the same members separately. Ignore object-key order, preserve array order, and treat omitted funnels and an empty array as equal. Publication date, active status, and project settings are not part of definition differences.
+
+Selection, project, or session changes and list/permission rechecks cancel an in-progress comparison and hide previous results. Do not retain the old table on error; require an explicit comparison again. Failure on one side also cancels the other lookup. Comparison does not determine compatibility or provide aggregate/conversion comparison across versions, and it notes that identically named definitions may measure different meanings.
+
+### Multi-Step Funnel Property Breakdown
+
+The multi-step funnel property-breakdown read API `/v1/projects/{projectId}/funnels/{funnelId}/breakdown`
+has been implemented and verified locally. groupBy is one registered required start-date dimension, and it reads summary and daily step figures for up to 32 values from existing per-dimension stored counts. It applies project reader/owner permission, recent 90 days/max 31 days, and limit checks for combinations, steps, rows, and safe integers. Before aggregating by property, it checks the step order of each original combination. It returns no raw events or task IDs and does not change the DB. Selecting a registered breakdown on the administrator goals screen queries start, completion, and completion rate by value plus step and daily detail for the selected value. It makes no additional request before breakdown, and on failure preserves the overall result and offers breakdown retry. Lock CSV during breakdown query or failure; clearing the breakdown allows exporting the overall result. CSV distinguishes the breakdown with group_by, property_type, property_value and property_summary/property_daily rows. Turning on period comparison also queries the immediately preceding equal-length start-date cohort for the same registered dimension and compares start, completion, and step figures by value plus change rate and rate difference. Union values from both periods down to data type and treat unobserved values as count 0 and rate null. Do not calculate the change rate for a previous count of 0 or a rate difference with no denominator. On comparison failure, preserve the current breakdown result and offer retry; on breakdown clearing, period/context change, or comparison off, cancel requests and discard late responses. CSV distinguishes both-period property_summary/property_daily rows for actually observed values and per-value property_comparison metrics. Lock CSV during breakdown comparison or failure. Overall and breakdown queries are responses from different times, so do not force their totals to match.
+
+### Multi-Step Funnel Period Comparison
+
+The period comparison switch in Goals also applies to the selected multi-step funnel. It additionally queries the immediately preceding same-number-of-days start-date cohort for the same project/version/definition through the existing funnel API. Start, completion, and step-reach counts use change rate (%), and completion rate, reach rate, and conversion rate use difference (%p). Leave the difference for a previous count of 0 or a rate with no denominator as null. Notify when either period has a provisional cohort. On comparison failure, retain current results and retry only the comparison. On selection/connection/context switch or comparison off, cancel previous queries and discard late responses. If comparison is not ready, lock the funnel CSV; turning comparison off exports the existing current-period CSV. Comparison CSV adds period, metric, current_value, previous_value, change, and change_unit to existing columns to distinguish current/previous summary and daily rows from comparison metric rows. Preserve each period's generation time separately. Provide the switch even for projects with only funnels and do not perform an overall workflow comparison query. There is no raw input, additional storage, API, or DB change.
+
+### Local Operations Log Report
+
+When optional execution diagnostics for retention cleanup are available, show execution counts by stop reason, maximum execution time, maximum scheduled delay, jobs with unknown outcomes, and the cursor-progress check amount. Distinguish state handed to the next execution because of time or page limits from deletion failures, and do not fabricate time or stop reasons in older logs.
+
+In API-connected settings, a user selects a `logs:summary` v2 JSON and reads observed responses, weighted request estimates, diagnostics, per-job HTTP responses and latency buckets, and cleanup execution/processing counts as tables. This report summarizes the collector's overall logs and is distinct from project and period filters. The file is 8MiB or less, validated in the Worker, and involves no network transmission, browser storage recording, or automatic polling. Reject format, extra-field, sample-weight, total, and diagnostic mismatches. Paginate long HTTP response lists and do not interpret omissions as 0. Clear previous reads/results on a new file, close, leaving the screen, or reconnection. Acquiring operational logs and remote monitoring and alerts are follow-up work; usage is documented in the [Local Report Guide](../ops/local-report-viewer.md).
+
+- Sembom pilot example: [sembom.md](../integrations/sembom.md)
+- Frontend design: [FRONTEND_DESIGN.md](../frontend/FRONTEND_DESIGN.md)
+
+## Delivery Diagnostics and Capacity Budget — 2026-10-23
+
+The browser SDK's optional synchronous onDelivery(state, events) callback distinguishes HTTP acceptance, retry, final failure, deadline exceeded, queue overflow, destroy discard, and host beacon queue acceptance. It does not expose event content or IDs. Callback exceptions or reentrancy do not change delivery state. The SDK-only budget remains 3KiB gzip. The combined budget for representative integration code plus required configuration, including delivery diagnostics code, is adjusted to 3.25KiB (3,328B). Because the existing reference example is close to 3KiB, explicitly allow about 130B of additional code cost instead of removing diagnostics or reducing validation. This paragraph takes precedence over the earlier 3KiB total integration target and past measurements.

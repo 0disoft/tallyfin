@@ -1,23 +1,23 @@
-# 제품 브리프
+# Product Brief
 
-상태: 초기 설계. 측정·구현·운영 검증 전 계획이다.
+Status: Initial design. This is a plan before measurement, implementation, and operational validation.
 
-## 문제
-Rodisoft의 여러 서비스에서 사용자가 주요 작업을 완료하는지, 오류가 어디에 몰리는지 공통된 방식으로 확인하려 한다. 서비스별 행동 정의를 유지하면서 같은 수집·검증·조회 기반을 재사용하는 도구가 필요하다.
+## Problem
+Across multiple Rodisoft services, we want to verify in a common way whether users complete key tasks and where errors concentrate. We need a tool that reuses the same collection, validation, and query foundation while maintaining service-specific behavioral definitions.
 
-## 목표
-프로젝트별로 독립 구성되는 이벤트/속성 스키마로 수집·분석하고, 워크플로 완료와 오류를 일관되게 보고하며, 민감 정보 없이 프라이버시를 지킨다.
+## Goals
+Collect and analyze with event/property schemas configured independently per project, report workflow completion and errors consistently, and protect privacy by not including sensitive information.
 
-## 사용자
-Rodisoft의 여러 서비스를 개발·운영하는 담당자가 첫 사용자다. 향후 외부 서비스에도 재사용할 수 있도록 특정 제품이나 비공개 내부 패키지에 종속시키지 않는다.
+## Users
+The first users are the people responsible for developing and operating multiple Rodisoft services. So that it can be reused for external services in the future, it is not tied to a specific product or private internal package.
 
-## 예시 시나리오
-회원가입, 파일 변환, 확정된 결제 성공, 계산 실행. 이 시나리오는 의미 예시일 뿐 와이어 계약이 아니며 이메일·파일·주문 ID·금액 같은 민감 입력은 다루지 않는다. 결제·가입 성공은 확인된 소스에서만 발생시키고 버튼 클릭을 성공으로 취급하지 않는다.
+## Example Scenarios
+Sign-up, file conversion, confirmed payment success, calculation execution. These scenarios are semantic examples only and not a wire contract, and they do not handle sensitive inputs such as email, files, order IDs, or amounts. Payment and sign-up success are emitted only from confirmed sources, and button clicks are not treated as success.
 
-## 접근
-SDK는 일반 수동 이벤트 훅을 제공하고 계산기 엔진 의존성이나 암묵적 DOM 자동 수집이 없다. 각 서비스는 자기 저장소에서 의미 있는 이름과 연동을 정의한다. 이벤트 집합은 전역 여섯 개가 아니라 프로젝트별 등록 스키마의 폐쇄 집합이다.
+## Approach
+The SDK provides generic manual event hooks and has no calculator engine dependency or implicit automatic DOM collection. Each service defines meaningful names and integrations in its own repository. The event set is not six global events but a closed set of per-project registered schemas.
 
-## 파일럿
-Sembom이 첫 파일럿이다. 다른 종류의 서비스를 두 번째 파일럿으로 적용해 범용성을 확인한다. v0.1 계약은 집계 90일·영수증 48시간·시도 상태 72시간을 유지하며 원문은 저장하지 않는다. 운영 도메인·인증 제공자·IP 보호 정책·라이선스는 활성화 전에 결정한다.
+## Pilot
+Sembom is the first pilot. A different type of service will be applied as the second pilot to confirm generality. The v0.1 contract maintains aggregates for 90 days, receipts for 48 hours, and attempt status for 72 hours, and does not store raw text. The operational domain, authentication provider, IP protection policy, and license are to be decided before activation.
 
-유용성은 서비스별로 등록한 작업 흐름의 완료 건수·비율, 오류 유형, 결과 활용 행동의 변화로 확인한다. 비율 옆에는 건수를 표시하고 서로 다른 완료 정의를 동일 지표로 합치지 않는다. 아직 측정 결과는 없다. 범위와 집계 기준은 [제품 명세](./02-spec.md)를 따른다.
+Usefulness is confirmed by the number and rate of completions of workflows registered per service, error types, and changes in actions that use the results. Display counts next to rates, and do not merge different completion definitions into the same metric. There are no measurement results yet. Scope and aggregation criteria follow the [product specification](./02-spec.md).

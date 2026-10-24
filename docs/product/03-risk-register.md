@@ -1,22 +1,22 @@
-# 위험 등록부 (03)
+# Risk Register (03)
 
-상태: 2026-10-21 소스와 설계문서 대조. 구현된 완화책과 운영에서 확인할 위험을 구분한다. 로컬 검증 내역은 [VALIDATION.md](../../VALIDATION.md)를 따른다. 실제 제공자·원격 DB·서비스 파일럿의 검증 결과는 아직 없다.
+Status: Cross-checked against sources and design documents on 2026-10-21. It distinguishes implemented mitigations from risks that must be verified in operations. Local validation details follow [VALIDATION.md](../../VALIDATION.md). No validation results yet exist for actual providers, remote DBs, or service pilots.
 
-| 위험 | 설명 | 현재 완화책 | 남은 결정·검증 |
+| Risk | Description | Current mitigations | Remaining decisions and verification |
 | --- | --- | --- | --- |
-| 누락 | 탭 종료/차단/전송 실패로 유실 | 브라우저 5초 전송·최대 2회/10분 재시도·숨김 keepalive 전송을 구현 | 실제 서비스·모바일에서 누락과 실행 비용 확인 |
-| 중복 | 재전송으로 중복 집계 | 출처별 영수증 48시간·해시 충돌 검사·원자적 저장을 구현 | 원격 환경의 장애·재전송 확인 |
-| 스팸 | 공개 프로젝트 ID·origin 게이트는 봇 방지 불가 | 프로젝트별 분당 요청·UTC 하루 신규 수신 한도와 입력 제한을 구현 | 추가 봇 차단 방식·일시적 IP 정책은 UNDECIDED |
-| 프라이버시 | 원문/결과/URL/식별자 저장 위험 | 등록 속성만 허용하고 고정 필드 관측 로그·최소 상태 보존을 구현 | 실제 서비스 스키마·로그·호스트 설정 검토 |
-| 관리자 초안 | 잘못 넣은 개인정보·비밀값이 다른 owner와 공유되고 백업에 남을 위험 | 명시적 owner 전용 저장·128KiB·프로젝트별 한 행·본문 로그 제외·CAS를 구현하고 저장 전에 공유 범위를 안내 | 운영 owner 관리와 백업 보존·삭제 절차 확인. 초안은 방문자 이벤트가 아닌 관리자 control-plane 원문 |
-| 카디널리티 | 등록 속성 조합 폭증 | 속성 최대 4개·정의별 32종·조합 256개 한도를 구현 | 서비스별 운영 한도·실제 분포 측정 |
-| 프로젝트 격리 | 다른 서비스 데이터 노출 | OIDC 검증·reader/owner·별도 creator/publisher 권한과 저장 시 재검사를 구현 | 실제 제공자 설정·원격 권한 확인 |
-| 의미와 버전 | 같은 이름의 이벤트 정의가 다름 | 불변 스키마 버전·동시 발행 충돌 검사·출처별 집계·버전 간 정의 비교를 구현 | 서비스 스키마 변경 절차 적용·다른 버전의 집계 비교는 후속. 정의 비교는 호환성 판정이 아님 |
-| 코호트 | 이벤트 나눗셈으로 완료율 오도 | 시작일 cohort·시도당 한 번·0 분모 null·프로젝트 시간대 조회를 구현 | 실제 업무의 시작/완료 정의 검토 |
-| 발행 출처 | 브라우저와 서버가 같은 성공을 중복 기록 | 전용 server endpoint·발행자 인증·권한·SDK·출처별 조회를 구현 | 실제 발행자 토큰·서비스의 성공 확정 지점 연결 |
-| 연결 한계 | 작업 퍼널을 사용자 추적으로 오해 | 2~10단계 browser/server 작업 퍼널·24시간 진행 창·72시간 연결 상태를 구현 | 실제 서비스 파일럿. 기존 workflow의 새로고침/기기 간 연결은 후속 |
-| 저장 | 공유 D1 쓰기 부하·보존/복구 실패 | 일별 집계 90일·유계 정리·로컬 부하/복구 도구를 구현 | 원격 Cron·운영 부하·백업/복구·RTO/RPO 확인 |
-| 벤더 | 수집/저장 구현의 Cloudflare 의존 | core/SDK 비의존 어댑터 | 다른 호스팅 환경의 저장 어댑터 |
-| 라이선스 | 오픈소스 의도이나 미정 | 라이선스 확정 전 배포 금지 | 라이선스 종류 |
+| Loss | Loss due to tab close/blocking/send failure | Implemented browser 5-second send, up to 2 retries per 10 minutes, and hidden keepalive send | Verify loss and runtime cost in actual services and on mobile |
+| Duplication | Duplicate counting due to retransmission | Implemented per-source 48-hour receipts, hash collision checks, and atomic storage | Verify failures and retransmission in a remote environment |
+| Spam | Public project IDs and origin gates cannot prevent bots | Implemented per-project per-minute request and UTC daily new-ingest limits plus input restrictions | Additional bot-blocking methods and temporary IP policy are UNDECIDED |
+| Privacy | Risk of storing raw text/results/URLs/identifiers | Implemented allowing only registered attributes, fixed-field observation logs, and minimal state retention | Review actual service schemas, logs, and host configuration |
+| Admin draft | Risk that mistakenly entered personal information or secrets are shared with other owners and remain in backups | Implemented explicit owner-only storage, 128KiB, one row per project, exclusion from body logs, and CAS, and provides sharing-scope guidance before saving | Verify operational owner management and backup retention/deletion procedures. The draft is administrator control-plane raw text, not a visitor event |
+| Cardinality | Explosion of registered attribute combinations | Implemented limits of at most 4 attributes, 32 types per definition, and 256 combinations | Measure per-service operational limits and actual distribution |
+| Project isolation | Exposure of another service's data | Implemented OIDC verification, reader/owner, separate creator/publisher permissions, and rechecks at storage time | Verify actual provider configuration and remote permissions |
+| Meaning and version | Event definitions with the same name differ | Implemented immutable schema versions, concurrent publication conflict checks, per-source aggregation, and cross-version definition comparison | Apply the service schema change procedure; aggregation comparison across different versions is follow-up. Definition comparison is not a compatibility determination |
+| Cohort | Completion rate is misleading due to event division | Implemented start-date cohort, once per attempt, null for a 0 denominator, and project-time-zone queries | Review the start/completion definitions of actual work |
+| Publication source | Browser and server record the same success twice | Implemented dedicated server endpoint, publisher authentication, permissions, SDK, and per-source lookup | Connect actual publisher tokens and the service's success confirmation point |
+| Linking limitation | Mistaking a task funnel for user tracking | Implemented 2–10-step browser/server task funnels, a 24-hour progress window, and a 72-hour linking status | Actual service pilot. Linking existing workflows across refreshes/devices is follow-up |
+| Storage | Shared D1 write load and retention/recovery failure | Implemented 90-day daily aggregation, bounded cleanup, and local load/recovery tools | Verify remote Cron, operational load, backup/recovery, and RTO/RPO |
+| Vendor | Collection/storage implementation depends on Cloudflare | core/SDK-independent adapter | Storage adapter for another hosting environment |
+| License | Open-source intent but undetermined | Distribution prohibited until the license is finalized | License type |
 
-프라이버시 세부는 [ADR 0003](../adr/0003-minimal-privacy-preserving-events.md), 현재 계약은 [제품 스펙](02-spec.md), 작업 순서는 [로드맵](01-roadmap.md)을 따른다.
+Privacy details follow [ADR 0003](../adr/0003-minimal-privacy-preserving-events.md); the current contract follows [Product spec](02-spec.md); and the implementation sequence follows [Roadmap](01-roadmap.md).
