@@ -1,341 +1,130 @@
-# 검증 이력 09
+# Validation History 09
 
-원문의 구간 순서를 유지한 과거 기록이다. 명령과 코드 경로는 저장소 루트 기준이다.
+This historical record preserves the section order of the original. Commands and code paths are relative to the repository root.
 
-## 관리자 서버 발행자 화면 — 2026-10-11
+## Admin server publisher screen — 2026-10-11
 
-설정의 LiveGrants와 LiveAdminChanges 사이에 owner 전용 LivePublishers를 연결했다.
-25건 목록·다음 페이지·첫 페이지 새로고침, issuer/subject 추가, 관측 생성 시각으로 회수,
-확인 후 쓰기와 변경 이력 갱신을 제공한다. 결과 불명은 같은 요청만 재확인하고 저장 중·
-결과 불명에는 설정 입력/저장/초기화와 관리자 grant 편집도 잠근다. 401/403·프로젝트 전환·
-폐기에서 신원을 지우고 늦은 응답을 폐기한다. UTF-8 BINARY 순서와 프로젝트/종류별 커서,
-닫힌 응답·createdAt/granted 쌍을 검증하며 640px 표는 포커스 가능한 영역 안에서 가로 스크롤한다.
+Connected owner-only LivePublishers between LiveGrants and LiveAdminChanges in Settings. The screen provides a 25-item list, next-page navigation, first-page refresh, addition of an issuer/subject pair, revocation using the observed creation time, and after confirmation a write followed by a change-history refresh. When the result is unknown, it rechecks only the same request; while a save is pending or its result is unknown, it also locks Settings input, save, and reset controls and admin grant editing. It clears identity on 401/403, project changes, and retirement, and discards late responses. The implementation validates UTF-8 BINARY ordering and separate project/type cursors, as well as closed responses and createdAt/granted pairs; at a 640px viewport, the table scrolls horizontally within a focusable region.
 
-실행·결과: 부모의 publisher·기존 grant 목록/편집 테스트 19/19, 보조 에이전트의
-관리자 신규 publisher 테스트 6/6·typecheck·build,
-test:sites 9/9를 통과했다. 부모는 기존 cryptographic ephemeral OIDC collector harness·
-Miniflare D1·Vite same-origin proxy·실제 Chrome으로 부여/회수 확인 전 쓰기 없음, 목록·
-이력 자동 갱신, 대기 PUT 동안 설정/grant 필드 잠금, owner 권한 회수 후 목록·입력 삭제,
-320px 문서 가로 넘침 없음·pageerror 0을 확인했다. 단위 회수 기대 시각은 실제 API로
-보냈고 최초 2개 이력과 재부여까지 총 3개 publisher 이력을 확인했다. 첫 브라우저 시도는
-기존 Vite 프록시의 정규식 키를 잘못 덮어 5188에 연결 실패했고, 검증 fixture가 그 키를
-정확히 덮도록 고친 뒤 통과했다. UI 코드의 오류로 판정하지 않았다. 보조 코드 리뷰에서
-오름차순 비교 역방향과 opaque subject 앞 공백 거부 fixture를 수정하고 관련 회귀를 넣었다.
+Execution and results: The parent's publisher and existing grant list/edit tests passed 19/19. A helper agent's tests for the new admin publisher features, typecheck, and build passed 6/6, as did test:sites 9/9. Using the existing cryptographic ephemeral OIDC collector harness, Miniflare D1, the Vite same-origin proxy, and actual Chrome, the parent confirmed that no write occurs before grant/revoke confirmation, the list and history refresh automatically, Settings and grant fields are locked during a pending PUT, the list and inputs are cleared after the owner's permission is revoked, there is no horizontal document overflow at 320px, and pageerror is 0. The unit for revocation used the expected timestamp sent through the actual API, and the test confirmed 3 publisher history entries in total: the first 2 entries and the re-grant. The first browser attempt failed to connect to port 5188 because the existing Vite proxy's regex key had been overwritten incorrectly; the verification fixture was fixed to override that key exactly, after which the attempt passed. This was not judged to be a UI code error. During an assistant code review, a reversed ascending comparison and an opaque subject fixture that rejected leading whitespace were corrected, and related regressions were added.
 
-화면 캡처는 .tmp/publishers-desktop.png·publishers-mobile.png이고 브라우저·Vite·Miniflare와
-이번 합성 D1 상태는 finally에서 정리했다. 브라우저 검증 후 모바일 표 최소 너비·안내
-보완을 다시 같은 시나리오로 확인했다. 이번 API/DB 원본 계약·마이그레이션·SDK·의존성·
-CI·위생 정책 변경은 없다. README·관리자/서버 발행 문서·로드맵을 갱신했다. 전체 스위트는
-관련 검사와 앞선 이력 검사 결과가 유효해 재실행하지 않았다. 실제 운영 OIDC·원격 D1·
-배포/Sembom 검증은 설정 미정으로 미실행이며 푸시·배포도 없다.
+The screen captures are `.tmp`/publishers-desktop.png and `.tmp`/publishers-mobile.png; the browser, Vite, Miniflare, and the synthesized D1 state from this run were cleaned up in finally. After browser verification, the mobile table's minimum width and guidance were adjusted, and the same scenario was checked again. This change contains no modifications to the source API/DB contract, migrations, SDK, dependencies, CI, or hygiene policy. Updated the README, admin/server publishing documentation, and roadmap. The full suite was not rerun because the relevant checks and the preceding history checks remained valid. Actual production OIDC, remote D1, deployment, and Sembom verification were not run because configuration is undecided; nothing was pushed or deployed.
 
-## 서버 발행자 등록·회수 API — 2026-10-11
+## Server publisher registration and revocation API — 2026-10-11
 
-현재 owner의 PUT/DELETE /v1/projects/{projectId}/publishers를 로컬 구현했다. PUT은
-issuer/subject만 받고 기존 생성 시각을 보존하는 no-op를 허용한다. DELETE는 관측한
-expectedCreatedAt을 비교하고, 이미 없는 권한에는 no-op, 다른 시각의 권한에는
-publisher_conflict(409)를 반환한다. 동일 밀리초에 재부여된 권한을 구분하는 고유 세대 ID는
-아니라는 한계를 계약에 명시했다. 권한 변경·publisher 감사 행·owner 재확인은 같은 D1
-batch이며 CLI와 별개로 검증된 administrator actor를 기록한다.
+Implemented locally PUT and DELETE /v1/projects/{projectId}/publishers for the current owner. PUT accepts only issuer/subject and allows a no-op that preserves an existing creation time. DELETE compares the observed expectedCreatedAt and returns a no-op for a grant that is already absent and publisher_conflict (409) for a grant with a different timestamp. The contract documents the limitation that this is not a unique generation ID capable of distinguishing grants reissued in the same millisecond. The permission change, publisher audit row, and owner recheck occur in the same D1 batch, and the implementation records an administrator actor verified independently of the CLI.
 
-실행·결과: 발행자 조회/변경·기존 관리자 grant 변경 테스트 16/16, 루트 npm exec --
-tsc --noEmit, tools/contracts lint·check 59/59 통과했다. 이후 입력 snapshot 복사 보완 뒤
-변경 API 4/4·타입 검사를 다시 통과했다. 실제 로컬 D1에서 회수 전 기대 시각과 현재 값
-불일치, 재요청 no-op·중복 이력 없음, owner 회수 경쟁, reader/publisher-only/없는 프로젝트
-거부, 이력 실패 시 권한 롤백, 닫힌 입력과 16KiB body·Content-Type 제한을 확인했다.
-새 ErrorCode를 추가한 첫 타입 검사에서는 고정 메시지 누락을 찾아 보완했다.
+Execution and results: Publisher lookup/change and existing admin grant change tests passed 16/16; root `tsc --noEmit` and tools/contracts lint and check passed 59/59. After supplementing the input snapshot copy, the change API passed 4/4 and the typecheck passed again. On actual local D1, verified the mismatch between the expected time and current value before revocation, no-op behavior and absence of duplicate history on a repeated request, a race during owner revocation, rejection of readers, publisher-only callers, and nonexistent projects, rollback of the grant when history insertion fails, closed input, and the 16KiB body and Content-Type limits. The first typecheck after adding the new ErrorCode found a missing fixed message, which was corrected.
 
-계약 원본 api/openapi.yaml과 서버 발행·관리자 문서, 로드맵·README를 갱신했다.
-이번 슬라이스의 DB·마이그레이션·SDK·의존성·CI·위생 변경은 없고 기존 0008 이력을 쓴다.
-발행자 관리 화면은 별도 다음 슬라이스다. 운영 리소스·실제 로그인/원격 검증은 설정
-미정으로 미실행이며 푸시·배포도 없다.
+Updated the contract source api/openapi.yaml, server publishing and admin documentation, roadmap, and README. This slice has no DB, migration, SDK, dependency, CI, or hygiene changes and uses the existing 0008 history. The publisher management screen is a later slice. Production resources and actual sign-in/remote verification were not run because configuration is undecided; nothing was pushed or deployed.
 
-## 서버 발행자 변경 이력 — 2026-10-11
+## Server publisher change history — 2026-10-11
 
-publisher.granted/revoked 이력을 target issuer/subject만 담는 별도 action으로 확장했다.
-0008은 admin_changes 13개 열과 기존 행을 그대로 복사하고 action/target 제약을 넓힌 뒤
-원래 인덱스·필드 검증·수정 금지 트리거를 재생성한다. 로컬 init이 두 action과 필요한
-가드를 확인하고 불완전한 업그레이드를 거부한다. CLI 부여/회수와 이력은 같은 batch이며
-중복·no-op에는 기록하지 않는다. 이력 조회/관리자 파서·표시에 두 action을 연결했다.
+Extended the history with publisher.granted/revoked as separate actions containing only the target issuer/subject. Migration 0008 copies all 13 admin_changes columns and existing rows unchanged, widens the action/target constraints, then recreates the original indexes, field validation, and modification-prevention triggers. Local initialization verifies both actions and the required guards and rejects an incomplete upgrade. CLI grant/revocation and history share one batch and do not record duplicates or no-ops. Connected both actions to history lookup, admin parsing, and display.
 
-실행·결과: 저장소/CLI/collector 이력 집중 테스트 20/20, 기존 서버 수집·퍼널·설치 DB
-검사 16/16, 관리자 이력 테스트 6/6, 루트 npm exec -- tsc --noEmit과
-npm run typecheck:admin·build:admin, tools/contracts lint·check 58/58 통과. 보조 에이전트의
-관리자 전체 테스트도 161/161 통과했다. 기존 history/project 행 보존·FK 무결성·반복 init,
-권한과 이력의 동시 롤백·중복 이력 없음·90일 정리·가드 손상 거부를 로컬 D1에서 확인했다.
-첫 타입 검사는 rows[0] 가능성으로 실패했고 비어 있는 batch 검사 뒤 non-null 표현을
-추가해 통과했다. 운영 DB에 마이그레이션은 적용하지 않았다.
+Execution and results: Focused repository/CLI/collector history tests passed 20/20; existing server ingestion, funnel, and installed-database checks passed 16/16; admin history tests passed 6/6; root typecheck and npm run typecheck:admin and build:admin passed; tools/contracts lint and check passed 58/58. A helper agent's full admin test suite also passed 161/161. On local D1, verified preservation of existing history/project rows, FK integrity, repeated initialization, simultaneous rollback of the grant and history, absence of duplicate history, 90-day cleanup, and rejection of a damaged guard. The first typecheck failed because rows[0] could be absent; after checking for an empty batch, a non-null assertion was added and the check passed. The migration was not applied to a production database.
 
-API/DB 계약 원본 api/openapi.yaml·db/schema.dbml과 문서/로드맵을 갱신했다.
-SDK·의존성·CI·위생 변경은 없으며 등록/회수 HTTP API와 발행자 관리 화면은 후속이다.
-DB 복사이므로 운영 적용 전 관리자·CLI 쓰기 중지와 백업·행 수·제약/FK 확인이 필요하다.
-실제 운영 리소스는 미정으로 원격/배포·실로그인 검증은 미실행이고 푸시·배포도 없다.
+Updated the API/DB contract sources api/openapi.yaml and db/schema.dbml along with the documentation and roadmap. There are no SDK, dependency, CI, or hygiene changes; the registration/revocation HTTP API and publisher management screen are later work. Because the migration copies the database, applying it in production requires pausing admin and CLI writes and checking the backup, row counts, constraints, and FKs beforehand. Actual production resources remain undecided, so remote and deployment checks and real sign-in verification were not run; nothing was pushed or deployed.
 
-## 서버 발행자 목록 API — 2026-10-11
+## Server publisher list API — 2026-10-11
 
-현재 owner 전용 GET /v1/projects/{projectId}/publishers를 추가했다. 발행자 권한과 관리자
-권한을 분리하고 매 페이지 같은 D1 batch에서 owner와 행을 읽는다. 기본 25·최대 100,
-issuer/subject 순서, 프로젝트·목록 종류별 커서, 신원·생성 시각만 반환한다.
+Added an owner-only GET /v1/projects/{projectId}/publishers. Publisher permissions are separate from administrator permissions, and each page reads the owner and rows in the same D1 batch. The endpoint defaults to 25 items and accepts up to 100, orders by issuer/subject, uses separate cursors for project/list type, and returns only identity and creation time.
 
-실행·결과: node --test apps/collector/test/publishers.test.ts apps/collector/test/grants.test.ts
-10/10, npm exec -- tsc --noEmit, tools/contracts의 npm run lint와 npm run check 57/57 통과.
-실제 로컬 Miniflare D1에서 권한 회수 직후 페이지 조회 거부, publisher-only/reader/다른
-프로젝트 owner 거부, 최대 Unicode 식별자·삭제된 커서 위치·목록 종류/프로젝트 분리,
-손상 데이터·저장 실패의 고정 오류를 확인했다. 처음의 손상 fixture는 DB CHECK가 빈 subject
-저장을 거부해 잘못된 HTTP issuer로 고친 뒤 통과했다. 이번 endpoint는 쓰기가 없다.
+Execution and results: node --test apps/collector/test/publishers.test.ts apps/collector/test/grants.test.ts passed 10/10; root typecheck passed; tools/contracts npm run lint and npm run check passed 57/57. On actual local Miniflare D1, verified rejection of a page request immediately after permission revocation, rejection of publisher-only, reader, and other-project owner callers, the largest Unicode identifier, a cursor pointing at a deleted position, separation of list type/project, and fixed errors for damaged data and storage failures. The initial damaged-data fixture was rejected by the DB CHECK constraint because it did not allow an empty subject; it was changed to an invalid HTTP issuer and then passed. This endpoint does not write data.
 
-계약 원본 api/openapi.yaml과 관리자·서버 발행 문서, 로드맵을 갱신했다. DB·마이그레이션·
-SDK·의존성·CI·위생 정책은 바꾸지 않았다. 화면·등록/회수 API는 다음 슬라이스다.
-운영 인증·원격 D1·배포 검증은 실제 설정 미정으로 미실행이며 푸시·배포는 없다.
+Updated the contract source api/openapi.yaml, admin/server publishing documentation, and roadmap. Did not change DB, migrations, SDK, dependencies, CI, or hygiene policy. The screen and registration/revocation API are later slices. Production authentication, remote D1, and deployment verification were not run because actual configuration is undecided; nothing was pushed or deployed.
 
-## 설치 설정 오류 안내 — 2026-10-11
+## Installation configuration error guidance — 2026-10-11
 
-설치 설정 검증 실패가 어느 입력 항목인지 알려주도록 `installation()`이 고정 `field`를 가진
-`InstallationConfigError`(기존 `TypeError` 호환)를 던지고, `install:prepare` CLI가
-`installation_config_failed` 오류에 그 `field`를 붙여 출력한다. 값은 `input`, `admin`,
-`collector`, `admin.accountId`, `admin.collectorWorkerName`, `adminOrigin`, `login`,
-`login.issuer` 중 하나이고 입력값·URL·ID·내부 예외 원문은 담지 않으며 `cause`도 두지 않는다.
-파일·인자·쓰기 오류처럼 검증 밖에서 난 실패는 기존 고정 오류 그대로이고 `field`를 붙이지 않는다.
+To identify which input caused an installation configuration validation failure, `installation()` now throws `InstallationConfigError` (compatible with the existing `TypeError`) with a fixed `field`, and the `install:prepare` CLI prints that `field` with `installation_config_failed` errors. The value is one of `input`, `admin`, `collector`, `admin.accountId`, `admin.collectorWorkerName`, `adminOrigin`, `login`, or `login.issuer`. It contains no input values, URLs, IDs, or source text from internal exceptions and has no `cause`. Failures outside validation, such as file, argument, or write errors, retain the existing fixed error and omit `field`.
 
-실행·결과: `node --test tools/runtime/test/installation.test.ts
-tools/runtime/test/configured-build.test.ts` 6/6, 루트 `npm exec -- tsc --noEmit`. 새 필드 형태
-검사는 8개 field 각각에서 `InstallationConfigError`·`TypeError` 호환, 제출 값 미포함, `cause`
-없음을 확인했고, CLI issuer 불일치는 `field=login.issuer`·stdout 빈 값·출력 폴더 미생성을, 일반
-인자 오류는 `field` 없음을 확인했다. 실제 관리자 빌드와 기존 빌드 보존·ambient `VITE_` 분리
-회귀도 함께 통과했다.
+Execution and results: `node --test tools/runtime/test/installation.test.ts tools/runtime/test/configured-build.test.ts` passed 6/6, and root typecheck passed. Tests for the new `field` shape confirmed `InstallationConfigError` and `TypeError` compatibility for each of the 8 fields, no submitted value in the error, and no `cause`. They also confirmed that a CLI issuer mismatch reports `field=login.issuer`, produces empty stdout, and does not create the output folder, while an ordinary argument error has no `field`. These checks passed together with the actual admin build, preservation of the existing build, and the ambient `VITE_` separation regression.
 
-[설치 설정 준비](../backend/installation.md)에 `field` 안내를, [README](../../README.md)에 현재
-구현·미확인 상태를 반영했다. API·DB 스키마·마이그레이션·SDK·의존성·CI 러너·저장소 위생 정책
-변경은 없다. 실제 운영 인증·원격 리소스·배포 검증은 미실행이다(실제 설정 미정). 푸시·배포는 없다.
+Added field guidance to [Installation configuration preparation](../backend/installation.md) and the current implementation/unverified status to [README](../../README.md). There are no changes to the API, DB schema, migrations, SDK, dependencies, CI runner, or repository hygiene policy. Actual production authentication, remote resources, and deployment verification were not run (actual configuration is undecided). Nothing was pushed or deployed.
 
-## 설치 메타데이터 검사 — 2026-10-11
+## Installation metadata check — 2026-10-11
 
-`npm run install:database-check -- --remote --dir <설치 묶음>`을 로컬 구현·검증했다. 설치
-디렉터리의 다섯 파일을 다시 검증하고 기준 마이그레이션을 이번 실행의 새 인메모리 D1에 적용한
-뒤 원격 D1의 `sqlite_master`를 한 번 조회해 테이블·인덱스·트리거 메타데이터를 비교한다. 기존
-원격 생성 권한 도구의 설치 Wrangler 전송을 그대로 쓴다. 기준은 16개 테이블·7개 마이그레이션이고
-SQL 입력·환경 변수·추가 config 옵션은 받지 않는다.
+Implemented and verified `npm run install:database-check -- --remote --dir <installation bundle>` locally. It revalidates the five files in the installation directory, applies the baseline migrations to a new in-memory D1 for the current run, then queries the remote D1's `sqlite_master` once to compare table, index, and trigger metadata. It reuses the Wrangler transport from the existing remote creator-provisioning tool. The baseline has 16 tables and 7 migrations, and the command accepts no SQL input, environment variables, or additional config options.
 
-실행·결과: `node --test tools/runtime/test/install-database-check.test.ts
-tools/runtime/test/restore-fingerprint.test.ts` 4/4(신규 2·기존 복구 2), 루트 `npm exec --
-tsc --noEmit`, 새 `--help`가 통과했다. 설치된 Wrangler를 테스트 포트에서만 `--remote`→`--local`로
-바꾼 실제 로컬 D1에서 호출 두 번과 임시 scratch 삭제를 확인해 현재 스키마는 통과하고
-`funnel_run_update`를 DROP한 DB는 누락 트리거로 불일치했으며 `retention_cleanup_state`
-revision 37은 조회 전후로 유지됐다. 데이터 행 읽기는 검사가 아니라 검증 fixture의 sentinel
-확인에서만 일어났고, 설정 파일 변조와 잘못된 인자는 원격 호출 수를 늘리지 않고 거부했다.
-초기 두 번의 테스트 실패는 fixture의 옛 테이블 이름 `cleanup_cursor` 오류와 `dispose` 중복
-호출이었고 수정 뒤 통과했으며 실행 동작은 그대로다.
+Execution and results: `node --test tools/runtime/test/install-database-check.test.ts tools/runtime/test/restore-fingerprint.test.ts` passed 4/4 (2 new and 2 existing restore tests), root typecheck passed, and the new `--help` passed. Against an actual local D1 using the installed Wrangler command and config with `--remote`→`--local` only on the test port, two invocations and cleanup of the temporary scratch database succeeded. The current schema matched, a database with `funnel_run_update` dropped was reported as mismatched because of the missing trigger, and `retention_cleanup_state` revision 37 remained unchanged before and after the lookup. Data rows were read only by the verification fixture's sentinel check, not by the database check; tampering with the configuration file and invalid arguments were rejected without increasing the remote call count. The first two test failures involved a fixture's obsolete `cleanup_cursor` table name and a duplicate `dispose` call; after corrections they passed, and the runtime behavior was unchanged.
 
-보고서는 기준·관측 객체 수, 누락·변경(기준 객체 이름만), 추가 객체 개수, 스키마 SHA-256,
-대상 해시, 기준 마이그레이션 목록을 담고 SQL·주소·계정·DB ID·issuer·subject는 출력하지
-않는다. `databaseSchemaMatches`가 true여도 `operationalReadinessVerified`는 false이고 예상과
-다르면 종료 코드 1이며, 원격 쓰기·상품 행 조회·토큰 발급·grant·원격 마이그레이션·배포는 하지
-않는다. 실제 Tallyfin 운영 설치 묶음이 없어 원격 실행은 하지 않았고 Workbench 등록 Tallyfin
-대상도 없다. Cloudflare vault `no-visible-accounts`(부분 커버리지)는 계정 부재의 증거가 아니며
-관측 metadata timestamp는 오늘 00:51 UTC다.
+The report includes baseline and observed object counts, missing or changed baseline object names, the number of added objects, the schema SHA-256, target hash, and the baseline migration list. It does not print SQL, addresses, accounts, DB IDs, issuers, or subjects. `databaseSchemaMatches` can be true while `operationalReadinessVerified` remains false; if the result differs from the baseline, the exit code is 1. The command performs no remote writes, product-row queries, token issuance or grants, remote migrations, or deployment. There is no actual Tallyfin production installation bundle, so remote execution was not run, and there is no registered Tallyfin target in Workbench. Cloudflare vault `no-visible-accounts` (partial coverage) is not evidence that accounts are absent; the observed metadata timestamp is today at 00:51 UTC.
 
-API·DB 스키마·마이그레이션·SDK·의존성·CI 러너·저장소 위생 정책 변경은 없다. package 명령 1개를
-추가했고 기존 `normalizeSql`을 내보내 재사용한다. 실제 운영 인증·원격 리소스·데이터 무결성·
-Cron·백업·로그인 검증은 미실행이다(운영 환경 미설정). 푸시·배포는 없다.
+There are no changes to the API, DB schema, migrations, SDK, dependencies, CI runner, or repository hygiene policy. Added 1 package command and exported and reused the existing `normalizeSql`. Actual production authentication, remote resources, data integrity, Cron, backup, and sign-in verification were not run (production environment is not configured). Nothing was pushed or deployed.
 
-## 브라우저 SDK 재시도·응답 유실 복구 실험 — 2026-10-11
+## Browser SDK retry and lost-response recovery experiment — 2026-10-11
 
-실패 정책을 상태 0(네트워크·타임아웃)·408·429·모든 5xx 재시도와 401·403·409·422
-미재시도로 넓히고 `bench:browser`에 `recovery` 화면을 추가했다. 최대 2회 재시도(총
-3번)·1/2초 백오프·정수 Retry-After·10분 예산·같은 ID/본문 유지·40개 버퍼·비동기
-전송·본문 무저장 규칙은 그대로다. [이벤트·집계 계약](../backend/event-contract.md)과
-[브라우저 SDK](../backend/browser-sdk.md)의 실패 정책·전송 계약 문장을 갱신했다.
+Broadened the failure policy to retry status 0 (network or timeout), 408, 429, and all 5xx responses, and to avoid retrying 401, 403, 409, and 422. Added a `recovery` view to `bench:browser`. The rules for at most 2 retries (3 attempts total), 1/2-second backoff, integer Retry-After, a 10-minute budget, the same ID/body, a 40-item buffer, asynchronous transmission, and no stored bodies remain unchanged. Updated failure-policy and transport-contract language in [event and aggregate contracts](../backend/event-contract.md) and [browser SDK](../backend/browser-sdk.md).
 
-`recovery` 화면은 첫 배치를 수집기 앞에서 502로 막고, 다음 시도는 20개를 D1에 저장한
-뒤 HTTP 응답 연결만 끊는다(브라우저에는 상태 0). 전송 trace는 [502, 0, 200, 200]이고
-앞 세 본문의 SHA-256이 같다. 첫 번째 200은 accepted 0·duplicates 20, 마지막 200은
-accepted 6이라 응답 유실 뒤 재전송이 이중 집계되지 않는다. 재시도 대기 중에 넣은
-계산 1건도 버퍼에 남아 함께 전송된다. 실브라우저 계산은 recovery 12회·수집기 종료 후
-outage 11회이고, Origin은 있고 쿠키·인증·Referer는 없으며 브라우저 스크립트 오류는
-0건이다.
+The `recovery` view rejects the first batch in front of the collector with a 502; the next attempt stores 20 items in D1 but drops only the HTTP response connection (the browser sees status 0). The transport trace is [502, 0, 200, 200], and the SHA-256 of the first three bodies is identical. The first 200 response has accepted 0 and duplicates 20, while the final 200 has accepted 6, showing that a resend after a lost response is not double counted. 1 calculation event queued during the retry delay also remains in the buffer and is sent with the next batch. Real-browser calculations were recovery 12 and outage 11 after the collector shut down. Origin was present; cookies, authentication, and Referer were absent; and browser script errors were 0.
 
-실행·결과: 브라우저 SDK 검사 30개와 관리자 SDK 코드 생성 검사 6개를 함께 실행해 36/36,
-`npm exec -- tsc --noEmit`,
-`npm run build:browser`, `npm run check:browser-size`,
-`npm run bench:browser -- --channel chrome --samples 2`. 번들 gzip은 기본 2750 B·
-Sembom 3026 B·퍼널 2920 B·퍼널+예제 3047 B로 예산 3072 B 안이다. 정상 화면 2회는 각각
-24개, 복구 화면은 26개가 저장돼 영수증 74개·workflow 시작/성공 34/34다. 결과 파일은
-`.tmp/browser-bench/1791679581062.json`이다.
+Execution and results: Browser SDK tests (30) and generated admin SDK code tests (6) passed together 36/36. `npm exec -- tsc --noEmit`, `npm run build:browser`, `npm run check:browser-size`, and `npm run bench:browser -- --channel chrome --samples 2` passed. Bundle gzip sizes were 2750 B for the default, 3026 B for Sembom, 2920 B for the funnel, and 3047 B for the funnel plus example, all within the 3072 B budget. The 2 normal runs stored 24 events each, and the recovery run stored 26, for 74 receipts and 34/34 workflow starts/successes. The result file is `.tmp/browser-bench/1791679581062.json`.
 
-관리자 생성 코드의 최초 gzip 3081 B는 한도 검사에서 실패했다. 진행 중 배치의 개수와
-재시도 상태를 확인할 때 Set을 배열로 복사하던 부분을 직접 순회로 바꿔 3072 B로 줄였다.
-소스와 빌드된 패키지로 생성한 코드 모두 같은 크기다. 위 36개 검사·타입 검사·빌드·
-크기 검사·Chrome 복구 실험은 이 변경 뒤 다시 통과했다.
+The admin-generated code's initial gzip size of 3081 B failed the size check. The part that copied a Set to an array when checking the batch count and retry state was changed to direct iteration, reducing it to 3072 B. Code generated from both the source and the built package is the same size. The 36 tests, typecheck, build, size check, and Chrome recovery experiment passed again after this change.
 
-fixture의 본문 SHA-256과 accepted·duplicates는 합성 측정값이며 실제 운영 로깅이 아니다.
-성능 수치 비교나 SLO 주장은 하지 않는다. API 형태·DB 스키마·마이그레이션·의존성·CI
-워크플로/러너 변경은 없고, 실제 운영 인증·원격 리소스·모바일·운영 환경 검증은
-미실행이다(운영 환경 미설정). 후속은 실제 운영 인증·원격 리소스 확인과 장기간·다중
-Worker 검증이다. 푸시·배포는 없다.
+The fixture body SHA-256 values and accepted/duplicates counts are synthetic measurements, not production logging. They are not used to compare performance or make SLO claims. There are no changes to the API shape, DB schema, migrations, dependencies, or CI workflow/runner. Actual production authentication, remote resources, mobile, and production-environment verification were not run (production environment is not configured). Follow-up work is to verify actual production authentication and remote resources and to test long-duration and multi-Worker operation. Nothing was pushed or deployed.
 
-## 누적 데이터·정리 부하 실험 — 2026-10-11
+## Retained-data and cleanup load experiment — 2026-10-11
 
-`bench:retained`(opt-in, 기본 test/check/CI 미포함)를 추가했다. 새 로컬 D1의 6개 프로젝트에
-네 테이블의 합성 이력 67,860행을 직접 SQL로 넣고, 실제 Worker 시계로 HTTP 8건/초를
-120초 제공했다. 데이터 생성과 인증 warmup은 측정에서 제외한다. 쓰기 480건·인증된 30일
-요약 조회 480건이 모두 200이었다. 실제 scheduled 정리 24회가 모두 ok였고 HTTP와 겹쳤다.
-운영 1분 대신 5초마다 정리를 호출했으며 커서 revision은 24다. 클라이언트 재시도 없이 새
-이벤트 8,800건·중복 800건·신규 workflow 시도 4,400건이 기대값과 일치했다.
+Added `bench:retained` (opt-in; not part of the default test/check/CI run). Direct SQL inserted 67,860 synthetic rows across four tables into 6 projects in a new local D1, then served HTTP at 8 requests/second for 120 seconds using the actual Worker clock. Data generation and authentication warmup were excluded from measurement. All 480 writes and 480 authenticated 30-day summary reads returned 200. All 24 actual scheduled cleanups were ok and overlapped with HTTP traffic. Cleanup ran every 5 seconds instead of production's 1 minute, and the cursor reached revision 24. Without client retries, the run produced 8,800 new events, 800 duplicates, and 4,400 new workflow attempts, matching the expected values.
 
-만료 영수증 7,200·만료 시도 7,200·오래된 이벤트 집계 2,160·workflow 집계 360행이
-삭제됐다. 최종 영수증 44,800·시도 8,000·이벤트 일별 9,720·workflow 일별 1,620행을
-확인했고, 보존 중인 집계의 모든 행은 초기값+새 수락분과 일치했다. API 요약도 별도
-검사했다. p95는 쓰기 48.95ms·조회 10.96ms·정리 123.60ms·작업 시작 지연 13.96ms였다.
-실제 부하 창은 120,011.575ms이고 설정 동시 작업 상한 16은 관측 최대치가 아니다.
+Cleanup deleted 7,200 expired receipts, 7,200 expired attempts, 2,160 aggregate rows for old events, and 360 workflow aggregate rows. Final counts were 44,800 receipts, 8,000 attempts, 9,720 daily event rows, and 1,620 daily workflow rows. Every retained aggregate row matched its initial value plus newly accepted data. The API summary was checked separately. p95 latency was 48.95ms for writes, 10.96ms for reads, 123.60ms for cleanup, and 13.96ms for job-start delay. The actual load window was 120,011.575ms; the configured concurrency limit of 16 was not the observed maximum.
 
-실행·통과: `npm run bench:retained`, 루트 `tsc --noEmit`,
-`node --test tools/runtime/test/retained-bench.test.ts tools/runtime/test/collector-bench.test.ts`
-4/4, 새 명령 help, `git diff --check`. 공용 harness 추출 뒤 `npm run bench:collector`도
-통과했다(`.tmp/collector-bench/run-hBJyX8/report.json`). 이 회귀 실행은 다른 검사와
-겹쳤으므로 측정 수치 비교에는 쓰지 않는다. 집중 검사는 과부하 때 발행 속도를 숨겨
-낮추지 않고 실패하는 것, 이미 시작한 작업 drain·취소·결과 순서, 작은 fixture의 6개
-프로젝트 정리/보존을 확인했다.
+Execution and passing checks: `npm run bench:retained`, root `tsc --noEmit`, `node --test tools/runtime/test/retained-bench.test.ts tools/runtime/test/collector-bench.test.ts` 4/4, the new command's help output, and `git diff --check`. After extracting the shared harness, `npm run bench:collector` also passed (`.tmp/collector-bench/run-hBJyX8/report.json`). That regression run overlapped with other checks and is not used to compare measurements. Focused tests confirmed that an overload fails instead of hiding it by lowering the publish rate, that already-started jobs drain, cancel, and settle in order, and that cleanup and retention work for 6 projects in a small fixture.
 
-최종 결과는 `.tmp/retained-bench/run-r2xPxi/report.json`이다. Node 24.18.0·Windows
-x64·Ryzen 5 7430U·Miniflare 4.20260730.0 환경이며 JWKS는 메모리 합성이다. 기존/원격 DB
-접근은 없었다. 실제 인증 제공자·운영 리소스·장기간·다중 Worker·장애 상황과 네 테이블 밖
-대량 데이터는 미검증이며 로컬 2분 결과를 운영 처리량/SLO로 일반화하지 않는다.
+The final result is `.tmp/retained-bench/run-r2xPxi/report.json`. The environment was Node 24.18.0, Windows x64, Ryzen 5 7430U, and Miniflare 4.20260730.0, with a synthetic in-memory JWKS. There was no access to existing or remote DBs. Actual identity providers, production resources, long-duration and multi-Worker operation, failure conditions, and high-volume data outside the four tables were not verified; the 2-minute local result is not generalized to production throughput or an SLO.
 
-부하 도구·공용 harness·설명과 성능 예산/수집기/로드맵을 갱신했다. API·DB 스키마·
-마이그레이션·SDK·의존성·CI 워크플로/러너·위생 정책 변경은 없고 푸시·배포도 없다.
+Updated the load tool, shared harness, documentation, and the performance budget/collector/roadmap. There are no changes to the API, DB schema, migrations, SDK, dependencies, CI workflow/runner, or hygiene policy; nothing was pushed or deployed.
 
-## 설치 공개 제공자 검사 — 2026-10-11
+## Installation public-provider check — 2026-10-11
 
-`install:check -- --dir <prepared-installation>`은 다섯 설치 파일을 재검증하고 공개 OIDC
-discovery·JWKS GET과 진단용 token endpoint OPTIONS만 보낸다. 코드 교환·로그인·토큰
-발급/갱신·클라이언트 등록·Cloudflare 조회·DB·배포·파일 쓰기는 하지 않는다. 같은 출처는
-CORS 헤더와 OPTIONS를 요구하지 않고 발행자 인증을 켰으면 발행자 JWKS도 검사한다.
-필수 공개 검사만 `publicChecksPassed`에 반영하고 운영 준비는 항상 미확인으로 반환한다.
+`install:check -- --dir <prepared-installation>` revalidates the five installation files and sends only public OIDC discovery and JWKS GET requests plus a diagnostic OPTIONS request to the token endpoint. It performs no code exchange, sign-in, token issuance or refresh, client registration, Cloudflare lookup, DB operation, deployment, or file write. It does not require CORS headers or OPTIONS for the same origin, and it checks the publisher JWKS when publisher authentication is enabled. Only required public checks appear in `publicChecksPassed`, and operational readiness is always returned as unverified.
 
-실행·통과: `node --test tools/runtime/test/install-check.test.ts
-tools/runtime/test/installation.test.ts` 7/7(신규 4·기존 3), 루트 `tsc --noEmit`, 신규 명령
-`--help`, 누락된 설치 디렉터리의 종료 코드 1·고정 오류 출력, `git diff --check`.
-집중 검사는 issuer·PKCE·알고리즘·HTTPS/CORS 오류, 같은 출처, 별도 발행자 키,
-비공개 필드·약한/잘못된 용도 공개키, 선언/실측 본문 상한, 요청 전 취소·멈춘 스트림 취소,
-설치 파일 변조 때 무네트워크·추가 인자 거부·파일 무변경을 확인했다. 제공자 응답과
-공개키는 격리된 메모리 fixture다. 초기 취소 검사 실패는 요청 전 취소 확인을 추가해 수정했다.
+Execution and passing checks: `node --test tools/runtime/test/install-check.test.ts tools/runtime/test/installation.test.ts` 7/7 (4 new and 3 existing), root `tsc --noEmit`, the new command's `--help`, exit code 1 with a fixed error for a missing installation directory, and `git diff --check`. Focused tests covered issuer, PKCE, algorithm, and HTTPS/CORS errors; same-origin behavior; separate publisher keys; private fields and weak or incorrectly purposed public keys; declared versus measured body limits; cancellation before a request and cancellation of a stalled stream; and no network access, rejection of extra arguments, and no file changes when installation files are tampered with. Provider responses and public keys were isolated in-memory fixtures. The initial cancellation test failure was fixed by adding a pre-request cancellation check.
 
-읽기 전용 Workbench snapshot의 등록 대상에는 Tallyfin이 없었다. vault 기반 Cloudflare
-목록은 `unknown/no-visible-accounts`, coverage partial이므로 계정 부재로 단정하지 않는다.
-저장소 `.tmp` 안에는 실제 설치 묶음이 없었고 실제 제공자·운영 리소스 검사는 미실행이다.
-실제 로그인·갱신·토큰 audience/type·클라이언트 등록·원격 DB/Worker/Cron은 확인하지 않았다.
+There was no Tallyfin target among the registered targets in the read-only Workbench snapshot. The vault-based Cloudflare listing returned `unknown/no-visible-accounts` with partial coverage, so it does not establish that no accounts exist. There was no actual installation bundle under the repository's `.tmp`, and actual provider/production-resource checks were not run. Actual sign-in, refresh, token audience/type, client registration, and remote DB/Worker/Cron behavior were not verified.
 
-설치 안내·로드맵·검증 기록을 갱신했고 API·DB 스키마·마이그레이션·SDK·의존성·CI
-워크플로/러너·위생 정책 변경은 없다. npm 명령만 추가했으며 푸시·배포도 없다.
+Updated installation guidance, the roadmap, and the validation record. There are no changes to the API, DB schema, migrations, SDK, dependencies, CI workflow/runner, or hygiene policy. Added only an npm command; nothing was pushed or deployed.
 
-## 수집기 로컬 부하 실험 — 2026-10-11
+## Collector local load experiment — 2026-10-11
 
-`npm run bench:collector`(opt-in, 기본 test/check/CI에 연결하지 않음)를 추가했다. 새 합성
-D1·loopback HTTP에서 실제 bearer·JWT 검증과 D1 집계를 거치는 216요청을 측정했고 204건
-200, 12건은 설계한 할당량 429다(Retry-After 확인). 동시성 1·4·8·16 단계는 각각 12배치
-240개 신규 이벤트와 같은 DB 조회 6건을 처리했고 workflow 쓰기 p95는
-47.13/111.39/190.01/322.82ms, 인증 조회 p95는 9.35/109.87/189.35/321.15ms였다. 같은 20개
-이벤트를 16동시로 재전송한 단계는 accepted 20·duplicates 300이고, browser/server가 공유하는
-분당 한도 12는 성공 12·429 12였으며 이후 다른 프로젝트 2건은 정상 수락됐다.
+Added `npm run bench:collector` (opt-in; not connected to the default test/check/CI run). Measured 216 requests through actual bearer/JWT verification and D1 aggregation using a new synthetic D1 and loopback HTTP. Of these, 204 returned 200 and 12 returned the designed quota response 429 (Retry-After verified). The concurrency steps of 1, 4, 8, and 16 each processed 12 batches of 240 new events and 6 reads against the same database. Workflow write p95 latency was 47.13/111.39/190.01/322.82ms, and authenticated read p95 latency was 9.35/109.87/189.35/321.15ms. The step that resent the same 20 events with 16 concurrent requests produced accepted 20 and duplicates 300. The shared browser/server limit of 12 per minute produced 12 successes and 12 returns of 429, after which 2 requests from a different project were accepted normally.
 
-실행·통과: 루트 `tsc --noEmit`, `node --test tools/runtime/test/collector-bench.test.ts` 2/2,
-신규 명령 `--help`와 옵션 인자 거부, `npm run bench:collector`. 환경은 Node 24.18.0·Miniflare 4.20260730.0·
-win32 x64이며 결과는 `.tmp/collector-bench/run-QOCW8g/report.json`이다. 최종 DB는 영수증
-1090·workflow 시작/성공 480/480·4단계 퍼널 완료 24·할당량 수락 12/거부 12이고 API 조회
-합계와 독립 DB 집계가 일치했다.
+Execution and passing checks: root `tsc --noEmit`, `node --test tools/runtime/test/collector-bench.test.ts` 2/2, the new command's `--help` plus rejection of option arguments, and `npm run bench:collector`. The environment was Node 24.18.0, Miniflare 4.20260730.0, and win32 x64; the result is `.tmp/collector-bench/run-QOCW8g/report.json`. The final database had 1090 receipts, 480/480 workflow starts/successes, 24 completed 4-step funnels, and 12 accepted/12 rejected quota requests, and aggregate API reads matched an independent DB aggregation.
 
-Worker 시계는 고정했고 HTTP 시간은 호스트 단조 시계 실측이며 JWKS는 메모리 합성이라 실제
-제공자 로그인·토큰 갱신·JWKS 장애는 미실행이다. 작은 순차 스윕으로 단계마다 DB가 커지고
-쓰기 12개·조회 6개 표본의 p95는 최댓값이므로 운영 처리량·SLO·원인 귀속으로 일반화하지
-않는다. 원격 DB·실제 운영 인증·지속 대용량 부하·정리 중 부하·다중 Worker는 미실행이다.
-측정 조건은 `tools/runtime/COLLECTOR-BENCH.md`에 있다.
+The Worker clock was fixed, HTTP time was measured with the host monotonic clock, and JWKS was synthetic in memory, so actual provider sign-in, token refresh, and JWKS failure behavior were not run. Because this was a short sequential sweep in which the DB grew at each step, and because p95 was the maximum of 12 write and 6 read samples, the results are not generalized to production throughput, an SLO, or causal attribution. Remote DBs, actual production authentication, sustained high-volume load, load during cleanup, and multiple Workers were not run. The measurement conditions are documented in `tools/runtime/COLLECTOR-BENCH.md`.
 
-API·DB 스키마·마이그레이션·의존성·CI 워크플로/러너·위생 정책 변경은 없고 opt-in
-`bench:collector` 명령만 추가했으며 푸시·배포는 없다.
+There are no changes to the API, DB schema, migrations, dependencies, CI workflow/runner, or hygiene policy. Added only the opt-in `bench:collector` command; nothing was pushed or deployed.
 
-## 전체 스키마 SQL 백업·복구 연습 — 2026-10-11
+## Full-schema SQL backup and restore drill — 2026-10-11
 
-`verify:restore` 명령과 로컬 합성 fixture·스키마/행 내용 fingerprint를 추가했다.
-새 source DB에 마이그레이션 0001~0007과 workflow·혼합 출처 퍼널·권한·관리자 변경 이력·
-생성 이력·사용량/거부·정리 커서를 저장하고 닫은 뒤 실제 Wrangler 로컬 export를 실행한다.
-별도 새 DB에 전체 SQL을 import하고 16개 테이블·38행의 내용/개수와 인덱스/트리거를
-포함한 스키마를 비교한다. 복원 후 브라우저 2건·서버 1건 재전송은 모두 duplicate이고
-집계가 바뀌지 않는다. 스키마 정의·생성 이력·퍼널 순서 위반 쓰기 3개가 거부되며
-그 뒤 내용이 그대로다. 최대 안전 정수 카운터도 SQL export/import 뒤 보존됐다.
+Added the `verify:restore` command, a local synthetic fixture, and fingerprints of schema and row contents. Stored schema migrations 0001 through 0007, workflows, mixed-source funnels, grants, admin change history, creation history, usage/rejections, and cleanup cursors in a new source DB, closed it, then ran an actual Wrangler local export. Imported the full SQL into a separate new DB and compared the 16 tables and 38 rows by content/count, including indexes and triggers. After restoration, resending 2 browser events and 1 server event produced duplicates, and aggregates did not change. 3 writes were rejected: an invalid schema definition, a creation-history violation, and a funnel-order violation; their contents were otherwise unchanged. The largest safe integer counter was also preserved through the SQL export/import.
 
-최종 실행·통과: `npm run verify:restore`, 루트 `tsc --noEmit`, 집중 검사 2/2,
-신규 명령 help와 `git diff --check`. 환경은 Node 24.18.0·Wrangler 4.148.0·
-Miniflare 4.20260730.0이며 최종 결과는 `.tmp/restore-drill/run-VFtFl3/report.json`이다.
-백업은 27,364 bytes, export 2,659ms·import 2,669ms·전체 8,814ms였다.
-소표본 로컬 합성 결과이며 운영 RTO가 아니다. 원시 SQL·두 DB·환경과 마이그레이션/백업
-해시는 무시된 새 실행 디렉터리에 보존했다.
+Final execution and passing checks: `npm run verify:restore`, root `tsc --noEmit`, focused tests 2/2, the new command's help output, and `git diff --check`. The environment was Node 24.18.0, Wrangler 4.148.0, and Miniflare 4.20260730.0; the final result is `.tmp/restore-drill/run-VFtFl3/report.json`. The backup was 27,364 bytes; export took 2,659ms, import took 2,669ms, and the total was 8,814ms. This is a small-sample local synthetic result, not a production RTO. Raw SQL, both databases, the environment, and migration/backup hashes were preserved in ignored, newly created run directories.
 
-초기 검사는 D1에서 허용되지 않는 `integrity_check`로 실패했고 이를 공식 지원
-`quick_check`로 수정했다. 최종 quick_check는 ok, 외래 키 위반은 0이었다.
-집중 검사는 행의 물리적 순서 무관, 같은 행 수의 내용 변경·인덱스/트리거 손실·
-따옴표 안 공백 변화 감지, 누락된 검사 응답/외래 키 위반 거부를 확인했다.
-실행은 원격/기존 DB 옵션 없이 합성 DB만 사용했고 원본 행이나 credential을 stdout에
-출력하지 않았다. 전체 연습은 기본 CI에 추가하지 않았으며 작은 집중 검사만
-기존 runtime test 경로에서 발견한다.
+The initial check failed on `integrity_check`, which D1 does not allow, and was changed to the officially supported `quick_check`. The final `quick_check` result was ok with 0 foreign-key violations. Focused tests covered independence from physical row order, detection of content changes with the same row count, loss of indexes/triggers, whitespace changes inside quotes, and rejection of a missing check response or foreign-key violations. The run used only synthetic databases without remote or existing-DB options and did not print source rows or credentials to stdout. The full drill is not part of the default CI; only the small focused checks are discovered through the existing runtime test paths.
 
-백업·복구 운영 문서·설치 안내·로드맵을 갱신했다. API·DB 스키마·마이그레이션·SDK·
-의존성·CI 워크플로/러너·위생 정책 변경은 없다. 실제 인증 제공자·원격 DB가 미설정이므로
-운영 백업·원격 복구·장애 전환·운영 RTO/RPO·부하 검증은 미실행이다. 푸시·배포도 없다.
+Updated the backup/restore operations documentation, installation guidance, and roadmap. There are no changes to the API, DB schema, migrations, SDK, dependencies, CI workflow/runner, or hygiene policy. Because the actual identity provider and remote DB are not configured, production backup, remote restore, failover, production RTO/RPO, and load verification were not run. Nothing was pushed or deployed.
 
-## 원격 최초 생성 권한 도구 — 2026-10-11
+## Remote initial-creation grant tool — 2026-10-11
 
-`provision:remote-creators`를 추가했다. 완전한 설치 묶음 재검증·발급자 일치·닫힌 JSON
-입력·대상과 상태를 포함한 계획 해시를 요구한다. 미리보기는 읽기만 하고 적용은 한 SQL
-CAS로 `project_creators`만 변경한다. 기존 grant·생성 이력·부여 시각을 보존하고
-재부여 시각·한도·생성 개수 경쟁을 거부한다. 오류·응답 유실은 고정 문구로 처리하고 자동
-재시도하지 않는다. Wrangler SQL import 대신 query 경로를 사용하고 임시 config/env·
-로그/metrics 차단·직접 CLI 프로세스 제한과 대상 범위를 확인한 캐시 정리를 추가했다.
+Added `provision:remote-creators`. It requires revalidation of the complete installation bundle, issuer matching, closed JSON input, and a plan hash that includes the target and state. Preview reads only; apply changes only `project_creators` in one SQL CAS. It preserves existing grants, creation history, and grant times, and rejects a re-grant time, limit, or creation-count race. Fixed errors cover errors and lost responses, and the tool does not retry automatically. It uses the query path instead of Wrangler SQL import and adds temporary config/env handling, disabled logging and metrics, limits on direct CLI processes, and target-scoped cache cleanup.
 
-실행·통과: 전체 권한 도구 검사 19/19(신규 7개), 루트 `tsc --noEmit`, 신규 npm 명령 help,
-`git diff --check`. 실제 로컬 D1에서 Unicode/따옴표/세미콜론 subject의 정확한 보존·부여·
-변경·회수·no-op·stale/재부여/생성 개수 경쟁을 검증했다. 합성 transport로 대상 고정·
-설치 파일 편집 거부·해시 필수·해시 불일치 쓰기 거부·응답/예외 정보 비노출을 확인했다.
-설치된 Wrangler의 동일 config/env/command를 테스트 포트에서 `--local`로만 바꾸어
-실제 D1 JSON·RETURNING 프로토콜을 확인했고 마지막 검사에서 네 실행의 임시 캐시 제거를
-확인했다. 이전 검사에서 남은 임시 캐시 디렉터리 4개의 수동 삭제는 자동 승인 검토에서
-차단되어 해당 캐시는 남겼다. 저장소·실행 대상 DB에 영향이 없다.
+Execution and passing checks: all 19/19 grant-tool tests (7 new), root `tsc --noEmit`, the new npm command's help output, and `git diff --check`. On actual local D1, verified exact preservation of subjects containing Unicode, quotes, and semicolons, plus grant, change, revoke, no-op, and stale/re-grant/creation-count races. Synthetic transport verified target pinning, rejection of edited installation files, the required hash, rejection of writes on a hash mismatch, and no exposure of response or exception details. With the installed Wrangler's identical config/env/command changed only to `--local` on a test port, verified the actual D1 JSON and RETURNING protocol; the final check confirmed removal of temporary caches from four runs. Automatic approval review blocked the manual deletion of 4 temporary cache directories left by an earlier check, so those caches remain. They have no effect on the repository or the target database.
 
-제품 로드맵·권한 정책·설치/등록 안내와 원격 등록 문서를 갱신했다. API·DB·마이그레이션·
-SDK·의존성·CI·위생 정책 변경은 없다. npm 실행 명령만 추가했다. 실제 제공자·운영 자격
-증명·원격 DB 대상이 미설정이므로 원격 조회/쓰기·운영 로그인·푸시·배포는 미실행이다.
+Updated the product roadmap, grant policy, installation/registration guidance, and remote-registration documentation. There are no changes to the API, DB, migrations, SDK, dependencies, CI, or hygiene policy. Added only an npm execution command. Because the actual provider, production credentials, and remote DB target are not configured, remote reads/writes, production sign-in, push, and deployment were not run.
 
-## 관리자 자기 계정 화면 — 2026-10-11
+## Admin personal-account screen — 2026-10-11
 
-관리자 API 연결 후 `로그인 계정 확인`을 펼칠 때만 `/v1/identity`를 읽고 검증한
-issuer/subject를 읽기 전용 필드·JSON으로 보여준다. 토큰·추론한 역할은 복사하지 않는다.
-닫기·연결 교체·언마운트는 요청 취소와 세대 번호로 이전 응답을 폐기하고, 조회 실패는
-이전 식별자를 지우고 재시도를 제공한다. 권한 없는 최초 계정도 프로젝트 선택 없이 사용한다.
+After connecting the admin API, only expanding "Check signed-in account" reads `/v1/identity` and displays the verified issuer/subject in read-only fields and JSON. It does not copy tokens or inferred roles. Closing the panel, replacing the connection, or unmounting cancels the request and discards earlier responses by generation number; a lookup failure clears the previous identifier and offers retry. A first account without a grant can also use the screen without selecting a project.
 
-실행·통과: 관리자 검사 160/160(자기 계정 신규 4개), 관리자 타입 검사·production 빌드,
-초기 JS/지연 로딩 검사 2/2, Sites 패키징/Worker 검사 9/9. 초기 JS gzip은 100 KiB 예산 안이다.
-로컬 브라우저에서 실제 컴포넌트와 합성 transport로 최초 0회·열기 1회 조회, 복사 성공 안내,
-401 후 식별자 제거, 재조회·닫은 뒤 지연 응답·연결 교체 뒤 지연 응답 폐기를 확인했다.
-실제 LiveDashboard에도 합성 transport를 연결하여 빈 프로젝트 목록에서 계정 조회 가능과
-연결 해제 때 계정 정보 제거를 확인했다. 좁은 화면(실제 innerWidth 356px)에서 문서 가로
-넘침이 없고 모든 계정 필드가 읽기 전용이다. 브라우저 viewport의 요청값 320px과 실제값은
-달랐으므로 320px 검증으로 기록하지 않는다.
-실제 제공자·원격 로그인·DB·운영 배포는 미설정으로 미실행이다. 이번 변경은 기존 API를
-소비하며 API·DB·마이그레이션·SDK·의존성·CI·위생 정책 변경이나 푸시는 없다.
+Execution and passing checks: Admin tests 160/160 (including 4 new personal-account tests), admin typecheck and production build, initial JS/lazy-loading checks 2/2, and Sites packaging/Worker checks 9/9. Initial JS gzip remains within the 100 KiB budget. In a local browser with the actual component and synthetic transport, verified 0 lookups initially and 1 on expansion, successful copy guidance, identifier removal after 401, a new lookup, discarding a response that arrives after closing, and discarding one that arrives after replacing the connection. Also connected synthetic transport to the actual LiveDashboard and verified that the account can be queried from an empty project list and that account information is removed when the connection is cleared. At a narrow viewport (actual innerWidth 356px), there was no horizontal document overflow, and every account field was read-only. The requested 320px viewport differed from the actual browser viewport, so this is not recorded as 320px verification.
+Actual provider, remote sign-in, DB, and production deployment were not run because they are not configured. This change consumes the existing API; there are no changes to the API, DB, migrations, SDK, dependencies, CI, or hygiene policy, and nothing was pushed.
 
-## 첫 운영 관리자 식별 조회 — 2026-10-11
+## First production admin identity lookup — 2026-10-11
 
-`GET /v1/identity`는 기존 관리자 bearer 검증을 거친 호출자의 issuer/subject만
-반환한다. 프로젝트 grant·생성 권한·DB 접근 없이 자기 계정만 확인할 수 있고 권한은
-부여하지 않는다. GET만 받고 쿼리를 거부하며 no-store·Vary Authorization을 적용한다.
-API 계약·닫힌 응답 예제·계약 검사와 제품/관리자 경계·로드맵을 갱신했다.
+`GET /v1/identity` returns only the issuer/subject of a caller that has passed the existing admin bearer verification. A caller can check their own account without project grants, creation permission, or database access, and the endpoint grants no permission. It accepts only GET, rejects queries, and applies no-store and Vary: Authorization. Updated the API contract, closed response examples, contract checks, product/admin boundaries, and roadmap.
 
-실행·통과: 관리자/실제 런타임 집중 검사 17/17(신규 자기 계정 검사 2개 포함),
-계약 검사 55/55, 수집기·OIDC 전체 검사 132/132, 루트 타입 검사와 OpenAPI lint.
-테스트는 관리자 store 접근을 차단한 상태에서도 grant 없는 호출자만
-반환하고 프로필·역할 등 검증기 추가 값은 제외함을 확인했다. 메서드·쿼리·헤더·인증
-미설정·검증기 예외·잘못된 식별자·크기 초과를 거부했다. 실제 Worker/JWKS/단기 서명
-JWT/D1 검사에서 grant를 모두 제거한 뒤에도 자기 계정은 200이고 변조 서명·다른
-audience 토큰은 401이었다.
-실제 제공자·운영 계정·DB·배포는 미설정으로 미실행이다.
-DB·마이그레이션·SDK·의존성·CI·위생 정책 변경과 푸시는 없다. API는 자기 계정 GET을
-추가했으며 기존 프로젝트 조회/변경 권한은 유지했다. UI 연결과 운영 최초 권한 등록은 후속이다.
+Execution and passing checks: Focused admin/actual runtime tests passed 17/17 (including 2 new personal-account tests), contract checks passed 55/55, and the full collector/OIDC checks passed 132/132, as did root typecheck and OpenAPI lint. The test confirmed that a caller without a grant still receives only their own identity even when admin store access is blocked, and that extra verifier values such as profile and role are excluded. It rejected unsupported methods, queries, headers, missing authentication, verifier exceptions, invalid identifiers, and oversized inputs. In an actual Worker/JWKS/short-lived signed JWT/D1 test, the personal account still returned 200 after every grant was removed, while a tampered signature and a token for a different audience returned 401.
+Actual provider, production account, DB, and deployment were not run because they are not configured.
+There are no changes to the DB, migrations, SDK, dependencies, CI, or hygiene policy, and nothing was pushed. The API adds a personal-account GET while preserving the existing project read/write permissions. UI integration and initial production grant registration are later work.
