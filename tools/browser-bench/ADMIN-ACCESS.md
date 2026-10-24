@@ -1,28 +1,34 @@
-# 관리자 권한·진행 중 저장 검증
+# Administrator Permission and In-Progress Save Verification
 
-Node 24 이상과 [로그인 검증 안내](ADMIN-LOGIN.md)의 Playwright 준비가 필요하다.
-브라우저를 자동 설치하지 않는다. 기본 검사·CI와 분리한 옵트인 명령이다.
+This requires Node 24 or later and the Playwright setup described in the
+[sign-in verification guide](ADMIN-LOGIN.md). It does not install a browser automatically. This is
+an opt-in command separate from the default checks and CI.
 
 ```powershell
 npm run verify:admin-access -- --channel chromium
 ```
 
-`--channel`은 chromium/chrome/msedge를 받고 `--help`는 실행 없이 사용법을 출력한다.
+`--channel` accepts chromium, chrome, or msedge, and `--help` prints usage without running.
 
-검증은 새 로컬 D1·실행 중 생성한 서명 로그인·격리된 Vite 캐시로 진행한다. 테스트용
-access 프로필에 합성 프로젝트 2개와 보조 소유자를 두어 마지막 소유자 보호를 유지한다.
-로컬 운영 도구로 owner→reader→owner를 전환하고 실제 서버 403, 화면의 편집 잠금,
-초안 보존·명시적 권한 복구를 확인한다. 권한을 되돌려도 재검증·개인정보 검토가 필요하다.
+Verification uses a new local D1 database, a signed sign-in generated during the run, and an
+isolated Vite cache. The test access profile contains 2 synthetic projects and a secondary owner so
+last-owner protection remains in effect. Use the local operational tooling to switch
+owner→reader→owner and verify the real server's 403 response, UI edit locking, draft preservation,
+and explicit permission recovery. Even after restoring permission, revalidation and privacy review
+are still required.
 
-스키마 검증 거부가 프로젝트 설정을 잠그는 경로와 설정 저장 거부가 스키마를 잠그는
-반대 경로를 모두 확인한다. 두 초안을 유지하고 최신 권한 재조회와 명시적 선택으로 복구한다.
+Both directions are checked: schema-validation denial locking project settings, and settings-save
+denial locking the schema. Both drafts are preserved and recovered through a fresh permission
+lookup and an explicit choice.
 
-설정 저장 2건은 서버에 커밋한 뒤 응답을 보류한다. 프로젝트를 바꾸거나 연결을 끊고 응답을
-해제해 이전 결과가 현재 화면을 바꾸지 않는지 확인한다. 이미 서버에 저장된 내용은 DB에
-남아야 한다. 이 진단은 저장을 되돌리는 기능을 검증하지 않는다.
+2 settings saves are committed on the server, then their responses are withheld. Switch projects or
+disconnect, then release the responses and verify that the old results do not change the current
+screen. Content already saved on the server must remain in the database. This diagnostic does not
+verify a feature that rolls back a save.
 
-성공 보고서는 `.tmp/admin-access-*/report.json`과 표준 출력에 고정 결과·횟수만 기록한다.
-토큰·계정 식별자·원문 주소·초안은 보고서에 포함하지 않는다. 실패는 고정 stage/code와
-합성 화면 사진을 해당 로컬 폴더에 남기고 exit 1로 종료한다. 임시 자료는 Git에서 제외한다.
-90초 제한과 종료 시 브라우저/Vite/Miniflare 정리를 적용한다. 실제 운영 설정·DB·로그인
-제공자·원격 환경은 사용하지 않는다. 실행 근거는 [VALIDATION.md](../../VALIDATION.md)를 따른다.
+A successful run records only fixed results and counts in `.tmp/admin-access-*/report.json` and on
+standard output. Tokens, account identifiers, source URLs, and drafts are excluded. A failure leaves
+a fixed stage and code plus synthetic screen images in the local folder and exits with code 1.
+Temporary material is excluded from Git. A 90-second limit applies, and the browser, Vite, and
+Miniflare are cleaned up on exit. No production settings, database, sign-in provider, or remote
+environment is used. Follow [VALIDATION.md](../../VALIDATION.md) for execution evidence.

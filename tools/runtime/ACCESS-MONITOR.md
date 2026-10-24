@@ -1,66 +1,76 @@
-# 인증 접근 반복 점검
+# Repeated Authentication Access Monitoring
 
-`monitor:access`는 호출할 때마다 기존 `install:access-check`의 세 GET을 한 번 실행하고,
-같은 설치 대상의 이전 상태와 비교해 연속 실패·복구 및 알림 필요 여부를 JSON으로 낸다.
-실행 주기·임계 횟수·알림 수신자는 운영자가 정한다. 도구는 주기 실행을 등록하지 않는다.
+`monitor:access` runs the 3 GET checks from the existing `install:access-check` once per invocation,
+compares them with the previous state for the same installation target, and emits JSON describing
+consecutive failures, recovery, and whether a notification is needed. The operator chooses the
+cadence, failure count, and alert recipients. The tool does not register a scheduled run.
 
 ```powershell
 npm run --silent monitor:access -- --dir <prepared-installation> --state <local-state.json> --failure-threshold <1..100> --recovery-threshold <1..100> --max-gap-seconds <1..86400> --token-stdin
 ```
 
-## 입력과 범위
+## Inputs and Scope
 
-설치 묶음·정책·기존 상태를 검증하고 상태 잠금을 확보한 다음, 운영자의 기존 안전한
-토큰 소스에서 비대화형 표준 입력으로 새 access token 한 줄을 받는다. 토큰은 인자·파일·
-보고서에 기록하지 않는다. 입력 30초·검사 15초와 개별 요청 5초·본문 16KiB 상한은
-[접근 검사](INSTALL-ACCESS-CHECK.md)와 같다. 이 명령은 토큰을 발급하거나 갱신하지 않는다.
+The command validates the installation bundle, policy, and existing state, acquires a state lock,
+and then reads one new access-token line from the operator's existing safe token source over
+non-interactive standard input. It never records the token in arguments, files, or reports. Input has
+a 30-second limit, checks have a 15-second limit, individual requests have a 5-second limit, and
+response bodies are capped at 16 KiB, matching the [access check](INSTALL-ACCESS-CHECK.md). This
+command does not issue or refresh tokens.
 
-검사는 identity → 관리자 저장소 read → 프로젝트 한 건 순서다. 앞 검사가 실패하면 뒤
-읽기를 생략한다. 요청 대상은 검토한 관리자 HTTPS 출처이고 redirect·쿠키·재시도·원격
-쓰기를 사용하지 않는다. 401/403·저장소 오류·잘못된 응답·네트워크 시간 초과는 모두
-이번 접근을 확인하지 못한 관측이다. 서비스 전체 장애나 수집/정리 상태로 확대하지 않는다.
-토큰 입력 실패·잘못된 상태·도구 취소는 유효 관측으로 저장하지 않는다.
-SIGINT/SIGTERM은 입력·검사를 취소하고 잠금을 정리한다. 강제 종료는 이 처리를 보장하지 않는다.
+The checks run in the order identity → administrator storage read → one project. If an earlier check
+fails, later reads are skipped. Requests target the reviewed administrator HTTPS origin and use no
+redirects, cookies, retries, or remote writes. A 401 or 403, storage error, malformed response, or
+network timeout is an observation that this access could not be verified. Do not extend it to a
+full-service outage or collection and cleanup status. Failed token input, invalid state, and tool
+cancellation are not stored as valid observations. SIGINT and SIGTERM cancel input and checks and
+clean up the lock. A forced termination does not guarantee that handling.
 
-## 상태와 알림 의도
+## State and Notification Intent
 
-| event | 의미 | notify |
+| event | Meaning | notify |
 | --- | --- | --- |
-| healthy | 접근 확인, 열린 문제 없음 | false |
-| failure_pending | 연속 실패가 아직 임계 횟수 미만 | false |
-| incident_opened | 연속 실패가 임계 횟수에 도달 | true |
-| incident_ongoing | 열린 문제에서 접근을 다시 확인하지 못함 | false |
-| recovery_pending | 접근은 확인했지만 연속 복구 횟수가 부족함 | false |
-| incident_resolved | 연속 성공이 복구 임계 횟수에 도달 | true |
+| healthy | Access verified and no open issue | false |
+| failure_pending | Consecutive failures have not reached the threshold | false |
+| incident_opened | Consecutive failures reached the threshold | true |
+| incident_ongoing | Access could not be verified again while an incident is open | false |
+| recovery_pending | Access was verified, but consecutive recoveries are insufficient | false |
+| incident_resolved | Consecutive successes reached the recovery threshold | true |
 
-한 번의 실패는 성공 연속 횟수를 지우고, 한 번의 성공은 실패 연속 횟수를 지운다.
-두 성공/실패 사이가 `max-gap-seconds`를 초과하면 연속 횟수를 초기화하고 현재 관측부터
-다시 센다. 이때 열린 문제는 유지한다. 예정된 주기보다 여유 있는 최대 간격을 정하고,
-실행 자체가 누락되는 상황은 스케줄러의 별도 감시로 확인한다.
+A failure clears the success streak, and a success clears the failure streak. If the gap between 2
+successes or failures exceeds `max-gap-seconds`, the streak is reset and counting resumes from the
+current observation. An open incident remains open. Set the maximum interval with headroom over the
+scheduled interval, and monitor a missing run separately through the scheduler.
 
-상태에는 schema·대상 공개 설정의 SHA-256·정책·UTC 검사 시각·연속 횟수·열림 여부만
-저장한다. 토큰·계정·subject·프로젝트 행·URL은 저장하지 않는다. 정책 또는 대상이
-다른 파일은 거부하며 시계가 이전 관측보다 뒤로 갔거나 같은 시각이면 거부한다.
-정책 변경 때는 기존 문제를 확인한 뒤 별도 상태 파일을 명시적으로 선택한다.
+State stores only the schema, the SHA-256 of the target's public configuration, policy, UTC check
+times, consecutive counts, and whether an incident is open. It does not store tokens, accounts,
+subjects, project rows, or URLs. It rejects files with a different policy or target, and rejects a
+clock that moved backward or is equal to the previous observation. When policy changes, review the
+existing incident and then explicitly choose a separate state file.
 
-파일은 명시한 위치에만 쓰고 부모 디렉터리가 없으면 만든다. `<state>.lock`을 독점
-생성해 같은 경로를 쓰는 실행의 중첩을 막는다. 임시 파일을 sync한 뒤 rename으로 교체한다.
-손상·초과 크기·심볼릭 링크 상태는 자동 초기화하지 않는다. 프로세스 강제 종료 뒤 잠금이
-남으면 해당 상태를 사용하는 실행이 실제로 끝났는지 확인한 뒤 운영자가 잠금을 정리한다.
-각 실행은 하나의 상태 파일을 사용하며 스케줄러가 같은 대상을 별도 파일로 나누지 않게 한다.
+The command writes only to the specified location and creates the parent directory if needed. It
+creates `<state>.lock` exclusively to prevent overlapping runs from using the same path. It syncs a
+temporary file and replaces the state with a rename. Corrupt, oversized, or symlinked state files are
+not reset automatically. If a lock remains after a forced process termination, the operator must
+confirm that no run using that state is still active before clearing it. Each run uses one state
+file; the scheduler must not split the same target across separate files.
 
-## 출력과 운영 연결
+## Output and Operational Integration
 
-출력은 `tallyfin.access-monitor/v1`이고 고정 검사 코드·현재 `accessVerified`·`incidentOpen`·
-위 event/notify·연속 횟수·간격 초과 여부만 담는다. `scope=administrator_access`,
-`serviceHealth=unknown`, `remoteChanges=false`, `notificationsSent=false`는 고정이다.
-종료 코드 0은 현재 접근 확인과 열린 문제 없음, 1은 확인 실패 또는 복구 대기,
-2는 인자·설치·상태·토큰 입력·도구 실패다. stderr 오류는 고정 코드만 출력한다.
+The output is `tallyfin.access-monitor/v1` and contains only fixed check codes, the current
+`accessVerified` and `incidentOpen` values, the event and notify values above, consecutive counts,
+and whether the allowed gap was exceeded. The following values are fixed: `scope=administrator_access`,
+`serviceHealth=unknown`, `remoteChanges=false`, and `notificationsSent=false`. Exit code 0 means
+current access is verified and no incident is open; 1 means verification failed or recovery is
+pending; 2 means an argument, installation, state, token-input, or tool failure. Stderr prints only a
+fixed code.
 
-토큰 제공·주기 실행·출력 보관·알림 전달은 운영 스케줄러가 연결한다. `notify=true`를
-전달 조건으로 쓸 수 있지만 명령은 알림을 발송하지 않는다. 상태 교체와 stdout 전달은
-하나의 트랜잭션이 아니므로 출력 유실 시 알림 전달을 보장하지 않는다. 운영 연결에서는
-작업 자체의 실패/출력 누락도 감시하고, 현재 `incidentOpen`을 함께 확인한다.
+The operational scheduler supplies the token, runs the schedule, stores output, and delivers alerts.
+It can use `notify=true` as a delivery condition, but the command does not send alerts. State
+replacement and stdout delivery are not one transaction, so losing output does not guarantee alert
+delivery. Operational integration should also monitor task failure and missing output, and check the
+current `incidentOpen` value.
 
-집중 검사와 실제 관리자 프록시·서명 OIDC·로컬 D1의 실패/복구 결과는
-[검증 기록](../../VALIDATION.md)에 있다. 실제 제공자·원격 실행·스케줄·수신자는 미연결이다.
+Focused checks and failure and recovery results with the real administrator proxy, signed OIDC, and
+local D1 are in the [validation record](../../VALIDATION.md). A real provider, remote execution,
+schedule, and recipients are not connected.

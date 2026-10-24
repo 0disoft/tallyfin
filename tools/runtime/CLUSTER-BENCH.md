@@ -1,47 +1,52 @@
-# 로컬 수집 클러스터 부하 실험
+# Local Collection Cluster Load Experiment
 
-`npm run bench:cluster`로 실행한다. 인자를 받지 않거나 `--help`, `--soak`만 받는다. CI·기본
-test/check에는 이 실험을 넣지 않는다. URL·자격 증명·원격 대상·기존 DB 경로를 받지 않는다. 각
-실행은 무시된 `.tmp/cluster-bench/run-*` 아래 새 D1과 루프백 리스너를 만들고, 성공·실패와
-관계없이 finally에서 런타임을 dispose한다. D1과 보고서는 검사할 수 있도록 남긴다.
+Run with `npm run bench:cluster`. It accepts no arguments, or only `--help` and `--soak`. This
+experiment is not included in CI or the default test/check. It accepts no URL, credentials, remote
+target, or existing database path. Each run creates a new D1 database and loopback listener under
+the ignored `.tmp/cluster-bench/run-*` path and disposes the runtime in a finally block regardless
+of success or failure. It leaves D1 and the report for inspection.
 
-## 프로필
+## Profiles
 
-인자가 없으면 120초 기본 프로필을, `--soak`이면 600초 soak 프로필을 실행한다. 두 프로필은
-토폴로지·초기 데이터·초당 발행 속도가 같고 관측 창과 그에 따른 총량만 다르다. soak도 고정
-10분이고 창을 따로 늘리거나 줄이는 옵션은 없다.
+With no argument, it runs the 120-second default profile; `--soak` runs the 600-second soak
+profile. Both use the same topology, initial data, and publishing rate per second; they differ only
+in observation window and resulting totals. Soak is also fixed at 10 minutes, with no option to
+increase or decrease the window separately.
 
-| 프로필 | 창 | 웨이브(2초 간격) | HTTP 요청 | 정리 호출 | accepted | duplicates | workflow 시도·퍼널 실행 |
+| Profile | Window | Waves (2-second interval) | HTTP requests | Cleanup calls | accepted | duplicates | Workflow attempts and funnel runs |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 기본 | 120초 | 60 | 900 | 24 | 3,600 | 7,200 | 600 |
-| `--soak` | 600초 | 300 | 4,500 | 120 | 18,000 | 36,000 | 3,000 |
+| Default | 120 seconds | 60 | 900 | 24 | 3,600 | 7,200 | 600 |
+| `--soak` | 600 seconds | 300 | 4,500 | 120 | 18,000 | 36,000 | 3,000 |
 
-초당 발행은 두 프로필 모두 7.5건이다. CLI는 창에 60초를 더한 시간(기본 180초, soak 660초)이
-지나면 취소를 요청한다. 취소·실패 때 새 작업 발행을 멈추고 시작한 작업을 모두 기다린 뒤
-런타임을 닫는다.
+Both profiles publish 7.5 events per second. The CLI requests cancellation after the window plus
+60 seconds (180 seconds default, 660 seconds soak). On cancellation or failure, it stops issuing new
+work, waits for all started work, and then closes the runtime.
 
-한 Miniflare/workerd 안에 수집 Worker 3개와 루프백 라우터 하나를 띄운다. 라우터는
-`/worker/0/...`부터 `/worker/2/...`까지 해당 수집 Worker로 넘기고 나머지 경로는 404로
-거절한다. 세 Worker는 같은 새 D1 ID 하나를 바인딩하고, 응답 헤더 `X-Tallyfin-Bench-Worker`로
-실제 실행 인스턴스를 구분한다. Worker는 실제 시계를 쓴다. 서울 자정을 넘어 보존 기준 날짜가
-바뀌는 실행을 막으려고, 시작 시각에 프로필 전체 시간(창+60초)을 더한 값이 다른 날짜면 시작을
-거부한다. HTTP 요청은 15초 제한이다.
+Inside one Miniflare/workerd, 3 collection Workers and one loopback router start. The router forwards
+`/worker/0/...` through `/worker/2/...` to the corresponding collection Worker and rejects other
+paths with 404. All three Workers bind the same new D1 ID, and the `X-Tallyfin-Bench-Worker`
+response header identifies the actual execution instance. The Worker uses the real clock. If adding
+the whole profile duration (window plus 60 seconds) to the start time crosses into another date, the
+run refuses to start so that the Seoul midnight retention cutoff does not change. HTTP requests have
+a 15-second limit.
 
-## 토큰
+## Tokens
 
-JWKS와 임시 서명키·토큰은 메모리에만 있고 외부 인증 제공자에 연결하지 않는다. 토큰 수명은
-5분이고, 관리자·퍼블리셔 리더는 만료 30초 전부터 각자 갱신한다. 같은 리더로 동시에 들어온
-요청은 진행 중인 한 번의 서명 결과를 함께 쓴다. 발급은 개수만 `tokenIssuances`로 보고서에 남기고
-토큰 값·키·신원은 남기지 않는다. soak 프로필은 관리자·퍼블리셔 발급이 각각 3회 이상이어야
-하고, 2분 기본 프로필은 이 하한을 검사하지 않는다.
+JWKS, ephemeral signing keys, and tokens exist only in memory and do not connect to an external
+identity provider. Tokens live for 5 minutes, and administrator and publisher readers refresh from
+30 seconds before expiration. Concurrent requests from the same reader share one in-flight signing
+result. The report records only the issuance count in `tokenIssuances`; it records no token values,
+keys, or identities. The soak profile requires at least 3 administrator and 3 publisher issuances,
+while the 2-minute default profile does not check this lower bound.
 
-## 데이터와 부하
+## Data and Load
 
-6개 합성 프로젝트(load-00~load-05)에 직접 SQL로 영수증·작업 상태·일별 집계를 넣는다. 이
-구간은 HTTP 측정에서 제외하며 과거 수집 처리량을 입증하지 않는다. 두 프로필의 초기 여섯
-테이블 합계는 같고 148,260행이다.
+The benchmark inserts receipts, workflow state, and daily aggregates directly with SQL into 6
+synthetic projects (`load-00` through `load-05`). This interval is excluded from HTTP measurement
+and does not demonstrate historical collection throughput. Both profiles start with the same 148,260
+rows across the first six tables.
 
-| 테이블 | 초기 행 |
+| Table | Initial rows |
 | --- | ---: |
 | event_receipts | 67,200 |
 | workflow_attempts | 67,200 |
@@ -50,62 +55,73 @@ JWKS와 임시 서명키·토큰은 메모리에만 있고 외부 인증 제공�
 | funnel_runs | 0 |
 | funnel_daily_counts | 0 |
 
-프로젝트마다 영수증 10,000행과 만료 1,200행, 작업 시도 10,000행과 만료 1,200행을 넣는다.
-이벤트 집계는 도구 3종 × 등록 이벤트 6종에 90일치와 그 앞선 20일치를 더해 프로젝트당
-1,980행이고, 작업 집계는 도구 3종 × 110일치로 330행이다. 퍼널 두 표는 부하 중 퍼널
-프로젝트에서만 채워진다.
+Each project receives 10,000 receipt rows with 1,200 expired, and 10,000 workflow-attempt rows with
+1,200 expired. Event aggregates contain 3 tools × 6 registered events × 90 days plus the preceding
+20 days, for 1,980 rows per project. Workflow aggregates contain 3 tools × 110 days, for 330 rows.
+The two funnel tables are populated only for the funnel project during load.
 
-정리가 끝나면 load 프로젝트는 만료 영수증 7,200행과 만료 작업 시도 7,200행, 90일 이전
-집계(event_daily_counts 2,160행·workflow_daily_counts 360행)를 잃는다. 두 프로필에서 이 초기
-정리 수는 같다. 수락된 workflow 배치는 프로젝트마다 기본 프로필에서 영수증 200행·작업
-시도 100행, soak에서 영수증 1,000행·작업 시도 500행을 더한다.
+After cleanup, the load projects lose 7,200 expired receipts, 7,200 expired workflow attempts, and
+aggregates older than 90 days (2,160 event_daily_counts rows and 360 workflow_daily_counts rows).
+This initial cleanup count is the same in both profiles. Accepted workflow batches add per project
+200 receipts and 100 workflow attempts in the default profile, and 1,000 receipts and 500 attempts
+in soak.
 
-혼합 퍼널 프로젝트(cluster-funnel)는 따로 등록하고 분당 요청 한도를 600으로 둔다. 브라우저
-배치는 `file_selected`/`upload_finished`, 서버 배치는 `job_started`/`job_finished`를
-같은 실행 ID 10개에 기록한다. 브라우저/서버 단계는 같은 실행에 합쳐지며 HTTP 도착 순서는
-보장하지 않는다. 기대 퍼널 실행 행은 각 프로필의 퍼널 실행 수(기본 600, soak 3,000)이고, 네
-단계 도달 수는 실행 수와 같다.
+The mixed funnel project (`cluster-funnel`) is registered separately with a 600-request-per-minute
+limit. Browser batches record `file_selected` and `upload_finished`, and server batches record
+`job_started` and `job_finished` for the same 10 execution IDs. Browser and server stages merge into
+the same execution, but HTTP arrival order is not guaranteed. Expected funnel run rows equal each
+profile's funnel run count (600 default, 3,000 soak), and four-stage reached counts equal the run
+count.
 
-2초 간격으로 웨이브를 발행하며 기본 60개, soak 300개다. 웨이브마다 20개 이벤트 workflow
-배치(작업 시도 10개)와 20개 이벤트 브라우저 퍼널 배치, 20개 이벤트 서버 퍼널 배치를 수집
-Worker 3개에 같은 본문으로 보낸다. 인증된 요약 3건과 퍼널 일별 3건도 함께 읽는다. 쓰기 9건과
-읽기 6건을 합쳐 웨이브마다 HTTP 15건, 초당 7.5건이다. 같은 본문을 세 Worker에 동시에
-보내므로 한 곳만 수락하고 나머지는 중복으로 응답한다. 기대값은 기본 accepted
-3,600·duplicates 7,200, soak accepted 18,000·duplicates 36,000이고, 남는 새 workflow 시도 행과
-퍼널 실행은 기본 600개, soak 3,000개다. workflow 배치는 load 프로젝트 6개에 흩어지고 퍼널
-배치는 퍼널 프로젝트로만 간다. load 프로젝트의 기존 오늘 집계는 count를 늘리고, 퍼널
-프로젝트에는 출처별 이벤트 집계 8행과 단계 집계 8행을 새로 만든다.
+Waves are issued every 2 seconds, 60 in the default profile and 300 in soak. Each wave sends a
+20-event workflow batch (10 workflow attempts), a 20-event browser funnel batch, and a 20-event
+server funnel batch to all 3 collection Workers with the same body. It also reads 3 authenticated
+summaries and 3 funnel daily aggregates. That makes 9 writes plus 6 reads, or 15 HTTP requests per
+wave and 7.5 per second. Sending the same body to 3 Workers at once means one accepts it and the
+others respond as duplicates. Expected values are accepted 3,600 and duplicates 7,200 in the
+default profile, and accepted 18,000 and duplicates 36,000 in soak; the resulting new workflow
+attempt rows and funnel runs are 600 default and 3,000 soak. Workflow batches spread across the 6
+load projects, while funnel batches go only to the funnel project. Existing today aggregates in load
+projects increment their counts, and the funnel project creates 8 source-event aggregate rows and 8
+stage aggregate rows.
 
-실제 scheduled 정리는 1분 간격이 아니라 5초마다 호출하고 Worker 3개에 돌아가며 배정한다.
-기본 24회, soak 120회이며 HTTP 작업과 겹쳐 실행돼야 한다. 끝나면 만료 영수증·작업 시도와
-90일 이전 집계 행이 모두 사라지고 커서 revision이 정리 호출 수와 같아야 한다.
+Actual scheduled cleanup runs every 5 seconds rather than every 1 minute, assigned round-robin across
+the 3 Workers. It runs 24 times by default and 120 times in soak and must overlap HTTP work. At the
+end, all expired receipts and workflow attempts and aggregates older than 90 days are gone, and the
+cursor revision equals the number of cleanup calls.
 
-## 검증
+## Verification
 
-수집 Worker 3개가 같은 D1을 읽는지 인스턴스별로 확인하고, 프로젝트별 영수증·작업 시도 수를
-초기값+수락분과, 집계의 모든 행을 초기값+수락된 변경분과 대조한다. 퍼널 단계별 도달 수가 각
-프로필의 퍼널 실행 수인지, 각 Worker의 퍼널 요약이 startedRuns·completedRuns가 그 값이고
-완료율 100인지도 확인한다. 예상 밖 상태·영수증·집계·정리 결과는 실패다.
+Verify per instance that all 3 collection Workers read the same D1 database, and compare per-project
+receipt and workflow-attempt counts with initial values plus accepted work. Compare every aggregate
+row with its initial value plus accepted changes. Verify that funnel stage reached counts equal each
+profile's funnel run count, and that each Worker's funnel summary has `startedRuns` and
+`completedRuns` equal to that count and a 100% completion rate. Any unexpected state, receipt,
+aggregate, or cleanup result is a failure.
 
-실시간 절대 일정으로 요청을 발행하고 시작 지연을 따로 기록한다. 동시 작업 한도는 정리를
-포함해 16개이고, 한도를 넘길 요청은 속도를 줄이는 대신 명시적으로 실패한다. 실제 HTTP 동시
-실행 최대치는 보고서의 `peakHttpInFlight`에, 정리가 HTTP 작업과 겹친 횟수는
-`cleanupOverlappedHttp`에 남긴다. 주어진 속도에서 성공했다고 최대 처리 용량을 구했다고
-해석하지 않는다.
+Requests are issued on a real-time absolute schedule, and start delays are recorded separately. The
+concurrency limit, including cleanup, is 16; requests above it fail explicitly rather than slowing
+down. The actual maximum concurrent HTTP execution count is recorded in `peakHttpInFlight`, and the
+number of times cleanup overlapped HTTP work is recorded in `cleanupOverlappedHttp`. Success at the
+given rate does not mean maximum processing capacity has been determined.
 
-## 보고서와 한계
+## Report and Limits
 
-`report.json`은 `profile`과 창·환경·초기/최종 행 수·부하 창/실제 시간·수락/중복·정리
-횟수·종류별 p50/p95/max·발행 지연·토큰 발급 횟수·요청별 관측을 남긴다. `maxInFlight`는 설정한
-상한이고 `peakHttpInFlight`는 실제 최대치다. 이벤트 본문·토큰·키·신원은 남기지 않는다. 실패하면
-마지막 단계와 완료 관측을 `failure.json`에 남긴다. 실제 실행 결과와 통과 여부는
-[검증 기록](../../VALIDATION.md)에 적는다.
+`report.json` records `profile`, the window, environment, initial and final row counts, load window
+and actual time, accepted and duplicate counts, cleanup run count, p50/p95/max by type, issue
+latency, token issuance count, and per-request observations. `maxInFlight` is the configured limit
+and `peakHttpInFlight` is the actual maximum. Event bodies, tokens, keys, and identities are not
+recorded. A failure records the last stage and completion observations in `failure.json`. Record
+actual execution results and pass status in the [validation record](../../VALIDATION.md).
 
-환경 구성은 [Cloudflare Miniflare의 다중 Worker 안내](https://developers.cloudflare.com/workers/testing/miniflare/core/multiple-workers/)와
-설치된 Miniflare의 binding API를 따른다.
+Environment setup follows the
+[Cloudflare Miniflare guide for multiple Workers](https://developers.cloudflare.com/workers/testing/miniflare/core/multiple-workers/)
+and the installed Miniflare binding API.
 
-단일 로컬 에뮬레이터 안의 분리된 수집 Worker 3개를 120초(기본) 또는 600초(soak) 관찰한
-실험이다. 관측 창은 실행한 프로필의 실제 시간이고, 처리 용량 수치도 지역 특성도 며칠 치
-soak도 아니다. 다중 프로세스·다중 지역·장기간 부하·원격 한도/비용·장애 복구·실제 로그인은
-미검증이며, 관측 지연에는 호스트·에뮬레이터·암호·DB 작업이 함께 들어가 운영 D1 처리량이나
-SLO로 일반화하지 않는다. 정상 부하에서의 성공과 과부하/장애 대응은 별도 검증이다.
+This experiment observes 3 separated collection Workers inside a single local emulator for 120
+seconds (default) or 600 seconds (soak). The observation window is the actual time of the run
+profile; throughput figures are neither regional characteristics nor a multi-day soak. Multi-process
+and multi-region operation, long-duration load, remote limits and costs, failure recovery, and real
+sign-in remain unverified. Observed latency includes host, emulator, crypto, and database work and
+must not be generalized into production D1 throughput or an SLO. Success under normal load and
+response to overload or failure require separate verification.

@@ -16,7 +16,7 @@ final result: passed
 
 ## Findings and iteration history
 
-1. **P2 — Vertical spacing pushed the event table down.** Initial capture `comparison-before.png` showed a taller chart, excessive gaps and the final table row below the viewport. Reduced chart height and section gaps; changed table-header margin and metric padding. Final full and table captures show all four rows with the intended flat table structure. The extra accessible “수치 보기” control accounts for the remaining small offset.
+1. **P2 — Vertical spacing pushed the event table down.** Initial capture `comparison-before.png` showed a taller chart, excessive gaps and the final table row below the viewport. Reduced chart height and section gaps; changed table-header margin and metric padding. Final full and table captures show all four rows with the intended flat table structure. The extra accessible **View values** control accounts for the remaining small offset.
 2. **P2 — Table count alignment and legend drift.** Initial counts sat at the far right and the legend used a bar icon. Counts now align at a stable 72% first-column boundary in overview, and the legend uses a blue circle from Phosphor. Other analytical tables retain right-aligned numbers.
 3. **P2 — Mobile horizontal overflow.** A tooltip retained its desktop coordinates on resize, expanding document width to 780px. Chart overflow is now contained, and native details use block layout. At CSS 320px and 390px, document width is within the viewport; the event table scrolls inside its own container (271px client / 540px contents at 320px).
 4. **P1 — Period-dependent fixture counts.** Overlapping dates changed when selecting 14 versus 30 days. Fixtures now use a stable calendar index; a regression test checks identical overlapping records for all projects. This was a data-correctness issue rather than a source-visual mismatch.
@@ -62,19 +62,45 @@ Post-fix captures were reopened in full-view and focused comparison. No actionab
 - [x] Responsive widths and browser console checked.
 - [x] Evidence and production limitations recorded.
 
-## API 연결 모드 추가분 (2026-10-08)
+## API Connection Mode Additions (2026-10-08)
 
-- `src/api/*`(client·validate·dates·coverage·pagination)와 `src/LiveDashboard.tsx`가 실 API 조회를 맡고 기존 시각 시안과 레이아웃은 유지한다. 헤더의 `Sample`/`API 연결` 전환으로 나눈다.
-- 같은 출처만 허용하고(userinfo·쿼리·해시 거부) `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`로 요청한다. 기본 fetch는 globalThis 컨텍스트로 호출한다.
-- 토큰은 탭 메모리와 클라이언트 사설 필드에만 두고 서버 오류 문구는 반사하지 않는다(고정 안내 + requestId). `연결 끊기`는 토큰을 지우고 헤더 및 본문을 읽는 중인 요청을 중단한다.
-- 계약 타입/최소 런타임 검증과 meta·이벤트·작업 흐름 ID 대조로 다른 프로젝트·버전·기간 응답을 거부하고, 값이 없으면 0으로 채우지 않는다.
-- 로컬 검증: 타입체크, 샘플 모델·API 클라이언트 테스트 19/19, 프로덕션 빌드, Sites 패키징 테스트 4/4 통과. JS 번들 약 653kB(압축 전)의 크기 경고는 남아 있다.
-- `http://127.0.0.1:5187/`에서 로컬 Miniflare D1의 관리자 조회 API(5188)를 프록시해 수집 3건·시작 1건·성공 1건·완료율 100%, 이벤트 일별 집계·속성 버킷, 목표·읽기 전용 설정을 확인했다. 증명: `.tmp/admin-api-d1-local-20261008.jpg`.
-- 잘못된/빈 스키마 버전, 존재하지 않는 버전의 404, 토큰 없는 401, 연결 해제 후 초기화·재연결을 확인했다. 실제 인증 제공자와 서명 검증은 연결하지 않았고 검증기 포트만 모킹했다. 403·503은 클라이언트/관리자 테스트에서만 검증했다.
+- `src/api/*` (client, validate, dates, coverage, and pagination) and `src/LiveDashboard.tsx` handle
+  real API queries while preserving the visual reference and existing layout. The
+  `Sample`/`API connection` toggle in the header switches between them.
+- Requests allow only the same origin (rejecting userinfo, queries, and fragments) and use
+  `credentials: omit`, `cache: no-store`, and `referrerPolicy: no-referrer`. Default fetch is called
+  through the globalThis context.
+- Tokens live only in tab memory and private client fields, and server error text is not reflected
+  (fixed guidance plus requestId). `Disconnect` clears the token and aborts in-flight requests that
+  are reading headers or bodies.
+- Contract types, minimal runtime validation, and cross-checks of meta, event, and workflow IDs
+  reject responses from another project, version, or period. Missing values are not filled with 0.
+- Local validation passed: typecheck, 19/19 sample-model and API-client tests, the production build,
+  and 4/4 Sites packaging tests. A JavaScript bundle-size warning remains at approximately 653 kB
+  before compression.
+- At `http://127.0.0.1:5187/`, the administrator query API from local Miniflare D1 (5188) was
+  proxied to verify 3 collections, 1 start, 1 success, a 100% completion rate, daily event
+  aggregates and property buckets, and goal and read-only settings. Evidence:
+  `.tmp/admin-api-d1-local-20261008.jpg`.
+- Invalid and empty schema versions, a 404 for a nonexistent version, a 401 without a token, and
+  reset and reconnection after disconnecting were verified. No real authentication provider or
+  signature verification was connected; only the verifier port was mocked. The 403 and 503 cases
+  were verified only in client and administrator tests.
 
-## OIDC 로그인 연결 추가분 (2026-10-08)
+## OIDC Sign-In Connection Additions (2026-10-08)
 
-- API 모드에 지연 로드하는 관리자 로그인과 접힌 직접 토큰 입력을 연결했다. 설정이 없으면 로그인 버튼을 비활성화하고 안내한다. 진행 상태는 status, 실패는 alert로 표시한다.
-- 로컬 Vite 5180의 React StrictMode 화면에서 설정 없음, 직접 연결 펼치기, 다른 출처 엔드포인트 거부, 샘플 복귀와 재진입을 확인했다. `/auth/callback?error=access_denied`는 즉시 쿼리가 지워지고 API 모드의 설정 오류를 표시하며 대기 상태가 끝난다. 콘솔 오류는 수집되지 않았다.
-- 정상 로그인 화면 증거는 저장소 루트 `.tmp/admin-oidc-login-20261008.png`다. 실제 제공자 설정은 없으며 브라우저의 인증 성공·제공자 리다이렉트·갱신은 검증하지 않았다. 격리된 클라이언트 테스트는 실행 중 생성한 키로 ID 서명과 PKCE·state/nonce·갱신을 검증한다.
-- 타입 검사와 테스트 31/31, 프로덕션 빌드와 Sites 패키징 테스트 4/4 통과. 로그인 청크 30.65kB/gzip 10.85kB, 메인 청크 657.25kB/gzip 191.91kB다. 메인 번들의 기존 크기 경고와 폰트 최적화 과제는 남아 있다. 새 전체 접근성 감사와 운영 제공자 smoke는 실행하지 않았다.
+- API mode now connects a lazily loaded administrator sign-in flow and a collapsed direct-token
+  input. Without configuration, the sign-in button is disabled and guidance is shown. Progress is
+  shown with status and failures with alert.
+- On the React StrictMode screen in local Vite 5180, verified behavior included no configuration,
+  expanding the direct connection, rejection of another-origin endpoint, and returning to the
+  sample and re-entering. `/auth/callback?error=access_denied` clears the query immediately, shows
+  the API-mode configuration error, and ends the waiting state. No console errors were captured.
+- Evidence of the normal sign-in screen is `.tmp/admin-oidc-login-20261008.png` in the repository
+  root. No real provider configuration exists, and browser authentication success, provider
+  redirect, and refresh were not verified. Isolated client tests use keys generated during the run
+  to verify ID signing and PKCE, state, nonce, and refresh.
+- Type checking, 31/31 tests, the production build, and 4/4 Sites packaging tests passed. The login
+  chunk is 30.65 kB with gzip 10.85 kB, and the main chunk is 657.25 kB with gzip 191.91 kB. The
+  existing main-bundle size warning and font optimization work remain. No new full accessibility
+  audit or production-provider smoke test was run.

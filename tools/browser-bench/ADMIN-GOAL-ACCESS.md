@@ -1,43 +1,49 @@
-# 목표·퍼널 읽기 권한 검증
+# Goal and Funnel Read Permission Verification
 
 ```powershell
 npm run verify:admin-goal-access -- --channel chromium
 ```
 
-Node 24 이상과 [로그인 검증 안내](ADMIN-LOGIN.md)의 Playwright 환경이 필요하다.
-`--channel`은 chromium/chrome/msedge, `--help`는 실행 없는 안내다. 브라우저를 자동
-설치하지 않는다. 기본 검사와 CI에 연결하지 않은 옵트인 명령이다.
+This requires Node 24 or later and the Playwright environment described in the
+[sign-in verification guide](ADMIN-LOGIN.md). `--channel` accepts chromium, chrome, or msedge, and
+`--help` prints guidance without running. It does not install a browser automatically. This is an
+opt-in command that is not connected to the default checks or CI.
 
-새 Miniflare D1, 격리된 Vite 캐시와 실행 중 생성한 RS256 로그인 키만 사용한다.
-실제 운영 설정·OIDC·원격 DB에는 접속하지 않는다. 테스트 전용 goals 프로필에
-작업 흐름과 두 단계 퍼널, 합성 프로젝트 2개와 보조 소유자를 등록한다. Core 검증과
-D1 commit으로 현재·직전 기간의 16개 이벤트를 준비한다. 과거 수신 시각을 지정하는
-것은 fixture 준비 과정이며 실제 브라우저 수집으로 과거 이벤트를 보내는 검증은 아니다.
+It uses only a new Miniflare D1, an isolated Vite cache, and an RS256 signing key generated during
+the run. It does not connect to production settings, OIDC, or a remote database. A test-only goals
+profile registers a workflow, a two-stage funnel, 2 synthetic projects, and a secondary owner. It
+prepares 16 events for the current and previous periods through Core verification and a D1 commit.
+Specifying past receive timestamps is part of fixture setup; it is not verification that real
+browser collection can send events from the past.
 
-화면에서 목표를 열고 분류·기간 비교를 선택한다. 다음 여섯 요청을 보내기 직전에
-운영 도구로 실제 D1 grant를 회수하고, 서명된 API가 돌려준 403을 그대로 전달한다.
+Open the goal in the UI and select a breakdown and period comparison. Immediately before each of the
+following 6 requests, revoke the actual D1 grant with the operational tool and pass through the 403
+returned by the signed API unchanged.
 
-- 작업 흐름 현재 기간 속성 조회
-- 작업 흐름 직전 기간 속성 조회
-- 퍼널 현재 기간 전체 조회
-- 퍼널 현재 기간 속성 조회
-- 퍼널 직전 기간 전체 조회
-- 퍼널 직전 기간 속성 조회
+- Workflow current-period property query
+- Workflow previous-period property query
+- Funnel current-period total query
+- Funnel current-period property query
+- Funnel previous-period total query
+- Funnel previous-period property query
 
-각 거부 뒤 이전 표·분류·비교와 CSV가 제거되거나 비활성화되어야 한다. grant를 다시
-부여한 뒤 화면에서 새로고침해 다음 경로로 복구한다. 정상 퍼널 비교에서 현재의 loan과
-직전의 timer 행을 정확히 확인하고, 실제 다운로드한 CSV의 양 기간 시작·완료 1건과
-속성별 1/0·0/1 비교를 검증한다. 전체 D1의 workflow 시작 4건과 funnel 시작 4건도 확인한다.
+After each denial, the previous table, breakdown, comparison, and CSV must be removed or disabled.
+After regranting, refresh the UI and recover through the following path. In a normal funnel
+comparison, confirm the current loan and previous timer rows exactly, and verify that the actually
+downloaded CSV contains 1 start and completion per period and a 1/0 and 0/1 comparison for each
+property. Also confirm 4 workflow starts and 4 funnel starts across the full D1 database.
 
-일곱 번째 요청은 실제 403을 받은 뒤 응답을 보류한다. 다른 프로젝트로 전환한 뒤
-보류 응답을 해제해 새 화면의 권한과 CSV가 유지되는지 검사한다. 새 프로젝트의 실제
-CSV에는 이전 프로젝트 ID가 없어야 한다. 연결 해제 뒤 분석과 내보내기 요소도 없어야 한다.
+The seventh request receives a real 403, then its response is withheld. Switch to another project and
+release the withheld response, then check that the new screen's permissions and CSV remain. The new
+project's real CSV must not contain the previous project ID. After disconnecting, analytics and export
+elements must also be absent.
 
-성공 보고서는 `.tmp/admin-goal-access-*/report.json`과 표준 출력에 고정 결과·횟수를
-기록한다. 현재·비교 화면의 합성 스크린샷도 같은 Git 제외 폴더에 둔다. 실패는 stage·
-통과한 시나리오·관측한 거부와 스크린샷을 남기고 exit 1이다. 토큰·원문 오류·입력
-초안은 기록하지 않는다. 60초 제한과 브라우저·Vite·Miniflare 정리를 적용한다.
+A successful run records fixed results and counts in `.tmp/admin-goal-access-*/report.json` and on
+standard output. Synthetic screenshots of the current and comparison screens are placed in the same
+Git-excluded folder. A failure records the stage, scenarios passed, observed denials, and screenshots,
+then exits with code 1. Tokens, raw errors, and input drafts are not recorded. A 60-second limit
+applies, with browser, Vite, and Miniflare cleanup.
 
-이는 로컬 Chromium·서명 API·D1 경로의 근거다. 모든 API·조직·역할 조합, 실제 제공자,
-운영 배포, 모바일과 다른 브라우저 검증으로 확대하지 않는다. 실행 결과는
-[검증 기록](../../VALIDATION.md)에 둔다.
+This is evidence for the local Chromium, signed API, and D1 path. It does not extend to every API,
+organization, and role combination, a real provider, production deployment, mobile, or other
+browsers. Put execution results in the [validation record](../../VALIDATION.md).

@@ -1,52 +1,59 @@
-# 로컬 보존·정리 부하 실험
+# Local Retention and Cleanup Load Experiment
 
-`npm run bench:retained`로 실행한다. `--help` 외 인자를 받지 않고 CI·기본 test/check에는
-이 2분 실험을 넣지 않는다. URL·자격 증명·원격 대상·기존 DB 경로를 받지 않는다.
-각 실행은 무시된 `.tmp/retained-bench/run-*` 아래 새 D1과 루프백 리스너를 만들고
-성공·실패 시 런타임을 dispose한다. DB와 보고서는 검사할 수 있도록 남긴다.
+Run with `npm run bench:retained`. It accepts no arguments other than `--help`, and this 2-minute
+experiment is not included in CI or the default test/check. It accepts no URL, credentials, remote
+target, or existing database path. Each run creates a new D1 database and loopback listener under
+the ignored `.tmp/retained-bench/run-*` path and disposes the runtime on success or failure. It
+leaves the database and report for inspection.
 
-Worker는 실제 시계를 쓴다. JWKS와 임시 서명키·토큰은 메모리 안에만 있고 외부 인증
-제공자에 연결하지 않는다. 서울 자정 3분 전에는 보존 기준 날짜 변경을 피하려고 시작을
-거부한다. HTTP 요청은 15초 제한이고, CLI는 180초에 취소를 요청한다. 취소·실패 때
-새 작업 발행을 멈추고 시작한 작업을 모두 기다린 뒤 런타임을 닫는다.
+The Worker uses the real clock. JWKS, the ephemeral signing key, and tokens exist only in memory and
+do not connect to an external identity provider. It refuses to start 3 minutes before Seoul
+midnight to avoid changing the retention cutoff date. HTTP requests have a 15-second limit, and the
+CLI requests cancellation at 180 seconds. On cancellation or failure, it stops issuing new work,
+waits for all started work, and then closes the runtime.
 
-## 데이터와 부하
+## Data and Load
 
-6개 합성 프로젝트에 직접 SQL로 영수증·작업 상태·일별 집계를 넣는다. 이 구간은
-HTTP 측정에서 제외하며 과거 수집 처리량을 입증하지 않는다. 보존 창 안팎 데이터가
-함께 있으며 초기 네 테이블은 합계 67,860행이다.
+It inserts receipts, workflow state, and daily aggregates directly with SQL into 6 synthetic
+projects. This interval is excluded from HTTP measurement and does not demonstrate historical
+collection throughput. The data includes rows inside and outside the retention window, and the first
+four tables contain 67,860 rows in total initially.
 
-| 테이블 | 초기 행 | 만료 제거 | 새 삽입 | 최종 행 |
+| Table | Initial rows | Expired and removed | Newly inserted | Final rows |
 | --- | ---: | ---: | ---: | ---: |
 | event_receipts | 43,200 | 7,200 | 8,800 | 44,800 |
 | workflow_attempts | 10,800 | 7,200 | 4,400 | 8,000 |
 | event_daily_counts | 11,880 | 2,160 | 0 | 9,720 |
 | workflow_daily_counts | 1,980 | 360 | 0 | 1,620 |
 
-집계는 새 행이 아닌 기존 오늘 행의 count를 늘린다. 120초 동안 초당 HTTP 8건으로
-배치 쓰기 480건과 인증된 30일 요약 조회 480건을 제공한다. 배치는 20개 이벤트·10개
-workflow 시도를 담고, 12번째 쓰기마다 직전 배치를 재전송한다. 기대값은 accepted
-8,800·duplicates 800·신규 workflow 시도 4,400이다. 클라이언트 재시도는 없다.
+Aggregation increments the count of existing today rows rather than creating new rows. For 120
+seconds, it issues 8 HTTP requests per second, serving 480 batch writes and 480 authenticated 30-day
+summary queries. A batch contains 20 events and 10 workflow attempts, and every 12th write replays
+the previous batch. The expected values are accepted 8,800, duplicates 800, and 4,400 new workflow
+attempts. There is no client retry.
 
-실제 scheduled 정리는 운영의 1분 간격보다 빠른 5초마다 24회 호출한다. 회당 최대
-5개 프로젝트·프로젝트/테이블당 500행 한도와 실제 D1 커서를 사용한다. HTTP 작업과
-정리가 겹쳐 실행돼야 하고, 6개 프로젝트 모두 만료 행이 제거돼야 한다. 보존 중인
-영수증·작업 상태의 개수/시각을 확인하고, 집계의 모든 행을 초기값+수락된 변경분과
-대조하며 최종 API 요약도 독립적으로 확인한다. 커서 revision은 24여야 한다.
+Actual scheduled cleanup is called 24 times every 5 seconds, faster than the production 1-minute
+interval. Each run uses a maximum of 5 projects, a 500-row limit per project and table, and the real
+D1 cursor. HTTP work and cleanup must overlap, and all expired rows must be removed from all 6
+projects. Verify the count and timestamps of retained receipts and workflow state, compare every
+aggregate row with its initial value plus accepted changes, and independently verify the final API
+summary. The cursor revision must be 24.
 
-실시간 절대 일정으로 요청을 발행하고 시작 지연을 따로 기록한다. 동시 작업 한도는
-정리를 포함해 16개이며 한도를 넘길 요청은 속도를 줄이는 대신 명시적으로 실패한다.
-예상 밖 상태·영수증·집계·정리 결과는 실패다. 주어진 속도에서 성공했다고 최대 처리
-용량을 구했다고 해석하지 않는다.
+Requests are issued on a real-time absolute schedule, and start delays are recorded separately. The
+concurrency limit, including cleanup, is 16; requests above the limit fail explicitly instead of
+being slowed. Any unexpected state, receipt, aggregate, or cleanup result is a failure. Success at
+the given rate does not mean maximum processing capacity has been determined.
 
-## 보고서와 한계
+## Report and Limits
 
-`report.json`은 환경·초기/최종 행 수·부하 창/실제 시간·수락/중복·정리 횟수·각 종류의
-p50/p95/max·발행 지연과 요청별 관측을 남긴다. `maxInFlight`는 설정한 상한이다.
-이벤트 본문·토큰·키·신원은 남기지 않는다. 실패하면 마지막 단계와 완료 관측을
-`failure.json`에 남긴다. 실제 실행 결과는 [검증 기록](../../VALIDATION.md)에 있다.
+`report.json` records the environment, initial and final row counts, load window and actual time,
+accepted and duplicate counts, cleanup run count, p50/p95/max for each type, issue latency, and
+per-request observations. `maxInFlight` is the configured limit. Event bodies, tokens, keys, and
+identities are not recorded. A failure records the last stage and completion observations in
+`failure.json`. Actual execution results are in the [validation record](../../VALIDATION.md).
 
-단일 로컬 에뮬레이터의 네 데이터 테이블을 2분 관찰한 실험이다. 나머지 테이블의
-대량 데이터·장기간 부하·다중 Worker·원격 한도/비용·장애 복구·실제 로그인은 미검증이다.
-관측 지연에는 호스트·에뮬레이터·암호·DB 작업이 함께 들어가며 운영 D1 처리량이나
-SLO로 일반화하지 않는다. 정상 부하에서의 성공과 과부하/장애 대응은 별도 검증이다.
+This experiment observes four data tables in a single local emulator for 2 minutes. Large data in
+the remaining tables, long-duration load, multiple Workers, remote limits and costs, failure
+recovery, and real sign-in remain unverified. Observed latency includes host, emulator, crypto, and
+database work, and must not be generalized into production D1 throughput or an SLO. Success under
+normal load and response to overload or failure require separate verification.
