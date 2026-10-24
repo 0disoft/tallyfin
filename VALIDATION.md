@@ -22,6 +22,31 @@ Tallyfin의 변경을 어떤 명령으로 확인할지 고르는 안내다. 아�
 
 검증 결과에 적는 범위는 그 명령이 실제로 본 범위와 같아야 한다요. 관련 suite만 돌렸다면 그 suite를, 일부 경로만 확인했다면 그 경로를 기록한다요.
 
+## 프로젝트 날짜 변환 포맷터 재사용 — 2026-10-24
+
+`packages/core/src/calendar-date.ts`에서 `localDate`와 `dateEnd`가 고정 locale·연월일 옵션의
+`Intl.DateTimeFormat`을 공유한다. 시간대별 포맷터를 최대 32개까지 LRU로 재사용하며, 날짜
+결과와 프로젝트·요청 데이터는 캐시하지 않는다. 기존 시그니처, `dateEnd` 이진 탐색과 DST
+판정은 유지하고 invalid zone 실패는 캐시 항목을 축출하지 않는다.
+
+- `npm run test:core`: 57/57 통과. `npx tsc --noEmit`: 통과.
+- 신규 `packages/core/test/calendar-date.test.ts` 3개는 프로젝트 현지 자정 직전·직후, 달·년 경계,
+  23/25시간 DST, Lord Howe 30분 전환, Apia 건너뛴 날, 윤일, invalid zone, 32개 상한/LRU,
+  매호출 실제 날짜 계산을 다룬다.
+- 첫 D1 관련 26개 실행에서 `storage.test.ts` 17개와 `funnel-dimensions.test.ts` 3개가
+  통과했다. `breakdown-dates.test.ts` 기존 2개는 생성 수 31을 기대해 변경 후 1/0에서
+  실패했으며 제품 오류는 아니다. `Intl.formatToParts` 실제 호출 수가 bucket 1과 32에서
+  같고 포맷터 생성이 1 이하이며 빈 결과 변환이 0인지 확인하도록 고친 뒤
+  `node --test packages/storage-d1/test/breakdown-dates.test.ts`: 6/6 통과.
+- Node v24.18.0의 로컬 격리 헬퍼 `.tmp/calendar-date-bench.mjs`에서 수정 전 함수 사본과
+  결과가 같았다. 전후 교대 7회 중앙값은 `localDate` 1000회 142.002ms→15.0816ms,
+  `dateEnd` 31회 8.8236ms→4.922ms였고, 한 시간대 1000+31회 콜드 호출의 포맷터 생성은
+  1031→1이었다. 이는 헬퍼 로컬 측정이며 운영 요청 전체 지연 단축을 뜻하지 않는다.
+
+API·DB 계약, 의존성, CI, 저장소 위생 변경은 없다. 전체 백엔드·관리자 UI 빌드, 원격 부하,
+배포, 푸시는 실행하지 않았고 일반 소스 lint는 설정되어 있지 않다.
+최종 `git diff --check`도 통과했다.
+
 ## 서버 초안 기존 DB 업그레이드·문서 마무리 — 2026-10-24
 
 기존 설치 DB에 0014 초안 테이블을 들이는 경로와 초안 저장 동작을 확인하고, 서버 초안

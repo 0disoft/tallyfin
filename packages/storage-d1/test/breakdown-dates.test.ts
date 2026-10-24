@@ -40,8 +40,15 @@ for (const kind of ['workflow', 'funnel'] as const) {
     const formatter = t.mock.method(Intl, 'DateTimeFormat', function (...args: ConstructorParameters<typeof Intl.DateTimeFormat>) {
       return new NativeFormatter(...args);
     });
-    const result = run(dates, Date.parse('2026-03-11T04:00:00Z'));
-    assert.equal(formatter.mock.callCount(), dates.length);
+    const formats = t.mock.method(Intl.DateTimeFormat.prototype, 'formatToParts');
+    const now = Date.parse('2026-03-11T04:00:00Z');
+    run(dates, now, 1);
+    const singleBucketCalls = formats.mock.callCount();
+    assert.ok(singleBucketCalls > 0);
+    formats.mock.resetCalls();
+    const result = run(dates, now);
+    assert.equal(formats.mock.callCount(), singleBucketCalls);
+    assert.ok(formatter.mock.callCount() <= 1);
     assert.equal(result.buckets.length, 32);
     for (const bucket of result.buckets) {
       assert.deepEqual(bucket.days.map(day => day.date), dates);
@@ -76,7 +83,9 @@ for (const kind of ['workflow', 'funnel'] as const) {
     const formatter = t.mock.method(Intl, 'DateTimeFormat', function (...args: ConstructorParameters<typeof Intl.DateTimeFormat>) {
       return new NativeFormatter(...args);
     });
+    const formats = t.mock.method(Intl.DateTimeFormat.prototype, 'formatToParts');
     assert.deepEqual(run(['2026-03-08'], Date.parse('2026-03-11T04:00:00Z'), 0).buckets, []);
     assert.equal(formatter.mock.callCount(), 0);
+    assert.equal(formats.mock.callCount(), 0);
   });
 }

@@ -1,5 +1,6 @@
 import { CollectionError } from './types.ts';
 import type { Properties } from './types.ts';
+import { calendarDateReader } from './calendar-date.ts';
 
 export const MAX_BODY_BYTES = 16 * 1024;
 export const DAY = 86_400_000;
@@ -39,9 +40,7 @@ export function utcMillis(value: unknown): number {
   return milliseconds;
 }
 export function localDate(milliseconds: number, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat('en', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(milliseconds);
-  const part = (type: string) => parts.find(p => p.type === type)!.value;
-  return `${part('year')}-${part('month')}-${part('day')}`;
+  return calendarDateReader(timeZone)(milliseconds);
 }
 export function dimensionKey(properties: Properties, keys = Object.keys(properties)): string {
   const value = JSON.stringify([...keys].sort().map(key => has(properties, key)

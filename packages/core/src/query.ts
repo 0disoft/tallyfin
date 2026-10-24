@@ -9,6 +9,7 @@ import type { GrantChange, GrantChangeResult } from './grants.ts';
 import type { PublisherChange, PublisherChangeResult } from './publishers.ts';
 import type { AdminChangePage } from './admin-changes.ts';
 import { DAY, integer, localDate } from './value.ts';
+import { calendarDateReader } from './calendar-date.ts';
 
 /** Supplied only by a host verifier, never derived from an unverified request claim. */
 export interface AdminPrincipal { issuer: string; subject: string }
@@ -82,11 +83,7 @@ export function workflowCounts(started: number, succeeded: number, failed: numbe
 /** UTC instant at the next project-local calendar day (including DST transitions). */
 export function dateEnd(date: string, zone: string): number {
   const target = dateMillis(date);
-  const formatter = new Intl.DateTimeFormat('en', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' });
-  const dayAt = (at: number) => {
-    const parts = formatter.formatToParts(at);
-    return ['year', 'month', 'day'].map(type => parts.find(p => p.type === type)!.value).join('-');
-  };
+  const dayAt = calendarDateReader(zone);
   let low = target - 2 * DAY, high = target + COLLECTION_POLICY.linkageTtlMs;
   while (low < high) {
     const mid = Math.floor((low + high) / 2);
