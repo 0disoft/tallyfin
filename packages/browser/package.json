@@ -2,12 +2,13 @@
   "name": "@tallyfin/browser",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "exports": {
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" },
     "./funnels": { "types": "./dist/funnels.d.ts", "import": "./dist/funnels.js" }
   },
-  "files": ["dist"],
+  "files": ["dist", "NOTICE"],
   "scripts": {
     "build": "node ../../tools/browser/build.mjs && tsc -p tsconfig.build.json"
   }

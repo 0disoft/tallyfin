@@ -10,8 +10,8 @@ import { createHash } from 'node:crypto';
 const root = fileURLToPath(new URL('../../', import.meta.url)), execute = promisify(execFile);
 const npm = process.env.npm_execpath ?? join(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js');
 const expected = {
-  '@tallyfin/browser': ['dist/common.d.ts', 'dist/delivery-policy.d.ts', 'dist/funnels.d.ts', 'dist/funnels.js', 'dist/index.d.ts', 'dist/index.js', 'dist/types.d.ts', 'package.json'],
-  '@tallyfin/server': ['dist/index.d.ts', 'dist/index.js', 'dist/policy.d.ts', 'package.json'],
+  '@tallyfin/browser': ['LICENSE', 'NOTICE', 'dist/common.d.ts', 'dist/delivery-policy.d.ts', 'dist/funnels.d.ts', 'dist/funnels.js', 'dist/index.d.ts', 'dist/index.js', 'dist/types.d.ts', 'package.json'],
+  '@tallyfin/server': ['LICENSE', 'NOTICE', 'dist/index.d.ts', 'dist/index.js', 'dist/policy.d.ts', 'package.json'],
 };
 const consumerSource = `import { createTallyfin, type BrowserClient } from '@tallyfin/browser';
 import { createTallyfinFunnels, type FunnelClient } from '@tallyfin/browser/funnels';
@@ -45,7 +45,7 @@ async function command(file, args, cwd = root) {
 try {
   const args = process.argv.slice(2);
   if (args.length === 1 && args[0] === '--help') {
-    console.log('npm run verify:sdk-packages\nBuilds both SDKs with stale-output probes, packs local tarballs offline and installs them outside the checkout. Checks the exact file list, ESM entry points and declaration compilation. No registry publication, credentials or version change. Artifacts stay in .tmp/sdk-packages/.');
+    console.log('npm run verify:sdk-packages\nBuilds both SDKs with stale-output probes, packs local tarballs offline and installs them outside the checkout. Checks the exact file list, Apache-2.0 metadata, LICENSE/NOTICE contents, ESM entry points and declaration compilation. No registry publication, credentials or version change. Artifacts stay in .tmp/sdk-packages/.');
   } else {
     assert.equal(args.length, 0);
     const parent = resolve(root, '.tmp/sdk-packages'); await mkdir(parent, { recursive: true });
@@ -84,6 +84,12 @@ try {
     for (const pkg of packages) {
       const installed = join(consumer, 'node_modules', ...pkg.name.split('/'));
       assert.equal(await realpath(installed), installed, 'Installed package must not be a workspace symlink');
+      const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
+      assert.equal(manifest.license, 'Apache-2.0', `${pkg.name} must declare Apache-2.0`);
+      for (const file of ['LICENSE', 'NOTICE']) {
+        assert.deepEqual(await readFile(join(installed, file)), await readFile(join(root, file)),
+          `${pkg.name}/${file} must match the repository original`);
+      }
     }
     phase = 'types';
     await writeFile(join(consumer, 'consumer.ts'), consumerSource);
@@ -95,7 +101,7 @@ try {
     const runtime = JSON.parse(executed.stdout);
     assert.deepEqual(runtime, { standardBrowser: true, funnelBrowser: true, server: true, networkRequests: 0, credentialRequests: 0 });
     const report = { schemaVersion: 'tallyfin.sdk-packages/v1', verified: true, offline: true, consumerOutsideWorkspace: true,
-      published: false, versionsChanged: false, declarationsCompiled: true, artifacts, runtime };
+      published: false, versionsChanged: false, declarationsCompiled: true, license: 'Apache-2.0', noticesVerified: true, artifacts, runtime };
     await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2));
     console.log(JSON.stringify({ ...report, output }));
   }

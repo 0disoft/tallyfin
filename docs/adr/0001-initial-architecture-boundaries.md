@@ -30,4 +30,6 @@ On 2026-10-11, the administrator decision was superseded by the React/Vite adopt
 
 Package scope, build scripts, domain, resources, secrets, authentication, retention, license, delivery interval, batch size, retries, dedupe TTL, request size limits, and raw retention period.
 
+License update — 2026-10-25: The list above records the initial undecided items; Apache-2.0 has since been adopted (see [License](../../README.md#license)). Public scope, release method, and npm publication remain separate decisions.
+
 Related: [architecture](../../ARCHITECTURE.md), [specification](../product/02-spec.md).

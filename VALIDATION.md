@@ -22,6 +22,17 @@ There is no independent `format` script. Follow `.editorconfig` and `.gitattribu
 
 The scope recorded in a result must match what the command actually examined. If only a related suite was run, record that suite; if only some paths were checked, record those paths.
 
+## Apache-2.0 License Adoption — 2026-10-25
+
+Adopted Apache-2.0 using the official license text in the canonical root `LICENSE` and a root `NOTICE` with `Copyright 2026 Rodisoft`. Updated 10 first-party package manifests and 3 lockfiles to Apache-2.0, preserving private flags, versions, scripts, and the dependency graph. Browser and server package roots include exact copies of `LICENSE` and `NOTICE`. Updated the product specification, roadmap, and risk register, and annotated historical ADR 0001 with the current license decision. Existing third-party notices are unchanged.
+
+- `npm run check --prefix tools/contracts`: 69/69 passed.
+- `npm run verify:sdk-packages`: `verified: true`. Offline tarballs contain 10 browser files and 6 server files. Actual installs outside the checkout verified Apache-2.0 metadata, byte-exact `LICENSE`/`NOTICE`, types, and all 3 ESM entry points, with `networkRequests: 0` and `credentialRequests: 0`. Report: `.tmp/sdk-packages/run-NnAREH/report.json`.
+- One-off deep JSON comparisons of the 10 manifests and 3 lockfiles passed: only license metadata and `NOTICE` inclusion changed; transitive dependencies are unchanged.
+- `node --check tools/sdk/verify-packages.mjs` and `git diff --check`: passed.
+
+Broader application, real-provider, and remote suites were skipped because no runtime or API/DB logic changed. API/DB contracts, dependency versions, CI/runners, and repository hygiene policies are unchanged; the only tooling change enhances the optional SDK packaging verification. No push, npm publication, deployment, or repository visibility change was performed.
+
 ## English Documentation for Public Release — 2026-10-25
 
 Audited 149 tracked Markdown and text documents and translated 88 in place, covering public guides, product and architecture decisions, backend and SDK contracts, operations, and validation history. Historical evidence retains its original scope; local verification does not imply production deployment. Translated headings have matching internal links, and the admin guide explains that the current UI uses Korean.

@@ -14,6 +14,8 @@ consumption path.
 2. Use `npm pack --offline --ignore-scripts` to create two local tarballs under
    `.tmp/sdk-packages/run-*`. Check that their contents exactly match the current published file
    list, preventing source, tests, configuration, or old declaration files from being included.
+   Both tarballs must include `LICENSE` and `NOTICE` as exact copies of the canonical root
+   [LICENSE](../../LICENSE) and [NOTICE](../../NOTICE).
 3. Install only those tarballs into a new temporary npm project outside the workspace. The install
    is offline, scripts are disabled, no lockfile is created, and audit and fund are disabled. Verify
    that the actual install path is not a workspace symlink.
@@ -35,6 +37,8 @@ Remove only that re-passed value from the child environment so the original `.np
 Do not modify user configuration, and keep `--ignore-scripts` on pack and install.
 
 This command does not query a registry, sign in, publish, add dependencies, or change versions. Both
-SDKs remain `private: true` at `0.0.0`; the operator must establish the license, public scope, and
-release method. Follow [VALIDATION.md](../../VALIDATION.md) for verification records and
+SDKs remain `private: true` at `0.0.0`. First-party code and documentation in all Tallyfin packages
+and SDKs use Apache-2.0; third-party code and fonts retain their original licenses and notices,
+including the Inter and Noto Sans KR OFL notices. The operator must still establish public scope
+and release method; actual npm publication is separate work. Follow [VALIDATION.md](../../VALIDATION.md) for verification records and
 [workspace-boundaries.md](../../docs/monorepo/workspace-boundaries.md) for package boundaries.

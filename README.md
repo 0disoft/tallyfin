@@ -2,7 +2,7 @@
 
 Tallyfin is a lightweight product event analytics platform shared across Rodisoft services. Per-project configuration counts different actions such as sign-ups, file conversions, purchases, and calculations while minimizing personal data collection. Sembom is the first integration example.
 
-This document is a guide for readers who want to download the project and try it locally. The production identity provider, remote database, domain, and license are still undecided, and no production deployment or service pilot has taken place.
+This document is a guide for readers who want to download the project and try it locally. The production identity provider, remote database, and domain are still undecided, and no production deployment or service pilot has taken place.
 
 ## What works locally now
 
@@ -21,7 +21,7 @@ The owner-only `LivePublishers` settings screen provides a 25-item list with pag
 
 ## What has not been verified yet
 
-- The production identity provider, remote D1, domain and deployment, service pilot, and license are undecided or have not been run.
+- The production identity provider, remote D1, domain and deployment, and service pilot are undecided or have not been run.
 - No production values exist yet for publisher OIDC, and sign-in through a real provider has not been verified.
 - Local load, cleanup, and recovery experiments have been verified. Remote migrations, cleanup Cron jobs, backup and recovery, and production SLOs have not been verified; the production SLO is UNDECIDED.
 - The API 401 shown under the administrator's default settings is a real response returned while authentication is disabled. Real sign-in requires separate OIDC configuration.
@@ -79,6 +79,10 @@ Administrator settings also include an Operations log report that reads a `logs:
 - Integration and validation: [Sembom example](docs/integrations/sembom.md), [performance targets](docs/engineering/03-performance-budget.md), [validation record](VALIDATION.md)
 - Operations: [release runbook](docs/ops/release.md), [rollback runbook](docs/ops/rollback.md), [incident response](docs/ops/incident-response.md), [operational contract](docs/ops/00-operational-contract.md), [secrets](docs/ops/secrets.md), [backup and recovery](docs/ops/backup-and-restore.md), [production observability](docs/ops/observability.md)
 - Apps: [administrator app](apps/admin/README.md), [integrated runtime and deployment](docs/backend/runtime.md)
+
+## License
+
+First-party Tallyfin code and documentation, including all packages and SDKs, use Apache-2.0; the root [LICENSE](LICENSE) and [NOTICE](NOTICE) are canonical. Third-party code, fonts, and other assets retain their original licenses and notices. See [Contributing](CONTRIBUTING.md#license) for contribution licensing.
 
 ## Out of scope
 

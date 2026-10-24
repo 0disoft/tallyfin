@@ -17,6 +17,6 @@ Status: Cross-checked against sources and design documents on 2026-10-21. It dis
 | Linking limitation | Mistaking a task funnel for user tracking | Implemented 2–10-step browser/server task funnels, a 24-hour progress window, and a 72-hour linking status | Actual service pilot. Linking existing workflows across refreshes/devices is follow-up |
 | Storage | Shared D1 write load and retention/recovery failure | Implemented 90-day daily aggregation, bounded cleanup, and local load/recovery tools | Verify remote Cron, operational load, backup/recovery, and RTO/RPO |
 | Vendor | Collection/storage implementation depends on Cloudflare | core/SDK-independent adapter | Storage adapter for another hosting environment |
-| License | Open-source intent but undetermined | Distribution prohibited until the license is finalized | License type |
+| License | Missing license or attribution notices in distribution | Apache-2.0 adopted; [license and third-party notice policy](../../README.md#license) documented | Verify notice inclusion in [SDK packages](../../tools/sdk/README.md). Public scope, release method, and npm publication remain separate work |
 
 Privacy details follow [ADR 0003](../adr/0003-minimal-privacy-preserving-events.md); the current contract follows [Product spec](02-spec.md); and the implementation sequence follows [Roadmap](01-roadmap.md).

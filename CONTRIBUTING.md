@@ -1,6 +1,6 @@
 # Contributing
 
-Status: These are the procedures for code, test, and documentation changes in the local implementation. The license and CLA are undecided, and the handling of rights for external contributions and the distribution of public packages are not settled.
+Status: These are the procedures for code, test, and documentation changes in the local implementation.
 
 ## Types of contributions
 - Documentation: clear and concise, without repetitive template language.
@@ -23,4 +23,8 @@ Status: These are the procedures for code, test, and documentation changes in th
 Relative links in documentation point to real files. Do not record unimplemented features or checks that were not run as completed.
 
 ## License
-The license and CLA are undecided. Do not assume rights before they are settled.
+Tallyfin uses Apache-2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Under section 5 of Apache-2.0, unless you explicitly state otherwise, contributions you intentionally submit for inclusion in Tallyfin are submitted under Apache-2.0 without additional terms or conditions. Section 5 does not supersede or modify any separate license agreement already executed regarding those contributions. Contributors retain copyright in their contributions.
+
+Preserve original licenses and notices when contributing third-party material.

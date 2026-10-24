@@ -2,6 +2,7 @@
   "name": "@tallyfin/collector",
   "version": "0.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "type": "module",
   "dependencies": { "@tallyfin/core": "*", "@tallyfin/storage-d1": "*", "@tallyfin/auth-oidc": "*" }
 }
