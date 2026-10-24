@@ -1,157 +1,155 @@
-# 관리자·발행자 JWT 검증 어댑터
+# Administrator and Publisher JWT Verification Adapter
 
-상태: `packages/auth-oidc`의 서명·클레임 검증과 `createOidcWorker` 연결을 로컬에서
-구현·검증했다. 관리자 프로토타입의 PKCE 로그인·회전 갱신도 로컬에서 구현했다. 발행자
-(머신) 검증기와 `exclusiveAudience` 정책, `runtime.ts`·`config.ts`의 `PUBLISHER_*`
-설정 배선은 로컬에서 구현·검증했다. 최신 검사 범위는 VALIDATION.md를 따른다.
-실제 인증 제공자 연결과 운영 배포는 하지 않았다. 서버 어댑터는 JWT access token을 검증한다.
+Status: Signature and claim verification in `packages/auth-oidc` and the `createOidcWorker` connection were implemented and
+verified locally. PKCE sign-in and rotating refresh in the administrator prototype were also implemented locally. The publisher
+(machine) verifier, the `exclusiveAudience` policy, and the `PUBLISHER_*` settings wiring in `runtime.ts` and `config.ts`
+were implemented and verified locally. The current check scope follows VALIDATION.md.
+Real identity provider connections and production deployment have not been done. The server adapter verifies JWT access tokens.
 
-## 호스트 연결
+## Host Connection
 
-`createOidcVerifier(options)`는 기존 `createWorker(verifyBearer)` 포트에 맞는 검증기를
-돌려준다. `createOidcWorker(options)`는 두 호출을 묶는다. 기존 커스텀 검증기와
-검증기 없는 기본 export도 유지한다. 기본 export는 관리자 API를 401로 닫는다.
+`createOidcVerifier(options)` returns a verifier that fits the existing `createWorker(verifyBearer)` port.
+`createOidcWorker(options)` combines the two calls. Existing custom verifiers and the default export without a verifier
+remain available. The default export closes the administrator API with 401.
 
 ```ts
 import { createOidcWorker } from './apps/collector/src/index.ts';
 import type { OidcOptions } from '@tallyfin/auth-oidc';
 
-// 호스트가 실제 제공자 설정을 읽은 뒤 호출한다. 설정 읽기/배포는 호스트 책임이다.
+// The host calls this after reading its real provider configuration. Reading configuration and deployment are host responsibilities.
 export function configureAdministrator(options: OidcOptions) {
   return createOidcWorker(options);
 }
 ```
 
-| 설정 | 동작 |
+| Setting | Behavior |
 | --- | --- |
-| issuer | 필수. 신뢰할 발급자의 HTTPS URL과 `iss`를 정확히 비교한다. 끝의 `/`도 구분한다. |
-| audience | 필수. Tallyfin 관리자 API의 대상 값. 브라우저 로그인 클라이언트 ID와 분리한다. |
-| jwksUri | 필수. 운영자가 지정한 HTTPS 공개키 주소. 토큰이나 요청에서 받지 않는다. |
-| algorithms | 기본 `['RS256']`. 호스트가 `RS256`·`ES256` 중 명시 선택한다. |
-| tokenType | 기본 `at+jwt`(RFC 9068). 제공자가 `JWT`를 쓰면 명시 선택하고 API 전용 audience를 요구한다. |
-| clockToleranceSeconds | 기본 5초, 0~60초. 시간 클레임 검사에 적용한다. |
-| exclusiveAudience | 기본 false. true면 `aud`에 지정 audience 하나만 있어야 하는 발행자(머신) 정책이 된다. |
-| fetchImpl | 선택. 호스트가 신뢰하는 transport 또는 격리 테스트용 fetch 구현. |
+| issuer | Required. Compares `iss` exactly against the HTTPS URL of the trusted issuer. The trailing `/` is significant. |
+| audience | Required. The audience value of the Tallyfin administrator API. Separate from the browser sign-in client ID. |
+| jwksUri | Required. The HTTPS public-key address specified by the operator. It is never taken from a token or request. |
+| algorithms | Defaults to `['RS256']`. The host explicitly chooses `RS256` or `ES256`. |
+| tokenType | Defaults to `at+jwt` (RFC 9068). Select `JWT` explicitly when the provider uses it, and require an API-specific audience. |
+| clockToleranceSeconds | Defaults to 5 seconds, with a range of 0 to 60 seconds. Applied to time-claim checks. |
+| exclusiveAudience | Defaults to false. When true, this becomes a publisher (machine) policy requiring exactly the specified audience in `aud`. |
+| fetchImpl | Optional. A transport trusted by the host or a fetch implementation for isolated tests. |
 
-설정 오류는 생성 시 예외가 나고 네트워크 요청을 보내지 않는다. 프로토타입은 OIDC
-로그인과 접힌 bearer 직접 입력을 제공한다. 실제 제공자와 API audience는 미정이다.
+A configuration error throws during creation and sends no network request. The prototype provides OIDC
+sign-in and collapsed direct bearer entry. The real provider and API audience are undecided.
 
-## 발행자(머신) 검증
+## Publisher (Machine) Verification
 
-서버 발행자는 관리자와 별도 검증기 포트를 쓴다. 관리자 검증기를 대신 쓰지 않고, 토큰의
-role이나 프로젝트 grant도 발행 권한으로 쓰지 않는다.
+A server publisher uses a verifier port separate from the administrator. It does not substitute the administrator verifier, and a
+token role or project grant is not used as publishing authorization.
 
-- `createWorker(adminVerifier?, publisherVerifier?)` — 두 번째 포트로 발행자 검증기를
-  받는다. 발행자를 주지 않으면 `POST /v1/projects/{projectId}/server-batches`만 401로 닫힌다.
-- `createOidcWorker(adminOptions, publisherOptions?)` — 둘 다 주면 audience가 서로 달라야
-  하고 같으면 생성 시점에 거부한다.
-- `createPublisherOidcWorker(publisherOptions)` — 발행자 전용. 관리자 경로는 열지 않는다.
-- 발행자 검증기는 `exclusiveAudience: true`로 만든다. 서명 검증 뒤 `aud`가 설정한 audience
-  문자열 하나이거나 같은 값을 가진 1원소 배열일 때만 통과시키고, 다른 audience가 섞인
-  토큰은 거부한다. 관리자 검증기는 기존 포함(include) 정책을 유지한다.
-- 잘못된 토큰·null·형식이 틀린 주체는 401이고, 공개키 제공자 장애·기한·용량 오류는
-  기존 storage_unavailable 503이다. 통과하면 `{issuer, subject}`만
-  넘기고 토큰·클레임은 저장하거나 로그에 남기지 않는다.
-- 발행자 검증기 뒤에 수집기가 D1 `project_publishers` 권한을 다시 본다. owner/reader
-  관리자 grant로는 발행 권한을 얻지 못한다.
+- `createWorker(adminVerifier?, publisherVerifier?)` — accepts the publisher verifier as the second port.
+  Without a publisher verifier, only `POST /v1/projects/{projectId}/server-batches` is closed with 401.
+- `createOidcWorker(adminOptions, publisherOptions?)` — when both are supplied, their audiences must differ;
+  equal audiences are rejected at creation.
+- `createPublisherOidcWorker(publisherOptions)` — Publisher only. It does not open administrator routes.
+- The publisher verifier is created with `exclusiveAudience: true`. After signature verification, it passes only when `aud` is
+  the one configured audience string or a one-element array containing that value; a token containing another audience is
+  rejected. The administrator verifier keeps the existing include policy.
+- An invalid token, null, or malformed principal returns 401, while public-key provider failures, timeouts, and capacity errors return the
+  existing `storage_unavailable` 503. On success, only `{issuer, subject}` is passed through, and tokens and claims are neither stored nor logged.
+- After the publisher verifier passes, the collector checks the D1 `project_publishers` authorization again. An owner or reader
+  administrator grant does not confer publishing authorization.
 
-`runtime.ts`·`config.ts`가 `PUBLISHER_AUTH_MODE`(기본 `disabled`)와 `PUBLISHER_OIDC_*`
-키를 읽어 이 검증기를 붙인다. 기본 구성에서는 server 경로가 닫혀 있다. 실제 제공자 값과
-운영 audience 등록·배포는 하지 않았다. 설정 키 규칙은 [실행·배포 준비](./runtime.md)에 둔다.
+`runtime.ts` and `config.ts` read `PUBLISHER_AUTH_MODE` (default `disabled`) and the `PUBLISHER_OIDC_*` keys and attach this verifier.
+The server route is closed in the default configuration. Real provider values and production audience registration and deployment have not
+been done. Setting-key rules are in [Runtime and Deployment Preparation](./runtime.md).
 
-## 토큰·권한 정책
+## Token and Authorization Policy
 
-서명과 `iss`·`aud`·`exp`를 검증하고 `iss`·`sub`·`aud`·`exp`·`iat`를 필수로 요구한다.
-`nbf`가 있으면 검증하며 미래 `iat`, `exp <= iat`, 빈/512자 초과 `sub`를 거부한다.
-기본 프로필은 JWT access token이다. ID token을 관리자 인증에 사용하지 않는다.
-opaque token·introspection·자동 discovery는 지원하지 않는다.
+It verifies the signature and `iss`, `aud`, and `exp`, and requires `iss`, `sub`, `aud`, `exp`, and `iat`.
+It verifies `nbf` when present and rejects a future `iat`, `exp <= iat`, and an empty or over-512-character `sub`.
+The default profile is a JWT access token. ID tokens are not used for administrator authentication.
+Opaque tokens, introspection, and automatic discovery are not supported.
 
-`kid`를 요구하고 대칭키 알고리즘·unsigned token·토큰의 `jku`/`x5u`를 거부한다.
-성공하면 `{ issuer, subject }`만 반환한다. 이메일·이름·토큰의 role을 권한으로 쓰지
-않고 기존 D1 `project_grants`를 매 조회마다 적용한다. 검증 상세·클레임·토큰을 로그나
-응답에 넣지 않는다. 토큰 검증 거부는 401, 공개키 조회 장애는 503, 프로젝트 권한 부족은
-403이다. 검증기를 직접 호출하면 기본 null 반환을 유지하며, 수집기는 선택적
-throwDependencyErrors로 의존성 오류와 비공개 cause를 받는다.
+It requires `kid` and rejects symmetric-key algorithms, unsigned tokens, and `jku` or `x5u` in tokens.
+On success it returns only `{ issuer, subject }`. Email, name, and token roles are not used as authorization;
+the existing D1 `project_grants` is applied on every read. Verification details, claims, and tokens are not included in logs or
+responses. Rejected token verification returns 401, public-key retrieval failure 503, and insufficient project authorization
+returns 403. Calling a verifier directly preserves the default null return, while the collector can receive dependency errors and a private cause through the optional
+`throwDependencyErrors`.
 
-## 공개키 조회와 캐시
+## Public-Key Retrieval and Cache
 
-HTTPS 주소의 userinfo·쿼리·해시와 리다이렉트를 거부한다. 자격증명·bearer·referrer를
-보내지 않는다. 응답은 최대 64KiB·32개 공개키로 제한하고 비밀키 필드를 거부한다.
-헤더부터 본문 읽기까지 5초 제한을 적용한다.
+Userinfo, query, and fragment in the HTTPS address and redirects are rejected. Credentials, bearer tokens, and referrer are not
+sent. A response is limited to 64 KiB and 32 public keys, and private-key fields are rejected.
+A 5-second limit applies from headers through body reading.
 
-검증기마다 실행 2개·대기 32개로 제한한다. 호출자의 기한 대기는 슬롯 관리 바깥에 두고,
-취소를 무시하는 fetch는 실제 종료까지 슬롯을 점유한다. 늦은 응답은 본문을 폐기한다.
-실패 cooldown은 대기열을 깨우기 전에 기록하며 같은 작업의 늦은 종료가 기한 때 기록한
-cooldown을 연장하거나 더 새로운 성공을 덮지 않는다. 실제 전송을 강제 종료하지는 않는다.
+Each verifier is limited to 2 running operations and 32 waiting calls. Caller deadline waiting is outside slot management,
+and a fetch that ignores cancellation holds its slot until actual completion. Late responses have their bodies discarded.
+Failure cooldown is recorded before waking the queue, so a late completion from the same operation cannot extend a cooldown recorded at the deadline or overwrite
+a newer success. It does not forcibly stop the actual transport.
 
-공개키 캐시 수명은 10분이다. 새 `kid` 갱신은 성공한 조회 후 30초 간격으로 제한하고,
-조회 실패 후에도 30초 동안 재시도를 막는다. 키 변경 직후 새 토큰은 갱신 간격 동안
-거부될 수 있고 삭제한 키는 캐시 수명 동안 남을 수 있다. 토큰별 폐기·로그아웃 반영은
-제공자의 짧은 access token 수명 또는 별도 후속 정책이 필요하다.
+The public-key cache lifetime is 10 minutes. A new `kid` refresh is limited to 30-second intervals after a successful read,
+and retries remain blocked for 30 seconds after a failed read. A new token immediately after a key change may be rejected during the refresh interval,
+and a deleted key may remain for its cache lifetime. Propagation of per-token revocation or logout requires the provider's short access token lifetime
+or a separate follow-up policy.
 
-호스트는 같은 설정의 Worker 인스턴스를 재사용한다. 요청마다 검증기를 새로 만들거나
-다른 제공자 설정 사이에서 검증기를 공유하지 않는다. 캐시는 영속 권한 저장이 아니다.
+The host reuses Worker instances with the same configuration. It does not create a verifier per request or share verifiers across
+different provider settings. The cache is not persistent authorization storage.
 
-## 의존성·검증
+## Dependencies and Verification
 
-`jose ^6`을 사용하며 설치 시점 버전은 lockfile에 기록한다. MIT 라이선스, 추가 런타임
-의존성 없음, Web Crypto 기반이다. Cloudflare·D1 의존성은 없고 core/SDK에 포함하지
-않는다. SDK+Sembom gzip 2949 bytes는 유지한다.
+It uses `jose ^6`, and the installed version is recorded in the lockfile. It is MIT licensed, has no additional runtime
+dependencies, and is based on Web Crypto. It has no Cloudflare or D1 dependency and is not included in the core or SDK.
+The SDK plus Sembom gzip size remains 2949 bytes.
 
-실행 중 생성한 키로 정상/변조/만료/클레임 누락, 키 갱신, 실패 재시도 제한, 크기·시간
-제한을 검증했다. Worker에서도 실제 서명 검증과 D1 grant 회수를 확인했다. private
-key와 bearer를 파일·로그에 남기지 않는다. 외부 제공자·운영 토큰으로는 검증하지 않았다.
+With keys generated at runtime, it verified valid, tampered, expired, and missing-claim tokens, key refresh, failed-retry limits, and size and time
+limits. It also verified real signature checking in the Worker and revocation of a D1 grant. Private
+keys and bearer tokens are not written to files or logs. It was not verified with an external provider or production tokens.
 
-근거: [jose jwtVerify](https://github.com/panva/jose/blob/main/docs/jwt/verify/functions/jwtVerify.md),
-[remote JWKS 설정](https://github.com/panva/jose/blob/main/docs/jwks/remote/interfaces/RemoteJWKSetOptions.md),
-[Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/),
+References: [jose jwtVerify](https://github.com/panva/jose/blob/main/docs/jwt/verify/functions/jwtVerify.md),
+[remote JWKS configuration](https://github.com/panva/jose/blob/main/docs/jwks/remote/interfaces/RemoteJWKSetOptions.md),
+[Workers Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/), and
 [RFC 9068](https://www.rfc-editor.org/rfc/rfc9068).
 
-## 브라우저 관리자 로그인
+## Browser Administrator Sign-In
 
-관리자/수집기 타깃과 공개 로그인 설정을 함께 준비하려면
-[운영 설치 설정 준비](./installation.md)의 `npm run install:prepare`를 사용한다.
-issuer·계정·서비스 바인딩·관리자 출처의 일치를 검사하며 실제 제공자 등록은 별도다.
+To prepare the administrator and collector targets together with public login settings, use
+`npm run install:prepare` from [Production Installation Configuration](./installation.md).
+It checks that the issuer, account, service binding, and administrator origin match; provider registration is separate.
 
-`apps/admin/src/auth`는 공개 클라이언트 OIDC를 사용한다. 클라이언트 비밀값
-없이 Authorization Code + PKCE(S256), state, nonce와 ID token 서명을 검증한다.
-ID token은 로그인 세션을 확인하는 용도이며 `/v1`에는 access token만 보낸다.
-프로젝트 권한은 서버의 D1 `project_grants`로 검사한다.
+`apps/admin/src/auth` uses public-client OIDC. Without a client secret, it verifies Authorization Code with PKCE (S256), state, nonce,
+and the ID token signature. The ID token confirms the login session, while only the access token is sent to `/v1`.
+Project authorization is checked against the server's D1 `project_grants`.
 
-| 빌드 환경 변수 | 필수 | 설명 |
+| Build environment variable | Required | Description |
 | --- | --- | --- |
-| `VITE_OIDC_ISSUER` | 예 | 신뢰할 발급자의 HTTPS 주소. userinfo·쿼리·해시를 거부한다. |
-| `VITE_OIDC_CLIENT_ID` | 예 | 제공자에 등록한 공개 클라이언트 식별자. API audience와 구분한다. |
-| `VITE_OIDC_SCOPE` | 예 | 공백으로 구분한 scope. `openid`를 반드시 포함한다. |
-| `VITE_OIDC_RESOURCE` | 아니요 | 제공자의 resource indicator. 인가·코드 교환·갱신에 전달하며 API audience와의 매핑은 제공자 설정으로 확인한다. |
-| `VITE_OIDC_ID_TOKEN_ALG` | 아니요 | `RS256`(기본) 또는 `ES256`. 서버 access token 알고리즘 설정과 별개다. |
+| `VITE_OIDC_ISSUER` | Yes | HTTPS address of the trusted issuer. Userinfo, query, and fragment are rejected. |
+| `VITE_OIDC_CLIENT_ID` | Yes | Public client identifier registered with the provider. Separate from the API audience. |
+| `VITE_OIDC_SCOPE` | Yes | Space-separated scopes. Must include `openid`. |
+| `VITE_OIDC_RESOURCE` | No | Provider resource indicator. Sent for authorization, code exchange, and refresh; confirm its mapping to the API audience in provider settings. |
+| `VITE_OIDC_ID_TOKEN_ALG` | No | `RS256` (default) or `ES256`. Separate from the server access token algorithm setting. |
 
-필수 세 변수가 모두 비면 로그인 버튼은 비활성화된다. 일부만 채우거나 값이 잘못되면
-설정 오류를 표시한다. `VITE_` 값은 공개 번들에 포함되므로 비밀값을 넣지 않는다.
-제공자·client ID·scope·resource·API audience의 실제 값은 **UNDECIDED**다.
+The sign-in button is disabled when all three required variables are empty. Filling only some of them or using an invalid value
+shows a configuration error. `VITE_` values are included in the public bundle, so do not put secrets there.
+The real provider, client ID, scope, resource, and API audience values are **UNDECIDED**.
 
-제공자에 관리자 화면의 `origin + /auth/callback`을 사전 등록해야 한다. 화면은 HTTPS
-또는 localhost/127.0.0.1/[::1]의 로컬 HTTP에서만 로그인을 허용한다. 제공자 discovery,
-token, JWKS 주소는 HTTPS이고 S256 지원이 필요하다. discovery·token·JWKS 조회에
-관리자 출처의 CORS 허용이 필요하다. 호스트는 `/auth/callback`을 SPA에 전달하고
-같은 출처 `/v1`을 인증 검증기가 연결된 수집기로 라우팅해야 한다.
+The administrator screen's `origin + /auth/callback` must be registered with the provider in advance. The screen allows
+sign-in only over HTTPS or local HTTP on localhost, 127.0.0.1, or [::1]. Provider discovery,
+token, and JWKS addresses must use HTTPS and support S256. Discovery, token, and JWKS requests require
+the administrator origin to be allowed by CORS. The host must route `/auth/callback` to the SPA and route
+same-origin `/v1` to the collector connected to the authentication verifier.
 
-콜백 code/state/error는 첫 렌더링 전에 주소에서 지운다. 일회성 state/nonce/verifier와
-설정 식별값만 sessionStorage에 최대 10분간 보관하며 코드 교환 전에 소비한다.
-access/refresh token은 메모리에만 있어 새로고침하면 다시 로그인해야 한다.
-`oauth4webapi ^3`은 로그인 화면에 진입할 때 별도 청크로 로드된다.
+The callback code, state, and error are removed from the address before the first render. Only one-time state, nonce, verifier, and
+configuration identifiers are kept in sessionStorage for at most 10 minutes and consumed before the code exchange.
+Access and refresh tokens exist only in memory, so refreshing the page requires signing in again.
+`oauth4webapi ^3` loads as a separate chunk when the sign-in screen is entered.
 
-만료 직전 API 요청은 한 번의 공유 갱신을 기다린다. refresh token이 있으면 새 토큰으로
-회전해야 하며, 실패하거나 같은 토큰이 돌아오면 세션을 비우고 재로그인을 요구한다.
-refresh token이 없으면 access token 만료 후 다시 로그인한다. 요청 취소는 다른 요청의
-공유 갱신을 취소하지 않는다. 연결 해제·샘플 모드 전환은 요청과 로컬 토큰을 정리한다.
-제공자 로그아웃·토큰 폐기 호출은 구현하지 않았다.
+API requests near expiration wait for one shared refresh. If a refresh token exists, it must be rotated to new tokens;
+if refresh fails or the same token returns, the session is cleared and sign-in is required again.
+Without a refresh token, the user signs in again after the access token expires. Cancelling one request does not cancel another request's
+shared refresh. Disconnecting or switching to sample mode clears requests and local tokens.
+Provider logout and token-revocation calls have not been implemented.
 
-테스트는 실행 중 생성한 키와 격리된 제공자 응답으로 서명·nonce/state·콜백 중복 처리·
-회전 갱신·취소를 검증한다. 실제 제공자의 CORS·JWT access token 발급·resource/audience
-매핑·회전 갱신과 운영 배포는 아직 검증하지 않았다.
+Tests use keys generated at runtime and isolated provider responses to verify signatures, nonce and state, duplicate callback handling,
+rotating refresh, and cancellation. The real provider's CORS behavior, JWT access token issuance, resource and audience
+mapping, rotating refresh, and production deployment have not been verified.
 
-선택적 `verify:admin-login`은 실제 관리자 앱·Chrome·로컬 수집기/D1을 거쳐 로그인 버튼부터
-인가 리다이렉트·콜백·인증된 API 조회·공유 회전 갱신을 확인한다. 갱신 실패·잘못된 state·
-재로그인·새로고침도 확인하며 제공자 응답은 외부 통신 없이 브라우저에서 채운다. 실행과
-격리 범위는 [관리자 로그인 검증 안내](../../tools/browser-bench/ADMIN-LOGIN.md)에 있다.
+The optional `verify:admin-login` walks through the real administrator app, Chrome, and a local collector and D1 from the sign-in button through
+the authorization redirect, callback, authenticated API read, and shared rotating refresh. It also checks refresh failure, invalid state,
+sign-in again, and page refresh, filling provider responses in the browser without external communication. Execution and
+isolation scope are in the [administrator login verification guide](../../tools/browser-bench/ADMIN-LOGIN.md).

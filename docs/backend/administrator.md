@@ -1,518 +1,506 @@
-# 관리자 조회·설정 경계 (apps/collector)
+# Administrator Read and Settings Boundary (apps/collector)
 
-## 작업 흐름 실패 원인 집계 — 2026-10-23
+## Workflow Failure Reason Aggregation — 2026-10-23
 
-workflow의 선택 failureReasonProperty는 실패 이벤트의 enum 속성 하나만 참조한다.
-자유 입력 오류 메시지는 받지 않는다. daily 응답과 days의 선택 failureReasons는 속성명,
-정렬된 enum buckets, measuredFailures·missingReasonFailures·unmeasuredFailures를 제공한다.
-미설정이면 null이고 구 서버는 필드를 생략할 수 있다. 원인 누락은 측정 실패에 포함하며
-과거 미측정 실패와 구별한다. 비율의 분모는 누락·미측정을 포함한 전체 확정 실패다.
+A workflow's selected `failureReasonProperty` references only one enum property on failure events.
+Free-form error messages are not accepted. The `failureReasons` property in the daily response and in each selected
+`days` entry provides the property name, sorted enum buckets, `measuredFailures`, `missingReasonFailures`, and `unmeasuredFailures`.
+It is null when unset, and an older server may omit the field. A missing reason is included in measured failures and
+distinguished from historical unmeasured failures. The denominator for rates is all finalized failures, including missing and unmeasured reasons.
 
-시작일 코호트·버전·권한 경계를 유지하고, 최초 확정 실패만 기존 CAS batch에서 집계한다.
-종료가 먼저 오면 시작 관측 시 집계한다. 재전송은 최초 원인을 덮어쓰거나 다시 세지 않는다.
-시도 정리 뒤에도 일별 집계 보존 기간 동안 남는다. 기존 SQL 수는 유지하고 행/응답은 커진다.
-DB 0013을 새 수집기보다 먼저 적용해야 하며 원격 적용은 하지 않았다.
+The start-date cohort, version, and authorization boundary are retained, and only the first finalized failure is aggregated in the existing CAS batch.
+If the end arrives first, aggregation occurs when the start is observed. Retransmission does not overwrite the first reason or count it again.
+The aggregate remains for its retention period after attempt cleanup. The existing SQL count is unchanged; rows and responses grow.
+Apply database migration 0013 before the new collector; it has not been applied remotely.
 
+## Workflow Completion Duration — 2026-10-23
 
-## 작업 흐름 완료 소요시간 — 2026-10-23
+An optional `duration` was added to the existing workflow daily response and to each `days` item.
+The new server always provides it, while older responses may omit the field. Six fixed buckets are provided for success and failure separately,
+and `measuredAttempts` and `unmeasuredAttempts` distinguish previously unmeasured completions. Totals must
+match the period and daily completion counts. Definitions without failure events also have null failure bucket counts.
 
-기존 workflow daily 응답에 선택 duration과 각 days 항목의 duration을 추가했다.
-새 서버는 모두 제공하고 구 응답에는 필드가 없을 수 있다. 6개 고정 구간을 성공/실패별로
-제공하고 measuredAttempts·unmeasuredAttempts로 과거 미측정 완료를 구분한다. 합계는
-기간/일별 완료 건수와 일치해야 한다. 실패 이벤트가 없는 정의는 구간 실패 건수도 null이다.
+Duration is browser `occurredAt` minus `startedAt`; it is not server processing time, an average, or an exact percentile.
+0 ms and exactly 24 hours are valid, and values on an intermediate boundary belong to the next bucket. The start-date cohort, project,
+version, and browser source are retained, and aggregate values are read from the same snapshot as the existing authorization SQL.
+Only the first finalized completion is measured in the same CAS batch as the existing completion delta. If the end is observed first,
+it is measured when the start is observed, and retransmissions or a different eventId for the same step are not counted again.
+An unmeasured completion is not interpreted as 0 ms. Records before 0012 are not backfilled automatically.
+The values are stored in existing daily rows, so they remain for the 90-day aggregate period after the 72-hour attempt cleanup.
+The SQL count for daily reads, overview, ingestion, and cleanup does not increase, while read and row bytes do.
 
-시간은 브라우저 occurredAt - startedAt이며 서버 처리시간·평균·정확한 백분위가 아니다.
-0ms와 정확히 24시간은 유효하고 중간 경계는 다음 구간에 속한다. 시작일 코호트·프로젝트·
-버전·browser 출처를 유지하고, 기존 권한 SQL과 같은 snapshot에서 집계값을 읽는다.
-최초로 확정된 종료만 기존 완료 delta와 같은 CAS batch에서 측정한다. 종료가 먼저 오면
-시작이 관측될 때 측정하고 재전송·다른 eventId의 같은 단계는 다시 세지 않는다.
-미측정 완료는 0ms로 해석하지 않는다. 0012 이전 기록은 자동 backfill하지 않는다.
-기존 일별 행에 보존하므로 72시간 시도 정리 뒤에도 90일 집계 기간에 남는다.
-일별 조회·통합 현황·수집·정리의 SQL 수는 늘리지 않으며 읽기/행 바이트는 증가한다.
+## Project Name and ID Search — 2026-10-23
 
-## 프로젝트 이름·ID 검색 — 2026-10-23
+`GET /v1/projects` accepts an optional `q` for a substring search of project names or IDs. Only ASCII letters are
+matched case-insensitively; Hangul characters and symbols are compared exactly. `%` and `_` are not wildcards.
+Leading and trailing whitespace is removed, and a blank value uses the existing full list. The original query may contain at most 80 UTF-16
+code units, and a control character returns 400. The URL-encoded query is limited to 1,024 characters on this route only, which allows
+80 Hangul characters. Authentication runs before input validation.
 
-`GET /v1/projects`는 선택 `q`로 이름 또는 ID의 부분 문자열을 검색한다. 영문 ASCII만
-대소문자를 구분하지 않으며 한글과 기호는 그대로 비교한다. `%`·`_`는 와일드카드가 아니다.
-앞뒤 공백을 제거하고 빈 값은 기존 전체 목록으로 처리한다. 원본 검색어는 최대 80 UTF-16
-코드 단위이며 제어 문자는 400이다. URL 인코딩한 전체 쿼리는 이 경로에서만 1024자로
-제한해 한글 80자도 허용한다. 인증은 입력 검증보다 먼저 실행한다.
+The search condition and reader/owner grant are bound in the same SQL, and `limit+1` rows are read after filtering.
+ID ordering, the existing cursor, and the response format are retained, and authorization is checked again on every page. The next
+page passes the same `q`; if the query changes, start without a cursor. A cursor does not prove search or authorization,
+and results can change when names or grants change in a live list. Search uses one SQL statement, with no separate index for substrings.
+Large-scale production latency has not been measured.
 
-검색 조건과 reader/owner grant를 같은 SQL에 바인딩하고 필터 후 limit+1개를 읽는다.
-ID 사전순·기존 커서와 응답 형식은 유지하며 각 페이지에서 권한을 다시 검사한다. 다음
-페이지는 같은 q를 전달하고 검색어 변경 시 cursor 없이 시작한다. 커서는 검색·권한
-증명이 아니며 살아 있는 목록에서 이름·권한이 변하면 결과도 바뀔 수 있다. 검색은 한 번의
-SQL이며 부분 문자열용 별도 인덱스는 없다. 대규모 운영 지연은 아직 측정하지 않았다.
+## Service Overview
 
-## 서비스 통합 조회
+`GET /v1/overview?projectIds=sembom,other&source=browser` accepts 1 to 5 unique IDs and only the
+browser or server source after authentication. In request order it returns events for the most recent and previous 7 days under the latest active schema,
+the browser workflow completion rate referenced by the schema's `representativeWorkflowId`, the most recent receipt, and
+the total rejection count for the most recent 7 UTC days. A normal omission leaves the workflow name and completion rate
+null and does not select the first workflow. Invalid syntax or a reference missing from the same version is rejected during draft
+validation and publishing, while a stored definition that violates the contract marks that row as an error.
+The server computes periods in the project time zone. A suspended latest version is not selected.
 
-`GET /v1/overview?projectIds=sembom,other&source=browser`는 인증 후 중복 없는 1~5개 ID와
-browser/server 출처만 받는다. 요청 순서대로 최신 활성 스키마의 최근/직전 7일 이벤트,
-스키마의 `representativeWorkflowId`가 가리키는 browser 작업 흐름의 완료율, 최근 수신과
-최근 UTC 7일 거부 합계를 반환한다. 필드를 생략한 정상 미지정은 흐름 이름과 완료율을
-null로 두며 첫 workflow를 고르지 않는다. 문법이 틀리거나 같은 버전에 없는 참조는 초안
-검증·발행에서 거부하고, 저장된 정의가 계약을 위반하면 해당 행을 오류로 표시한다.
-기간은 서버가 프로젝트 시간대로 계산한다. 사용 중지된 최신 버전은 선택하지 않는다.
+`workflowStats` provides start, success, failure, and in-progress counts for the current and previous periods, plus `provisional`.
+The failure count is null for a workflow without failure events. Completion rate keeps the existing success/start calculation, and
+`provisional` follows the existing rule that data remains provisional until 2 days after the end of the local date. No
+workflow, authorization or aggregation failure, or a server source produces `workflowStats=null`. No additional SQL is run.
 
-workflowStats는 현재/직전 기간의 시작·성공·실패·진행 중 건수와 provisional을 제공한다.
-실패 이벤트가 없는 흐름의 실패 건수는 null이다. 완료율은 기존 성공/시작 계산을 유지하고,
-provisional은 기존 일별 조회와 같은 현지 날짜 종료 후 2일 규칙을 따른다. 흐름 없음·
-권한/집계 실패·서버 출처는 workflowStats=null이다. 추가 SQL은 실행하지 않는다.
+The `period` on a successful row specifies `timeZone`, `from`/`to`, and `previousFrom`/`previousTo`. A period is provided even when there is
+no active schema; an error or lost-authorization row clears it with `period=null`. `generatedAt` fixes the time used for period calculations at the request
+time; it does not mean that all database reads are a snapshot at one instant.
 
-성공 행의 period는 timeZone·from/to·previousFrom/previousTo를 명시한다. 활성 스키마가
-없어도 기간은 제공하며 오류/권한 상실 행은 period=null로 지운다. generatedAt은 요청
-시각에 고정한 기간 계산 기준이며 모든 DB 읽기가 한 시점의 스냅샷이라는 뜻은 아니다.
+After one metadata read, one authorization recheck and aggregate batch, rejection records are read in sequential
+pages for each service. Up to 4,096 rows are aggregated immediately rather than accumulating raw records, with a maximum of 17 batches and 42 SQL statements.
+The grant condition applies to every aggregate, and a change to the active version, definition, or time zone between the two batches causes a query failure
+for that service. Unregistered projects and missing authorization produce the same `accessDenied` error row with all values null.
+Without an active schema, only event and completion values are null; recent receipt and rejection
+counts remain available as project diagnostics. A true zero (no rejection records) is distinguished from an unqueried null.
+Authorization is checked again for each rejection page; if it is revoked, the entire row, including earlier aggregates, is cleared.
+Corruption or storage failure while reading rejections discards partial totals and fails only that panel. Changes or cleanup
+between pages can change results, so rejection totals are not a single-instant snapshot.
+A metadata or analytics SQL execution failure produces a total 503. If a custom AdminStore has no optional overview port, the response is 503 and the
+code does not automatically repeat individual requests. Responses use no-store and `Vary: Authorization`, and CORS is not allowed.
+The abort signal is checked before the first read, after a batch, and before starting the next batch, and it stops new reads.
+It does not guarantee cancellation of a D1 execution that has already started.
 
-메타데이터 한 번과 권한 재검사·집계 batch 한 번 이후 거부 기록을 서비스별 순차
-페이지로 읽는다. 4,096행을 즉시 합산해 원문을 누적하지 않으며 최대 17 batch·42 SQL이다.
-모든 집계에 grant 조건을 적용하고 두 batch 사이의 활성 버전·정의·시간대 변경은
-그 서비스의 조회 실패로 처리한다. 미등록과 권한 없음은 같은 accessDenied 오류 행이며
-수치는 모두 null이다. 활성 스키마가 없으면 이벤트·완료율만 null이며 최근 수신과 거부
-건수는 프로젝트 진단으로 계속 조회한다. 거부 기록이 없다는 실제 0과 미조회 null을 구분한다.
-거부 페이지마다 권한을 재검사하며 회수되면 이전 집계까지 포함한 행 전체를 비운다.
-거부 조회의 손상/저장 실패는 부분 합계를 버리고 해당 패널만 실패 처리한다. 페이지
-사이의 변경·정리로 결과가 달라질 수 있어 거부 합계는 단일 시점의 스냅샷이 아니다.
-메타데이터/분석 SQL 실행 실패는 전체 503이다. 커스텀 AdminStore의 선택적 overview 포트가 없으면 503이며 자동으로
-개별 요청을 반복하지 않는다. 응답은 no-store·Vary: Authorization이며 CORS를 허용하지 않는다.
-취소 신호는 첫 읽기 전·batch 완료 후·다음 batch 시작 전에 확인하고 새 읽기를 중단한다.
-이미 시작한 D1 실행 자체를 취소할 수 있다고 보장하지 않는다.
+## Current Signed-in Account
 
-## 현재 로그인 계정 확인
+`GET /v1/identity` verifies the administrator access token's signature, issuer, audience, and validity period,
+then returns only the caller's `{ issuer, subject }`. It does not require a project grant or creator permission, so
+the initial production account can confirm its identifiers. It does not issue authorization or credentials or read or write the
+database, and it returns no email, profile, other accounts, tokens, or roles.
+It does not substitute the OIDC ID token `sub` or a browser-supplied subject.
 
-`GET /v1/identity`는 관리자 access token의 서명·issuer·audience·유효기간을 검증한
-후 호출자의 `{ issuer, subject }`만 반환한다. 최초 운영 계정도 식별자를 확인할 수
-있도록 프로젝트 grant·생성 권한은 요구하지 않는다. 권한·자격 증명을 발급하거나
-DB를 읽고 쓰지 않으며 이메일·프로필·다른 계정·토큰·역할은 반환하지 않는다.
-OIDC ID token의 sub나 브라우저가 입력한 subject를 대신 사용하지 않는다.
+It accepts GET only and rejects query parameters. Unconfigured authentication, an invalid bearer, or failed verification returns 401;
+an invalid query returns 400; other methods return 405 with `Allow: GET`. The response uses no-store and
+`Vary: Authorization`, and adds neither cookies nor CORS access. The issuer and subject are each at most 512 characters
+and follow the validated grant identity rules. This route is for confirming that the account and provider match before an operator
+registers initial authorization.
 
-GET만 받고 쿼리는 거부한다. 인증 미설정·잘못된 bearer·검증 실패는 401,
-잘못된 쿼리는 400, 다른 메서드는 405(Allow: GET)다. 응답은 no-store·
-Vary: Authorization이고 쿠키나 CORS 허용을 추가하지 않는다. issuer/subject는
-각각 최대 512자이며 검증한 grant identity 규칙을 따른다. 운영자가 최초 권한을
-등록하기 전에 해당 계정과 제공자가 일치하는지 확인하는 용도다.
+## Administrator Storage Read Check
 
-## 관리자 저장소 읽기 확인
+`GET /v1/health` accepts only a verified administrator bearer. It is not a public health check. It only needs to pass the same
+grant identity check as `/v1/identity`; no project grant or creator permission is required. If the host connects a
+`checkReadiness` port, it reads the two control-plane tables `projects` and `project_grants` with
+`SELECT 1 ... LIMIT 1` and, on success, returns only `{status:'ok', scope:'administrator_storage_read'}`.
+It does not expose rows, accounts, or project data. Without the port, it returns 503
+`storage_unavailable`; methods other than GET return 405 with `Allow: GET`. Success does not verify ingestion writes, aggregation, cleanup, or complete
+logging. Operational observability follows [Operational Observability](../ops/observability.md).
 
-`GET /v1/health`는 검증된 관리자 bearer만 받는다. 공개 헬스 체크가 아니다. `/v1/identity`와
-같은 grant identity 검사를 통과하면 되고 프로젝트 grant·생성 권한은 필요 없다. 호스트가
-`checkReadiness` 포트를 연결하면 `projects`·`project_grants` 두 제어면 테이블을 각각
-`SELECT 1 ... LIMIT 1`로 읽고, 성공하면 `{status:'ok', scope:'administrator_storage_read'}`만
-반환한다. 행·계정·프로젝트 데이터는 공개하지 않는다. 포트가 없으면 503
-`storage_unavailable`이고 GET 외는 405(Allow: GET)다. 성공해도 수집 쓰기·집계·정리·로그
-완전성은 확인하지 않는다. 운영 관측은 [운영 관측](../ops/observability.md)을 따른다.
+Status: Administrator reads (GET), source-specific aggregate reads (`source`), funnel daily reads (`funnel`), project settings
+read and change (PATCH), project grant registration, role change, and revocation (PUT and DELETE), project change history
+read (GET), the verifier port, and the OIDC JWT signature verification adapter have been implemented and verified locally. A real
+identity provider, sign-in flow, token issuance, and production settings have not been connected yet.
 
-상태: 관리자 조회(GET)·출처별 집계 조회(source)·퍼널 일별 조회(funnel)·프로젝트 설정
-조회/변경(PATCH)·프로젝트 권한 부여/역할 변경/회수(PUT·DELETE)·프로젝트 변경 이력
-조회(GET)·검증기 포트·OIDC JWT 서명 검증 어댑터를 로컬에서 구현·검증했다. 실제 인증
-제공자·로그인 흐름·토큰 발급과 운영 설정은 아직 연결하지 않았다.
+The host connects a trusted verifier through `createWorker(verifyBearer)`. `verifyBearer` checks the
+signature, trusted issuer, audience, and validity period, then returns `{ issuer, subject }` or
+null. The default export in `apps/collector/src/index.ts` is created without a verifier and
+closes administrator routes with 401. A missing verifier or an empty bearer, issuer, or subject returns 401.
+Project settings routes accept GET and PATCH and return 405 with `Allow: GET, PATCH` for everything else; project grant
+routes accept GET, PUT, and DELETE and return 405 with `Allow: GET, PUT, DELETE` for everything else; the draft validation route
+accepts POST only and returns 405 with `Allow: POST` for everything else; project list and creation routes accept GET and POST
+(`Allow: GET, POST`); version-specific schema routes accept GET and PUT;
+every other read route returns 405 with `Allow: GET` for any method other than GET.
 
-호스트는 `createWorker(verifyBearer)`로 신뢰하는 검증기를 연결한다. `verifyBearer`는
-서명·신뢰하는 발급자·대상·유효기간을 확인한 뒤 `{ issuer, subject }`를 돌려주거나
-null을 돌려준다. `apps/collector/src/index.ts`의 기본 export는 검증기 없이 만들어져
-관리자 경로를 401로 닫는다. 검증기가 없거나 bearer·issuer·subject가 비면 401이다.
-프로젝트 설정 경로는 GET·PATCH를 받고 그 밖은 405(Allow: GET, PATCH), 프로젝트 권한
-경로는 GET·PUT·DELETE를 받고 그 밖은 405(Allow: GET, PUT, DELETE), 초안 검증 경로는
-POST만 받고 그 밖은 405(Allow: POST), 프로젝트 목록/생성 경로는 GET·POST
-(Allow: GET, POST), 버전별 스키마 경로는 GET·PUT을
-받으며 나머지 조회 경로는 GET이 아니면 405(Allow: GET)다.
-
-저장소 루트의 호스트 어댑터 파일 예시다. `@tallyfin/collector` 패키지에는 `exports`가
-없으므로 소스 경로로 가져온다. `hostVerify`는 호스트가 채워야 할 자리이고 이 저장소에는
-구현이 없다.
+The following is an example host adapter file at the repository root. The `@tallyfin/collector` package has no `exports`,
+so it is imported by source path. `hostVerify` is a placeholder the host must fill in, and this repository has no
+implementation for it.
 
 ```ts
-// worker.ts (호스트 어댑터, 저장소 루트)
+// worker.ts (host adapter at the repository root)
 import { createWorker } from './apps/collector/src/index.ts';
 
 export default createWorker(bearer => hostVerify(bearer));
 ```
 
-일반 JWT access token 제공자에는 `createOidcWorker(options)`도 사용할 수 있다.
-운영자가 issuer·API audience·HTTPS 공개키 주소를 지정한다. 지원 프로필과 캐시
-갱신 한계는 [OIDC 어댑터](./oidc.md)에 설명한다.
+`createOidcWorker(options)` can also be used with a standard JWT access token provider.
+The operator specifies the issuer, API audience, and HTTPS public-key address. Supported profiles and cache
+refresh limitations are described in the [OIDC Adapter](./oidc.md).
 
-검증된 issuer/subject로 프로젝트별 조회마다 `project_grants`의 role(reader/owner)을 확인한다.
-화면 선택·cursor·공개 projectId로 권한을 얻지 않는다. grant가 없으면 403, 정의·버전이
-없으면 404, 저장소 오류는 503이다. 단순 JWT decode로 인증하지 않는다.
+Each project read checks the role (reader or owner) in `project_grants` for the verified issuer and subject.
+Authorization is not obtained from a screen selection, cursor, or public projectId. A missing grant returns 403, a missing definition or version
+returns 404, and a storage error returns 503. Authentication never relies on a plain JWT decode.
 
-지원 조회 경로는 아래 GET이고, 쓰기는 프로젝트 생성 POST·설정 PATCH·버전별 스키마 PUT·
-프로젝트 권한 PUT·DELETE·발행자 권한 PUT·DELETE다. 초안 검증 POST는 저장하지 않는 읽기
-작업이다. 발행자 권한 부여·회수는 아래 발행자 등록·회수 규칙을 따르고 provisioning
-CLI(`publisher-grant`·`publisher-revoke`)도 그대로 쓸 수 있다. 발행자 목록은 위 owner 전용
-GET으로 읽는다.
+The supported read routes are the GETs below. Writes are project creation POST, settings PATCH, version-specific schema PUT,
+project grant PUT and DELETE, and publisher authorization PUT and DELETE. Draft validation POST is a read operation that does not store data.
+Publisher grant and revocation follow the publisher registration and revocation rules below, and the provisioning
+CLI (`publisher-grant` and `publisher-revoke`) can still be used. The publisher list is read through the owner-only
+GET above.
 
-- `GET /v1/projects` — 접근 가능한 프로젝트 목록. limit 기본 25·최대 100, cursor 페이지.
-- `POST /v1/projects` — 별도 생성 권한을 가진 관리자만 프로젝트 생성. 아래 생성 규칙을 따른다.
-- `GET /v1/projects/{projectId}` — 현재 설정과 settingsHash. reader/owner.
-- `GET /v1/projects/{projectId}/publishers` — 현재 owner 전용 서버 발행자 목록. 관리자 grant와 별개인 발행 권한만 반환한다.
-- `PUT /v1/projects/{projectId}/publishers` — owner의 발행 권한 부여. `{issuer,subject}`만 받는다.
-- `DELETE /v1/projects/{projectId}/publishers` — owner의 발행 권한 회수. `{issuer,subject,expectedGrantId}`를 받는다.
-- `GET /v1/projects/{projectId}/grants` — 현재 owner 전용 권한 목록. 아래 목록 규칙을 따른다.
-- `PUT /v1/projects/{projectId}/grants` — owner의 reader/owner grant 등록·역할 변경. 아래 변경 규칙을 따른다.
-- `DELETE /v1/projects/{projectId}/grants` — owner의 grant 회수. 아래 변경 규칙을 따른다.
-- `GET /v1/projects/{projectId}/changes` — 현재 owner 전용 변경 이력 조회. 아래 변경 이력 규칙을 따른다.
-- `GET /v1/projects/{projectId}/collection/rejections?from={UTC-date}&to={UTC-date}` — reader/owner의 수집 거부 진단. 아래 UTC 진단 규칙을 따른다.
-- `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — 불변 레지스트리 스냅샷.
-- `GET /v1/projects/{projectId}/schemas` — reader/owner의 버전 목록·최신 버전 조회.
-- `PUT /v1/projects/{projectId}/schemas/{schemaVersion}` — owner의 새 버전 발행.
-- `POST /v1/projects/{projectId}/schemas/validate` — owner 전용 초안 검증, 저장 없음.
-- `GET /v1/projects/{projectId}/summary` — 한 버전·기간의 이벤트별 건수. 선택 `source`(기본 browser, browser|server).
-- `GET /v1/projects/{projectId}/events/{eventName}/daily` — 일별 건수와 선택 속성 버킷. 선택 `source`.
-- `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — 시작일 cohort. browser 출처 전용.
-- `GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}` — 시작 시점 속성별 cohort. browser 출처 전용.
-- `GET /v1/projects/{projectId}/funnels/{funnelId}/daily` — 시작일 cohort 퍼널 도달 수·전환율. 아래 퍼널 일별 조회 규칙을 따른다.
+- `GET /v1/projects` — Accessible project list. Default limit 25, maximum 100, cursor pagination.
+- `POST /v1/projects` — Creates a project only for an administrator with separate creator authorization. Follow the creation rules below.
+- `GET /v1/projects/{projectId}` — Current settings and settingsHash. Reader or owner.
+- `GET /v1/projects/{projectId}/publishers` — Current server publisher list, owner only. Returns only publishing authorization, which is separate from administrator grants.
+- `PUT /v1/projects/{projectId}/publishers` — Owner grants publishing authorization. Accepts only `{issuer,subject}`.
+- `DELETE /v1/projects/{projectId}/publishers` — Owner revokes publishing authorization. Accepts `{issuer,subject,expectedGrantId}`.
+- `GET /v1/projects/{projectId}/grants` — Current grant list, owner only. Follow the list rules below.
+- `PUT /v1/projects/{projectId}/grants` — Owner registers a reader or owner grant or changes a role. Follow the change rules below.
+- `DELETE /v1/projects/{projectId}/grants` — Owner revokes a grant. Follow the change rules below.
+- `GET /v1/projects/{projectId}/changes` — Change history, owner only. Follow the change history rules below.
+- `GET /v1/projects/{projectId}/collection/rejections?from={UTC-date}&to={UTC-date}` — Ingestion rejection diagnostics for a reader or owner. Follow the UTC diagnostics rules below.
+- `GET /v1/projects/{projectId}/schemas/{schemaVersion}` — Immutable registry snapshot.
+- `GET /v1/projects/{projectId}/schemas` — Version list and latest version for a reader or owner.
+- `PUT /v1/projects/{projectId}/schemas/{schemaVersion}` — Owner publishes a new version.
+- `POST /v1/projects/{projectId}/schemas/validate` — Owner-only draft validation with no storage.
+- `GET /v1/projects/{projectId}/summary` — Event counts for one version and period. Optional `source` (default browser, browser or server).
+- `GET /v1/projects/{projectId}/events/{eventName}/daily` — Daily counts and optional property buckets. Optional `source`.
+- `GET /v1/projects/{projectId}/workflows/{workflowId}/daily` — Start-date cohort. Browser source only.
+- `GET /v1/projects/{projectId}/workflows/{workflowId}/breakdown?groupBy={dimension}` — Cohort by start-time property. Browser source only.
+- `GET /v1/projects/{projectId}/funnels/{funnelId}/daily` — Funnel reach counts and conversion rates for a start-date cohort. Follow the funnel daily rules below.
 
-집계 조회는 정확한 schemaVersion, 프로젝트 시간대의 from/to, 보존 90일 안에서 최대
-31일을 요구한다. retired 버전과 paused 프로젝트도 같은 grant로 조회한다. 빈 날짜는 0으로
-채우고, 흐름 완료율은 시작 cohort의 succeeded/started이며 실패 단계가 없으면
-failedAttempts는 null, 날짜 끝 + 48시간까지 provisional=true다.
+Aggregate reads require an exact schemaVersion, a from/to period in the project time zone, and a span of at most
+31 days within the 90-day retention window. Retired versions and paused projects are read with the same grant. Empty dates are filled with
+0, workflow completion rate is `succeeded/started` for the start cohort, and `failedAttempts` is null when the workflow has no failure step;
+`provisional` is true until 48 hours after the end of the date.
 
-`summary`와 `events/{eventName}/daily`만 선택 `source`(기본 browser)를 받고 한 요청에 한
-출처만 읽는다. browser와 server 건수를 합치거나 서로 바꿔 세지 않는다. server 정의도 daily
-속성 분류를 지원하고 등록된 출처·속성 이름만 허용한다. 그 출처에 정의가 없으면 summary는
-`events=[]`·`totalEvents=0`이고, 다른 출처에만 있는 이벤트 이름을 daily로 요청하면 404다.
-workflow 경로는 `source`를 받지 않고 browser 기록만 읽는다(source를 주면 400). meta.source는
-요청 출처(기본 browser)이고 meta.latestReceivedAt는 프로젝트 전체의 최신 수신 시각이라 특정
-출처·버전·날짜 값이 아니다. 조회 권한은 매 요청마다 `project_grants` reader/owner로 다시
-검사하며 `project_publishers` 발행 권한으로는 조회할 수 없다.
+Only `summary` and `events/{eventName}/daily` accept optional `source` (default browser), and a request reads only one
+source. Browser and server counts are neither combined nor substituted. Server definitions also support daily
+property classification, and only registered sources and property names are accepted. If the source has no definition, `summary`
+returns `events=[]` and `totalEvents=0`; requesting a daily event name that exists only in another source returns 404.
+Workflow routes do not accept `source` and read only browser records (supplying `source` returns 400). `meta.source` is the
+requested source (default browser), and `meta.latestReceivedAt` is the latest receipt time for the entire project, not a value for a specific
+source, version, or date. Read authorization is rechecked against `project_grants` reader or owner on every request, and
+`project_publishers` publishing authorization cannot be used to read.
 
-속성별 흐름 조회는 등록 workflow.dimensions 중 한 속성만 groupBy로 받는다. 시작
-시점에 저장한 차원 키를 사용하고 이벤트 발생일별 건수로 완료율을 추론하지 않는다.
-기존 daily 응답은 바꾸지 않는다. 응답은 meta·workflowId·cohortBasis·groupBy·summary와
-최대32개 buckets다. 각 bucket은 자료형을 유지한 value·summary·최대31일 days를 담는다.
-다른 차원 조합은 같은 값에 합산하며 완료율은 합산된 성공/시작이다. 필수 차원이므로
-null 버킷은 없고 관찰된 값만 반환한다. 빈 결과는 buckets=[], 0시도 완료율은 null이다.
-기존 reader/owner grant를 정의·집계와 같은 D1 batch에서 다시 확인한다. 최대7936개
-원본 행을 읽고 초과·손상 데이터는503으로 실패한다. 저장/마이그레이션 변경은 없다.
+A workflow property read accepts only one of the registered `workflow.dimensions` as `groupBy`. It uses the dimension key stored at
+start time and does not infer completion from event-date counts. The existing daily response is unchanged. The response contains
+`meta`, `workflowId`, `cohortBasis`, `groupBy`, `summary`, and up to 32 `buckets`. Each bucket contains a value that preserves its
+type, `summary`, and up to 31 `days`. Other dimension combinations are summed into the same value, and completion rate is computed from the summed successes and starts. Because it
+is a required dimension, there are no null buckets, and only observed values are returned. An empty result returns `buckets=[]`, and a completion rate with zero attempts is null.
+Existing reader or owner authorization is rechecked in the same D1 batch as definitions and aggregates. Up to 7,936
+source rows are read, and an overflow or corrupt data returns 503. There are no storage or migration changes.
 
-## 퍼널 일별 조회
+## Funnel Daily Query
 
-`GET /v1/projects/{projectId}/funnels/{funnelId}/breakdown`은 기존에 저장한 필수 시작일 차원으로
-퍼널을 나눠 읽는다. `schemaVersion`·`from`·`to`·`groupBy`가 필수다. groupBy는 선택 퍼널의
-dimensions 중 하나이며, 단계의 browser/server 출처를 합쳐 조회하므로 source는 받지 않는다.
-프로젝트 reader/owner grant·정의·집계를 같은 D1 batch에서 읽고 각 SELECT가 grant를 다시
-확인한다. 범위는 최근 90일 안의 1~31일이고 최대 256개 원래 차원 조합·10단계·79,360행을
-읽는다. 상한보다 한 행 더 요청해 넘침을 발견하면 503으로 거부한다.
+`GET /v1/projects/{projectId}/funnels/{funnelId}/breakdown` reads a funnel split by a required start-date dimension
+that was already stored. `schemaVersion`, `from`, `to`, and `groupBy` are required. `groupBy` is one of the optional funnel's
+`dimensions`, and the query combines browser and server sources for its steps, so it does not accept `source`. It reads the
+project reader or owner grant, definition, and aggregates in the same D1 batch, and every SELECT checks the grant again.
+The range is 1 to 31 days within the most recent 90 days, reading at most 256 original dimension combinations, 10 steps, and 79,360 rows.
+It requests one row beyond the limit and rejects an overflow with 503.
 
-응답은 source 없는 meta·funnelId·definition·cohortBasis(startedAt)·groupBy·전체 summary와
-최대 32개 buckets다. 각 bucket의 value는 등록된 string/boolean/integer 값이며 false·0도
-보존한다. 필수 차원이므로 null은 없고 관측 행이 없으면 buckets는 빈 배열이다. 각 bucket은
-summary와 모든 조회일의 days를 담고, 없는 날은 건수 0·비율 null이다. 비율과 provisional은
-daily 조회와 같으며 평균 일별 비율을 쓰지 않고 전체 건수에서 계산한다.
+The response contains source-free `meta`, `funnelId`, `definition`, `cohortBasis` (`startedAt`), `groupBy`, overall `summary`, and
+up to 32 `buckets`. Each bucket's value is a registered string, boolean, or integer; false and 0 are preserved.
+Because the dimension is required, there are no nulls, and `buckets` is an empty array when there are no observed rows. Each bucket contains a
+`summary` and `days` for every queried date; days without data have count 0 and a null rate. Rates and `provisional` match the
+daily query; they are calculated from total counts rather than an average of daily rates.
 
-감싼 다른 차원을 합치기 전에 각 날짜/원래 조합의 연속 단계 건수를 검사한다. 미등록 값·
-중복 단계·다른 날짜·잘못된 차원 JSON·안전 정수 넘침·앞 단계보다 큰 건수는 503이다.
-runId·dimension_key·원문 이벤트는 응답에 넣지 않는다. DB·마이그레이션은 그대로이며
-이 읽기 API는 로컬에서 구현·검증했다. 관리자 분류 화면·CSV 연결은 다음 단계다.
+Before combining other wrapped dimensions, it checks the consecutive reached-step count for each date and original combination. An unregistered value,
+duplicate step, different date, invalid dimension JSON, unsafe-integer overflow, or greater count at an earlier step returns 503.
+`runId`, `dimension_key`, and raw events are not included in the response. The database and migrations are unchanged; this read
+API has been implemented and verified locally. The administrator classification screen and CSV connection are the next step.
 
-`GET /v1/projects/{projectId}/funnels/{funnelId}/daily`는 등록 퍼널의 시작일 cohort 도달 수와
-전환율을 읽는다. `schemaVersion`·`from`·`to`가 필수이고 프로젝트-local 최근 90일 안에서
-1~31일(양끝 포함)을 읽는다. 정의 조회·집계·reader/owner grant 검사는 같은 D1 batch에서
-수행한다. `source`·`groupBy`는 받지 않고 400이다. 등록된 각 단계의 browser/server 출처와
-모든 차원 조합을 하나로 합쳐 시작일 cohort로 세며 출처별 분리나 방문자 재구성은 없다.
+`GET /v1/projects/{projectId}/funnels/{funnelId}/daily` reads start-date cohort reach counts and
+conversion rates for a registered funnel. `schemaVersion`, `from`, and `to` are required, and the query reads 1 to 31 days
+(inclusive) within the most recent 90 project-local days. Definition read, aggregation, and reader or owner grant checks run in the same D1 batch.
+It does not accept `source` or `groupBy`; either returns 400. Browser and server sources for each registered step and
+all dimension combinations are combined into one start-date cohort; there is no source split or visitor reconstruction.
 
-응답은 meta(source 없음)·funnelId·definition·cohortBasis(startedAt)·summary(FunnelCounts)와
-0으로 채운 days다. 각 step은 stepIndex·reachedRuns·reachRate·conversionRate·notReachedNext를
-담고 reachedRuns는 비증가한다. reachRate는 첫 단계 기준, conversionRate는 직전 단계 기준이고
-분모가 0인 비율·첫 단계 conversionRate·마지막 notReachedNext는 null이다. 프로젝트-local
-날짜 끝 +48시간까지 provisional이며 미완료·미전달 작업도 포함하므로 다음 단계 미도달은
-실패나 이탈의 증거가 아니다. paused 프로젝트·retired 버전도 조회한다. 알 수 없는
-스키마·퍼널 404·미인증 401·grant 없음 403·malformed 400·손상·초과 503, no-store, run ID
-미노출, 묶인 행 최대 310개이고 초과 시 503으로 실패한다. 저장·마이그레이션 변경은 없다.
+The response contains `meta` (no source), `funnelId`, `definition`, `cohortBasis` (`startedAt`), `summary` (`FunnelCounts`), and
+`days` filled with 0. Each step contains `stepIndex`, `reachedRuns`, `reachRate`, `conversionRate`, and `notReachedNext`;
+`reachedRuns` is nonincreasing. `reachRate` is relative to the first step, `conversionRate` is relative to the immediately preceding step,
+and rates with a zero denominator, the first step's `conversionRate`, and the last step's `notReachedNext` are null. Results are `provisional` until 48 hours after the end of the
+project-local date, and they include incomplete and undelivered work, so failure to reach the next step is not proof of failure or abandonment. Paused projects and
+retired versions remain readable. Unknown schema or funnel returns 404, missing authentication returns 401, missing grant returns 403, malformed input returns 400,
+and corrupt or oversized data returns 503. Responses use no-store and do not expose run IDs. At most 310 grouped rows are returned, and an overflow returns 503.
+There are no storage or migration changes.
 
-## 수집 거부 진단 — UTC 수신일
+## Ingestion Rejection Diagnostics — UTC Receipt Date
 
-`from`/`to`는 필수 UTC 날짜이며 오늘과 앞 6일 안에서 최대 7개 날짜를 읽는다.
-프로젝트 시간대·스키마 버전·이벤트 발생일과 무관하다. reader/owner는 중지 프로젝트나
-스키마가 없는 프로젝트도 읽을 수 있고, 같은 D1 batch에서 grant와 집계를 검사한다.
-추가/중복 파라미터는 400, 미인증은 401, grant 없음은 403, 프로젝트 없음은 404,
-GET 아닌 메서드는 405, 손상된 JSON/시각/원인/안전 정수·합계/DB 실패는 503이다.
+`from` and `to` are required UTC dates and must select at most 7 dates within today and the preceding 6 days.
+They are independent of project time zone, schema version, and event occurrence date. A reader or owner can read a paused project or a
+project without a schema, and the grant and aggregates are checked in the same D1 batch.
+Extra or duplicate parameters return 400, missing authentication 401, missing grant 403, missing project 404,
+methods other than GET 405, and corrupt JSON, timestamps, reasons, safe integers or totals, or a database failure 503.
 
-응답은 `meta`(UTC/receivedAt/retentionDays=7/coverage=best-effort), 전체 `summary`,
-모든 요청 날짜의 `days`다. 각 요약은 거부 요청 수·마지막 거부 요청의 수신 시각과
-고정 10개 원인 버킷을 포함한다. 기록이 없으면 0/null이고 저장 실패를 0으로 채우지
-않는다. minute_limit/daily_limit는 공개 응답에서 모두 quota_exceeded지만 여기서는
-구분한다. OPTIONS·잘못된 메서드의 거부도 포함될 수 있다. 이벤트 수·방문자 수·거부율·
-할당량 사용량을 의미하지 않는다. 원문·출처·IP·토큰·requestId·이벤트 ID를 반환하지 않는다.
+The response contains `meta` (`UTC`, `receivedAt`, `retentionDays=7`, `coverage=best-effort`), overall `summary`,
+and `days` for every requested date. Each summary contains the rejected request count, the receipt time of the most recent rejected request, and
+10 fixed cause buckets. With no records they are 0 or null, and a storage failure is not filled with 0.
+`minute_limit` and `daily_limit` both appear as `quota_exceeded` in public responses but are distinct here.
+Rejections for OPTIONS and invalid methods may be included. These values do not represent event count, visitor count, rejection rate, or
+quota usage. The response does not return raw data, source, IP, token, requestId, or event ID.
 
-브라우저와 발행 권한을 통과한 서버 수집의 거부 기록을 합산한다. 출처별 건수는
-구분하지 않으며, 서버 인증·발행 권한 검사에서 처음 거부된 요청은 기록하지 않는다.
-추가 진단 기록은 best-effort이며 저장 실패·알 수 없는 프로젝트·관리자/API 인증 실패·
-admission DB 실패·마이그레이션 이전 이력은 포함하지 않는다. 진단이 응답 뒤 저장될 수
-있으므로 직후 조회에는 아직 반영되지 않을 수 있다. 조회는 최대 10080분과 7일/10원인
-출력으로 제한하며 설정의 수집 상태 진단 화면에 거부 요약·일별 내역을 로컬에서 연결했다. [응답 예제](../../api/examples/collection-rejections-response.json)를 따른다.
+The values combine rejection records for browser ingestion and server ingestion that passed publishing authorization. Counts are not split by
+source, and requests first rejected during server authentication or publishing authorization checks are not recorded.
+Additional diagnostics are best-effort and exclude storage failures, unknown projects, administrator or API authentication failures,
+admission database failures, and history from before the migration. Diagnostics may be stored after the response,
+so an immediate read may not include them yet. A read is limited to 10,080 minutes and 7 days with 10 causes.
+The settings screen's collection-status diagnostics now shows rejection summaries and daily details locally. Follow the [response example](../../api/examples/collection-rejections-response.json).
 
-## 프로젝트 설정 조회·변경
+## Project Settings Read and Change
 
-`GET /v1/projects/{projectId}`는 reader/owner에게 `{project, allowedOrigins, limits,
-settingsHash, canEdit}`를 돌려준다. `canEdit`는 요청을 보낸 검증된 principal이 그
-프로젝트의 owner grant를 가졌는지 나타내는 snapshot boolean이라 reader에게는 false다.
-paused 프로젝트도 조회하고 schemaVersion은 요구하지 않는다. settingsHash는
-`project`·`allowedOrigins`·`limits`의 canonical JSON SHA-256이라
-ingest_revision·집계·스키마는 해시에 들어가지 않고 `canEdit`도 해시에서 제외한다.
+`GET /v1/projects/{projectId}` returns `{project, allowedOrigins, limits,
+settingsHash, canEdit}` to a reader or owner. `canEdit` is a snapshot boolean indicating whether the verified principal making the request
+has an owner grant for that project, so it is false for readers.
+Paused projects remain readable, and no schemaVersion is required. `settingsHash` is
+the SHA-256 of the canonical JSON for `project`, `allowedOrigins`, and `limits`, so
+`ingest_revision`, aggregates, and schemas are not included, and `canEdit` is also excluded.
 
-`PATCH /v1/projects/{projectId}`는 owner 전용이다. 본문은 UTF-8 16KiB 이하
-`application/json` 또는 `text/plain`(identity 인코딩)이고 닫힌 JSON으로 검증한다.
-`name`·`status(active/paused)`·`allowedOrigins`·`limits`만 바꿀 수 있고 보낸 limits
-키만 병합한다. `expectedSettingsHash`와 변경할 항목이 최소 하나 필요하다. allowedOrigins는
-정확한 HTTPS origin만 받고, 명시적으로 켠 `allowLocalHttp`에서만 loopback HTTP를
-허용한다. `id`·`timeZone`·`schemas`·`grants`·`aggregates`는 바꿀 수 없고 이미
-사용한 한도와 기존 스키마·데이터는 그대로 둔다.
+`PATCH /v1/projects/{projectId}` is owner-only. The body is UTF-8 JSON of 16 KiB or less with
+`application/json` or `text/plain` (identity encoding), validated as closed JSON.
+Only `name`, `status` (`active` or `paused`), `allowedOrigins`, and `limits` can change, and only the supplied `limits`
+keys are merged. `expectedSettingsHash` and at least one changed field are required. `allowedOrigins` accepts only
+exact HTTPS origins; loopback HTTP is allowed only when `allowLocalHttp` is explicitly enabled. `id`, `timeZone`, `schemas`, `grants`, and
+`aggregates` cannot change, and existing usage limits and schemas and data remain as they are.
 
-`canEdit`는 조회 스냅샷의 표시용 값이라 저장 권한 판단에 그대로 쓰지 않는다. 변경은
-저장 시점에 grant를 다시 확인하고 `expectedSettingsHash`를 현재 값과 비교해 원자
-UPDATE로 반영한다. owner 자격이 회수되면 403, 해시가 오래됐거나 다른 설정 변경과
-겹치면 `settings_conflict`(409)다. 수집만 일어나 ingest_revision이 올라간 경우는 충돌이
-아니다. 설정 변경은 ingest_revision을 1 올려 진행 중인 수집의 충돌 검사와 맞물린다. 응답이
-유실되거나 409를 받으면 현재 설정을 다시 읽어 비교한 뒤 재시도하고, 새 해시를 그대로
-덮어쓰지 않는다.
+`canEdit` is a display value from the read snapshot and is not used directly to decide write authorization. A change checks
+the grant again at write time and compares `expectedSettingsHash` with the current value, then applies the update atomically.
+If owner authorization has been revoked, it returns 403. If the hash is stale or another settings change
+overlapped, it returns `settings_conflict` (409). A change in `ingest_revision` caused only by ingestion is not a conflict.
+A settings change increments `ingest_revision` by 1 to coordinate with conflict checks for in-flight ingestion. If a response is
+lost or a 409 is returned, read and compare the current settings before retrying; do not overwrite the new hash.
 
-## 스키마 초안 검증
+## Schema Draft Validation
 
-기존 `GET /v1/projects/{projectId}/schemas/{schemaVersion}`로 발행된 정의를 읽고,
-`POST /v1/projects/{projectId}/schemas/validate`에 `{events, workflows, funnels?}`만 보내 검증한다.
-프로젝트·버전·상태·허용 출처 등 다른 필드는 받지 않는다. POST는 인증한 뒤 프로젝트
-설정과 owner grant를 같은 DB 조회에서 확인하며, 권한이 없으면 본문을 읽기 전에 403을
-반환한다. 일시정지된 프로젝트도 검증할 수 있다. reader는 발행된 스키마 조회만 가능하다.
+Read an already published definition through the existing `GET /v1/projects/{projectId}/schemas/{schemaVersion}`, then
+send only `{events, workflows, funnels?}` to `POST /v1/projects/{projectId}/schemas/validate` for validation.
+Other fields such as project, version, status, and allowed source are not accepted. After authentication, POST checks the project
+settings and owner grant in the same database read and, if unauthorized, returns 403 before reading the body. Paused projects
+can also be validated. A reader can only read published schemas.
 
-본문은 identity 인코딩의 `application/json` 또는 `text/plain`이며 UTF-8 32KiB가
-상한이다. 다른 수집·설정 경로의 16KiB 상한은 그대로다. 쿼리 파라미터는 받지 않는다.
-JSON 오류·닫힌 envelope 위반·배열이 아닌 events/workflows/선택 funnels는 400, 크기 초과는 413,
-지원하지 않는 미디어·인코딩은 415다.
+The body uses identity-encoded `application/json` or `text/plain`, with a 32 KiB UTF-8 limit.
+The 16 KiB limits on other ingestion and settings routes remain unchanged. Query parameters are not accepted.
+Invalid JSON, a closed-envelope violation, or non-array events, workflows, or optional funnels returns 400; an oversized body returns 413;
+an unsupported media type or encoding returns 415.
 
-정의의 의미 검증 결과는 200으로 `{valid, issues, privacyReviewRequired: true}`를
-반환한다. 정상 초안의 issues는 빈 배열이고, 오류가 있으면 첫 오류 하나의 JSON pointer
-`path`와 안정된 `code`를 반환한다. 입력값·DB 오류를 응답이나 로그에 넣지 않는다.
-코드는 invalid_definition, definition_limit, duplicate, cardinality_limit,
-invalid_reference, dimension_mismatch다. browser_event_required는 구버전 응답 호환을 위해
-계약에 남겨 두지만 현재 검증기는 내보내지 않는다. server 정의만 있는 초안도 검증한다.
+Semantic validation of a definition returns 200 with `{valid, issues, privacyReviewRequired: true}`.
+For a valid draft, `issues` is an empty array. If there are errors, it returns the JSON pointer `path` and stable `code` of the first error.
+Input values and database errors are not included in the response or logs. The codes are
+`invalid_definition`, `definition_limit`, `duplicate`, `cardinality_limit`,
+`invalid_reference`, and `dimension_mismatch`. `browser_event_required` remains in the contract for compatibility with older
+responses, but the current validator does not emit it. Drafts containing only server definitions are also validated.
 
-검증은 실제 등록과 같은 코어 함수로 이벤트 1~50개·흐름 최대 10개·속성 최대 4개·
-종류 수/가능 조합 한도·흐름 참조·필수 차원 일치를 확인한다. 이벤트 출처는 browser/server
-문자열만 허용한다. 검증 성공 후에도 enum의 개인정보 포함 여부는 운영자가 검토해야 한다.
-초안·스키마·설정·사용량·집계는 쓰지 않으므로 반복 요청에 idempotency key가 필요 없다.
-버전 예약이나 발행 가능성을 확정하지 않으며, 발행 때 다시 검증·권한 확인한다.
+Validation uses the same core functions as actual registration to check 1 to 50 events, up to 10 workflows, up to 4 properties per event,
+type count and possible-combination limits, workflow references, and required-dimension consistency. Event sources must be the browser or server
+string. Even after validation succeeds, an operator must review whether enum values contain personal information.
+Drafts, schemas, settings, usage, and aggregates are not written, so repeated requests do not need an idempotency key.
+Validation does not reserve a version or guarantee publication; publication performs validation and authorization checks again.
 
-## 새 스키마 버전 발행
+## Publishing a New Schema Version
 
-목록 GET은 버전 번호 내림차순으로 메타데이터를 반환한다. limit 기본 25·최대 100,
-beforeVersion은 이전 페이지 마지막 버전보다 작은 번호를 조회하는 배타적 커서다.
-latestVersion은 커서와 무관하게 해당 snapshot의 최고 번호이며, 등록된 스키마가
-없으면 null이다. 매 페이지에서 grant를 다시 검사하고 paused 프로젝트·retired 버전도
-표시한다. 정의 전체는 기존 버전별 GET으로 읽는다.
+The list GET returns metadata in descending version number order. The default limit is 25 and the maximum is 100;
+`beforeVersion` is an exclusive cursor that selects versions lower than the last version on the previous page.
+`latestVersion` is the highest version in that snapshot regardless of the cursor and is null when no schema is registered.
+The grant is checked again on every page, and paused projects and retired versions are included. Full definitions are read through
+the existing version-specific GET.
 
-발행 PUT 본문은 `{expectedLatestVersion, privacyReviewed: true, events, workflows, funnels?}`다.
-identity 인코딩의 application/json 또는 text/plain을 받고 본문은 UTF-8 33KiB,
-정의 자체는 32KiB가 상한이다. 이벤트·흐름 규칙은 초안 검증과 같은 함수로 다시 검사한다.
-선택 funnels도 같은 한도·검증을 공유한다. 퍼널은 최대 10개, 순서 단계는 2~10개이며
-각 단계의 등록 출처·이벤트와 동일 필수 분류 도메인을 확인한다. 생략한 기존 정의의
-해시는 유지하고, 명시한 funnels는 정의 해시·불변 버전·재요청 비교에 포함한다.
-단계 연결 수집과 퍼널 일별 조회 API는 로컬 구현·검증했고, 관리자 퍼널 분석 화면·CSV와
-퍼널 전용 단계 편집 폼도 로컬에서 연결했다.
-privacyReviewed는 owner의 검토 확인이며 자동 개인정보 탐지가 아니다. 프로젝트·상태·
-허용 출처·수집 한도는 본문에 넣을 수 없다. 닫힌 입력·잘못된 정의는 400이다.
+The publishing PUT body is `{expectedLatestVersion, privacyReviewed: true, events, workflows, funnels?}`.
+It accepts identity-encoded `application/json` or `text/plain`; the body limit is 33 KiB UTF-8 and the definition limit is
+32 KiB. Event and workflow rules are checked again with the same functions as draft validation.
+Optional funnels share the same limits and validation. There can be up to 10 funnels, with ordered steps of 2 to 10, and every step must match its
+registered source, event, and required classification domain. Omitted definitions retain their existing hash, while explicitly supplied
+funnels are included in the definition hash, immutable version, and retry comparison.
+Step-link ingestion and the funnel daily read API have been implemented and verified locally; the administrator funnel analysis screen, CSV,
+and funnel-specific step editor form have also been connected locally.
+`privacyReviewed` is the owner's confirmation of review, not automatic personal-information detection. Project, status,
+allowed origins, and ingestion limits cannot be included in the body. Closed input or an invalid definition returns 400.
 
-새 번호는 모든 기존 버전보다 커야 하고 expectedLatestVersion이 현재 최고 번호와
-같아야 한다. 스키마가 없을 때만 null로 첫 버전을 발행한다. owner 조건·최고 번호 검사·
-삽입·ingest_revision 증가는 한 D1 batch에서 수행한다. 저장 직전에 권한이 회수되면
-403, 다른 내용으로 같은 번호를 쓰거나 최고 번호가 바뀌면 schema_conflict(409)다.
-설정이나 수집에 의한 revision 변화만으로 발행을 거부하지 않는다.
+The new number must be greater than every existing version, and `expectedLatestVersion` must equal the current highest number.
+`null` publishes the first version only when there is no schema. The owner condition, highest-number check,
+insert, and `ingest_revision` increment run in one D1 batch. If authorization is revoked immediately before storage,
+the request returns 403; writing the same number with different content or a changed highest number returns `schema_conflict` (409).
+A revision change caused only by settings or ingestion does not reject publication.
 
-같은 버전·같은 canonical 정의로 재요청하면 200과 기존 발행 메타데이터를 반환하고
-추가 저장·revision 증가가 없다. 따라서 응답 유실 후에도 같은 PUT을 재시도할 수 있다.
-이후 더 높은 버전이 생기거나 해당 버전이 retired 상태여도 같은 정의의 재요청은
-현재 상태를 반환하며 재활성화하지 않는다. 별도 Idempotency-Key는 요구하지 않는다.
-동일성은 객체 키 순서만 정규화하고 배열 순서는 보존한다.
+Retrying with the same version and the same canonical definition returns 200 with the existing publication metadata and does not
+store more data or increment the revision, so the same PUT can be retried after a lost response.
+If a higher version is created later or that version becomes retired, retrying the same definition returns the current state
+and does not reactivate it. A separate `Idempotency-Key` is not required.
+Equality normalizes only object key order and preserves array order.
 
-기존 버전·집계·설정은 유지하고 새 버전만 active로 만든다. 이전 버전은 자동으로
-retired 처리하지 않는다. 발행이 SDK의 선택 버전을 바꾸지는 않으므로 적용 제품에서
-새 정의를 확인하고 버전을 명시적으로 전환해야 한다. 응답은 projectId·schemaVersion·
-schemaStatus·publishedAt과 canonical `{events,workflows}`의 SHA-256 definitionHash다.
+Existing versions, aggregates, and settings are retained, and only the new version becomes active. Older versions are not
+automatically retired. Publishing does not change the SDK's selected version, so an adopting product must review the
+new definition and switch to the version explicitly. The response contains `projectId`, `schemaVersion`,
+`schemaStatus`, `publishedAt`, and the SHA-256 `definitionHash` of canonical `{events,workflows}`.
 
-D1 batch의 rollback·실행 순서는 [공식 D1 문서](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch),
-직전 삽입 여부에 따른 revision 변경은 [SQLite changes()](https://www.sqlite.org/lang_corefunc.html#changes)를
-기준으로 구현하고 Miniflare에서 발행·재요청·동시 발행·실패 rollback을 확인했다.
+D1 batch rollback and execution order follow the [official D1 documentation](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch).
+Revision changes depend on whether the preceding insert occurred and are implemented using
+[SQLite changes()](https://www.sqlite.org/lang_corefunc.html#changes); publishing, retries, concurrent publication, and rollback after failure
+were checked in Miniflare.
 
-프로젝트 생성은 별도 생성 권한 API 또는 provisioning CLI를 사용한다.
-스키마 상태 변경은 기존 provisioning CLI가 맡는다. grant 부여·역할 변경·회수는 새 owner
-API(PUT·DELETE)로 로컬 구현했고 provisioning CLI는 대안으로 유지한다. 관리자 화면의 권한
-변경 UI는 로컬에서 구현·검증했고, 인증 제공자 설정과 원격 배포는 후속이다. 요청·응답 형태는
-[OpenAPI](../../api/openapi.yaml)를 따르고, 동작 의미는
-[이벤트·집계 계약](./event-contract.md)을 따른다.
+Project creation uses a separate creator authorization API or the provisioning CLI.
+Schema status changes remain with the existing provisioning CLI. Grant registration, role changes, and revocation have been implemented locally through the new owner
+API (PUT and DELETE), and the provisioning CLI remains an alternative. The permission change UI in the administrator screen has been implemented and
+verified locally; identity provider configuration and remote deployment are follow-up work. Request and response shapes follow
+[OpenAPI](../../api/openapi.yaml), and behavioral semantics follow the
+[Event and Aggregation Contract](./event-contract.md).
 
-## 프로젝트 권한 목록
+## Project Grant List
 
-`GET /v1/projects/{projectId}/grants`는 현재 프로젝트 owner만 읽는다. reader·다른
-프로젝트 owner·권한이 없는 사용자·없는 프로젝트는 403이다. 프로젝트가 paused이거나
-스키마가 없어도 조회하며, 검증된 호출자 issuer/subject로 매 페이지에서 owner를 다시
-확인한다. 권한 검사와 목록은 같은 D1 batch에서 읽는다.
-[D1 batch 문서](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)의
-트랜잭션 의미를 따르며, 조회 도중 회수된 권한은 다음 페이지에서 다시 검사한다.
+`GET /v1/projects/{projectId}/grants` is readable only by the current project owner. Readers, owners of another
+project, users without a grant, and nonexistent projects return 403. The list is readable when the project is paused or has
+no schema, and the owner check is repeated on every page using the verified caller's issuer and subject. Authorization and the list are read in the same D1 batch.
+The [D1 batch documentation](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch) defines the
+transaction semantics; authorization revoked during a read is checked again on the next page.
 
-응답은 `{projectId,data:[{issuer,subject,role,createdAt}],page:{limit,nextCursor}}`다.
-createdAt은 최초 grant 생성 시각이며 역할 변경으로 초기화되지 않는다. 이름·이메일을
-추측하거나 인증 토큰·사용자 프로필을 반환하지 않는다. issuer/subject와 커서는 관리자
-식별 정보로 다루고 요청/응답 로그에 기록하지 않는다. 응답은 no-store다.
+The response is `{projectId,data:[{issuer,subject,role,createdAt}],page:{limit,nextCursor}}`.
+`createdAt` is the time the grant was first created and is not reset by a role change. Names and email addresses are not
+inferred, and authentication tokens or user profiles are not returned. Issuer, subject, and cursor are treated as administrator
+identifiers and are not written to request or response logs. The response uses no-store.
 
-limit은 기본 25·최대 100이고 issuer, subject의 SQLite BINARY 순서로 읽는다.
-다음 페이지에는 nextCursor를 그대로 보내며 null이면 끝이다. 커서는 프로젝트와 마지막
-식별값을 담은 base64url 위치값(최대 12288자)으로 권한을 부여하지 않는다. 잘못된 형식·
-다른 프로젝트 커서·중복/추가 파라미터·12352자를 넘는 쿼리는 400이다. 첫 페이지는
-cursor를 생략하거나 빈 값으로 보낸다. 식별자 둘의 최대 512자·Unicode도 지원한다.
-각 페이지는 현재 DB를 읽으므로 이전 위치보다 앞에 추가된 grant는 목록을 처음부터
-다시 읽어야 보인다. 조회로 grant·설정·수집 사용량을 변경하지 않는다.
+The default limit is 25 and the maximum is 100, ordered by SQLite BINARY order of issuer and subject.
+Pass `nextCursor` unchanged to the next page; null means the end. The cursor is a base64url position value containing the project and last
+identifier (up to 12,288 characters) and grants no authorization. Invalid format, a cursor from another project, duplicate or extra
+parameters, or a query over 12,352 characters returns 400. Omit the cursor or send an empty value for the first page.
+Identifiers up to 512 characters each and Unicode are supported. Each page reads the current database, so grants inserted
+before the previous position require rereading the list from the beginning. Reads do not change grants, settings, or ingestion usage.
 
-## 프로젝트 권한 변경
+## Project Grant Changes
 
-`PUT /v1/projects/{projectId}/grants`와 `DELETE .../grants`는 현재 프로젝트
-owner만 쓴다. reader·다른 프로젝트 owner·발급자가 다른 호출자·회수된 owner·없는
-프로젝트는 403이다. 라우터는 본문을 읽기 전에 검증된 호출자가 owner인지 preflight로
-확인하고, 쓰기 직전 원자 DB batch에서 owner 조건·CAS·last-owner 가드·결과 조회를 함께
-수행한다. 본문은 닫힌 JSON이며 UTF-8 16KiB 이하 identity 인코딩만 받고 조회 파라미터는
-받지 않는다. issuer·subject는 [provisioning CLI](./provisioning.md)와 같은 제약을 쓴다.
-PUT 본문은 `{issuer,subject,role,expectedRole}`, DELETE 본문은
-`{issuer,subject,expectedRole}`이다.
+`PUT /v1/projects/{projectId}/grants` and `DELETE .../grants` are writable only by the current project
+owner. Readers, owners of another project, callers whose issuer differs, revoked owners, and nonexistent
+projects return 403. Before reading the body, the router preflights whether the verified caller is the owner; immediately before
+the write, the atomic database batch performs the owner condition, CAS, last-owner guard, and result read together.
+The body is closed JSON, accepts only UTF-8 identity encoding of 16 KiB or less, and does not accept query parameters.
+Issuer and subject use the same constraints as the [provisioning CLI](./provisioning.md).
+The PUT body is `{issuer,subject,role,expectedRole}`; the DELETE body is
+`{issuer,subject,expectedRole}`.
 
-`expectedRole`은 호출자가 마지막으로 본 역할이다. PUT에서 null은 신규 등록,
-reader/owner는 현재 저장 역할과 비교하는 CAS다. 대상이 이미 원하는 역할이면 다시 쓰지
-않고 200 `changed=false`로 성공하며, 그 밖에 저장 역할이 expectedRole과 다르면
-grant_conflict(409)다. DELETE에서 null은 grant가 없다고 본 경우이고 grant가 없으면
-멱등 성공(changed=false)이다. 저장 역할이 expectedRole과 다르면 grant_conflict(409)다.
+`expectedRole` is the role the caller last saw. On PUT, null means a new registration, and reader or owner is a CAS against the
+currently stored role. If the target already has the desired role, no write occurs and it succeeds with 200 and `changed=false`;
+otherwise a stored role different from `expectedRole` returns `grant_conflict` (409). On DELETE, null means the caller believes
+no grant exists, and an absent grant is an idempotent success with `changed=false`. A stored role different from `expectedRole` returns `grant_conflict` (409).
 
-역할 변경은 최초 createdAt을 유지하고, 마지막 owner를 reader로 내리거나 회수하면
-last_owner(409)다. 다른 owner가 있으면 자기 grant를 스스로 낮추거나 회수할 수 있고 그때
-응답은 canManage=false이며 이후 owner API 호출은 403이다. 성공 응답은 200
-`{projectId,issuer,subject,role,createdAt,canManage,changed}`이고 role이 null이면
-createdAt도 null이다. 이 API와 관리자 화면의 권한 변경 패널을 로컬에서 구현·검증했다.
-화면은 후보를 준비만 하고 확인 패널에서만 저장하며, 결과가 불명확하면 같은 요청만 다시
-보내고, 권한을 잃으면 목록과 편집을 잠근다. DB·마이그레이션 변경·배포·운영 identity
-자격 증명은 없다.
+A role change preserves the original `createdAt`. Demoting or revoking the last owner to reader returns
+`last_owner` (409). If another owner exists, a caller may lower or revoke their own grant; the response then has
+`canManage=false`, and later owner API calls return 403. A successful response is 200 with
+`{projectId,issuer,subject,role,createdAt,canManage,changed}`; when `role` is null, `createdAt` is also null.
+This API and the permission change panel in the administrator screen have been implemented and verified locally.
+The screen prepares candidates and stores them only from the confirmation panel; when the result is unclear, it retries only the same request,
+and when access is lost, it locks the list and editor. There are no database or migration changes, deployments, or production identity
+credentials.
 
-## 발행자 등록·회수
+## Publisher Registration and Revocation
 
-`PUT /v1/projects/{projectId}/publishers`와 `DELETE .../publishers`는 현재 프로젝트 owner만
-쓴다. reader·다른 프로젝트 owner·회수된 owner·없는 프로젝트는 403이고, 관리자 grant와 별개인
-`project_publishers` 발행 권한만 있는 주체도 403이다. 라우터는 본문을 읽기 전에 owner인지
-확인하고, 쓰기 직전 원자 D1 batch에서 owner 조회·권한 쓰기·감사 기록·결과 조회를 함께
-수행한다. batch의 각 쓰기 문장도 owner `EXISTS` 조건을 달고 있어, 본문 읽기와 batch 사이에
-owner가 회수되면 쓰기가 0행이 되어 아무것도 바뀌지 않고 owner 조회가 빈 결과라 403이다.
-회수는 예외 롤백이 아니라 조건이 쓰기를 막는 방식이다. 본문은 닫힌 JSON이며
-`application/json`과 `text/plain`만 UTF-8 16KiB 이하로 받고 조회 파라미터는 받지 않는다.
-넘치면 413, 다른 미디어 타입·비-identity 인코딩은 415다. issuer·subject는
-[provisioning CLI](./provisioning.md)와 같은 `validGrantIdentity` 제약을 쓴다.
+`PUT /v1/projects/{projectId}/publishers` and `DELETE .../publishers` are writable only by the current project owner.
+Readers, owners of another project, revoked owners, and nonexistent projects return 403, and a principal that has only
+`project_publishers` publishing authorization separate from administrator grants also returns 403. Before reading the body, the router checks that the caller is owner;
+immediately before writing, the atomic D1 batch performs the owner check, authorization write, audit record, and result read together.
+Every write statement in the batch also carries the owner `EXISTS` condition, so if the owner is revoked between reading the body and executing the batch,
+the write changes zero rows, nothing changes, the owner read is empty, and the response is 403.
+Revocation relies on the condition blocking the write, not on exception rollback. The body is closed JSON and accepts only
+`application/json` and `text/plain` with UTF-8 encoding and a 16 KiB limit; query parameters are not accepted.
+An oversized body returns 413, and another media type or nonidentity encoding returns 415. Issuer and subject use the
+`validGrantIdentity` constraints from the [provisioning CLI](./provisioning.md).
 
-PUT 본문은 `{issuer,subject}`, DELETE 본문은 `{issuer,subject,expectedGrantId}`이다.
-`expectedGrantId`는 마지막으로 읽은 불변 부여 세대를 32자 소문자 hex 문자열 또는 null로 넣는다.
-null은 권한이 없다고 본 경우다. granted가 true인 PUT은 expectedGrantId를 받지 않는다.
-예전 `expectedCreatedAt` 필드는 보내면 400이다.
+The PUT body is `{issuer,subject}`, and the DELETE body is `{issuer,subject,expectedGrantId}`.
+`expectedGrantId` is the immutable grant generation last read, as a 32-character lowercase hex string or null.
+Null means the caller believes no grant exists. A PUT with `granted` true does not accept `expectedGrantId`.
+Sending the former `expectedCreatedAt` field returns 400.
 
-이미 있는 발행 권한을 다시 부여하면 DB를 다시 쓰지 않고 200 `changed=false`로 성공하며
-기존 행과 `grantId`를 바꾸지 않는다. 대상 권한 행이 없으면 `expectedGrantId` 값과 상관없이
-no-op이고 `changed=false`다(직전에 읽은 ID로 회수한 뒤 같은 유효 ID나 null로 다시 보내도 이미 행이
-없어 no-op로 성공한다). DELETE의 CAS는 `expectedGrantId`와 저장된 `grant_id`를 비교하고
-다르면 publisher_conflict(409)라 다시 읽어야 한다. `grant_id`는 재부여할 때마다 새로 생기므로
-같은 밀리초에 다시 부여된 권한도 구분한다. `immutable_publisher_generation` 트리거가 행 UPDATE를
-막아 회수는 삭제, 부여는 재삽입으로만 한다.
+Granting an existing publishing authorization again succeeds with 200 and `changed=false` without rewriting the database, and it does not change
+the existing row or its `grantId`. If the target grant row is absent, the operation is a no-op with `changed=false` regardless of
+`expectedGrantId` (after revoking with the ID just read, resending the same valid ID or null still succeeds as a no-op because the row
+no longer exists). The DELETE CAS compares `expectedGrantId` with the stored `grant_id`; a mismatch returns
+`publisher_conflict` (409), and the caller must read again. `grant_id` is newly assigned on every grant, so
+grants regranted in the same millisecond remain distinguishable. The `immutable_publisher_generation` trigger prevents UPDATEs to the row,
+so revocation is a deletion and granting is a reinsertion.
 
-성공 응답은 200 `{projectId,issuer,subject,granted,grantId,createdAt,changed}`이고 granted·
-grantId·createdAt이 짝을 이룬다(부여는 true·부여 ID·생성 시각, 회수는 false·null·null).
-자격증명·역할은 넣지
-않는다. 변경 이력(`publisher.granted`·`publisher.revoked`) 감사 기록은 권한 쓰기와 같은
-D1 batch이고 직전 쓰기가 1행을 바꿨을 때만 INSERT한다. no-op이면 권한 쓰기도 이력 추가도
-없고, 1행을 바꾼 뒤 감사 INSERT가 실패하면 같은 batch라 권한 변경도 함께 롤백된다. 상태
-코드는 200·400·401·403·405(Allow: GET, PUT, DELETE)·413·415·503이고
-DELETE에만 409가 더해진다. 이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다.
-DB는 0009로 `project_publishers`에 `grant_id`를 둔 상태를 쓰고 감사는 0008 action을 그대로
-쓴다. 설정의 owner 전용
-`LivePublishers`도 로컬에서 연결했으며 CLI도 그대로 쓸 수 있다.
+A successful response is 200 with `{projectId,issuer,subject,granted,grantId,createdAt,changed}`; `granted`,
+`grantId`, and `createdAt` are paired (grant is true, grant ID, and creation time; revocation is false with null values).
+Credentials and roles are not included.
+The change history audit (`publisher.granted` and `publisher.revoked`) is written in the same D1 batch as the authorization write and is inserted only
+when the preceding write changes one row. A no-op performs neither an authorization write nor a history addition; if an audit INSERT fails after one row changes,
+the same batch rolls back the authorization change. Status codes are 200, 400, 401, 403, 405 (`Allow: GET, PUT, DELETE`), 413, 415, and 503, with
+409 added only for DELETE. This API does not issue credentials or change administrator grants.
+The database uses the state from migration 0009 that adds `grant_id` to `project_publishers`, and audit uses the existing 0008 action.
+The owner-only `LivePublishers` in settings is also connected locally, and the CLI remains usable.
 
-## 발행자 관리 화면
+## Publisher Management Screen
 
-`apps/admin` 설정 화면에서 owner 전용 `LivePublishers`를 `LiveGrants`와 `LiveAdminChanges`
-사이에 연결했다. 목록은 25건씩 읽고 다음 페이지·처음부터 새로고침을 제공한다. issuer/subject로
-부여를 준비하고 목록에서 관찰한 `grantId`를 `expectedGrantId`로 보내 회수를 준비한다.
-등록 시각 표는 그대로 보여주고 `grantId`는 화면에 쓰지 않는다.
-두 쓰기는 명시적 확인 뒤에만 전송한다. 충돌이면 최신 목록을 다시 읽어 복구하고, 결과가
-불확실하면 원래 요청을 그대로 재시도한다. 저장 뒤 기존 관리자 변경 이력을 갱신한다.
+In the `apps/admin` settings screen, the owner-only `LivePublishers` is connected between `LiveGrants` and `LiveAdminChanges`.
+The list reads 25 items at a time and provides next-page navigation and refresh from the beginning. It prepares a grant from issuer and subject,
+and uses the `grantId` observed in the list as `expectedGrantId` when preparing revocation.
+The registration-time table remains visible, and `grantId` is not shown on screen.
+Both writes are sent only after explicit confirmation. On conflict, the latest list is reread for recovery; when the result is uncertain,
+the original request is retried unchanged. After storage, the existing administrator change history is refreshed.
 
-요청 취소와 늦은 응답 폐기를 적용하고 권한 거부·프로젝트 전환 때 목록과 입력의 식별자를
-지운다. 발행 권한 쓰기가 진행 중이거나 결과가 불확실하면 설정 폼과 grant 변경을 잠근다.
-표는 최소 너비 640px이며 키보드로 포커스할 수 있는 `table-scroll` 안에서 가로로 스크롤한다.
+Request cancellation and late-response discard are applied, and identifiers in the list and input are cleared when authorization is denied or the project changes.
+The settings form and grant changes are locked while a publishing-authorization write is in progress or its result is uncertain.
+The table has a minimum width of 640 px and scrolls horizontally inside a keyboard-focusable `table-scroll` container.
 
-로컬 브라우저 검증은 실제 Chrome·임시 암호 검증 OIDC 테스트 수집기·로컬 D1을 사용해 확인 전 쓰기
-없음, 부여·회수 감사 2행과 후속 재부여의 세 번째 행, 응답을 보류한 PUT 중 설정·grant 잠금,
-owner 회수 후 새로고침 시 화면 식별자 삭제를 확인했다. 320px에서 문서 가로 넘침과 콘솔
-오류는 없었다. 실제 Chrome·임시 OIDC·로컬 D1 스모크(같은 밀리초 재부여 뒤 stale 회수 409)와
-관리자 집중 19/19, api·모델 153/153, 타입 검사·빌드·번들 2/2·sites 9/9를 로컬에서 통과했다.
-상세 결과는 [검증 기록](../../VALIDATION.md)에 둔다.
-이 슬라이스는 발행자 API 계약과 화면을 `grantId` 기준으로 바꿨고 DB는 0009의 `grant_id`를 쓴다.
-실제 제공자·원격 리소스·배포·Sembom 연동은 확인하지 않았다.
+Local browser verification used real Chrome, a test collector with temporary-password OIDC verification, and local D1 to confirm no write before confirmation,
+two audit rows for grant and revocation plus a third row for a subsequent regrant, settings and grant locking during a held PUT response, and
+screen identifiers being cleared on refresh after owner revocation. At 320 px there was no document horizontal overflow or console
+error. A real Chrome, temporary OIDC, and local D1 smoke test (a stale revocation of a same-millisecond regrant returning 409), 19/19 focused administrator checks,
+153/153 API and model checks, type checking, build, bundling 2/2, and sites 9/9 passed locally.
+Detailed results are in [VALIDATION.md](../../VALIDATION.md).
+This slice changes the publisher API contract and screen around `grantId`, and the database uses `grant_id` from 0009.
+Real providers, remote resources, deployment, and Sembom integration were not verified.
 
-## 프로젝트 변경 이력 조회
+## Project Change History Read
 
-`GET /v1/projects/{projectId}/changes`는 현재 프로젝트 owner만 읽는다. reader·다른
-프로젝트 owner·없는 프로젝트·회수된 권한은 403이고, owner 권한과 기록을 같은 D1
-batch에서 읽는다. 인증 실패는 401, 잘못된 프로젝트·페이지 파라미터는 400, GET이 아니면
-405(Allow: GET), 손상 저장소는 503이다.
+`GET /v1/projects/{projectId}/changes` is readable only by the current project owner. Readers, owners of another
+project, nonexistent projects, and revoked grants return 403, and owner authorization and records are read in the same D1
+batch. Authentication failure returns 401, invalid project or page parameters return 400, methods other than GET return
+405 (`Allow: GET`), and corrupt storage returns 503.
 
-응답은 `{projectId,generatedAt,retentionDays:90,coverage:'recorded-changes-only',data,page}`다.
-각 항목은 id·occurredAt·actor·change만 담고 설정값·스키마 정의·요청 본문·토큰은 넣지
-않는다. actor는 관리자 API 변경이면 검증한 issuer/subject를 담은 administrator이고,
-오프라인 provisioning CLI 변경이면 식별자 없는 local_operator다. 저장된 NULL 식별자는
-응답에 넣지 않는다. change는 action에 필요한 값만 담는다. 프로젝트 생성은 action만,
-설정 변경은 바뀐 필드명 목록, 스키마는 동작과 버전 번호, grant는 대상 issuer/subject와
-이전/이후 역할이다.
-발행 권한 부여·회수(`publisher.granted`·`publisher.revoked`)는 대상 issuer/subject만 담고
-관리자 grant와 달리 역할은 넣지 않는다.
+The response is `{projectId,generatedAt,retentionDays:90,coverage:'recorded-changes-only',data,page}`.
+Each item contains only `id`, `occurredAt`, `actor`, and `change`; settings values, schema definitions, request bodies, and tokens are not included.
+`actor` is `administrator` with the verified issuer and subject for an administrator API change, or `local_operator` without identifiers for an offline
+provisioning CLI change. Stored null identifiers are not included in the response. `change` contains only values required by `action`. Project creation
+contains only `action`; settings changes contain the list of changed field names; schema changes contain the operation and version number; grant changes contain the target issuer and subject
+and previous and new roles.
+Publishing authorization grant and revocation (`publisher.granted` and `publisher.revoked`) contain only the target issuer and subject
+and, unlike administrator grants, no role.
 
-기록 대상은 관리자 API의 프로젝트 생성·설정 변경·스키마 발행·grant 변경·발행자 권한
-부여·회수와 provisioning CLI의 register·grant·revoke·publisher-grant·publisher-revoke다.
-API 발행자 권한 변경은 actor가 검증한 issuer/subject이고, CLI 발행 권한 변경은 식별자 없는
-local_operator다. 직접 SQL 쓰기, creator 권한 관리, 시스템 정리, 방문자 활동은 기록하지
-않는다.
+Recorded operations are administrator API project creation, settings change, schema publication, grant change, and publisher authorization
+grant and revocation, plus provisioning CLI `register`, `grant`, `revoke`, `publisher-grant`, and `publisher-revoke`.
+API publisher authorization changes use the verified issuer and subject as actor, while CLI publishing authorization changes use
+`local_operator` without identifiers. Direct SQL writes, creator authorization management, system cleanup, and visitor activity are not recorded.
 
-limit은 기본 25·최대 100이고 occurredAt 내림차순, 같은 시각이면 기록 UUID
-내림차순이다. 커서는 프로젝트에 묶인 base64url 위치값(최대 512자)으로
-`[1,projectId,timestamp,recordUUID]`를 담고 권한을 부여하지 않는다. 잘못된 형식·다른
-프로젝트 커서·중복/추가 파라미터·512자를 넘는 쿼리는 400이다. 첫 페이지는 cursor를
-생략하거나 빈 값으로 보낸다.
+The default limit is 25 and the maximum is 100, ordered by descending `occurredAt` and then by descending record UUID for the same time.
+The cursor is a base64url position value tied to the project (up to 512 characters) containing
+`[1,projectId,timestamp,recordUUID]`, and it grants no authorization. Invalid format, a cursor from another
+project, duplicate or extra parameters, or a query over 512 characters returns 400. Omit the cursor or send an empty value for the first page.
 
-조회 창은 generatedAt 기준 90일 rolling이고 cutoff 시각은 포함하며 미래 기록은 제외한다.
-물리 정리 전이라도 창을 벗어난 만료 행은 숨긴다. coverage는 기록된 변경만 담는다는
-뜻이며 이력이 비어도 과거에 변경이 없었다는 증거는 아니다. 페이지는 살아 있는 DB를
-읽으므로 뒤에 추가된 변경은 처음부터 다시 읽어야 보인다. 관리자 API 연결 설정 화면에
-소유자 전용 25건 목록·페이지 이동·재시도를 연결했다. reader는 요청하지 않고 설정·권한
-저장 뒤 첫 페이지를 갱신한다. 운영 인증·원격 D1 적용·배포·Sembom 연동은 없다.
+The query window is a rolling 90 days from `generatedAt`, including the cutoff instant and excluding future records.
+Expired rows outside the window are hidden even before physical cleanup. `coverage` means that only recorded changes are included;
+an empty history is not evidence that no changes occurred. Pages read a live database, so changes added later require rereading from the beginning.
+The administrator API connection settings screen provides an owner-only 25-item list, page navigation, and retry. Readers do not request it, and
+the first page is refreshed after settings or authorization are stored. Production authentication, remote D1 application, deployment, and Sembom integration do not exist.
 
-## 프로젝트 생성
+## Project Creation
 
-`POST /v1/projects`는 신뢰하는 검증기가 확인한 issuer/subject와 `project_creators`의
-별도 생성 권한을 요구한다. 프로젝트 reader/owner는 이 권한을 대신하지 못한다.
-권한이 없으면 본문을 읽기 전에 403이다. 운영자는 [provisioning CLI](./provisioning.md)의
-creator-grant/revoke로 권한과 1~1000개 한도를 부여·회수한다. 기존 프로젝트의 owner를
-자동으로 생성자로 등록하거나 클라이언트의 issuer/subject/owner 주장을 받지 않는다.
+`POST /v1/projects` requires an issuer and subject verified by a trusted verifier and separate creator authorization in
+`project_creators`. A project reader or owner cannot substitute for this authorization.
+Without authorization, it returns 403 before reading the body. Operators grant and revoke creator authorization and a 1 to 1,000 project limit with
+creator-grant and creator-revoke in the [provisioning CLI](./provisioning.md). It does not automatically register an existing project owner
+as a creator or accept issuer, subject, or owner claims from a client.
 
-입력은 `{id,name,timeZone,allowedOrigins,limits}`만 받는다. 두 수집 한도를 모두
-명시하며 설정 API와 같은 이름 길이·HTTPS origin·loopback opt-in 규칙을 사용한다.
-시간대는 IANA 이름을 검증하고 생성 후 변경할 수 없다. name은 공백뿐인 문자열·제어
-문자를 거부한다. 쿼리 파라미터 없이 identity JSON/text/plain, 최대 16KiB다.
-새 프로젝트는 active·스키마 없음으로 만들며 첫 발행은 기존 스키마 PUT을 사용한다.
-스키마가 없으면 수집이 허용되지 않는다.
+Input accepts only `{id,name,timeZone,allowedOrigins,limits}`. Both ingestion limits must be
+specified, and the name length, HTTPS origin, and loopback opt-in rules match the settings API.
+The time zone is validated as an IANA name and cannot be changed after creation. `name` rejects whitespace-only strings and control
+characters. The request has no query parameters and uses identity JSON or text/plain with a 16 KiB limit.
+A new project is created as active with no schema; the first publication uses the existing schema PUT.
+Ingestion is not allowed until a schema exists.
 
-프로젝트·원본 생성 요청 해시·최초 owner grant를 같은 원자 D1 batch로 저장한다.
-INSERT에서 생성 권한과 해당 principal의 API 생성 기록 개수를 다시 확인하므로
-동시 생성으로 한도를 넘을 수 없다. CLI로 등록한 기존 프로젝트는 이 개수에 포함하지
-않는다. 새 owner는 인증된 생성자이며 다른 프로젝트·스키마·집계·사용량은 변경하지 않는다.
+The project, original creation request hash, and initial owner grant are stored in one atomic D1 batch.
+The INSERT checks creator authorization and that principal's API creation record count again, so concurrent creation
+cannot exceed the limit. Existing projects registered through the CLI are not included in that count.
+The new owner is the authenticated creator, and no other projects, schemas, aggregates, or usage are changed.
 
-성공은 최초와 재요청 모두 200 `{projectId,createdAt,creationHash}`다. 별도
-Idempotency-Key 대신 공개 프로젝트 ID·인증된 생성자·초기 요청 해시를 사용한다.
-허용 origin 목록만 정렬해 해시를 만들며 나머지 값을 추측하거나 기본값으로 대체하지 않는다.
-같은 생성자의 같은 원본 내용은 설정 수정·스키마 발행·개수 한도 도달 뒤에도 원본
-생성 결과를 반환한다. 현재 생성 권한과 owner grant는 계속 필요하다. 재요청은 변경된
-설정을 되돌리거나 회수된 grant를 복원하지 않는다. 응답 유실은 같은 요청으로 재확인한다.
+Both initial creation and a retry succeed with 200 and `{projectId,createdAt,creationHash}`. It uses the public project ID,
+authenticated creator, and initial request hash instead of a separate `Idempotency-Key`.
+Only the allowed origin list is sorted for the hash; other values are not guessed or replaced with defaults.
+The same original content from the same creator returns the original creation result even after settings changes, schema publication, or reaching the project count limit.
+Current creation authorization and owner grant are still required. A retry does not roll back changed settings or restore a revoked grant. A lost
+response is confirmed by repeating the same request.
 
-다른 내용·다른 생성자·CLI가 이미 점유한 ID는 project_conflict(409), 개수 한도는
-project_limit_reached(409)다. 한도 도달과 ID 충돌이 겹치면 한도 오류가 우선할 수 있다.
-두 오류는 기존 프로젝트 내용이나 생성자를 노출하지 않는다. 생성 이력은 프로젝트 수명 동안
-유지하고 생성 권한 회수로 지우지 않는다. 요청 본문·DB 오류는 로그/응답에 넣지 않는다.
-신규 DB는 0001·0002·0003, 기존 DB는 0003 추가 적용이 필요하며 원격 적용은 아직 없다.
+Different content, a different creator, or an ID already claimed by the CLI returns `project_conflict` (409); reaching the count limit returns
+`project_limit_reached` (409). When both the limit and an ID conflict apply, the limit error may take precedence.
+Neither error exposes existing project content or creators. Creation history is retained for the life of the project
+and is not deleted when creator authorization is revoked. Request bodies and database errors are not included in logs or responses.
+A new database requires migrations 0001, 0002, and 0003; an existing database requires applying the addition from 0003. It has not been applied remotely.

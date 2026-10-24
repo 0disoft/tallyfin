@@ -1,178 +1,173 @@
-# 이벤트·집계 계약 v0.1
+# Event and Aggregation Contract v0.1
 
-2026-10-08에 v0.1 설계 계약을 확정했다. 코어 검증과 D1 저장 어댑터, 최소 브라우저
-수집기, 관리자 조회와 프로젝트 설정 변경(검증기 포트 포함), 서버 발행 수집을 로컬에서
-구현·검증했고 운영 배포는 아직 없다. 실제 인증 제공자와 운영 grant 부여도 후속이다.
-원격에 적용한 마이그레이션과 운영 데이터도 없다. 구현 상태는
-[수집기 구현](./collector.md)과 [관리자 조회·설정 경계](./administrator.md)에 정리한다. 형태는
-[OpenAPI](../../api/openapi.yaml)·[DBML](../../db/schema.dbml), 결정은
-[ADR 0005](../adr/0005-event-and-aggregation-contract.md)를 따른다.
+The v0.1 design contract was finalized on 2026-10-08. Core validation, the D1 storage adapter, the minimal browser
+collector, administrator reads and project settings changes (including the verifier port), and server publishing ingestion have been
+implemented and verified locally; production deployment does not exist yet. A real identity provider and production grant assignment are also follow-up work.
+No migrations or production data have been applied remotely. Implementation status is documented in
+[Collector Implementation](./collector.md) and the [Administrator Read and Settings Boundary](./administrator.md). Shapes follow
+[OpenAPI](../../api/openapi.yaml) and [DBML](../../db/schema.dbml), and decisions follow
+[ADR 0005](../adr/0005-event-and-aggregation-contract.md).
 
-일반 이벤트는 각 단계의 발생일에 세고, 완료율은 시작이 실제 수신된 시도 중 성공한
-비율로 계산한다. 그래서 두 수치가 다를 수 있다. 입력 검증 오류는 고칠 수 있는
-일반 이벤트이며 자동 종료 실패가 아니다. 원문과 영구 방문자 식별자는 저장하지 않는다.
+Regular events are counted on the date each step occurs, while completion rate is calculated from the attempts whose start was actually received and that succeeded.
+The two values can therefore differ. An input validation error is a regular event that can be corrected; it is not an automatic terminal failure.
+Raw events and persistent visitor identifiers are not stored.
 
-## 등록 정의
+## Registered Definition
 
-프로젝트에는 활성 상태·정확한 오리진 목록·고정 IANA 시간대·분당 요청 한도·UTC
-수신일당 신규 영수증 한도를 둔다. 기본 한도는 120회/분, 신규 ID 100,000개/일이다.
-오리진은 scheme/host/port만 비교하며 경로·와일드카드·null은 금지한다. 운영은 HTTPS,
-로컬 개발만 HTTP를 허용한다. 설정 등록과 변경은 owner 권한으로 검증한다.
-새 스키마 버전은 owner 전용 PUT으로도 발행하며 프로젝트 생성은 별도 생성 권한 POST 또는 CLI를 사용한다. grant 관리는 provisioning CLI가 맡는다. 기존 프로젝트
-설정은 관리자 API에서도 변경할 수 있다([관리자 조회·설정 경계](./administrator.md)).
+A project has an active status, an exact origin list, a fixed IANA time zone, a per-minute request limit, and a new-receipt
+limit per UTC receipt date. The defaults are 120 requests per minute and 100,000 new IDs per day.
+Origins compare only scheme, host, and port; paths, wildcards, and null are forbidden. Production uses HTTPS; only local development allows HTTP.
+Settings registration and changes require owner authorization.
+New schema versions can also be published through an owner-only PUT, while project creation uses a separate creator-authorization POST or the CLI. Grant management belongs to the provisioning CLI. Existing project
+settings can also be changed through the administrator API ([Administrator Read and Settings Boundary](./administrator.md)).
 
-스키마 버전의 events/workflows/선택 funnels는 불변이며 변경은 새 버전으로 발행한다. active만
-수집하고 retired는 조회만 한다. 여러 active 버전으로 구형 클라이언트를 수용할 수 있다.
-이벤트는 출처와 관계없이 1~50종·흐름은 최대 10종이며 server 정의만 있는 스키마도
-허용한다. server 전용 스키마는 workflows를 빈 배열로 둔다. 허용 browser 출처는
-0~16개이고 빈 목록이면 모든 browser 수집을 거부한다. server 인증에는 이 목록을 쓰지 않는다.
-server HTTP 수집(`POST .../server-batches`)·발행자 인증·권한 관리 CLI·
-서버 발행 SDK·출처별 조회 API(`source`)는 로컬에서 구현·검증 완료했다. server 배치의 코어 검증과 별도 프로젝트 발행 권한을
-검사하는 저장 어댑터를 구현했다. 0006은 browser 영수증·이벤트 집계를 보존하며 source
-제약을 넓히고 `project_publishers`를 빈 테이블로 추가한다. 발행 권한은 저장 직전 같은
-batch에서 다시 검사한다. 실제 제공자 연결·원격 배포는 아직 없다. definitions_json은 32KiB 이하다.
+Events, workflows, and optional funnels in a schema version are immutable; changes are published as a new version. Only active versions
+ingest data, and retired versions are read-only. Multiple active versions can support older clients.
+Regardless of source, there are 1 to 50 event types and up to 10 workflows; a schema containing only server definitions is also
+allowed. A server-only schema has an empty workflows array. The number of allowed browser origins is 0 to 16, and an empty list rejects all browser ingestion.
+The list is not used for server authentication.
+Server HTTP ingestion (`POST .../server-batches`), publisher authentication, the authorization management CLI,
+the server publishing SDK, and source-specific read APIs (`source`) have been implemented and verified locally. The server batch storage adapter validates
+the batch in the core and checks project publication authorization separately. Migration 0006 preserves browser receipts and event aggregates, broadens the
+source constraint, and adds an empty `project_publishers` table. Publication authorization is checked again in the same
+batch immediately before storage. Real provider connections and remote deployment do not exist yet. `definitions_json` is 32 KiB or less.
 
-속성은 최대 4개, boolean·고정 enum 1~32종·32가지 이하의 정수 범위만 허용한다.
-optional 누락도 한 값 종류로 세어 가능한 조합의 곱을 이벤트/흐름 각각 256 이하로
-제한한다. 자유 문자열·실수·중첩 객체·배열은 금지한다. 등록에는 purpose를 적고
-개인정보 금지 목록을 검토한다. enum 등록으로 계정·주문·입력·결과 정보를 허용하지 않는다.
+A property set has at most 4 properties and allows only booleans, fixed enums of 1 to 32 values, or integer ranges of at most 32 values.
+An omitted optional value also counts as a value type, and the product of possible combinations is limited to 256 or less for each event or workflow.
+Free-form strings, floating-point numbers, nested objects, and arrays are forbidden. Registration records a purpose and
+reviews the personal-information prohibition list. Enum registration must not permit account, order, input, or result information.
 
-흐름의 시작·성공·선택 실패 이벤트는 서로 다르고 같은 browser 출처여야 한다.
-각 이벤트는 최대 한 흐름의 한 단계에만 속한다. dimensions는 모든 단계에서 필수인
-동일 타입/허용 값의 속성이고 한 시도 안에서 값이 바뀌면 거부한다. 고칠 수 있는
-validation_error는 일반 이벤트로 둔다. 실패 단계가 없는 흐름도 허용한다.
+A workflow's start, success, and optional failure events must be distinct and use the same browser source.
+Each event belongs to at most one step of one workflow. Dimensions are properties with the same type and allowed values that are required on every step,
+and a value change within an attempt is rejected. A correctable
+`validation_error` remains a regular event. Workflows without a failure step are also allowed.
 
-## 전송·시간·재시도
+## Transport, Time, and Retry
 
-POST /v1/projects/{projectId}/batches는 source·schemaVersion·events를 받는다.
-최대 20개·16KiB UTF-8이며 application/json 또는 text/plain; charset=utf-8로 전송한다.
-두 경우 모두 JSON으로 파싱해 같은 스키마로 검사하고 압축 Content-Encoding은 거부한다.
-상위/이벤트 객체는 닫힌 필드 집합이고 properties는 등록 정의로 다시 검사한다.
-Beacon용 중복 키는 헤더 대신 이벤트 내부에 둔다. Beacon 성공 반환은 저장 성공이 아니다.
+`POST /v1/projects/{projectId}/batches` accepts `source`, `schemaVersion`, and `events`.
+A batch contains at most 20 events and 16 KiB of UTF-8 and is sent as `application/json` or `text/plain; charset=utf-8`.
+Both are parsed as JSON and checked against the same schema, and compressed `Content-Encoding` is rejected.
+The outer and event objects have closed field sets, and properties are checked again against the registered definition.
+The duplicate key for Beacon is inside the event rather than in a header. A successful Beacon return is not proof of storage success.
 
-eventId·attemptId는 암호학적 난수로 생성한 소문자 UUIDv4다. 생성 실패 시 보내지
-않으며 한 이벤트/작업에만 사용한다. 원문·결과·파일·주문·사용자 ID, URL·리퍼러·DOM·
-영구 식별자·분석 쿠키를 보내지 않는다. localStorage/sessionStorage도 쓰지 않는다.
+`eventId` and `attemptId` are lowercase UUIDv4 values generated with a cryptographic random source. If generation fails, do not send;
+each is used for one event or one attempt. Do not send raw input, results, file or order IDs, user IDs, URLs, referrers, DOM data,
+persistent identifiers, or analytics cookies. Do not use `localStorage` or `sessionStorage` either.
 
-occurredAt·startedAt은 실제 달력의 UTC RFC3339 Z 형식, 소수 초 0~3자리다. 내부는
-밀리초로 정규화한다. occurredAt은 서버 수신 시각의 과거 24시간~미래 5분만 허용한다.
-시작 단계는 occurredAt = startedAt, 종료는 startedAt 이상·24시간 이내다. 클라이언트
-시각은 이벤트 진위 증명이 아니다.
+`occurredAt` and `startedAt` use the UTC RFC3339 `Z` form with 0 to 3 fractional-second digits on the real calendar. Internally,
+they are normalized to milliseconds. `occurredAt` is allowed only from 24 hours in the past through 5 minutes in the future relative to server receipt.
+A start step has `occurredAt = startedAt`; a completion is at or after `startedAt` and within 24 hours. Client
+time is not proof that an event is authentic.
 
-SDK는 메모리 버퍼 40개, 20개마다 또는 5초마다 비동기 전송하며 숨김 시 남은 배치를
-보내는 시도를 한다. 네트워크·타임아웃 실패(상태 0)·408·429·모든 5xx만 최대 2회·총
-10분 이내 재시도하며 원래 ID/시각/본문을 유지한다. 401·403·409·422는 재시도하지
-않는다. 대기는 Retry-After([RFC 9110 §10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3))를
-우선하고, 정수 초는 그대로 쓰며 표준 IMF-fixdate(예 `Thu, 08 Oct 2026 15:01:15 GMT`)는
-브라우저 호스트 현재 시각 기준 남은 시간으로 바꾼다. 하한은 1초이며 지난 시각도 1초로
-본다. 형식이 어긋나면 1·2초 백오프를 쓴다. 대기가 배치 시작부터 10분 이상이 되면 재전송
-없이 버린다. 전송 완료를 업무/렌더링이 기다리지 않는다. 가득 찬 버퍼는 새 이벤트를
-버리고, 시작을 버퍼에 넣지 못한 흐름은 종료도 생성하지 않는다. 버퍼 추가를 실제
-전달로 판단하지 않는다.
+The SDK uses a 40-event memory buffer, sends asynchronously every 20 events or every 5 seconds, and attempts to send the remaining batches when the page is hidden.
+It retries only network and timeout failures (status 0), 408, 429, and all 5xx errors, at most 2 times and within a total
+10 minutes, preserving the original ID, time, and body. It does not retry 401, 403, 409, or 422.
+Retry-After ([RFC 9110 `10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3)) takes priority for waiting;
+integer seconds are used as-is, and a standard IMF-fixdate (for example `Thu, 08 Oct 2026 15:01:15 GMT`) is converted to the remaining time
+relative to the browser host's current time. The minimum is 1 second, and a past time is also treated as 1 second.
+If the format does not match, use 1-second and 2-second backoff. If the wait would reach 10 minutes from batch start, discard the batch without retransmitting.
+Business logic or rendering does not wait for transmission. A full buffer drops new events, and a workflow whose start cannot be buffered does not create a completion.
+Buffering an event is not proof of actual delivery.
 
-## 중복·원자성
+## Duplicates and Atomicity
 
-영수증 키는 프로젝트·source·eventId다. 해시는 프로젝트·버전·출처와 정규화된 이벤트
-전체의 SHA-256이다. 키 정렬, typed 값/누락 구분, 밀리초 Z 정규화 후 해시한다.
-같은 키/내용은 duplicates, 내용이 바뀌면 409로 전체 배치를 거부한다. 다른 버전에서
-같은 ID를 재사용해도 409다. 배치 안 같은 ID 반복은 422다.
+The receipt key is project, source, and eventId. The hash is the SHA-256 of the project, version, source, and the complete normalized event.
+It sorts keys, distinguishes typed values from omission, normalizes times to millisecond `Z`, and then hashes. The same key and content are
+duplicates, while changed content returns 409 and rejects the whole batch. Reusing the same ID in a different version also returns 409.
+A repeated ID within one batch returns 422.
 
-모든 이벤트를 검사한 뒤 영수증·시도·UTC 수신일 할당량·이벤트/목표 집계를 한 저장
-트랜잭션에서 반영한다. 모두 반영하거나 모두 롤백한다. 응답 소실 후에는 원래 ID로
-재전송한다. 동시 unique 충돌은 다시 읽어 중복/충돌을 판정하고 두 번 더하지 않는다.
-배치 전체가 거부되면 부분 accepted 응답을 만들지 않는다.
+After checking every event, receipts, attempts, the UTC receipt-date quota, and event and goal aggregates are applied in one storage
+transaction. Either all are applied or all are rolled back. After a lost response, retransmit the original IDs. A concurrent unique conflict
+rereads the data to decide whether it is a duplicate or conflict, and does not count it twice. If the whole batch is rejected, no partial
+accepted response is produced.
 
-호환되는 시도의 같은 단계가 새 eventId로 반복되어도 이미 센 단계는 duplicates다.
-새 영수증은 저장하고 UTC 일별 신규 영수증 한도에 포함한다. 완전히 같은 재전송 ID는
-새 영수증·집계·일별 한도를 늘리지 않는다. 분당 admission 한도는 중복/잘못된 요청도
-포함한다. 브라우저 경로의 거부 오리진과 선택적 앞단 제한에서 거부한 요청은 DB 한도를 소비하지 않는다. 성공 응답의 accepted + duplicates는 배치 이벤트 수와 같아야 한다.
+When the same step of a compatible attempt is repeated with a new eventId, an already counted step is a duplicate.
+The new receipt is stored and counted toward the UTC daily new-receipt limit. A completely identical retransmitted ID does not increase
+new receipts, aggregates, or the daily limit. Per-minute admission limits include duplicates and invalid requests.
+Requests rejected by the browser route's rejected origin or optional front limit do not consume database limits. The successful response's `accepted + duplicates` must equal the batch event count.
 
-저장 어댑터는 `projects.ingest_revision` 기반 CAS 가드로 경합을 한 번만 반영한다.
-provisioning에서 활성 스키마 정의가 바뀌거나 관리자 설정 변경이 일어나면 revision이
-올라가 fail-closed로 배치를 거부한다. 세부는 [수집기 구현](./collector.md)을 따른다.
+The storage adapter applies contention exactly once with a CAS guard based on `projects.ingest_revision`.
+If provisioning changes the active schema definition or an administrator settings change occurs, the revision increases and the batch is rejected
+fail-closed. Details follow [Collector Implementation](./collector.md).
 
-## 목표와 날짜
+## Goals and Dates
 
-흐름 단계에는 attempt = {workflowId, attemptId, startedAt}을 요구하고 일반 이벤트에는
-금지한다. 시도 키는 프로젝트·source·attemptId다. 첫 수신 뒤 버전·흐름·시작 시각·
-dimensions를 바꾸면 409다. 시작은 한 번, 종료는 첫 committed 결과만 유지한다.
-다른 종료 결과가 뒤에 오면 409다. 동일 배치는 occurredAt·eventId 순으로 처리한다.
+Workflow steps require `attempt = {workflowId, attemptId, startedAt}`, while regular events forbid it.
+The attempt key is project, source, and attemptId. After the first receipt, changing the version, workflow, start time, or
+dimensions returns 409. Start is accepted once, and only the first committed completion is retained.
+A different completion result that arrives later returns 409. A batch is processed in `occurredAt` and `eventId` order.
 
-종료가 먼저 오면 pending 연결 상태만 두고 목표에는 더하지 않는다. 실제 시작이
-도착한 트랜잭션에서 started와 해당 succeeded/failed를 함께 더한다. 시작이 끝내
-없으면 목표에서 제외한다. 일반 이벤트 건수에는 각 수신 단계가 발생일에 반영되므로
-미연결 종료도 이벤트 표에는 보일 수 있다.
+If the completion arrives first, only a pending linkage state is kept and nothing is added to the goal. The transaction that receives
+the actual start adds `started` and the corresponding succeeded or failed count together. A start that never arrives is excluded from
+the goal. Regular event counts reflect each received step on its occurrence date, so an unlinked completion can still appear in the event table.
 
-목표 날짜는 프로젝트 시간대의 startedAt 날짜다. succeeded + failed <= started를
-유지하며 pending = started - succeeded - failed다. 실패 단계가 없으면 failedAttempts는
-null, pending은 started - succeeded다. 완료율은 그 시작 cohort의 succeeded / started
-× 100이며 started=0이면 null이다. 날짜 끝 + 48시간까지 provisional=true다. 이후에도
-전달 완전성이나 이벤트 진위를 증명하는 수치는 아니다.
+The goal date is the date of `startedAt` in the project time zone. The invariant is `succeeded + failed <= started`,
+with `pending = started - succeeded - failed`. If there is no failure step, `failedAttempts` is
+null and `pending` is `started - succeeded`. Completion rate is `succeeded / started * 100` for that start cohort, and it is null when
+`started=0`. Results are `provisional=true` until 48 hours after the end of the date. They still do not prove delivery completeness
+or event authenticity.
 
-서울 10월 8일 23:59:50 시작·10월 9일 00:00:10 완료라면 일반 이벤트 날짜는 다르지만
-목표의 시작/완료는 모두 10월 8일이다. 새로고침하면 메모리 연결이 사라지며 서버
-완료를 browser 시작에 연결하지 않는다. 예시는 [배치](../../api/examples/browser-batch.json)와
-[목표 응답](../../api/examples/workflow-response.json)에 있다.
+For a start at 23:59:50 on October 8 in Seoul and completion at 00:00:10 on October 9, the regular event dates differ, but
+the goal's start and completion counts both belong to October 8. Refreshing removes in-memory linkage, and a server completion is not
+linked to a browser start. Examples are in [batch](../../api/examples/browser-batch.json) and
+[goal response](../../api/examples/workflow-response.json).
 
-## 퍼널 연결 수집
+## Funnel Linkage Ingestion
 
-등록된 funnels의 단계와 같은 출처로 보낸 이벤트에
-funnel = {funnelId, runId, startedAt} 링크를 붙인다. 일반 이벤트 건수에도 반영하며,
-퍼널 단계 도달 수는 별도로 집계한다. 퍼널 링크를 붙인 이벤트는 attempt를
-쓰지 않고, 한 이벤트에 attempt와 funnel을 함께 넣으면 거부한다. funnel이 있는 이벤트는
-workflow로 해석하지 않는다. runId는 작업마다 새 UUIDv4를 만들며 방문자 ID나 자격 증명,
-소유권 증명으로 쓰지 않는다.
+Events sent with the same source as a registered funnel's step include a
+`funnel = {funnelId, runId, startedAt}` link. They also count toward regular events, while funnel step reach is aggregated separately.
+An event with a funnel link does not use `attempt`; including both `attempt` and `funnel` on one event is rejected. An event with a funnel
+is not interpreted as a workflow. Each run gets a new UUIDv4 `runId`, which is not a visitor ID, credential, or
+proof of ownership.
 
-단계는 이벤트 이름과 등록 출처로 찾는다. 첫 단계는 occurredAt = startedAt이고 모든
-단계는 startedAt 뒤 24시간 이내여야 한다. 등록에 없는 단계 이름·출처나 창을 벗어난
-시각은 invalid_event(422)이고, 저장된 연결 정보와 어긋나거나 이미 본 단계에 다른 시각을
-보내면 attempt_conflict(409)다. 같은 키·내용 재전송은 duplicates이며
-영수증 48시간 기준을 유지한다. 저장은 최소 연결 상태를 갱신하고 실제 첫 단계부터 연속으로
-관찰한 단계까지만 시작일 cohort에 더한다. 수신 순서가 뒤집혀도 뒤늦게 앞 단계가 오면
-연속 구간을 함께 반영한다. 첫 단계가 끝내 없으면 그 작업은 퍼널 집계에 들어가지 않는다.
-연결 상태는 startedAt + 72시간, 단계 집계는 시작일 기준 90일 보존한다.
+Steps are identified by event name and registered source. The first step must have `occurredAt = startedAt`, and every
+step must occur within 24 hours after `startedAt`. An unregistered step name or source, or a time outside that window,
+returns `invalid_event` (422); a mismatch with stored linkage or a different time for an already seen step returns
+`attempt_conflict` (409). The same key and content are duplicates, and the 48-hour receipt window applies.
+Storage updates the minimal linkage state and adds to the start-date cohort only steps observed consecutively from the actual first step.
+If receipt order is reversed and an earlier step arrives later, the consecutive range is included as well. If the first step never arrives, the attempt is not
+included in funnel aggregates. Linkage state is retained for `startedAt + 72 hours`, and step aggregates are retained for 90 days from the start date.
 
-## 저장·보존
+## Storage and Retention
 
-원시 이벤트와 방문자 테이블은 없다. 일반 이벤트는 날짜·프로젝트·버전·출처·이벤트·
-검토된 속성 조합별 count, 목표는 시작일·프로젝트·버전·출처·흐름·dimensions별
-시작/성공/실패 카운터만 저장한다. 퍼널은 시작일 cohort·프로젝트·버전·퍼널·dimensions별
-단계 도달 수와 작업별 최소 연결 상태의 단계 시각만 저장한다. dimension_key는 정렬된
-typed JSON이며 optional 누락과 false/0/문자열을 구분한다. 한 키는 512bytes 이하이며
-해시만으로 속성을 저장하지 않는다.
+There are no raw event or visitor tables. Regular events store only counts by date, project, version, source, event,
+and reviewed property combination. Goals store only start, success, and failure counters by start date, project, version, source, workflow, and
+dimensions. Funnels store only step reach counts by start-date cohort, project, version, funnel, and dimensions, and
+step times in the minimal per-run linkage state. `dimension_key` is sorted typed JSON and distinguishes omission from false, 0, and strings.
+One key is 512 bytes or less, and properties are not stored by hash alone.
 
-- 영수증: receivedAt + 48시간.
-- 최소 시도 상태: startedAt + 72시간. 삭제 지연 시 읽기에서도 만료를 검사한다.
-- 퍼널 연결 상태: startedAt + 72시간. 단계 재전송으로 늘리지 않는다.
-- UTC 수신일 할당량: 해당 UTC 날짜 끝 + 72시간.
-- 집계: 프로젝트-local 오늘과 앞 89일, 총 90개 날짜.
-- 설정·grant: 명시적 제거 전까지. 해당 집계가 남은 스키마 정의를 먼저 삭제하지 않는다.
+- Receipts: `receivedAt + 48 hours`.
+- Minimal attempt state: `startedAt + 72 hours`. Reads also check expiration when deletion is delayed.
+- Funnel linkage state: `startedAt + 72 hours`. Retransmitting a step does not extend it.
+- UTC receipt-date quota: 72 hours after the end of that UTC date.
+- Aggregates: the project-local current day and the preceding 89 days, 90 dates in total.
+- Settings and grants: until explicitly removed. A schema definition is not deleted while its aggregates remain.
 
-오래된 원래 이벤트는 시간 검사로 거부하므로 영수증 정리 뒤 다시 집계하지 않는다.
-악성 입력이 ID의 시각을 새로 쓰는 것은 공개 수집의 한계다. 시간대 변경은 새
-프로젝트로 처리한다. count가 안전한 정수 범위를 넘으면 트랜잭션을 중단한다.
+Old original events are rejected by the time check, so they are not reaggregated after receipt cleanup.
+An attacker using a newly written timestamp in an ID is a limitation of public ingestion. A time-zone change is handled as a new
+project. If a count exceeds the safe-integer range, the transaction stops.
 
-## 조회·권한·운영
+## Reads, Authorization, and Operations
 
-관리자는 신뢰하는 검증기가 bearer를 issuer/subject로 검증한 뒤 매 요청마다
-project_grants를 확인한다. 단순 JWT decode와 화면의 프로젝트 선택은 권한이 아니다.
-목록은 접근 가능한 프로젝트만 ID 오름차순으로 반환하며 cursor를 매번 검사한다.
-인증 제공자·토큰 발급은 후속 구현이며 설정 없이는 관리자 API를 열지 않는다.
-reader/owner는 조회할 수 있고 프로젝트 설정 변경과 provisioning은 owner만 한다.
-설정 변경은 저장 시점에 grant를 다시 확인하고 `expectedSettingsHash`가 현재 canonical
-해시와 다르면 `settings_conflict`(409)로 거부한다. 수집만 일어난 경우는 충돌이 아니다.
-관리자 조회·설정 변경과 grant 조건 검사는 로컬에서 구현·검증했다.
+After a trusted verifier converts a bearer token to issuer and subject, the administrator checks
+`project_grants` on every request. A plain JWT decode or screen project selection is not authorization.
+Lists return only accessible projects in ascending ID order, and every cursor is checked.
+An identity provider and token issuance are follow-up implementations; the administrator API stays closed without configuration.
+Readers and owners can read, while only owners can change project settings or perform provisioning.
+A settings change checks the grant again at write time and rejects with `settings_conflict` (409) when `expectedSettingsHash` differs
+from the current canonical hash. Ingestion alone is not a conflict.
+Administrator reads, settings changes, and grant condition checks have been implemented and verified locally.
 
-집계 조회는 정확한 schemaVersion, 프로젝트-local from/to, 보존 90일 안에서 최대 31일,
-from <= to <= 오늘을 요구한다. 한 요청에 한 출처/한 버전만 집계한다. `summary`와 이벤트
-daily는 선택 `source`(기본 browser, browser|server)를 받고 워크플로 조회는 browser 전용이다. 이벤트 표는
-한 이벤트·선택 속성 하나로 그룹화하고 빈 날짜는 0, 빈 목표 날짜의 완료율은 null이다.
-저장 실패·권한 거부를 0으로 위장하지 않는다. coverage는 observed-only이며
-latestReceivedAt=null은 아직 신규 영수증을 받은 적이 없다는 뜻이다. 5분 클라이언트
-시각 오차로 내일 날짜에 저장된 이벤트는 해당 날짜가 조회 범위에 들어올 때 보인다.
+Aggregate reads require an exact schemaVersion, a project-local from/to period within the 90-day retention window and at most 31 days,
+and `from <= to <= today`. A request aggregates only one source and one version. `summary` and event
+daily accept optional `source` (default browser; browser or server), while workflow reads are browser-only. The event table
+groups by one event and one optional property, fills empty dates with 0, and returns null completion rate for an empty goal date.
+A storage failure or denied authorization is not disguised as 0. Coverage is observed-only, and
+`latestReceivedAt=null` means no new receipt has ever been received. An event stored on tomorrow's date because of a 5-minute client
+clock error becomes visible when that date enters the query range.
 
-CORS는 허용 오리진만 정확히 반사하고 Vary: Origin, credentials=false로 처리한다.
-공개 수집에 bearer로 권한을 높이는 경로는 없다. 응답은 no-store이며 분석 쿠키를
-발급하지 않는다. 요청 원문·토큰·IP·Origin·전체 URL은 로그/분석 DB에 남기지 않는다.
-진단에는 임시 requestId와 고정 오류 코드만 쓴다. 악용 방지용 IP 처리/보존·edge
-rate-limit 구현은 활성화 전에 정한다. 이 계약만으로 봇 차단을 완료했다고 주장하지 않는다.
+CORS reflects only allowed origins exactly, sets `Vary: Origin`, and uses `credentials=false`.
+No public ingestion route elevates authorization with a bearer token. Responses use no-store and issue no analytics cookies.
+Request bodies, tokens, IP addresses, Origins, and full URLs are not written to logs or the analytics database.
+Diagnostics use only a temporary requestId and fixed error codes. IP handling and retention for abuse prevention and edge
+rate-limit implementation are decided before activation. This contract alone does not claim that bot blocking is complete.

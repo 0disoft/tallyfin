@@ -1,97 +1,95 @@
-# 운영 설치 설정 준비
+# Production Installation Configuration Preparation
 
-상태: 같은 출처 경로·OIDC 클라이언트·서버 검증기와 로컬 설정 도구는 구현했다.
-실제 제공자·계정·도메인·D1 값과 원격 설치 검증은 아직 없다. 아래 명령은 로컬 파일만
-준비한다. 등록·권한 부여·원격 DB 적용·배포를 자동 실행하지 않는다.
+Status: The same-origin paths, OIDC client, server verifier, and local configuration tools have been implemented.
+Real provider, account, domain, and D1 values and remote installation verification do not exist yet. The commands below
+prepare local files only. They do not automatically perform registration, grant authorization, remote database application, or deployment.
 
-## 대화형 설정 — `install:setup`
+## Interactive Configuration — `install:setup`
 
 ```powershell
 npm run install:setup -- --out .tmp/installation
 ```
 
-`stdin`·`stderr`가 TTY인 대화형 터미널에서만 실행하고 공개 설정값만 묻는다. 관리자 HTTPS
-origin을 입력하면 workers.dev 주소인지 custom domain인지 그 자리에서 판정하므로
-`workersDev`·`domain`을 따로 넣지 않는다. 관리자와 수집기는 같은 Cloudflare 계정 ID를 쓰고
-수집기의 workers.dev 노출만 따로 묻는다. D1 이름·ID와 issuer·JWKS·audience·알고리즘·
-token typ은 실제 리소스·제공자 값에 맞춰 입력한다. scope·알고리즘·token typ에는 현재
-구현의 기본값 후보를 표시하며 제공자 설정과 맞는지 확인해야 한다. 발행자 인증을 켜면
-issuer·JWKS·audience·알고리즘·token typ을 따로 받는다. audience는 관리자 API와 달라야
-하며 issuer·JWKS는 같은 제공자를 써도 된다.
+Run this only in an interactive terminal where `stdin` and `stderr` are TTYs; it asks only for public configuration values. When you enter the
+administrator HTTPS origin, it determines on the spot whether that is a workers.dev address or a custom domain, so
+`workersDev` and `domain` are not entered separately. The administrator and collector use the same Cloudflare account ID; only the
+collector's workers.dev exposure is asked about separately. Enter the D1 name and ID and the issuer, JWKS, audience, algorithm, and
+token type to match the actual resources and provider values. For scope, algorithm, and token type, the prompt shows current
+implementation defaults as candidates, and you must confirm that they match the provider configuration. If publisher authentication is enabled,
+the setup asks separately for the issuer, JWKS, audience, algorithm, and token type. The publisher audience must differ from the administrator API
+audience; the issuer and JWKS may use the same provider.
 
-- 질문·안내·미리보기는 `stderr`, 결과 JSON은 `stdout`이다. 형식에 맞지 않는 값은 같은
-  질문을 세 번까지 다시 묻고, 세 번 실패하면 파일을 만들지 않고 끝낸다. 입력한 값은
-  형식 오류 메시지에는 입력값을 넣지 않는다. 마지막 미리보기에는 관리자 출처·콜백·Worker
-  이름·issuer·audience·출력 경로를 표시한다.
-- 토큰·비밀번호·client secret은 묻지 않는다. 계정·도메인·D1·제공자 값은 문법만 검사하며
-  실제 소유·존재를 확인하지 않는다.
-- 이미 있는 출력 디렉터리는 첫 질문 전에 거부한다. 쓰기는 `install:prepare`와 공유하는
-  writer가 기존 파일을 덮어쓰지 않는 `wx` 플래그로 처리한다.
-- 마지막 확인에서 `y`를 받아야 다섯 파일을 쓴다. 다른 답이면 파일 없이
-  `{prepared:false,cancelled:true,remoteChanges:false}`만 낸다.
-- 취소는 확인한 뒤에도 쓰기를 시작하기 전에 멈추고, 쓰는 중이면 이번 실행이 쓴 파일만
-  지운다. `--help` 단독 또는 `--out <new-directory>`만 받는다.
-- 질문 중 Ctrl+C와 표준 입력 종료는 질문을 중단하고 `installation_setup_cancelled`를 낸다.
-  이 단계에는 아직 파일을 쓰지 않았다.
-- 네트워크 요청·로그인·토큰·권한 조회·외부 등록·리소스 생성·배포를 하지 않는다. 반복
-  자동화에는 기존 `install:prepare --file`을 쓴다.
+- Questions, guidance, and the preview go to `stderr`; the result JSON goes to `stdout`. A value with the wrong format triggers the same
+  question up to three times; after three failures, the command exits without creating files. Format-error messages do not include the entered value.
+  The final preview shows the administrator origin, callback, Worker names, issuer, audience, and output path.
+- Tokens, passwords, and client secrets are not requested. Account, domain, D1, and provider values are checked only for syntax;
+  actual ownership and existence are not verified.
+- An existing output directory is rejected before the first question. Writes use the same writer as `install:prepare`,
+  with the `wx` flag so existing files are not overwritten.
+- The five files are written only after you answer `y` to the final confirmation. Any other answer produces only
+  `{prepared:false,cancelled:true,remoteChanges:false}` without creating files.
+- Cancellation stops before writing even after confirmation; if writing has started, it deletes only the files written by the current run.
+  Only `--help` alone or `--out <new-directory>` is accepted.
+- Ctrl+C during questions and end of standard input abort the questions and emit `installation_setup_cancelled`.
+  No files have been written at this stage.
+- It makes no network requests and does no sign-in, token issuance, authorization lookup, external registration, resource creation, or deployment. For repeatable
+  automation, use the existing `install:prepare --file`.
 
-값 검증은 기존 설치 검증기가 최종 권위이고, 실제 계정·도메인·D1·제공자 값은 운영자가
-정한다. 생성 뒤 검토·빌드·검사는 아래 절과 같다.
+Value validation ultimately belongs to the existing installation verifier, and the operator decides the actual account, domain, D1, and provider values.
+After generation, review, build, and checks follow the sections below.
 
-## 입력 준비
+## Preparing Input
 
-실제 값으로 채운 `.tmp/installation-input.json`을 만든다. JSON 최상위 키는 다음 네 개다.
+Create `.tmp/installation-input.json` filled with real values. Its top-level JSON keys are the following four.
 
-| 키 | 값 |
+| Key | Value |
 | --- | --- |
-| `adminOrigin` | 최종 관리자 HTTPS 출처. 경로·쿼리·해시·포트·끝 `/` 없이 입력한다. |
-| `admin` | [관리자 타깃](./runtime.md#관리자-worker-배포-준비)의 `workerName`, `accountId`, `collectorWorkerName`, `workersDev`, 선택 `domain`. |
-| `collector` | [수집기 타깃](./runtime.md#배포-준비)의 `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev`, `settings`. |
-| `login` | 공개 OIDC 클라이언트의 `issuer`, `clientId`, `scope`, 선택 `resource`, `idTokenAlgorithm`. |
+| `adminOrigin` | The final administrator HTTPS origin. Enter it without a path, query, fragment, port, or trailing `/`. |
+| `admin` | The `workerName`, `accountId`, `collectorWorkerName`, `workersDev`, and optional `domain` for the [administrator target](./runtime.md#administrator-worker-deployment-preparation). |
+| `collector` | The `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev`, and `settings` for the [collector target](./runtime.md#deployment-preparation). |
+| `login` | The public OIDC client's `issuer`, `clientId`, `scope`, optional `resource`, and `idTokenAlgorithm`. |
 
-`admin.accountId`와 `collector.accountId`는 같고, `admin.collectorWorkerName`은
-`collector.workerName`이어야 한다. 관리자 출처는 설정한 custom domain 또는 해당
-관리자 Worker의 실제 workers.dev 주소여야 한다. 수집기의 `ADMIN_AUTH_MODE=oidc`,
-`ALLOW_LOCAL_HTTP=false`, OIDC issuer·API audience·JWKS URI가 필수다.
-`login.issuer`는 수집기의 `OIDC_ISSUER`와 끝 `/`까지 정확히 일치해야 한다.
-scope에는 `openid`를 포함한다. ID token 서명 알고리즘과 access token 알고리즘은
-서로 다른 설정이다. 제공자에 등록한 실제 값을 사용하고 임의로 추정하지 않는다.
+`admin.accountId` and `collector.accountId` must be the same, and `admin.collectorWorkerName` must equal
+`collector.workerName`. The administrator origin must be the configured custom domain or the actual workers.dev address of that
+administrator Worker. The collector requires `ADMIN_AUTH_MODE=oidc`,
+`ALLOW_LOCAL_HTTP=false`, an OIDC issuer, an API audience, and a JWKS URI.
+`login.issuer` must exactly match the collector's `OIDC_ISSUER`, including the trailing `/`.
+The scope must include `openid`. The ID token signature algorithm and access token algorithm are separate
+settings. Use the actual values registered with the provider; do not guess them.
 
-클라이언트는 비밀값 없는 public client와 Code+PKCE(S256)다. 비밀키·토큰·client secret은
-입력에 넣지 않는다. 설정은 32KiB 이하 닫힌 JSON이고 알려지지 않은 키는 거부한다.
-`resource`와 API audience의 매핑은 제공자가 결정하므로 둘이 같다고 추정하지 않는다.
-주소·ID의 문법 검사는 리소스 소유권·실제 존재를 확인하지 않는다.
+The client is a public client without a secret and uses Authorization Code with PKCE (S256). Do not put private keys, tokens, or client secrets in the
+input. The configuration is a closed JSON document of 32 KiB or less, and unknown keys are rejected.
+The provider decides how `resource` maps to the API audience, so do not assume that the two are identical.
+Syntax checks on addresses and IDs do not prove resource ownership or actual existence.
 
-## 설정 묶음 생성
+## Generating the Configuration Bundle
 
 ```powershell
 npm run install:prepare -- --file .tmp/installation-input.json --out .tmp/installation
 ```
 
-출력 디렉터리는 새 경로여야 한다. 이미 있으면 파일을 수정하지 않고 실패한다.
-검증을 모두 마친 뒤 디렉터리를 만들고 다음 파일을 쓴다.
+The output directory must be a new path. If it already exists, the command fails without modifying files.
+After all validation succeeds, it creates the directory and writes the following files.
 
-| 파일 | 용도 |
+| File | Purpose |
 | --- | --- |
-| `collector.wrangler.json` | 실제 계정·D1·서버 OIDC 검증 설정. |
-| `admin.wrangler.json` | 같은 계정 수집기 바인딩·관리자 route. 자산 경로는 이 묶음의 `admin-assets`. |
-| `admin-login.json` | 공개 `VITE_OIDC_` 설정만 포함하는 관리자 빌드 입력. |
-| `oidc-registration.json` | 제공자에 등록할 정확한 callback·CORS 출처·PKCE·access token 요구 값. |
-| `installation.json` | 검증한 입력의 재현용 스냅샷. 자격 증명은 허용하지 않는다. |
+| `collector.wrangler.json` | The real account, D1, and server OIDC verification configuration. |
+| `admin.wrangler.json` | The collector binding in the same account and the administrator route. Asset paths use `admin-assets` in this bundle. |
+| `admin-login.json` | Administrator build input containing only public `VITE_OIDC_` settings. |
+| `oidc-registration.json` | The exact callback, CORS origins, PKCE, and access-token requirements to register with the provider. |
+| `installation.json` | A reproducible snapshot of the validated input. Credentials are not allowed. |
 
-서버/DB 설정을 프론트엔드 환경 변수로 복사하지 않는다. 생성 디렉터리는 공개 정적
-자산 디렉터리에 넣지 않는다. 파일 생성 직후부터 이번 실행이 만든 경로를 추적한다.
-파일 쓰기 실패나 취소 시 열린 파일을 닫고 쓰다 만 파일까지 정리하며,
-디렉터리에 다른 파일이 있으면 제거하지 않는다. 입력·예외 원문은 로그에 출력하지 않는다.
+Do not copy server or database settings into frontend environment variables. Do not place the generated directory in a public static
+asset directory. Track paths created by this run from the moment file creation begins.
+If a write fails or is cancelled, close open files and clean up partial files too, but
+do not remove the directory if it contains any other files. Input and raw exception text are not printed to logs.
 
-검증에서 걸리면 `installation_config_failed` 오류와 함께 어느 입력 항목인지 가리키는 `field`를
-하나 돌려준다. 값은 `input`, `admin`, `collector`, `admin.accountId`, `admin.collectorWorkerName`,
-`adminOrigin`, `login`, `login.issuer` 중 하나이고 그 밖의 입력값·URL·ID·내부 예외는 출력하지
-않는다. 파일 읽기·인자·쓰기 오류처럼 검증 밖에서 난 실패는 기존 고정 오류 그대로이고 `field`를
-붙이지 않는다.
+If validation fails, it returns an `installation_config_failed` error with one `field`
+identifying the input item. The value is one of `input`, `admin`, `collector`, `admin.accountId`, `admin.collectorWorkerName`,
+`adminOrigin`, `login`, or `login.issuer`; it does not print other input values, URLs, IDs, or internal exceptions.
+Failures outside validation, such as file-read, argument, or write errors, use the existing fixed errors and do not include `field`.
 
-## 관리자 빌드와 업로드 없는 검사
+## Administrator Build and Upload-Free Checks
 
 ```powershell
 npm run admin:build-configured -- --dir .tmp/installation
@@ -99,129 +97,126 @@ npm run admin:dry-run -- --config .tmp/installation/admin.wrangler.json
 npm run collector:dry-run -- --config .tmp/installation/collector.wrangler.json
 ```
 
-관리자 빌드는 `installation.json`에서 입력을 다시 검증하고 생성한 네 설정 파일을
-다시 비교한다. 특정 파일만 수정했거나 디렉터리를 옮겨 절대 경로가 달라졌으면 빌드
-전에 거부한다. 값을 바꾸려면 입력을 수정한 뒤 새 설치 디렉터리를 생성한다.
-공개 login JSON만 Vite define으로 넣고 `.env`와 부모 프로세스의 `VITE_` 값을
-읽지 않는다. production 모드로 빌드하고 개발용 proxy 설정도 적용하지 않는다.
-근거는 [Vite 설정](https://vite.dev/config/shared-options.html)과 실제 빌드 검사다.
+The administrator build validates the input in `installation.json` again and compares the four generated configuration files
+again. It refuses to build if only a specific file was edited or the directory was moved and absolute paths changed.
+To change values, edit the input and generate a new installation directory.
+Only the public login JSON is passed through Vite defines; `.env` and `VITE_` values from the parent process are
+not read. Build in production mode and do not apply development proxy settings.
+The basis is the [Vite configuration](https://vite.dev/config/shared-options.html) and actual build checks.
 
-산출물은 생성한 config가 가리키는 `admin-assets`에만 쓰며 기존 앱의 `dist/client`나
-다른 설치 묶음을 수정하지 않는다. 새 자산 디렉터리만 허용하고 성공한 뒤
-`admin-build.json`을 남긴다. 실패한 빌드의 부분 파일은 보존한다. 기존/실패한 빌드를
-덮어쓰려 하지 말고 새 설치 디렉터리를 준비한다. 다른 호스트에서 사용하려면 그
-호스트에서 다시 설정을 생성하고 빌드한다.
+Artifacts are written only to the `admin-assets` path in the generated configuration; they do not modify the existing app's `dist/client` or
+another installation bundle. Only a new asset directory is allowed, and `admin-build.json` is written after success.
+Partial files from a failed build are preserved. Prepare a new installation directory instead of trying to
+overwrite an existing or failed build. To use another host, generate the configuration and build again on that host.
 
-`admin:dry-run`은 선택한 config 하나만 설치된 Wrangler에 전달하고 `--dry-run`을
-고정한다. `--config`·`--outdir` 외 옵션과 중복 옵션은 거부한다. 기본 config는
-타입/패키지 확인용이다. 성공은 로컬 패키징 확인이며 로그인·DNS·원격 바인딩·DB를
-검증한 결과가 아니다. 실제 배포는 검토·승인한 후속 작업이다.
+`admin:dry-run` passes only the selected configuration to the installed Wrangler and fixes `--dry-run`.
+Options other than `--config` and `--outdir`, including duplicate options, are rejected. The default configuration is
+for type and package checks. Success confirms local packaging; it is not a result of validating sign-in, DNS, remote bindings, or the
+database. Actual deployment is an approved follow-up task.
 
-## 제공자와 운영 확인
+## Provider and Operational Verification
 
-`oidc-registration.json`을 기준으로 제공자에 public client·callback·관리자 CORS 출처를
-등록한다. discovery·token·JWKS가 HTTPS이고 S256을 지원해야 한다. API에는 ID token이
-아닌 등록 audience의 서명된 JWT access token을 발급해야 한다. refresh token을
-사용하면 회전해야 하며, 없으면 만료 후 다시 로그인한다. [OIDC 정책](./oidc.md)을 따른다.
+Using `oidc-registration.json` as the basis, register the public client, callback, and administrator CORS origin with the
+provider. Discovery, token, and JWKS endpoints must use HTTPS and support S256. The API must issue a signed JWT access token for the
+registered audience, not an ID token. If refresh tokens are used, rotate them; otherwise sign in again after
+expiration. Follow the [OIDC Policy](./oidc.md).
 
-실제 로그인 뒤 관리자 화면의 `로그인 계정 확인`을 펼쳐 서버가 검증한 issuer/subject를
-읽고 계정 정보 JSON을 복사한다. 프로젝트 권한이 없어도 자기 계정 조회는 가능하다.
-복사한 식별자를 신뢰된 운영자가 확인한 뒤 필요한 생성 권한·관리자 grant를 부여한다. 공개 client ID·
-이메일·브라우저 Origin을 subject로 추측하지 않는다. 최초 생성 권한은 신뢰된 운영자가
-[원격 생성 권한 도구](./remote-creator-provisioning.md)의 미리보기와 계획 해시 적용으로
-등록할 수 있다. 첫 프로젝트의 owner는 생성 API가 함께 부여한다. 기존 프로젝트 grant를
-직접 등록하는 기존 CLI는 로컬만 지원한다. 첫 운영 적용에는 원격 D1 마이그레이션·정리
-예약·백업/복구도 필요하며, 도구 구현과 실제 원격 권한 등록 완료를 구분한다.
+After a real sign-in, expand `Check signed-in account` in the administrator screen, read the issuer and subject
+verified by the server, and copy the account information JSON. An account can read its own identity even without project authorization.
+After a trusted operator verifies the copied identifiers, grant the required creator authorization and administrator grants. Do not infer a subject
+from a public client ID, email address, or browser Origin. A trusted operator can register initial creator authorization through the
+preview and plan-hash application of the [Remote Creator Authorization Tool](./remote-creator-provisioning.md).
+The creation API grants ownership of the first project. The existing CLI that directly registers grants for existing
+projects supports local operation only. The first production application also requires remote D1 migrations, scheduled cleanup,
+and backup and recovery procedures; distinguish tool implementation from completed remote authorization registration.
 
-현재 스키마의 복구 경로는 `npm run verify:restore`로 새 로컬 합성 DB에 연습할 수 있다.
-실제 운영 백업·원격 복구와 RTO/RPO 확인은 [백업·복구 절차](../ops/backup-and-restore.md)를 따른다.
+The current schema recovery path can be practiced against a new local synthetic database with `npm run verify:restore`.
+For actual production backup, remote recovery, and RTO/RPO verification, follow the [Backup and Recovery Procedure](../ops/backup-and-restore.md).
 
-현재는 제공자 등록·CORS·JWT 발급·갱신·원격 Worker 연결을 검증하지 않았다.
-설정 준비 완료와 운영 로그인 완료를 구분한다.
+Provider registration, CORS, JWT issuance and refresh, and remote Worker connections have not been verified.
+Distinguish completed configuration preparation from completed production sign-in.
 
-## 공개 제공자 확인 — `install:check`
+## Public Provider Check — `install:check`
 
 ```powershell
 npm run install:check -- --dir .tmp/installation
 ```
 
-준비한 설치 디렉터리의 다섯 파일을 다시 검증한 뒤 공개 OIDC discovery와 JWKS를
-GET한다. token endpoint에는 진단용 OPTIONS만 보내고, 같은 출처이면 이 요청도 생략한다.
-로그인·코드 교환·토큰 발급·갱신·클라이언트 등록·Cloudflare 조회·DB 접근·배포·파일 쓰기는
-하지 않는다. 발행자 인증을 켰으면 설정된 발행자 JWKS도 읽는다.
+After validating the five files in the prepared installation directory again, this command GETs the public OIDC discovery document and JWKS.
+It sends only a diagnostic OPTIONS request to the token endpoint and omits that request when the endpoint has the same origin.
+It performs no sign-in, code exchange, token issuance or refresh, client registration, Cloudflare lookup, database access, deployment, or file write.
+If publisher authentication is enabled, it also reads the configured publisher JWKS.
 
-요청은 HTTPS만 허용하고 쿼리·해시·주소의 사용자 정보를 거부한다. 쿠키·인증 헤더·
-referrer 없이 보내며 리다이렉트를 따르지 않는다. 요청당 5초·CLI 전체 45초·본문 64KiB·
-키 32개 상한을 적용한다. issuer 정확 일치·code 응답·PKCE S256·ID token 알고리즘을
-확인하고 공개키를 실제 import한다. RSA는 2048비트 이상, ES256은 P-256이다.
+Requests must use HTTPS, and user information in the query, fragment, or address is rejected. They are sent without cookies, authentication headers, or a
+referrer, and redirects are not followed. Limits are 5 seconds per request, 45 seconds for the whole CLI, 64 KiB per body, and
+32 keys. It checks exact issuer equality, code response support, PKCE S256, and the ID token algorithm, and actually imports the public keys.
+RSA keys must be at least 2048 bits, and ES256 keys must use P-256.
 
-교차 출처 discovery/JWKS GET은 관리자 출처 또는 `*`를 허용하는 CORS 헤더가 필요하다.
-같은 출처에는 CORS 헤더를 요구하지 않는다. token OPTIONS 결과는 실제 POST·갱신의
-증거가 아니고, 405나 확인 실패는 비차단 `unknown`으로 남긴다. 제공자의 클라이언트·
-callback·scope·audience·token type 설정과 실제 로그인을 별도로 확인한다.
+Cross-origin discovery and JWKS GET requests require CORS headers allowing the administrator origin or `*`.
+Same-origin requests do not require CORS headers. A token OPTIONS result is not evidence of an actual POST or refresh,
+and a 405 or failed check is recorded as a nonblocking `unknown`. Separately verify the provider's client, callback, scope, audience, and
+token-type settings and the actual sign-in.
 
-`publicChecksPassed`는 필수 공개 검사가 모두 pass일 때만 true다.
-`operationalReadinessVerified`는 항상 false이고 `manualRequired` 목록을 함께 반환한다.
-필수 검사 실패·미확인은 종료 코드 1이다. 입력·응답 본문·키·주소·식별자는 출력하지 않는다.
-자세한 사용법은 [설치 검사 안내](../../tools/runtime/INSTALL-CHECK.md)에 있다.
-기준은 [OIDC Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html),
-[RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html),
-[CORS 안내](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS)를 참고한다.
+`publicChecksPassed` is true only when all required public checks pass.
+`operationalReadinessVerified` is always false, and the command also returns a `manualRequired` list.
+A failed or unverified required check exits with code 1. It does not print input, response bodies, keys, addresses, or identifiers.
+Detailed usage is in the [Installation Check Guide](../../tools/runtime/INSTALL-CHECK.md).
+The references are [OIDC Discovery](https://openid.net/specs/openid-connect-discovery-1_0.html),
+[RFC 8414](https://www.rfc-editor.org/rfc/rfc8414.html), and the
+[CORS guide](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CORS).
 
-## 원격 스키마 메타데이터 확인 — `install:database-check`
+## Remote Schema Metadata Check — `install:database-check`
 
 ```powershell
 npm run install:database-check -- --remote --dir .tmp/installation
 ```
 
-준비한 설치 디렉터리의 다섯 파일을 다시 검증하고, 기준 마이그레이션을 이번 실행이 만든 새
-인메모리 D1에 적용한 뒤 원격 D1의 `sqlite_master`를 한 번 조회해 테이블·인덱스·트리거의
-이름과 정의를 비교한다. 기준은 현재 `0001`~`0013` 열세 마이그레이션·16개 테이블이고,
-발행자 이력·부여 ID, grant revision, 조회 인덱스, 소요시간·실패 원인 확장도 포함한다. 기존 원격 생성 권한 도구의
-설치 Wrangler 전송을 그대로 쓰고 SQL 입력·환경 변수·추가 config 옵션은 받지 않는다.
+This command validates the five files in the prepared installation directory again, applies the baseline migrations to a new
+in-memory D1 created by the current run, then queries the remote D1's `sqlite_master` once and compares the names and definitions of tables, indexes, and triggers.
+The baseline is the current thirteen migrations from `0001` through `0013` and 16 tables, including publisher history and assigned IDs, grant revisions,
+read indexes, and elapsed-time and failure-cause extensions. It reuses the installed Wrangler transport from the existing remote creator authorization tool
+as-is and accepts no SQL input, environment variables, or additional configuration options.
 
-보고서는 기준·관측 객체 수, 누락·변경 객체 이름(기준 객체만), 예상 밖 객체 개수, 스키마
-SHA-256, 대상 해시, 기준 마이그레이션 목록을 담는다. SQL·주소·계정·DB ID·issuer·subject는
-출력하지 않는다. `databaseSchemaMatches`가 true여도 `operationalReadinessVerified`는 false이고,
-예상과 다르거나 확인하지 못하면 종료 코드 1이다.
+The report contains baseline and observed object counts, names of missing or changed objects (baseline objects only), unexpected object counts, the schema
+SHA-256, target hash, and baseline migration list. It does not print SQL, addresses, accounts, database IDs, issuers, or subjects.
+Even when `databaseSchemaMatches` is true, `operationalReadinessVerified` is false; an unexpected result or a check that cannot be completed exits with code 1.
 
-원격 쓰기·상품 행 조회·로그인 토큰 발급·grant 부여·원격 마이그레이션·배포는 하지 않는다.
-스키마 일치는 데이터 무결성·정리 Cron·백업·로그인을 확인한 결과가 아니다.
-운영 설치 묶음이 아직 없어 실제 운영 DB 접속은 확인하지 않았고, 통과 여부는 원격 실행 뒤에 판단한다.
-조회 명령은 [D1 Wrangler 안내](https://developers.cloudflare.com/d1/wrangler-commands/#d1-execute)를 따른다.
+It performs no remote writes, product-row reads, sign-in token issuance, grant authorization, remote migrations, or deployment.
+Schema equality is not a result of verifying data integrity, cleanup Cron, backup, or sign-in.
+No production installation bundle exists yet, so actual production database connectivity has not been verified; decide whether it passes after running it remotely.
+The query command follows the [D1 Wrangler guide](https://developers.cloudflare.com/d1/wrangler-commands/#d1-execute).
 
-## 관리자 접근 확인 — `install:access-check`
+## Administrator Access Check — `install:access-check`
 
 ```powershell
 npm run install:access-check -- --dir .tmp/installation --token-stdin
 ```
 
-준비한 설치 디렉터리의 다섯 파일을 다시 검증한 뒤, 이미 발급된 관리자 access token을
-비대화형 표준 입력에서 받아 검토한 관리자 HTTPS 출처로 순서대로 읽기 세 번만 보낸다.
-`GET /v1/identity`로 서버가 검증한 issuer를 확인하고, 그 issuer가 설정한 발행자와 정확히 같을
-때만 `GET /v1/health`가 `{status:'ok', scope:'administrator_storage_read'}`인지 확인한 뒤,
-마지막으로 `GET /v1/projects?limit=1`을 읽는다. 앞 검사가 실패하면 뒤 검사는 요청하지 않는다.
-토큰은 인자·파일·보고서·오류에 남기지 않는다.
+After validating the five files in the prepared installation directory again, this command reads an already-issued administrator access token from
+noninteractive standard input and sends only three reads in sequence to the reviewed administrator HTTPS origin.
+It checks the issuer verified by the server with `GET /v1/identity`, and only when that issuer exactly matches the configured publisher
+does it check that `GET /v1/health` returns `{status:'ok', scope:'administrator_storage_read'}`; finally, it reads
+`GET /v1/projects?limit=1`. If an earlier check fails, later checks are not requested.
+The token is not retained in arguments, files, reports, or errors.
 
-리다이렉트 거부·자격 증명 생략·no-referrer·no-store·재시도 없음, 요청당 5초·토큰 입력 후 검사 15초·
-표준 입력 30초·본문 16KiB 상한을 적용한다. 보고서는 `tallyfin.install-access-check/v2`이고
-`admin-identity`·`admin-storage-read`·`project-list` 순서의 고정 `status`·`code`,
-`accessChecksPassed`(세 검사 모두 pass일 때만 true), `visibleProjectObserved`(true·false·null),
-`operationalReadinessVerified`·`remoteChanges`·`tokensRequested`(항상 false)를 담는다.
-원문 토큰·이름·subject·URL·본문은 출력하지 않는다.
+It rejects redirects, omits credentials, uses no-referrer and no-store, performs no retries, and applies limits of 5 seconds per request,
+15 seconds for checks after token input, 30 seconds for standard input, and 16 KiB per body. The report uses schema `tallyfin.install-access-check/v2`
+and contains fixed `status` and `code` values in the order `admin-identity`, `admin-storage-read`, and `project-list`,
+`accessChecksPassed` (true only when all three checks pass), `visibleProjectObserved` (true, false, or null), and
+`operationalReadinessVerified`, `remoteChanges`, and `tokensRequested` (always false).
+It does not print raw tokens, names, subjects, URLs, or bodies.
 
-CLI는 직접 DB에 접근하지 않는다. `admin-storage-read`는 관리자 Worker의 HTTP health 응답이고,
-서버가 `projects`·`project_grants` 두 제어면 테이블을 읽기 전용으로 확인한다는 뜻이다. 그
-성공은 서비스 전체 정상 판정이 아니다. 빈 프로젝트 목록은 접근 가능한 API를 뜻하지만 최초
-프로젝트 권한·생성을 증명하지 않는다. issuer 불일치나 확인 실패는 뒤 조회를 건너뛰고 통과로
-바꾸지 않는다(뒤 검사는 `identity-check-required`·`storage-check-required` unknown으로 남는다).
-이 명령은 로그인·토큰 발급·갱신·클라이언트 등록·원격 변경·배포·파일 쓰기를 하지 않는다.
+The CLI does not access the database directly. `admin-storage-read` is the administrator Worker's HTTP health response, which means the
+server read the two control-plane tables `projects` and `project_grants` in read-only mode. That
+success is not a judgment that the entire service is healthy. An empty project list means the API is reachable but does not prove initial
+project authorization or creation. An issuer mismatch or failed check skips later reads and does not turn the result into a pass (later checks remain unknown as
+`identity-check-required` and `storage-check-required`).
+This command performs no sign-in, token issuance or refresh, client registration, remote changes, deployment, or file writes.
 
-3단계 확장 뒤 로컬 집중 검사 7/7과 루트 타입 검사(종료 코드 0)를 통과했다. 이번 확장은 CLI만
-바뀌고 API·DB·수집기 코드는 바꾸지 않았다. 검증 기록은 [VALIDATION.md](../../VALIDATION.md)를
-따른다. 실제 제공자와 원격 배포는 아직 확인하지 않았다.
+After the three-stage extension, 7/7 focused local checks and the root type check (exit code 0) passed. This extension changed only the CLI;
+the API, database, and collector code were not changed. Verification records follow [VALIDATION.md](../../VALIDATION.md). Real provider behavior and remote deployment have not been verified.
 
-`install:check`·`install:database-check`·`install:access-check`는 각각 공개 제공자, 원격 DB
-메타데이터, 관리자 읽기 접근을 따로 본다. 셋 중 무엇도 로그인·토큰 갱신·최초 owner/생성자
-권한·수집과 Cron·백업/복구까지 확인한 운영 준비 완료를 뜻하지 않는다. 자세한 사용법은
-[접근 확인 안내](../../tools/runtime/INSTALL-ACCESS-CHECK.md)에 있다.
+`install:check`, `install:database-check`, and `install:access-check` separately examine the public provider, remote database
+metadata, and administrator read access. None of the three establishes complete operational readiness for sign-in, token refresh, initial owner or creator
+authorization, ingestion and Cron, or backup and recovery. Detailed usage is in the
+[Access Check Guide](../../tools/runtime/INSTALL-ACCESS-CHECK.md).

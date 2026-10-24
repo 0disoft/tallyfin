@@ -1,107 +1,97 @@
-# 만료 데이터 자동 정리
+# Automatic Expired-Data Cleanup
 
-## 실행 결과와 중단 원인
+## Execution Results and Stop Causes
 
-정상 종료와 예외·취소 모두 최종 보고서에 execution을 남긴다. elapsedMs는 단조 시계로
-측정한 실행 시간, stopReason은 page_limit·time_budget·cycle_complete·empty_page·
-cursor_conflict·cancelled·storage_error 중 하나다. 페이지·시간 한도는 다음 실행으로
-이월한 상태이며 전체 데이터가 정리됐다는 뜻은 아니다. 삭제 실패 건수는 별도로 센다.
-예약 실행은 시작할 때만 측정한 scheduleLagMs를 더한다. 예약보다 일찍 시작한 시계
-오차는 0으로 표시하며, 삭제 기준 시각은 계속 scheduledTime을 쓴다.
+The final report records an `execution` for normal completion, exceptions, and cancellation alike. `elapsedMs` is the execution time measured
+with a monotonic clock, and `stopReason` is one of `page_limit`, `time_budget`, `cycle_complete`, `empty_page`,
+`cursor_conflict`, `cancelled`, or `storage_error`. A page or time limit means state carries over to the next execution; it does not mean all data was cleaned.
+Deletion failures are counted separately. A scheduled run adds `scheduleLagMs`, measured only at start. A clock
+error that starts the run early is shown as 0, and the deletion cutoff still uses `scheduledTime`.
 
-interruptedProjects는 결과를 확인하지 못한 진행 중 작업 수이고, checkpointedProjects는
-커서 CAS로 진행을 확인한 시도 수다. 실패한 프로젝트도 기존 정책대로 커서를 진행하므로
-이 수치는 삭제 성공 건수가 아니다. 마지막 CAS의 불리언만으로 전체 진행을 판단하지 않는다.
-취소는 이미 실행 중인 D1 작업의 롤백을 보장하지 않는다. runCleanup의 선택적 동기 onReport는
-최종 스냅샷을 한 번 받으며 관측 실패나 전달 객체 변경은 원본 결과·예외에 영향을 주지 않는다.
+`interruptedProjects` is the number of in-progress operations whose result could not be confirmed, and `checkpointedProjects` is
+the number of attempts whose progress was confirmed by cursor CAS. A failed project still advances the cursor under existing policy,
+so this value is not a successful deletion count. Do not judge the whole run from only the boolean result of the final CAS.
+Cancellation does not guarantee rollback of a D1 operation already running. The optional synchronous `onReport` for `runCleanup` receives
+one final snapshot, and observation failure or mutation of the passed object does not affect the original result or exception.
 
-상태: Worker `scheduled` 핸들러와 D1 순회 위치 저장을 로컬에서 구현·검증했다.
-원격 DB 적용·Cron Trigger 등록·배포는 하지 않았다.
+Status: The Worker `scheduled` handler and D1 traversal-position storage were implemented and verified locally.
+Remote database application, Cron Trigger registration, and deployment have not been done.
 
-## 실행과 한도
+## Execution and Limits
 
-`apps/collector`의 `scheduled` 핸들러는 `ScheduledController.scheduledTime`을 기준으로
-`runCleanup`을 실행하고 모든 작업을 await 한다. HTTP 수집·관리자 조회 요청에서는
-정리를 실행하지 않는다. `createWorker`·`createOidcWorker`·기본 export 모두 포함한다.
+The `scheduled` handler in `apps/collector` runs `runCleanup` relative to `ScheduledController.scheduledTime` and awaits all work.
+Cleanup does not run during HTTP ingestion or administrator read requests. This applies to `createWorker`, `createOidcWorker`, and the default export.
 
-- 기본은 회당 한 페이지·프로젝트 최대 4개를 ID 오름차순으로 처리한다. 중지된 프로젝트도 대상이다.
-  호스트가 쿼리 예산을 확인하고 `createWorker`의 `cleanupMaxPages`를 1~4로 지정하면
-  최대 4페이지·16개 프로젝트를 순차 처리한다. OIDC factory도 마지막 선택 인자로 같은
-  WorkerOptions를 받는다. 설치 설정과 기본 export의 값은 1로 유지한다.
-- 20초의 단조 시계 예산이 끝나면 새 프로젝트/페이지를 시작하지 않고, 처리한 페이지
-  앞부분까지만 커서를 저장한다. 전체 DB 대기에는 기존 30초 기한이 적용된다.
-  한 실행에서 이미 처리한 프로젝트를 다시 만나면 중단해 짧은 순회의 중복 삭제를 막는다.
-- scheduled 정리는 프로젝트마다 9개 테이블에서 각각 최소 500행에서 최대 10,000행까지 삭제한다. 만료 시각을 쓰는
-  영수증·시도·퍼널 연결 상태·할당량 4개 테이블, 분당 카운터, 90일 보존을 쓰는 이벤트·
-  목표·퍼널 단계 집계, 관리자 변경 이력이 대상이다. `cleanup`을 직접 호출하면
-  프로젝트·테이블당 최대 10,000행까지 지운다. 한 번에 전부 비우는 반복은 없다.
-- 영수증 48시간·시도 72시간·퍼널 연결 상태 72시간·일일 할당량 UTC 날짜 끝 + 72시간
-  만료 규칙을 유지한다.
-- 거부 기록이 없는 분당 카운터는 지난 2분 밖을, 거부 기록이 있는 분은 오늘을 포함한
-  최근 7개 UTC 날짜 밖을 삭제한다. 이벤트/목표/퍼널 단계 집계는 프로젝트 시간대의 오늘을
-  포함한 90일 밖을 삭제한다. 관리자 변경 이력은 90일 rolling 밖을 같은 행 단위 한도로
-  지운다. 프로젝트·스키마·관리자 권한은 삭제하지 않는다.
+- By default, each run processes one page and at most 4 projects in ascending ID order. Paused projects are included.
+  If the host confirms sufficient query budget and sets `cleanupMaxPages` from 1 to 4 on `createWorker`, it processes up to 4 pages and 16 projects
+  sequentially. The OIDC factory also accepts the same `WorkerOptions` as its final optional argument. Installation configuration and the default export
+  keep the value at 1.
+- When the 20-second monotonic-clock budget expires, it starts no new project or page and saves the cursor only through the portion of the page it processed. The existing 30-second limit applies to total database waiting.
+  If a project already processed in the same run is encountered again, it stops to prevent duplicate deletion during a short traversal.
+- Scheduled cleanup deletes at least 500 and up to 10,000 rows from each of 9 tables per project. The targets are four tables that use expiration times—receipts,
+  attempts, funnel linkage state, and quota—plus per-minute counters, event, goal, and funnel step aggregates with 90-day retention, and administrator change history.
+  Calling `cleanup` directly deletes up to 10,000 rows per project and table. There is no loop that empties everything at once.
+- Receipt, attempt, and funnel linkage expiration remains at 48 hours, 72 hours, and 72 hours, respectively; daily quota expires 72 hours after the end of the UTC date.
+- Per-minute counters without rejection records remove minutes older than the preceding 2. Minutes with rejection records are deleted outside the most recent
+  7 UTC dates, including today. Event, goal, and funnel step aggregates delete data outside the 90 days including today in the project time zone. Administrator
+  change history removes records outside the rolling 90 days under the same per-table row limit. Projects, schemas, and administrator grants are not deleted.
 
-커서는 `retention_cleanup_state` 1행(id=1)의 `last_project_id`·`revision`으로 저장한다.
-Worker가 다시 생성돼도 마지막 처리 위치 뒤부터 이어가고 끝에서는 처음으로 돌아온다.
-프로젝트가 삭제돼도 커서가 유지되도록 외래 키를 두지 않는다. 새로 추가된 프로젝트는
-그 위치에 따라 현재 또는 다음 순회에서 처리된다.
+The cursor is stored as `last_project_id` and `revision` in one row (`id=1`) of `retention_cleanup_state`.
+A recreated Worker continues after the last processed position and returns to the beginning at the end.
+There is no foreign key, so the cursor survives project deletion. A newly added project is processed in the current or next traversal depending on its
+position.
 
-한 프로젝트의 실패는 다른 프로젝트를 막지 않는다. 실패한 프로젝트도 커서를 앞으로
-옮겨 다음 순회에서 다시 시도한다. 커서 갱신은 revision CAS로 처리해 겹친 실행의 오래된
-결과가 커서를 되돌리지 못하게 한다. 중복 실행은 삭제 조건을 다시 적용하므로 보존 중인
-데이터를 삭제하지 않는다. 실행 중 중단되면 커서 저장 전의 페이지를 다시 처리할 수 있다.
+Failure of one project does not block others. A failed project also advances the cursor so it is retried on the next traversal.
+The cursor update uses revision CAS, so a stale result from overlapping runs cannot move the cursor backward. Duplicate runs reapply
+deletion conditions, so retained data is not deleted. An interruption can cause the page before the cursor was saved to be processed again.
 
-## 실패와 관측
+## Failures and Observation
 
-프로젝트 실패가 하나라도 있거나 CAS 충돌로 커서가 갱신되지 않으면, 나머지를 처리한 뒤
-고정 오류로 실행을 실패시킨다. 프로젝트 목록/커서 DB 접근 실패도 실행 실패다.
-로그에는 runId·고정 코드·attempted/completed/failed/cursorAdvanced만 남기며 DB 오류
-본문·프로젝트/이벤트 ID·설정값은 넣지 않는다. completed는 호출 성공한 프로젝트 수이며
-삭제한 행 수나 해당 프로젝트의 모든 만료 데이터가 소진됐다는 뜻으로 쓰지 않는다.
+If any project fails or the cursor is not advanced because of a CAS conflict, the run processes the remainder and then
+fails with a fixed error. Failure to access the project list or cursor database also fails the run.
+Logs contain only `runId`, fixed codes, and `attempted`, `completed`, `failed`, and `cursorAdvanced`; they do not include database error
+text, project or event IDs, or settings values. `completed` is the number of projects whose call succeeded, not a deleted-row count
+or proof that every expired record in those projects was exhausted.
 
-최대 SQL 문장은 페이지당 45개(상태 2 + 목록 최대 2 + 삭제/관측 최대 40 + 커서 1)다.
-프로젝트마다 9개 삭제와 남은 만료 영수증 MIN 조회 1개를 같은 batch로 실행한다. 기본 한 페이지는 D1 Free의
-실행당 50개 한도 안에 둔다. 4페이지 옵션은 최대 180개이므로 그 예산을 지원하는 호스트에서만
-사용한다. 페이지마다 커서 CAS 성공을 확인하며, 충돌하면 다음 페이지를 읽지 않는다.
-병렬 삭제는 하지 않는다. 선택적 clock·signal·maxPages는 runCleanup의 기존 필수 인자를 유지한다.
-보존기간이 지났어도 순회·삭제 한도·실패 때문에 물리 삭제는 늦어질 수 있다. 지연된 실행은
-예약 시각 기준으로 처리하고 이후 실행에서 따라잡는다. 만료 잔량과 DB 쓰기 비용을
-측정한 뒤 주기/처리량을 조정해야 한다. 만료 시각 자체를 바꾸어 적체를 숨기지 않는다.
+The maximum SQL statement count is 45 per page (2 state + up to 2 list + up to 40 delete/observe + 1 cursor).
+For each project it runs the 9 deletes and one remaining expired-receipt MIN query in the same batch. The default one-page run stays within D1 Free's
+50-executions-per-run limit. The four-page option can reach 180, so use it only on hosts that support that budget. It checks a successful
+cursor CAS on every page and stops reading the next page on conflict. It does not delete in parallel. The optional `clock`, `signal`, and
+`maxPages` preserve `runCleanup`'s existing required arguments. Physical deletion can be delayed by traversal and deletion limits or failures even after retention expires.
+A delayed run uses the scheduled time and catches up in later runs. Measure expired backlog and database write cost
+before adjusting interval or throughput. Do not hide a backlog by changing expiration times themselves.
 
-## 호스트 활성화와 롤백
+## Host Activation and Rollback
 
-호스트는 `0001_initial.sql` 뒤에 `0002_retention_cleanup.sql`을 적용하고 D1 `DB`
-바인딩과 Worker의 `scheduled` export를 연결해야 한다. 새 테이블만 추가하며 기존
-프로젝트/이벤트 행을 바꾸지 않는다. `0005_admin_changes.sql`을 적용하면 같은 정리가
-관리자 변경 이력도 같은 한도로 지운다. `0007_task_funnels.sql`을 적용하면 퍼널 연결
-상태와 단계 집계도 같은 순회에서 지운다. 원격 Cron Trigger는 아직 등록하지 않았다.
-파일럿 시작안은 매분 실행이며 운영 호스트 설정에 다음 조각을 합친다.
+The host must apply `0002_retention_cleanup.sql` after `0001_initial.sql` and connect the D1 `DB` binding and the Worker's
+`scheduled` export. It only adds a new table and does not change existing project or event rows. Applying
+`0005_admin_changes.sql` makes the same cleanup delete administrator change history under the same limits. Applying
+`0007_task_funnels.sql` also removes funnel linkage state and step aggregates in the same traversal. A remote Cron Trigger has not been registered.
+The pilot proposal is a run every minute, adding the following fragment to the production host configuration.
 
 ```json
 { "triggers": { "crons": ["* * * * *"] } }
 ```
 
-중단하려면 호스트 Cron Trigger를 제거한다. 코드 롤백 시 새 테이블은 남겨도 이전
-수집기에 영향을 주지 않는다. 지운 만료 데이터는 코드 롤백으로 복구되지 않으며
-복구가 필요하면 별도 백업/복원 정책을 따른다. 원격 작업은 승인한 배포 범위에서 실행한다.
+To stop cleanup, remove the host Cron Trigger. The new tables can remain after a code rollback without affecting an earlier collector.
+Deleted expired data is not restored by a code rollback; follow the separate backup and restore policy if recovery is needed. Remote work runs within the approved deployment scope.
 
-구조는 [DBML](../../db/schema.dbml), 마이그레이션은
-[적용 메모](../../db/migrations/README.md), 실행 증거는 [VALIDATION](../../VALIDATION.md)을 따른다.
-호스트 동작 근거는 [Cloudflare scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/),
-쿼리 예산 근거는 [D1 limits](https://developers.cloudflare.com/d1/platform/limits/)다.
+The structure follows [DBML](../../db/schema.dbml), migrations follow the
+[application notes](../../db/migrations/README.md), and execution evidence is in [VALIDATION](../../VALIDATION.md).
+Host behavior references the [Cloudflare scheduled handler](https://developers.cloudflare.com/workers/runtime-apis/handlers/scheduled/),
+and query budgets reference [D1 limits](https://developers.cloudflare.com/d1/platform/limits/).
 
-## 수신량에 맞춘 삭제 예산과 관측 — 2026-10-23
+## Ingestion-Scaled Deletion Budget and Observation — 2026-10-23
 
-매분 실행을 기준으로 프로젝트 수와 회당 처리 프로젝트 수에서 순회 간격을 계산한다.
-프로젝트별 삭제 한도는 `ceil(일일 신규 수신 한도 × 순회 분 수 × 2 / 1440)`이며
-500~10,000행으로 제한한다. 누락된 예약 실행과 기존 적체를 따라잡도록 2배 여유를 둔다.
-100개 프로젝트·일일 100,000건 설정은 테이블당 3,473행, 200개는 6,945행이다.
-이 값은 실행 처리량의 측정 결과나 보장이 아니다. 정리 시간 20초·DB 수명 30초·커서 CAS와
-보존기간은 유지한다. paused 프로젝트도 계속 정리한다.
+For a run every minute, traversal interval is calculated from the project count and projects processed per run.
+The deletion limit per project is `ceil(daily new-receipt limit × traversal minutes × 2 / 1440)`, bounded to
+500 to 10,000 rows. The factor of 2 allows for missed scheduled runs and existing backlog.
+At 100 projects with a daily limit of 100,000, the value is 3,473 rows per table; at 200 projects it is 6,945.
+This value is not a measurement or guarantee of execution throughput. The 20-second cleanup time, 30-second database lifetime, cursor CAS, and
+retention period remain unchanged. Paused projects continue to be cleaned.
 
-새 metrics 로그는 삭제 행 수·삭제 한도에 도달한 테이블 횟수·측정 프로젝트 횟수·
-삭제 후 남은 만료 영수증의 최장 지연·계산한 필요량이 10,000행을 넘긴 프로젝트 횟수를
-남긴다. 마지막 항목이 있거나 만료 지연이 증가하면 수신 한도·유료 호스트의 페이지 수·
-DB 분리를 검토한다. 다른 테이블의 최장 지연이나 전체 DB 적체로 해석하지 않는다.
-동일 프로젝트 재처리는 계속 금지하고, 이전 void cleanup 호출은 필수 시그니처를 유지한다.
+The new metrics log records deleted rows, the number of tables that reached the deletion limit, the number of measured projects,
+the longest delay of expired receipts remaining after deletion, and the number of projects whose calculated requirement exceeded 10,000 rows.
+If the last value is present or expired-data delay increases, review ingestion limits, paid-host page counts, and database separation. Do not interpret it
+as the longest delay in other tables or overall database backlog. Reprocessing the same project remains forbidden, and the previous void cleanup call
+retains its required signature.

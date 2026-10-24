@@ -1,117 +1,106 @@
-# 브라우저 SDK (packages/browser)
+# Browser SDK (packages/browser)
 
-상태: `packages/browser` SDK(`cb3f2ff`)와 `examples/sembom` 예제·크기 검사(`f356d8a`)를 로컬 구현·검증했다. 예제는 실제 Sembom 저장소에 설치·활성화하지 않았고 API·DB 계약은 바뀌지 않았다. 기본 엔트리와 분리한 선택 프로필 `@tallyfin/browser/funnels`의 퍼널 연결 전송도 로컬 구현·검증했고, 관리자 연결 안내가 이 프로필 코드를 만드는 경로도 로컬 구현·검증했다. 이름·식별자 원시 문자열 검사는 `15faf3d`에 커밋했다.
-전송 의미는 [이벤트·집계 계약](./event-contract.md), 수신 경계는 [수집기 구현](./collector.md)을 따른다.
+Status: The `packages/browser` SDK (`cb3f2ff`) and the `examples/sembom` example and size checks (`f356d8a`) were implemented and verified locally. The example has not been installed or activated in the real Sembom repository, and the API and database contracts are unchanged. Funnel-link transmission in the optional profile `@tallyfin/browser/funnels`, which is separate from the main entry point, was also implemented and verified locally, and the administrator connection guide that generates this profile code was implemented and verified locally. Validation of names and identifiers as raw strings was committed in `15faf3d`.
+Transmission semantics follow the [Event and Aggregation Contract](./event-contract.md), and the receiving boundary follows [Collector Implementation](./collector.md).
 
-## 경계
-`createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)`가 `BrowserClient`를 돌려준다. SDK는 외부 런타임 의존성이 없고 서버 코어·D1 런타임을 번들에 넣지 않는다. 서비스별 이벤트 이름은 내장하지 않으며, 등록 스키마는 빌드 시점에 `tools/browser/schema.mjs`의 `projectBrowserSchema`로 레지스트리에서 압축 투영한다. 선택적 `BrowserPlatform`(`now`·`uuid`·`timer`·`send`, 선택 `monotonicNow`·`beacon`·`onHidden`)으로 테스트나 명시적 어댑터를 붙인다.
+## Boundary
+`createTallyfin({ endpoint, schema, allowLocalHttp?, enabled? }, host?)` returns a `BrowserClient`. The SDK has no external runtime dependencies and does not bundle the server core or D1 runtime. It does not embed service-specific event names, and the registered schema is projected and compressed from the registry at build time with `projectBrowserSchema` in `tools/browser/schema.mjs`. An optional `BrowserPlatform` (`now`, `uuid`, `timer`, `send`, optional `monotonicNow`, `beacon`, `onHidden`) attaches test or explicit adapters.
 
-기본 호스트는 이벤트/HTTP-date에 `Date.now`, 재시도 예산에 `performance.now`를 쓴다.
-커스텀 호스트는 `monotonicNow`를 생략하면 기존 `now` 동작을 유지한다. 시계와 timer는
-같은 경과 시간 기준으로 구동해야 한다. 유한 입력 제한상 이벤트 한 건은 800 ASCII
-bytes 미만이므로 20건을 한 번에 조립해도 16KiB 이하다.
+The default host uses `Date.now` for event and HTTP dates and `performance.now` for retry budgets.
+A custom host that omits `monotonicNow` retains the existing `now` behavior. The clock and timer
+must use the same elapsed-time basis. Because of the finite input limit, one event is under 800 ASCII
+bytes, so assembling 20 at once also stays within 16 KiB.
 
-내부 파일은 `types.ts`가 기존 공개 타입을, `common.ts`가 속성 검증·네이티브 어댑터·큐·재시도·숨김 전송·destroy 처리를, `index.ts`가 workflow 검증과 track/start 진입점을 맡는다.
-내부 enqueue는 연결 필드를 공통으로 받도록 분리했으며 기존 workflow의 `{ attempt }` 형식과 공개 BrowserClient API는 유지한다. 브라우저 퍼널 모듈은 기본 엔트리와 분리한 선택 엔트리 `@tallyfin/browser/funnels`로 구현했고 기본 번들에는 넣지 않는다.
+Internally, `types.ts` holds the existing public types, `common.ts` handles property validation, native adapters, the queue, retries, hidden-page sending, and destroy, and `index.ts` handles workflow validation and the track/start entry points.
+Internal enqueue was separated to receive linkage fields in a common shape, while the existing workflow `{ attempt }` format and public BrowserClient API remain unchanged. The browser funnel module is implemented as the optional `@tallyfin/browser/funnels` entry separate from the main entry and is not included in the default bundle.
 
-## 비활성·SSR·잘못된 설정
-다음 경우 리스너 없이 무동작 클라이언트를 돌려준다. `enabled: false`, 커스텀 호스트 없이 브라우저 환경(`document`·`fetch`·`crypto`)을 사용할 수 없음, 잘못된 엔드포인트·스키마, 검사 중 예외다. 무동작 클라이언트는 `track`이 `false`, `start`가 `undefined`, `pending`이 0이다.
+## Disabled, SSR, and Invalid Configuration
+In each of the following cases, it returns a no-op client without listeners: `enabled: false`; no browser environment (`document`, `fetch`, `crypto`) without a custom host; an invalid endpoint or schema; or an exception during checks. The no-op client returns `false` from `track`, `undefined` from `start`, and a `pending` value of 0.
 
-엔드포인트는 `/v1/projects/<id>/batches` 경로와 HTTPS를 요구하고 userinfo·쿼리·해시를 거부한다. `allowLocalHttp: true`를 명시하면 localhost·127.0.0.1·[::1]의 HTTP도 허용한다. 스키마는 `JSON.stringify(schema).length`가 32768을 넘으면 거부하며, 이 길이는 UTF-8 바이트 수가 아니라 JavaScript 문자열 길이다.
+The endpoint must use the `/v1/projects/<id>/batches` path and HTTPS and must reject userinfo, query, and fragment. Explicitly setting `allowLocalHttp: true` also allows HTTP on localhost, 127.0.0.1, and [::1]. A schema is rejected when `JSON.stringify(schema).length` exceeds 32768; this length is JavaScript string length, not UTF-8 byte count.
 
-## 클라이언트 API
-- `track(name, properties?)`: 일반 이벤트만 버퍼에 넣는다. 워크플로 단계 이름은 거부한다.
-- `start(workflow, properties?)`: 시작 이벤트와 attemptId·startedAt을 만들고 `AttemptHandle`을 돌려준다. 시작을 넣지 못하면 핸들도 만들지 않는다.
-- `AttemptHandle.succeed/fail(properties?)`: 24시간 안에 한 번만 종료를 넣는다. 속성은 객체만 받으며 배열·null·원시값·함수는 `false`로 거부한다. 속성을 생략하거나 빈 객체를 넣으면 시작할 때의 dimensions를 사용한다. 잘못된 호출은 핸들을 소진하지 않아 올바른 속성으로 다시 호출할 수 있다. dimensions 값이 바뀌면 거부하고, 실패 단계가 없는 흐름은 `fail`이 `false`다.
-- `AttemptHandle.cancel()`: 이후 종료 이벤트를 막는다. 이미 버퍼에 넣은 시작 이벤트는 유지한다.
-- `flush()`: 다음 기회에 전송하도록 예약한다. 네트워크 완료를 기다리게 하지 않는다.
-- `destroy()`: 리스너·타이머를 지우고 진행 중 I/O를 중단하며 메모리를 비운다. 늦은 응답은 반영하지 않고 두 번 호출해도 안전하다.
-- `pending`: 버퍼와 진행 중/재시도 이벤트의 합이며 전달 완료 수가 아니다.
+## Client API
+- `track(name, properties?)`: Buffers only regular events. Workflow step names are rejected.
+- `start(workflow, properties?)`: Creates a start event with an attemptId and startedAt and returns an `AttemptHandle`. No handle is created if the start cannot be buffered.
+- `AttemptHandle.succeed/fail(properties?)`: Adds a completion only once within 24 hours. Properties must be an object; arrays, null, primitives, and functions return `false`. Omitting properties or passing an empty object uses the dimensions from start. An invalid call does not consume the handle, so it can be retried with valid properties. Changed dimension values are rejected, and `fail` returns `false` for a workflow without a failure step.
+- `AttemptHandle.cancel()`: Prevents later completion events. A start event already in the buffer remains.
+- `flush()`: Schedules transmission at the next opportunity. It does not make the caller wait for network completion.
+- `destroy()`: Clears listeners and timers, stops in-flight I/O, and releases memory. Late responses are ignored, and calling it twice is safe.
+- `pending`: The sum of buffered, in-flight, and retrying events; it is not a count of completed deliveries.
 
-`track`·`succeed`·`fail`의 `true`는 메모리 버퍼가 이벤트를 받았다는 뜻이다. 서버 저장 완료를 뜻하지 않는다.
+A `true` result from `track`, `succeed`, or `fail` means the in-memory buffer accepted the event. It does not mean the server stored it.
 
-이벤트는 넣기 전에 한 번 스냅샷하고 등록 규칙으로 검사한다. 알 수 없는 이름·키, 자유 문자열, 중첩 객체·배열은 버린다. 이벤트 ID는 `crypto.randomUUID`로 만들고 실패하면 보내지 않으며 약한 난수로 대체하지 않는다.
+An event is snapshotted once before buffering and checked against registration rules. Unknown names or keys, free-form strings, nested objects, and arrays are dropped. Event IDs are generated with `crypto.randomUUID`; if generation fails, the event is not sent, and it does not fall back to a weaker random source.
 
-이름과 식별자는 변환하기 전에 원시 문자열인지 먼저 본다. 이벤트 이름은 `common.ts`의 스냅샷이, `start`의 workflow 식별자와 attempt ID는 `index.ts`가, 이벤트 ID는 `common.ts`의 enqueue가 `typeof value === 'string'`을 통과해야 한다. `toString`·`toJSON`으로 문자열처럼 보이는 객체는 이 단계에서 거부되므로 변환이나 직렬화가 일어나지 않고, 등록되지 않은 내용이 이름·식별자 자리에 실려 나가지 않는다.
+Names and identifiers are checked for being raw strings before conversion. The event name snapshot in `common.ts`, the workflow identifier and attempt ID in `start` in `index.ts`, and event IDs in `common.ts` enqueue must pass `typeof value === 'string'`. Objects that look like strings through `toString` or `toJSON` are rejected at this stage, so no conversion or serialization occurs and unregistered content cannot be carried in a name or identifier position.
 
-## 퍼널 프로필 (`@tallyfin/browser/funnels`)
+## Funnel Profile (`@tallyfin/browser/funnels`)
 
-기본 엔트리는 퍼널 코드를 넣지 않는다. 퍼널을 쓰는 서비스만 선택 엔트리 `@tallyfin/browser/funnels`에서 `createTallyfinFunnels(options, host?)`를 가져온다. `options`는 `FunnelSchema`(`version`·`events`·`funnels`)를 받고, `host`는 커스텀 호스트를 붙이는 기존 `BrowserPlatform` 선택 포트다. 버퍼·재시도·배치 전송·`flush`·`destroy`·`pending`은 기본 클라이언트와 같은 메모리 전송(`createTransport`)을 공유하며 별도 저장소나 추가 엔드포인트를 만들지 않는다.
+The main entry does not include funnel code. Only services that use funnels import `createTallyfinFunnels(options, host?)` from the optional entry `@tallyfin/browser/funnels`. `options` accepts a `FunnelSchema` (`version`, `events`, `funnels`), and `host` is the existing optional `BrowserPlatform` port for custom hosts. Buffering, retries, batch transmission, `flush`, `destroy`, and `pending` share the same in-memory transport (`createTransport`) as the main client and create no separate storage or additional endpoint.
 
-`FunnelClient`는 `track`·`flush`·`destroy`·`pending`에 `createFunnelRun`·`trackFunnel`을 더하고 workflow 진입점 `start`는 두지 않는다. 퍼널 작업은 기본 workflow 시도와 다른 엔트리라서 한쪽에서 시작한 작업을 다른 쪽으로 이어받지 않는다.
+`FunnelClient` adds `createFunnelRun` and `trackFunnel` to `track`, `flush`, `destroy`, and `pending`, and has no workflow `start` entry point. Funnel runs are separate from workflow attempts, so a run started in one entry cannot be continued in the other.
 
-- `createFunnelRun(id)`: 등록된 퍼널의 새 작업 컨텍스트를 만든다. 돌려주는 `{ funnelId, runId, startedAt }`는 동결된 값이고 이벤트를 넣지 않으며 네트워크도 쓰지 않는다. `runId`는 매번 새 UUIDv4이고 방문자 식별자로 재사용하지 않는다. 저장소·쿠키·`localStorage`를 쓰지 않는다. 첫 단계가 browser가 아닌 퍼널·미등록·비활성·destroy 뒤에는 `undefined`다. 그래서 브라우저에서는 browser로 시작하는 퍼널만 작업을 만들 수 있다.
-- `trackFunnel(name, properties, link, occurredAt?)`: `link`를 복사해 검증한 뒤 단계 이벤트를 넣는다. `link`는 `funnelId`·`runId`(UUIDv4)·`startedAt`(엄격한 UTC)만 가진 불변이고 한 번 검증하면 바꾸지 않는다. 서버에서 시작해 브라우저로 넘어온 퍼널의 browser 단계도 이 경로로 받는다. 수동 재시도에는 원래 `occurredAt`을 넘겨 최초 논리 발생 시각을 유지한다.
-- `track(name, properties?)`: 일반 이벤트만 넣는다. 등록된 퍼널 단계 이름이면 `false`로 거부한다.
+- `createFunnelRun(id)`: Creates a new run context for a registered funnel. The returned `{ funnelId, runId, startedAt }` are frozen values; it adds no events and performs no network I/O. `runId` is a new UUIDv4 every time and is not reused as a visitor identifier. It uses no storage, cookies, or `localStorage`. It returns `undefined` for an unregistered, disabled, or destroyed funnel, or a funnel whose first step is not browser. Thus a browser can create runs only for funnels that start with a browser step.
+- `trackFunnel(name, properties, link, occurredAt?)`: Copies and validates `link`, then buffers the step event. `link` is immutable and contains only `funnelId`, `runId` (UUIDv4), and `startedAt` (strict UTC); once validated, it is not changed. A browser step of a funnel started on the server is also accepted through this route. For a manual retry, pass the original `occurredAt` to preserve the first logical occurrence time.
+- `track(name, properties?)`: Buffers only regular events. A registered funnel step name returns `false`.
 
-퍼널 분류값(`dimensions`)은 단계마다 같은 등록 규칙을 쓰는 유한 값 집합이다. 단계 사이에서 분류 정의가 어긋나면 서버가 거부하므로 호스트는 연결이 살아 있는 동안 차원과 논리 발생 시각을 바꾸지 않아야 한다. 서버 단계는 빌드 시점 투영(`projectFunnelBrowserSchema`)에서 `null` 자리로만 남아 순서를 지키고, 브라우저 번들은 서버 정의를 싣지 않는다.
+Funnel dimension values use the same finite-value registration rules on every step. If their definitions differ between steps, the server rejects the event, so the host must not change dimensions or the logical occurrence time while the link is active. Server steps remain only as `null` placeholders in the build-time projection (`projectFunnelBrowserSchema`) to preserve order, and the browser bundle does not include server definitions.
 
-작업 흐름과 퍼널의 enum 허용 값은 순서와 무관한 집합으로 비교한다. `pdf, image`와
-`image, pdf`는 같은 규칙이다. SDK는 내부 JSON 스냅샷만 정렬하며 호스트가 넘긴 원본
-스키마는 바꾸지 않는다. 다른 값 집합·중복 값·필수 여부나 속성 종류의 불일치는 계속 거부한다.
+Workflow and funnel enum values are compared as unordered sets. `pdf, image` and
+`image, pdf` are the same rule. The SDK sorts only its internal JSON snapshot and does not modify the original
+schema supplied by the host. Different value sets, duplicate values, requiredness mismatches, and property-type mismatches continue to be rejected.
 
-예시는 `examples/funnels/browser.ts`와 `examples/funnels/browser-schema.json`에 있다.
+Examples are in `examples/funnels/browser.ts` and `examples/funnels/browser-schema.json`.
 
-관리자 연결 안내는 이 프로필을 그대로 만든다. 브라우저 출처에서 작업 퍼널을 고르면
-`sdkSetup(registry, origin, 'browser', { profile: 'funnels', funnelId })`가
-`@tallyfin/browser/funnels` 팩토리와 `tools/browser/schema.mjs`의 퍼널 투영(브라우저
-단계는 이름, 서버 단계는 `null` 자리)을 만들고, 고른 퍼널의 사용 예제를 주석으로 붙인다.
-일반 프로필은 기존 `createTallyfin`·workflow 코드를 만들고, 퍼널 프로필은 일반 이벤트와
-등록 단계만 싣고 작업 흐름 전용 이벤트는 스키마에서 뺀다. 예제는 자격 증명을 넣지 않고
-첫 출처가 browser인 퍼널만 `createFunnelRun`을 쓰며 나머지는 호스트가 검증한 전달
-컨텍스트를 쓴다.
+The administrator connection guide generates this profile exactly. When a workflow funnel is selected for a browser source,
+`sdkSetup(registry, origin, 'browser', { profile: 'funnels', funnelId })` generates the
+`@tallyfin/browser/funnels` factory and the funnel projection from `tools/browser/schema.mjs` (browser
+step names and `null` server placeholders), with a commented usage example for the selected funnel.
+The regular profile generates the existing `createTallyfin` and workflow code, while the funnel profile includes only regular events and
+registered steps and removes workflow-only events from the schema. Examples contain no credentials; only funnels whose first source is browser use
+`createFunnelRun`, and the rest use the delivery context verified by the host.
 
-빌드는 SDK 내부 Batch의 `__tfBatch` 예약 필드 6개만 짧게 만든다. 공개 SDK·HTTP 키는
-이름을 유지한다. 고정 endpoint와 설정을 포함한 관리자 생성 코드의 로컬 번들은 gzip
-3KiB 예산 이내다. 2026-10-12 gzip 실측은 기본 2775 B·Sembom 3047 B·퍼널 2920 B·
-참조 예제 3050 B·관리자 생성 퍼널 코드 3072 B다. 생성 코드 측정은 고정된 참조
-레지스트리와 endpoint 기준이며, 임의로 큰 사용자 스키마까지 3KiB를 보장하지 않는다.
+The build shortens only six reserved `__tfBatch` fields in the SDK-internal Batch. Public SDK and HTTP key
+names remain unchanged. A local bundle of administrator-generated code with a fixed endpoint and configuration is within the 3 KiB gzip
+budget. On 2026-10-12, gzip measurements were 2775 B for the default, 3047 B for Sembom, 2920 B for funnels,
+3050 B for the reference example, and 3072 B for administrator-generated funnel code. Generated-code measurements use a fixed reference
+registry and endpoint and do not guarantee 3 KiB for arbitrarily large user schemas.
 
-## 버퍼·재시도·전송
-- 메모리 40개(진행 중 포함), 배치당 20개·16384 bytes, 20개가 모이거나 5초가 지나면 비동기 전송한다.
-- 네트워크·타임아웃 실패(상태 0)·408·429·모든 5xx만 최대 2회 재시도하고 401·403·409·422는 재시도하지 않는다. 대기는 Retry-After([RFC 9110 §10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3))를 우선한다. 정수 초는 그대로 쓰고, 표준 IMF-fixdate(예 `Thu, 08 Oct 2026 15:01:15 GMT`)는 브라우저 호스트 현재 시각 기준 남은 시간으로 바꾼다. 하한은 1초이며 지난 시각도 1초로 본다. 그 밖의 형식은 무시하고 1·2초 백오프를 쓴다. 대기가 배치 시작부터 10분 이상이 되면 재전송 없이 버린다. 재시도는 원래 ID·시각·바디를 유지한다.
-- 응답 본문은 저장·로그하지 않고 취소한다. 정리의 완료를 기다리지 않으며 정리가 실패하거나 멈춰도 받은 HTTP 상태를 처리한다. 200·401·403·422 응답의 정리 지연 때문에 시간 초과 재전송을 하지 않는다.
-- 네이티브 `sendBeacon`은 credentials를 강제로 포함하므로 쓰지 않는다. keepalive fetch로 `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`, `redirect: manual`을 쓰고 네이티브 기본값인 CORS 모드를 유지한다. 리다이렉트는 따라가지 않고 배치를 버린다. 필터링된 리다이렉트의 상태 0은 내부적으로 재시도하지 않는 3xx 분기로 보내며, 네트워크 예외와 커스텀 호스트의 상태 0은 기존대로 재시도한다. 수집 주소는 리다이렉트 없는 최종 endpoint여야 한다.
-- 숨김 콜백은 진행 중 배치를 다시 보내지 않고 Retry-After를 건너뛰지 않으며, 아직 안 보낸 keepalive 배치를 최대 2개까지 즉시 시작한다. `BrowserPlatform.beacon`은 명시적 커스텀 호스트용 선택 포트로 남아 있고 `false`이거나 예외면 keepalive fetch로 넘어간다. beacon `true`는 브라우저 큐 수락이며 서버 저장 완료가 아니다.
+## Buffering, Retry, and Transmission
+- The in-memory buffer holds 40 events including in-flight events. A batch has 20 events and 16384 bytes; it sends asynchronously when 20 events accumulate or 5 seconds pass.
+- It retries only network and timeout failures (status 0), 408, 429, and all 5xx responses, up to 2 times; it does not retry 401, 403, 409, or 422. Retry-After ([RFC 9110 `10.2.3](https://www.rfc-editor.org/rfc/rfc9110.html#section-10.2.3)) takes priority for the wait. Integer seconds are used as-is, and a standard IMF-fixdate (for example, `Thu, 08 Oct 2026 15:01:15 GMT`) becomes the remaining time relative to the browser host's current time. The minimum wait is 1 second, and a past time also means 1 second. Other formats are ignored in favor of 1-second and 2-second backoff. If the wait would be 10 minutes or more from the start of the batch, the batch is discarded without retransmission. Retries preserve the original ID, time, and body.
+- Response bodies are cancelled without being stored or logged. The client does not wait for cleanup to finish and processes the received HTTP status even if cleanup fails or stalls. A delayed cleanup from a 200, 401, 403, or 422 response does not trigger a timeout retransmission.
+- Native `sendBeacon` is not used because it forces credentials. Keepalive fetch uses `credentials: omit`, `cache: no-store`, `referrerPolicy: no-referrer`, `redirect: manual`, and the CORS mode default of the native fetch implementation. Redirects are not followed and the batch is discarded. A filtered redirect with status 0 goes to the non-retrying 3xx branch internally, while network exceptions and custom-host status 0 are retried as before. The ingestion address must be a final endpoint without redirects.
+- The hidden callback does not resend in-flight batches and does not skip Retry-After; it immediately starts at most two keepalive batches that have not yet been sent. `BrowserPlatform.beacon` remains an optional port for explicit custom hosts and falls back to keepalive fetch when it returns `false` or throws. Beacon `true` means the browser accepted the queue, not that the server stored the event.
 
-원문 입력·결과, 금액, 이메일, 계정·주문·파일 ID, URL·리퍼러·DOM·영구 식별자·쿠키를 보내지 않고 `localStorage`/`sessionStorage`도 쓰지 않는다.
+The client does not send raw input or results, amounts, email addresses, account, order, or file IDs, URLs, referrers, DOM data, persistent identifiers, or cookies, and it does not use `localStorage` or `sessionStorage`.
 
-배치 16384 bytes와 이벤트 하나 16000 bytes 한도는 UTF-8 바이트가 아니라 JavaScript 문자열 길이로 잰다. 직렬화되는 이름·키·enum은 ASCII 패턴(`namePattern`·`enumPattern`)으로 제한되고 UUID·ISO 시각·불리언·정수도 ASCII라서 지금은 두 값이 같다. 허용 범위에 자유 문자열이나 비ASCII 값을 넣는 확장을 하면 이 두 비교는 UTF-8 바이트 측정으로 되돌려야 한다.
+The 16384-byte batch and 16000-byte per-event limits are measured in JavaScript string length, not UTF-8 bytes. Serialized names, keys, and enum values are restricted by ASCII patterns (`namePattern` and `enumPattern`), and UUIDs, ISO times, booleans, and integers are ASCII, so the two values are currently equal. An extension that allows free-form strings or non-ASCII values within this range must restore these comparisons to UTF-8 byte measurement.
 
-## 빌드·검사
+## Build and Checks
 ```sh
 npm run test:browser
 npm run build:browser
 npm run check:browser-size
 ```
 
-`build:browser`는 esbuild 번들과 `tsc` 선언을 만들고, `check:browser-size`는 예제 스키마 투영 일치와 번들 경계, SDK 단독 gzip 3KiB·대표 연동 합계 3.25KiB 예산을 검사한다. 퍼널 예제 투영 일치와 퍼널 번들 경계, 퍼널 SDK+예제 예산도 함께 본다. 관리자 `sdkSetup`이 생성한 퍼널 코드도 source SDK에 직접 연결해 endpoint·스키마를 포함한 크기와 런타임 의존성 없음·다른 프로필 없음 경계를 같은 명령에서 검사한다. 최신 크기는 전달 진단 추가 후 검증 기록을 따르며, 위 2026-10-12 수치는 진단 추가 전 이력이다. 본문 정리·리다이렉트 개선 뒤 브라우저 검사 32개·관리자 퍼널 SDK 생성 검사 6개, 총 38/38과 루트 타입 검사·`build:browser`·`check:browser-size`를 확인했다. 스키마 검증·배치 포장·퍼널 링크 복사의 중복 배열/객체 생성을 줄였고 숫자 검사는 같은 공용 safe-integer 검사로 모았다. 이름·식별자 원시 문자열 검사 뒤에는 브라우저 검사 36개·관리자 퍼널 SDK 생성 검사 6개, 총 42/42와 `npx --no-install tsc --noEmit`·`build:browser`·`check:browser-size`를 확인했고, 새 `packages/browser/test/identities.test.ts` 4개는 검사 추가 전 HEAD를 격리 실행하면 3개가 실패했다. 공개 SDK·HTTP 키와 검증 범위는 유지한다. 실브라우저 확인을 포함한 실행 기록은 [VALIDATION.md](../../VALIDATION.md)에 있다.
+`build:browser` creates an esbuild bundle and `tsc` declarations. `check:browser-size` checks that the example schema projection matches, bundle boundaries, the 3 KiB standalone SDK gzip budget, and the 3.25 KiB representative-integration total. It also checks funnel example projection matching, funnel bundle boundaries, and the funnel SDK-plus-example budget. The same command links administrator `sdkSetup`-generated funnel code directly to the source SDK and checks its size including endpoint and schema, absence of runtime dependencies, and absence of other profiles. Current sizes follow the verification record after delivery diagnostics were added; the 2026-10-12 values above are history from before that addition. After body-cleanup and redirect improvements, the 32 browser checks, 6 administrator funnel SDK generation checks (38/38 total), root type check, `build:browser`, and `check:browser-size` passed. Duplicate array and object creation in schema validation, batch packaging, and funnel link copying was reduced, and numeric checks were consolidated into the same shared safe-integer check. After raw-string checks for names and identifiers, the 36 browser checks and 6 administrator funnel SDK generation checks (42/42 total) plus `npx --no-install tsc --noEmit`, `build:browser`, and `check:browser-size` passed; when the new four `packages/browser/test/identities.test.ts` cases were run in isolation against HEAD before the check was added, three failed. The public SDK and HTTP keys and the verification scope are unchanged. Execution records, including real-browser checks, are in [VALIDATION.md](../../VALIDATION.md).
 
-생성 퍼널 코드의 3099 B 초과는 공용 객체 검사, 재시도 대기 하한의 단일 계산,
-타이머 중계 함수·beacon 임시값 제거로 3072 B까지 줄였다. 입력·기간·재시도 검사와
-공개 키는 유지한다. 브라우저 45/45·관리자 242/242·SDK 빌드·루트 타입 검사와
-로컬 Chromium 생성 SDK 온보딩/응답 유실 회귀가 통과했다. 생성 코드가 상한에
-딱 맞으므로 도구·SDK 변경 때 같은 명령을 다시 측정해야 한다.
+The generated funnel code first exceeded the budget at 3099 B, then was reduced to 3072 B by sharing object checks, calculating the retry-wait minimum once, and removing the timer relay function and temporary beacon values. Input, duration, and retry checks and public keys are preserved. The 45/45 browser checks, 242/242 administrator checks, SDK build, root type check, and local Chromium onboarding and lost-response regression for generated SDK code passed. Because generated code is exactly at the limit, rerun the same measurements after tool or SDK changes.
 
-## 남은 검증
-합성 화면의 실브라우저 초기 실행·동기 호출·전송, 수집기 종료 시 동작, 502·응답 유실
-복구는 [측정 도구](../../tools/browser-bench/README.md)의 `recovery`·`outage`
-화면으로 확인했다.
-실제 Sembom 설치·활성화와 서비스 지연·처리량, 모바일·운영 환경, 원격 배포는 남았다.
-퍼널 예제의 실제 서비스 적용도 남았다. 관리자 SDK 코드 생성은 표준·퍼널 프로필과 서버
-설정을 만들도록 로컬 구현·검증했고, reader/owner 퍼널 일별 조회 API와 관리자 퍼널 분석
-화면·CSV, 퍼널 전용 단계 편집 폼도 로컬에서 구현·검증했다.
-실제 운영 발행자·관리자 인증 연결도 후속이다.
-이름·식별자 원시 문자열 검사는 Node 대역 검사로만 확인했고 실제 브라우저 실행이나
-배포된 수집기로는 확인하지 않았다.
+## Remaining Verification
+The measurement tool's `recovery` and `outage` screens were used to check real-browser initial execution, synchronous calls, and transmission on a synthetic screen, behavior when the collector stops, and recovery from 502 responses and lost responses. These are in the [measurement tool](../../tools/browser-bench/README.md).
 
-## 전달 진단 — 2026-10-23
+Still outstanding are installation and activation in the real Sembom service, service latency and throughput, mobile and production environments, and remote deployment.
+Applying the funnel example to a real service is also outstanding. Administrator SDK code generation has been implemented and verified locally for standard and funnel profiles and server configuration, and the reader/owner funnel daily read API, administrator funnel analysis screen and CSV, and funnel-specific step editor form have also been implemented and verified locally.
+Connecting to real production publisher and administrator authentication is follow-up work.
+Raw-string checks for names and identifiers were verified only with Node-level tests, not in a real browser or against a deployed collector.
 
-선택적 `onDelivery(state, events)`는 고정 원인과 건수만 동기적으로 전달한다.
-accepted는 HTTP 2xx를 관측한 이벤트 수이며 신규 집계 수가 아니다(중복을 포함할 수 있다).
-retry는 예약된 재시도의 배치 이벤트 수, failed는 HTTP 거부/재시도 소진으로 끝난 배치,
-expired는 전송 전 예산 만료, overflow는 큐에 들어가지 못한 이벤트, destroyed는 명시적
-종료 시 버린 잔여 이벤트다. beacon_queued는 주입 호스트의 큐 수락으로 서버 전달을
-보장하지 않는다. 잘못된 입력·비활성 SDK는 기존 false 반환을 유지한다. 콜백에서는
-내용/ID/URL을 받지 않으며 메모리 숫자 집계 같은 짧은 동기 작업을 사용한다.
-단독 3KiB·대표 연동 합계 3.25KiB의 예산은 성능 예산 문서를 따른다.
+## Delivery Diagnostics — 2026-10-23
+
+Optional `onDelivery(state, events)` synchronously reports only fixed causes and counts.
+`accepted` is the number of events for which an HTTP 2xx response was observed; it is not a count of new aggregates and may include duplicates.
+`retry` is the batch event count for a scheduled retry, `failed` is a batch that ended with an HTTP rejection or exhausted retries,
+`expired` is a batch whose transmission budget expired before sending, `overflow` is an event that could not enter the queue, and `destroyed` is a remaining event discarded on explicit shutdown.
+`beacon_queued` means an injected host accepted the queue and does not guarantee server delivery. Invalid input or a disabled SDK keeps the existing `false` return. The callback receives no content, ID, or URL; use only short synchronous work such as incrementing an in-memory counter.
+The standalone 3 KiB and representative-integration 3.25 KiB budgets follow the performance budget document.

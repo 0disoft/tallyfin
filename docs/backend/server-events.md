@@ -1,337 +1,312 @@
-# 서버 발행 이벤트 계약 (코어·저장·endpoint 슬라이스)
+# Server Publishing Event Contract (Core, Storage, and Endpoint Slice)
 
-상태: 서버 이벤트의 코어 검증·정규화·해시·ingest 계획, 저장·발행 권한, 전용 발행
-endpoint와 발행자 인증·런타임 설정 배선까지 로컬에서 구현했고 좁은 범위 검증을
-통과했다. `project_publishers` 부여·회수 CLI와 dependency-free 서버 SDK까지 로컬
-구현했다. 그 CLI는 발행 권한 쓰기와 같은 D1 batch에서 관리자 변경 이력(`admin_changes`)에
-`publisher.granted`·`publisher.revoked` 감사 기록을 남기고, `0008_publisher_history.sql`이
-이력 action을 넓혔다. 변경 이력 조회 API와 관리자 화면도 이 action을 표시한다. 발행 권한을
-바꾸는 관리자 API(`PUT`·`DELETE /v1/projects/{projectId}/publishers`)와 설정의 owner 전용
-`LivePublishers` 화면을 로컬에서 연결했다. 출처별 조회 API(`source` 선택, 기본 browser)는
-로컬에서 구현·검증 완료했고 실제 발행자 OIDC 제공자 설정은 아직 없고 서버 출처 조회 화면은
-로컬에서 연결했다. 이 문서는
-확정한 것과 아직 계획인 것을 나눠 적는다.
+Status: Server event core validation, normalization, hashing, and the ingest plan; storage and publishing authorization; the dedicated publishing
+endpoint; and publisher authentication and runtime configuration wiring have been implemented locally and passed focused verification.
+The `project_publishers` grant and revocation CLI and the dependency-free server SDK have also been implemented locally.
+That CLI writes `publisher.granted` and `publisher.revoked` audit records to administrator change history (`admin_changes`) in the same D1 batch
+as the publishing authorization write, and `0008_publisher_history.sql`
+broadens the history actions. The change history read API and administrator screen also display those actions. The administrator API that changes
+publishing authorization (`PUT` and `DELETE /v1/projects/{projectId}/publishers`) and the owner-only
+`LivePublishers` screen in settings have been connected locally. The source-specific read API (optional `source`, default browser) has been
+implemented and verified locally. Real publisher OIDC provider settings do not exist yet, and the server-source read screen has been
+connected locally. This document separates what is finalized from what is still planned.
 
-형태는 [OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
-동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다. 브라우저 수집 경로는
-[수집기 구현](./collector.md)과 [브라우저 SDK](./browser-sdk.md)에 있다.
+Shapes follow [OpenAPI](../../api/openapi.yaml), storage structure follows [DBML](../../db/schema.dbml), and
+behavioral semantics follow the [Event and Aggregation Contract](./event-contract.md). The browser ingestion route is in
+[Collector Implementation](./collector.md) and the [Browser SDK](./browser-sdk.md).
 
-## 코어 슬라이스에 포함된 것
+## Included in the Core Slice
 
-- 코어의 `parseServerBatch`·`prepareServerBatch`. 브라우저 `parseBatch`·`prepareBatch`와
-  같은 규칙으로 배치 구조·시간 범위·등록 정의를 검사하고 이벤트를 정규화·정렬한다.
-  `packages/core/src/batch.ts`·`types.ts`·`value.ts`에 둔다. `parseServerBatch`는
-  계약 검증만 하며 발행자 인증과 프로젝트 권한 검사는 하지 않는다.
-- source별 payload hash. 영수증 키와 해시 입력에 출처가 들어가 server 이벤트가
-  browser와 같은 해시 바이트를 쓰지 않는다. 브라우저 canonical 해시 입력은 바이트
-  그대로 유지한다.
-- `planIngest`의 서버 지원. 순수 함수로 영수증과 이벤트 일별 집계 delta만 만들고
-  attempt·workflow 상태는 만들지 않는다.
-- `ServerBatch`·`ServerEvent` 계약. OpenAPI 스키마·예제·테스트를 함께 둔다.
+- `parseServerBatch` and `prepareServerBatch` in the core. They validate batch structure, time range, and registered definitions with the
+  same rules as browser `parseBatch` and `prepareBatch`, then normalize and sort events.
+  They live in `packages/core/src/batch.ts`, `types.ts`, and `value.ts`. `parseServerBatch` only
+  validates the contract; it does not perform publisher authentication or project authorization.
+- Per-source payload hashes. The source is part of the receipt key and hash input, so a server event does not use the same hash bytes as a
+  browser event. The browser canonical hash input remains byte-for-byte unchanged.
+- Server support in `planIngest`. This pure function creates only receipt and event daily aggregate deltas and does not create
+  attempt or workflow state.
+- The `ServerBatch` and `ServerEvent` contracts, together with their OpenAPI schema, examples, and tests.
 
-## 저장·발행 권한 슬라이스에 포함된 것
+## Included in the Storage and Publishing Authorization Slice
 
-- `project_publishers` 테이블. 0006에서는 `(project_id, issuer, subject, created_at)`만 두었고,
-  현재 정의는 0009가 더한 불변 부여 ID `grant_id`까지 포함한다. 새로 적용하는 DB에서는 빈
-  테이블로 시작한다. 기존 관리자 grant(`project_grants`)에서
-  발행 권한을 만들어 주지 않고 backfill도 하지 않는다. 관리자 reader/owner 여부와 발행
-  권한은 서로 독립이며, owner도 발행 권한을 자동으로 얻지 않는다.
-- `0006_server_collection.sql`. `project_publishers`를 추가하고 `event_receipts`·
-  `event_daily_counts`의 source 제약을 `browser`에서 `browser|server`로 넓힌다. SQLite는
-  CHECK를 직접 바꿀 수 없어 두 테이블을 복사·재생성한다. 발행 권한 표는 0009가 `grant_id`를
-  더하며 다시 재생성한다.
-- 저장 어댑터의 `publisherAccess`·`commitServer`. `D1Store`가 `ServerCollectionStore`를
-  구현하고 서버 배치 저장 경로를 맡는다.
-- 코어의 `ServerPrincipal`(issuer·subject)과 `ServerCollectionStore`. 호스트가 검증해
-  넘기는 발행자 주체와 `publisherAccess`·`commitServer` 포트를 나타낸다.
+- The `project_publishers` table. Migration 0006 contained only `(project_id, issuer, subject, created_at)`;
+  the current definition also includes the immutable grant ID `grant_id` added by 0009. A newly applied database starts with an empty
+  table. Publishing authorization is not created from existing administrator grants (`project_grants`), and no backfill is performed. Administrator
+  reader or owner status and publishing authorization are independent, and an owner does not automatically receive publishing authorization.
+- `0006_server_collection.sql`. It adds `project_publishers` and broadens the source constraint on `event_receipts` and
+  `event_daily_counts` from `browser` to `browser|server`. SQLite cannot alter a CHECK directly, so it copies and recreates both
+  tables. Migration 0009 adds `grant_id` to the publishing authorization table and recreates it again.
+- `publisherAccess` and `commitServer` in the storage adapter. `D1Store` implements `ServerCollectionStore` and owns
+  server batch storage.
+- The core `ServerPrincipal` (issuer and subject) and `ServerCollectionStore`. They represent the publisher principal verified and passed by
+  the host and the `publisherAccess` and `commitServer` ports.
 
-## ServerEvent 계약
+## ServerEvent Contract
 
-`ServerEvent`는 네 필드만 갖는 닫힌 객체다.
+`ServerEvent` is a closed object with only four fields.
 
-- `eventId` — 새 이벤트마다 새로 만드는 소문자 UUIDv4. 재시도는 원래 eventId·
-  occurredAt·내용을 그대로 다시 보내며 새 ID를 만들지 않는다. 같은 ID를 다른 이벤트에
-  재사용하지 않는다.
-- `name` — 프로젝트에 등록된 이벤트 이름.
-- `occurredAt` — 실제 달력의 UTC RFC3339 Z. 소수 초는 0~3자리이며 밀리초로
-  정규화한다.
-- `properties` — 등록 정의의 속성만. boolean·enum·integer와 이벤트당 4개 한도는
-  browser와 같다.
+- `eventId` — A lowercase UUIDv4 newly created for each new event. Retries resend the original eventId, occurredAt, and content unchanged and do not
+  create a new ID. Do not reuse an ID for another event.
+- `name` — An event name registered for the project.
+- `occurredAt` — UTC RFC3339 `Z` on the real calendar, with 0 to 3 fractional-second digits, normalized to
+  milliseconds.
+- `properties` — Only properties in the registered definition. Booleans, enums, and integers and the limit of 4 properties per event are
+  the same as for browser events.
 
-`attempt`는 넣지 않는다. server 이벤트에 attempt가 있으면 배치 전체를 거부한다.
-출처는 배치 하나로 정하고 `source`는 `server`다. 배치는 최대 20개·16KiB UTF-8이며
-`occurredAt`은 수신 시각 기준 과거 24시간~미래 5분만 허용한다.
+It does not include `attempt`. If a server event has an attempt, the whole batch is rejected.
+Source is determined for the whole batch, and `source` is `server`. A batch has at most 20 events and 16 KiB of UTF-8;
+`occurredAt` is allowed only from 24 hours in the past through 5 minutes in the future relative to receipt.
 
-`name`은 source가 `server`인 등록 정의에서만 고른다. 브라우저 정의로 server 이벤트를
-보내거나 server 정의로 browser 이벤트를 보내면 거부한다. v0.1 작업 흐름 정의는 browser
-출처만 지원하므로 server 이벤트는 흐름 단계가 되지 않는다.
+`name` is selected only from a registered definition whose source is `server`. Sending a server event through a browser definition or a browser event through
+a server definition is rejected. In v0.1, workflow definitions support only the browser source, so a server event cannot be a workflow step.
 
-스키마는 최소 이벤트 하나만 요구하고 server 정의만 있어도 등록할 수 있다.
-server 전용 스키마는 workflows를 빈 배열로 둔다. allowedOrigins도 빈 배열로 둘 수 있으며
-이때 browser 수집은 origin_denied로 거부하고 server 발행은 전용 인증·발행 권한을 계속 검사한다.
-해당 스키마의 browser summary는 events=[]·totalEvents=0이고 browser workflow 조회는 404다.
+A schema requires at least one event and can be registered with server definitions only.
+A server-only schema uses an empty workflows array. It can also use an empty `allowedOrigins`; in that case browser ingestion is rejected with
+`origin_denied`, while server publishing continues to check dedicated authentication and publishing authorization. Browser `summary` for that schema
+returns `events=[]` and `totalEvents=0`, and browser workflow reads return 404.
 
-## 중복·해시
+## Duplicates and Hashing
 
-영수증 키는 프로젝트·source·eventId다. payload hash는 프로젝트·스키마 버전·출처와
-정규화된 이벤트 전체의 SHA-256이다. canonical 입력 형식은 browser와 같고, server
-이벤트는 마지막 attempt 슬롯을 null로 둔다. server 해시에는 attempt 식별자나 내용이
-들어가지 않는다.
+The receipt key is project, source, and eventId. The payload hash is the SHA-256 of the project, schema version, source, and
+the complete normalized event. Its canonical input format matches the browser, and server events use null in the final attempt slot.
+Server hashes contain no attempt identifier or content.
 
-- 같은 키·같은 내용은 duplicates로 세고 새 영수증·집계를 만들지 않는다.
-- 같은 키·다른 내용이나 다른 스키마 버전은 `event_conflict`(409)로 배치 전체를
-  거부한다.
-- 같은 배치 안에서 같은 eventId가 반복되면 `invalid_event`(422)다.
-- 배치는 occurredAt·eventId 순으로 처리한다.
+- The same key and content are counted as duplicates and create no new receipt or aggregate.
+- The same key with different content or a different schema version rejects the whole batch with `event_conflict` (409).
+- Repeating the same eventId within a batch returns `invalid_event` (422).
+- Batches are processed in occurredAt and eventId order.
 
-브라우저 canonical 해시 입력은 바뀌지 않는다. 이미 저장된 browser 영수증과 비교해도
-같은 값이 나온다.
+The browser canonical hash input does not change. It produces the same value when compared with already stored browser receipts.
 
-## planIngest 범위
+## planIngest Scope
 
-`planIngest`는 I/O 없는 순수 함수다. 입력 snapshot의 영수증을 event_id로 비교하므로
-호출자가 그 프로젝트·source에 속한 영수증만 담아야 한다. server 배치에서는 영수증과
-이벤트 일별 집계 delta만 만들고 attempt·workflow 상태는 만들지 않는다. 저장 어댑터는
-영수증을 프로젝트·source로 걸러 읽고, UTC 일일 사용량은 source 구분 없이 프로젝트
-단위로 읽어 넘긴다.
+`planIngest` is an I/O-free pure function. Because it compares receipts in the input snapshot by event_id,
+the caller must include only receipts belonging to that project and source. For a server batch it creates only receipt and event daily aggregate
+deltas and no attempt or workflow state. The storage adapter filters receipts by project and source and reads the UTC daily usage by project
+without source separation before passing it in.
 
-## 저장 구조와 출처 분리
+## Storage Structure and Source Separation
 
-- `event_receipts`와 `event_daily_counts`의 source는 `browser`와 `server`를 받는다.
-  영수증 키와 집계 키에 source가 들어가므로 같은 날·같은 이벤트·같은 속성이라도 출처가
-  다르면 다른 행이다.
-- `workflow_attempts`와 `workflow_daily_counts`는 browser 전용 제약을 그대로 유지한다.
-  server 이벤트는 시도·목표 상태를 만들지 않는다.
-- 조회는 한 번에 한 출처만 다룬다. browser와 server 건수를 합쳐 이중 집계하지 않는다.
+- The source of `event_receipts` and `event_daily_counts` accepts `browser` and `server`.
+  Source is part of the receipt and aggregate keys, so the same date, event, and properties are different rows when the source differs.
+- `workflow_attempts` and `workflow_daily_counts` keep their browser-only constraints.
+  Server events do not create attempt or goal state.
+- Reads handle one source at a time. Browser and server counts are never combined and double-counted.
 
-## 서버 커밋과 발행 권한
+## Server Commit and Publishing Authorization
 
-서버 배치는 관리자 조회·설정 권한과 다른 경로로 저장한다.
+Server batches are stored through a route separate from administrator read and settings authorization.
 
-- `publisherAccess`는 프로젝트·발행자 주체의 `project_publishers` 행만 확인하는
-  조회다. 프로젝트 ID나 발행자 형식이 맞지 않거나 행이 없으면 `forbidden`(403),
-  조회 자체가 실패하면 `storage_unavailable`(503)이다.
-- `commitServer`는 일관 읽기 batch에서 프로젝트·스키마·해당 source 영수증·UTC 일일
-  사용량과 함께 발행 권한 행을 읽고, 그 읽기에서 권한이 없으면 쓰기 전에
-  `forbidden`(403)이다. 쓰기 CAS batch는 `EXISTS`로 같은 발행 권한을 다시 확인한다.
-- 읽기와 쓰기 사이에 발행자 행이 지워지면 CAS가 실패해 batch 전체가 롤백되고, 다시
-  읽어 권한이 없으면 `forbidden`(403)이다.
+- `publisherAccess` checks only the project and publisher principal's `project_publishers` row.
+  An invalid project ID or publisher format, or an absent row, returns `forbidden` (403); a read failure returns `storage_unavailable` (503).
+- `commitServer` reads the publishing authorization row together with the project, schema, source receipts, and UTC daily
+  usage in one consistent-read batch. If that read finds no authorization, it returns `forbidden` (403) before writing.
+  The write CAS batch checks the same publishing authorization again with `EXISTS`.
+- If the publisher row is deleted between read and write, the CAS fails and rolls back the whole batch; a reread without authorization
+  returns `forbidden` (403).
 
-브라우저 저장 경로는 server 배치를 `invalid_request`(400)로, `commitServer`는 attempt나
-workflow가 섞인 배치를 `invalid_event`(422)로 거부한다. 권한 검사와 저장이 같은
-트랜잭션이므로 발행자 회수 경쟁에서 부분 저장이 남지 않는다.
-`project_publishers`에는 발행자 주체(issuer·subject)와 생성 시각, 그리고 회수·재부여를
-구분하는 비밀 아닌 부여 ID(`grant_id`)를 둔다. 이벤트 입력·원문·발행자 토큰은 저장하지 않는다.
+The browser storage route rejects server batches with `invalid_request` (400), while `commitServer` rejects a batch containing an attempt or
+workflow with `invalid_event` (422). Because authorization checks and storage share one
+transaction, a race with publisher revocation leaves no partial write.
+`project_publishers` holds the publisher principal (issuer and subject), creation time, and a nonsecret grant ID (`grant_id`) that distinguishes
+revocation and regrant. Event input, raw events, and publisher tokens are not stored.
 
-호스트(수집 HTTP 경계)는 서명·issuer·audience·exp를 검증한 principal만 넘긴다. 전용
-endpoint와 발행자 검증기, `PUBLISHER_*` 런타임 배선을 구현했지만 기본값은 `disabled`다.
-발행자 인증을 켜지 않은 배포에서는 이 계약만으로 서버 발행이 열리지 않는다. 발행자
-토큰은 저장하지 않고 요청 처리 동안에만 쓴다.
+The host (the collector HTTP boundary) passes only a principal whose signature, issuer, audience, and exp have been verified. The dedicated
+endpoint, publisher verifier, and `PUBLISHER_*` runtime wiring have been implemented, but the default is `disabled`.
+On a deployment that has not enabled publisher authentication, this contract alone does not open server publishing. Publisher
+tokens are not stored and are used only while handling the request.
 
-## 할당량
+## Quota
 
-분당 admission과 프로젝트 UTC 일일 신규 영수증 한도는 browser와 server가 공유한다.
-두 출처가 한 프로젝트의 같은 분당·일일 예산을 나눠 쓰며, 출처별로 따로 계산하지 않는다.
-같은 ID 재전송도 분당 요청 한도는 소비한다. 같은 내용의 중복은 UTC 일일 신규 영수증
-수와 이벤트 집계를 늘리지 않는다.
+Per-minute admission and the project's UTC daily new-receipt limit are shared by browser and server.
+The two sources divide the same per-minute and daily budget for a project; they are not calculated separately.
+Retransmitting the same ID still consumes the per-minute request limit. A duplicate with the same content does not increase the UTC daily new receipt
+count or event aggregates.
 
-## 서버 발행 endpoint
+## Server Publishing Endpoint
 
-`POST /v1/projects/{projectId}/server-batches` 하나만 연다. 브라우저 수집 경로와 다른
-요청 경계를 쓴다.
+Only `POST /v1/projects/{projectId}/server-batches` is opened. It uses a request boundary different from browser ingestion.
 
-- 인증은 `Authorization: Bearer` 헤더만 쓴다. 헤더는 8192자 이하이고 형식이 맞아야
-  하며, 서명·issuer·audience·exp를 검증한 발행자 주체(issuer·subject)만 통과한다.
-  호스트가 `PublisherAccess{store, verifyBearer}`로 검증기를 주입한다.
-- 호스트가 발행자 검증기를 주지 않으면 이 경로는 `unauthorized`(401)다. 관리자 검증기를
-  대신 쓰지 않고 fallback도 두지 않는다. 검증기가 예외를 던지거나 null을 돌려줘도 401이다.
-- 통과한 주체는 형식 검사를 다시 거친 뒤 issuer·subject만 복사해 저장 포트로 넘긴다.
-  토큰과 클레임은 저장하거나 응답에 넣지 않는다.
-- 권한 검사가 프로젝트 읽기와 분당 admission보다 먼저다. 인증이나 발행 권한이 처음부터
-  거부된 요청은 프로젝트 분당 quota를 쓰지 않는다. 인증을 통과한 뒤의 잘못된 요청·중복
-  요청은 브라우저 수집과 같이 분당 admission을 쓴다.
-- 이 경로는 CORS를 지원하지 않는다. `Origin`은 인증에 쓰지 않고 무시하며 응답에
-  `Access-Control-Allow-Origin`을 넣지 않는다. `OPTIONS` preflight를 처리하지 않는다.
-  `POST`가 아니면 `invalid_request`(405)와 `Allow: POST`다.
-- 본문은 `application/json`만 받는다. 다른 미디어 타입은 `invalid_request`(415)다.
-  조회 파라미터가 있으면 `invalid_request`(400)로 거부한다. 16KiB·20개 한도와 필드
-  검사는 코어 `parseServerBatch`·`prepareServerBatch`를 따른다.
-- 등록되지 않았거나 다른 출처의 이름은 거부하고, 일시 중지 프로젝트는
-  `project_unavailable`(403)다. 모르는 프로젝트는 404 대신 `forbidden`(403)으로 답해
-  프로젝트 존재를 숨긴다.
-- 저장은 D1 `commitServer`가 발행 권한을 다시 확인한다. UTC 일일 신규 영수증 한도와
-  분당 admission은 browser와 공유하며, 한도 초과 429에는 `Retry-After`를 보낸다.
+- Authentication uses only the `Authorization: Bearer` header. The header is 8192 characters or less and must have the correct format;
+  only a publisher principal (issuer and subject) whose signature, issuer, audience, and exp have been verified passes.
+  The host injects the verifier through `PublisherAccess{store, verifyBearer}`.
+- If the host does not supply a publisher verifier, this route returns `unauthorized` (401). It does not substitute the administrator verifier
+  and has no fallback. A verifier that throws or returns null also produces 401.
+- A passing principal is checked for format again, then only issuer and subject are copied to the storage port.
+  Tokens and claims are neither stored nor included in the response.
+- Authorization check precedes project read and per-minute admission. A request rejected at the initial authentication or publishing authorization
+  stage does not consume the project's per-minute quota. Invalid and duplicate requests after authentication consume per-minute admission in the same way as
+  browser ingestion.
+- This route does not support CORS. `Origin` is not used for authentication, is ignored, and is not reflected in an
+  `Access-Control-Allow-Origin` response header. It does not handle `OPTIONS` preflight.
+  A method other than `POST` returns `invalid_request` (405) with `Allow: POST`.
+- The body must be `application/json`. Another media type returns `invalid_request` (415).
+  Query parameters return `invalid_request` (400). The 16 KiB and 20-event limits and field
+  checks follow core `parseServerBatch` and `prepareServerBatch`.
+- An unregistered or different-source name is rejected, and a paused project returns
+  `project_unavailable` (403). An unknown project returns `forbidden` (403) rather than 404 to hide
+  whether the project exists.
+- D1 `commitServer` checks publishing authorization again at storage time. The UTC daily new-receipt limit and
+  per-minute admission are shared with the browser, and an over-limit 429 includes `Retry-After`.
 
-### 팩토리 배선
+### Factory Wiring
 
-- `createWorker(adminVerifier?, publisherVerifier?)` — 관리자와 발행자 검증기를 따로
-  받는다. 발행자를 주지 않으면 server 경로만 닫힌다.
-- `createOidcWorker(adminOptions, publisherOptions?)` — 둘 다 주면 audience가 서로 달라야
-  하고 같으면 생성 시점에 거부한다.
-- `createPublisherOidcWorker(publisherOptions)` — 발행자 전용. 관리자 경로를 열지 않는다.
-- 기본 export는 검증기를 붙이지 않으므로 관리자·발행자 경로가 모두 401로 닫힌다.
-- 발행자용 OIDC 검증기는 `exclusiveAudience`로 만든다. 서명 검증 뒤에 `aud`가 audience
-  문자열 하나이거나 같은 값을 가진 1원소 배열일 때만 통과시키고, 다른 audience가 섞인
-  토큰은 거부한다. 관리자 검증기는 기존 `includes` 정책을 유지한다.
-- 인증은 기존 `packages/auth-oidc`의 jose 기반 검증을 재사용한다.
+- `createWorker(adminVerifier?, publisherVerifier?)` — Accepts administrator and publisher verifiers separately.
+  Without a publisher verifier, only the server route is closed.
+- `createOidcWorker(adminOptions, publisherOptions?)` — When both are supplied, their audiences must differ;
+  equal audiences are rejected at creation.
+- `createPublisherOidcWorker(publisherOptions)` — Publisher only. It does not open administrator routes.
+- The default export attaches no verifier, so both administrator and publisher routes are closed with 401.
+- The publisher OIDC verifier is created with `exclusiveAudience`. After signature verification, it passes only when `aud` is one audience
+  string or a one-element array containing that value; a token containing another audience is rejected. The administrator verifier keeps the
+  existing `includes` policy.
+- Authentication reuses the existing jose-based verification in `packages/auth-oidc`.
 
-발행자 검증기는 호스트가 주입한다. 배포 설정에서 발행자 인증을 켜지 않으면(기본값
-`disabled`, 발행자 설정이 없는 기존 배포 포함) server 경로는 401로 닫혀 있다. 발행자
-OIDC 제공자 값과 원격 등록·배포는 아직 넣지 않았다.
+The publisher verifier is injected by the host. If publisher authentication is not enabled in deployment settings (the default
+`disabled`, including existing deployments without publisher settings), the server route stays closed with 401. Real publisher
+OIDC provider values and remote registration and deployment have not been added.
 
-## 마이그레이션과 롤백
+## Migrations and Rollback
 
-`0006_server_collection.sql`은 `project_publishers`를 추가하고 `event_receipts`·
-`event_daily_counts`를 복사·재생성해 source 제약을 넓힌다. 테이블 복사가 큰 작업이라
-운영 적용 전에 수집을 잠시 멈추고 백업한 뒤, 적용 전후 행 수와 스키마·외래 키를
-검증해야 한다. 절차와 확인 항목은 [적용 메모](../../db/migrations/README.md)에 둔다.
-이 문서 작성 시점에 운영 DB 백업·적용은 실행하지 않았고 원격 D1에도 적용하지 않았다.
+`0006_server_collection.sql` adds `project_publishers` and copies and recreates `event_receipts` and
+`event_daily_counts` to broaden the source constraint. Because table copying is large, production application requires a brief ingestion pause and backup,
+followed by validation of row counts, schema, and foreign keys before and after. The procedure and checklist are in the
+[application notes](../../db/migrations/README.md). No production database backup or application was performed when this document was written, and it has not been applied to remote D1.
 
-롤백은 이전 browser 코드로 되돌리고 확장 테이블은 남겨 둔다. 이미 저장된 server 행을
-지워 롤백하지 않으며, 서버 수집을 끄고 server 출처 조회를 열지 않는다.
-`project_publishers` 권한도 삭제하지 않는다.
+To roll back, restore the previous browser code and leave the expanded tables in place. Do not delete stored server rows for rollback.
+Disable server ingestion and do not open server-source reads.
+Do not delete `project_publishers` authorization either.
 
-`0008_publisher_history.sql`은 `admin_changes`를 복사·재생성해 action 제약에
-`publisher.granted`·`publisher.revoked`를 더한다. 열 13개와 기존 행·인덱스·트리거는 그대로
-유지하고 backfill은 하지 않는다. 관리자 API·provisioning CLI 쓰기를 멈춘 상태에서 한 batch로
-적용하고, 적용 전후 행 수와 스키마·외래 키를 비교해 확인한다. 롤백이 필요하면 확장 스키마는
-남겨 두되, 새 action을 해석하지 못하는 예전 관리자 이력 리더를 새 행 위에 다시 올리지 않는다.
-예전 리더로 되돌리는 대신 앞으로 고치는 방식을 우선한다.
+`0008_publisher_history.sql` copies and recreates `admin_changes` to add
+`publisher.granted` and `publisher.revoked` to the action constraint. Its 13 columns, existing rows, indexes, and triggers remain
+unchanged, and no backfill is performed. Apply it in one batch while administrator API and provisioning CLI writes are stopped,
+then compare row counts, schema, and foreign keys before and after. If rollback is needed, leave the expanded schema in place, but do not put an older administrator history reader
+that cannot interpret the new action back over new rows. Prefer fixing forward over restoring an older reader.
 
-`0006`은 한 batch로 적용한다. 저장 어댑터 테스트는 0006의 마지막 문장이 실패하도록
-강제했을 때 기존 행·제약·marker가 롤백되는지도 확인한다.
+`0006` is applied in one batch. The storage adapter test also forces the final statement of 0006 to fail and confirms that existing rows, constraints, and markers
+roll back.
 
-## 발행자 권한 CLI
+## Publisher Authorization CLI
 
-`project_publishers` 부여·회수는 오프라인 provisioning CLI의 `publisher-grant`·
-`publisher-revoke`로 로컬 구현했다. 닫힌 JSON `{projectId, issuer, subject}`만 받고
-issuer·subject는 코어 `validGrantIdentity`로 검사한다. role이나 프로젝트 한도는 없다.
-프로젝트가 없으면 미리보기에서 `project_not_found`로 멈춘다. 기본은 미리보기이고
-`--apply`·`--expect-plan`으로 검토한 계획만 적용한다. 계획 출력은 원본 식별값 대신
-`principalHash`를 넣고, 프로젝트 생성 시각과 현재 권한 상태를 CAS로 비교한다.
+`project_publishers` grant and revocation were implemented locally in the offline provisioning CLI as `publisher-grant` and
+`publisher-revoke`. They accept only closed JSON `{projectId, issuer, subject}`, and issuer and subject are checked with the core
+`validGrantIdentity`. There is no role or project limit. If the project does not exist, preview stops with `project_not_found`. The default is
+preview, and only a reviewed plan is applied with `--apply` and `--expect-plan`. Plan output includes a `principalHash` instead of raw identifiers,
+and compares project creation time and current authorization state with CAS.
 
-이 명령은 발행 권한과 이력만 바꾸고 관리자 `project_grants`·마지막 owner 검사·자격증명
-발급은 건드리지 않는다. 적용은 권한 행 쓰기와 관리자 변경 이력(`admin_changes`) 기록을 같은
-D1 batch로 처리한다. 이력 저장이 실패하면 같은 D1 batch의 권한 변경도 롤백된다. 다시 실행해
-이미 원하는 상태면 DB를 쓰지 않고 no-op로 끝나므로 새 이력이 남지 않는다. actor는 API가 아닌
-CLI 변경이라 식별자 없는
-`local_operator`다. `0008_publisher_history.sql`이 이 이력의 action을 넓히고, 발행 권한 표는
-`0009_publisher_generations.sql`이 `grant_id`를 더해 다시 만든다. 세부 형식은
-[등록·권한 관리 CLI](./provisioning.md)에 있다.
+This command changes only publishing authorization and history; it does not touch administrator `project_grants`, check the last owner, or issue
+credentials. Application writes the authorization row and records administrator change history (`admin_changes`) in one D1
+batch. If history storage fails, the authorization change in the same D1 batch rolls back. Running it again when the desired state already exists
+writes nothing and ends as a no-op, so no new history is left. Because this is a CLI change rather than an API change, the actor is
+`local_operator` without identifiers. `0008_publisher_history.sql` broadens the actions for this history, and the publishing authorization table is
+recreated by `0009_publisher_generations.sql` with `grant_id`. Detailed formats are in
+[Registration and Authorization Management CLI](./provisioning.md).
 
-## 서버 SDK
+## Server SDK
 
-`@tallyfin/server`(`packages/server`)가 서버 발행 클라이언트를 로컬 구현했다. 호스트가
-`createTallyfinServer`에 endpoint·검토한 server 스키마·`getToken`을 주면 `createEvent`가
-eventId·UTC occurredAt·속성을 얼려 만들고, `send`가 1~20개·16KiB 이하 배치 하나를 보낸다.
-재시도·취소·영수증·재전송 규칙은 [서버 SDK](./server-sdk.md)에 있고, 실제 발급자 선택과
-자격증명 발급은 호스트 책임이다.
+`@tallyfin/server` (`packages/server`) implements the server publishing client locally. When the host supplies
+`createTallyfinServer` with an endpoint, reviewed server schema, and `getToken`, `createEvent` freezes an eventId, UTC occurredAt, and
+properties, and `send` transmits one batch of 1 to 20 events and at most 16 KiB.
+Retry, cancellation, receipt, and retransmission rules are in the [Server SDK](./server-sdk.md); choosing the real issuer and
+issuing credentials are the host's responsibility.
 
-## 관리자 발행자 목록
+## Administrator Publisher List
 
-`GET /v1/projects/{projectId}/publishers`는 관리자 bearer와 현재 프로젝트 owner grant를
-요구한다. `project_publishers` 자체로는 읽을 수 없고 reader도 403이다. 프로젝트가 없거나
-owner 권한이 회수된 경우도 403이며 매 페이지 권한과 행을 같은 D1 batch에서 읽는다.
-일시 중지·스키마 없는 프로젝트도 제어 영역 조회를 허용한다.
+`GET /v1/projects/{projectId}/publishers` requires an administrator bearer and the current project owner grant.
+A `project_publishers` grant alone cannot read it, and a reader receives 403. A missing project or revoked owner authorization also returns 403;
+each page reads authorization and rows in the same D1 batch.
+Paused projects and projects without a schema are readable through this control-plane route.
 
-응답은 `{projectId,data,page}`이며 각 행은 issuer·subject·grantId·createdAt을 담는다.
-`grantId`는 자격증명이 아니라 회수·재부여를 구분하는 비밀 아닌 동시성 표식이다. 토큰·프로필·
-이메일을 반환하지 않는다. limit은 기본 25·최대 100이고 issuer/subject의 SQLite BINARY
-순서다. base64url 커서는 프로젝트와 publishers 목록 종류에 묶인 위치로 최대 12288자,
-전체 쿼리 최대 12352자이며 다른 프로젝트·grant 커서·중복/추가 인자를 거부한다. 행 삭제
-후에도 위치를 유지하고 커서 앞에 새 행이 생기면 첫 페이지부터 새로고침해야 한다.
-Cache-Control은 no-store이고 CORS·쿠키·쓰기 없이 GET만 받는다. 인증 실패는 401,
-잘못된 입력은 400, 다른 메서드는 405(Allow: GET, PUT, DELETE), 저장소 실패·손상 데이터는
-503이다. PUT·DELETE는 아래 등록·회수 규칙을 따르며 GET 동작 자체는 바뀌지 않는다.
-CLI로 남긴 발행 권한 변경은 관리자 변경 이력에 `publisher.granted`·`publisher.revoked`로
-나타난다.
+The response is `{projectId,data,page}`, and each row contains issuer, subject, grantId, and createdAt.
+`grantId` is not a credential; it is a nonsecret concurrency marker that distinguishes revocation and regrant. The response does not return tokens, profiles, or
+email. The default limit is 25 and the maximum is 100, ordered by SQLite BINARY order of issuer and subject.
+The base64url cursor is a position tied to the project and publishers-list kind, at most 12,288 characters; the full query is at most 12,352 characters, and it rejects
+cursors from another project or grant list and duplicate or extra parameters. The position survives row deletion; if new rows are inserted before the cursor, refresh
+from the first page. Cache-Control is no-store, and GET is the only accepted method with no CORS, cookies, or writes. Authentication failure is 401,
+invalid input 400, other methods 405 (`Allow: GET, PUT, DELETE`), and storage failure or corrupt data
+returns 503. PUT and DELETE follow the registration and revocation rules below, while GET behavior itself is unchanged.
+A publishing authorization change made by the CLI appears in administrator change history as `publisher.granted` or `publisher.revoked`.
 
-## 관리자 발행자 등록·회수
+## Administrator Publisher Registration and Revocation
 
-`PUT /v1/projects/{projectId}/publishers`는 발행 권한을 부여하고
-`DELETE /v1/projects/{projectId}/publishers`는 회수한다. 둘 다 관리자 bearer와 현재 프로젝트
-owner grant를 요구한다. reader·다른 프로젝트 owner·회수된 owner·없는 프로젝트는 403이고,
-`project_publishers` 발행 권한만 있는 주체도 403이다. 라우터는 본문을 읽기 전에 owner 여부를
-확인하고, 쓰기 직전 원자 D1 batch에서 owner 조회·권한 쓰기·감사 기록·결과 조회를 함께
-수행한다. batch의 각 쓰기 문장도 owner `EXISTS` 조건을 달고 있어, 본문 읽기와 batch 사이에
-owner가 회수되면 쓰기 문장이 0행이 되어 아무것도 바뀌지 않고 owner 조회가 빈 결과라 403이다.
-회수는 예외 롤백이 아니라 조건이 쓰기를 막는 방식이다.
+`PUT /v1/projects/{projectId}/publishers` grants publishing authorization, and
+`DELETE /v1/projects/{projectId}/publishers` revokes it. Both require an administrator bearer and the current project
+owner grant. Readers, owners of another project, revoked owners, and nonexistent projects return 403, and a principal that has only
+`project_publishers` publishing authorization also returns 403. Before reading the body, the router checks whether the caller is owner;
+immediately before writing, the atomic D1 batch performs the owner check, authorization write, audit record, and result read together.
+Every write statement in the batch also carries the owner `EXISTS` condition, so if the owner is revoked between reading the body and executing the batch,
+the write affects zero rows, nothing changes, the owner read is empty, and the response is 403.
+Revocation relies on the condition blocking the write rather than exception rollback.
 
-- PUT 본문은 `{issuer,subject}`뿐이고 DELETE 본문은 `{issuer,subject,expectedGrantId}`이다.
-  role·자격증명·추가 필드는 없다. issuer·subject는 코어 `validGrantIdentity`를 따르고
-  프로젝트 ID 형식도 검사한다.
-- `expectedGrantId`는 마지막으로 읽은 불변 부여 세대를 32자 소문자 hex 문자열 또는 null로 넣는다.
-  null은 권한이 없다고 관찰한 경우다. granted가 true인 요청은 expectedGrantId를 받지 않는다.
-  예전 `expectedCreatedAt` 필드는 보내면 400이다.
-- 본문은 `application/json`과 `text/plain`을 받고 16KiB를 넘으면 413, 다른 미디어 타입이나
-  비-identity 인코딩은 415다. 조회 파라미터는 400이다.
-- 응답은 `{projectId,issuer,subject,granted,grantId,createdAt,changed}`다. granted·grantId·
-  createdAt이 짝을 이룬다. 부여는 true·부여 ID·생성 시각, 회수는 false·null·null이고
-  자격증명·역할은 넣지 않는다.
-- 이미 있는 발행 권한을 다시 부여하면 `changed=false`이고 기존 행과 `grantId`를 바꾸지 않는다.
-  대상 권한 행이 없으면 `expectedGrantId` 값과 상관없이(직전에 읽은 ID든 null이든)
-  no-op이며 `changed=false`다. 회수한 뒤 같은 유효 ID나 null로 다시 보내도 이미 행이
-  없어 no-op로 성공한다. 행이 남아 있고 저장된 `grant_id`가 `expectedGrantId`와 같을 때만
-  `changed=true`다.
-- 회수 CAS는 `expectedGrantId`와 저장된 `grant_id`를 비교하고 다르면
-  `publisher_conflict`(409)다. 다시 읽어야 한다. `grant_id`는 재부여할 때마다 새로 생기므로
-  같은 밀리초에 다시 부여된 권한도 구분한다. `immutable_publisher_generation` 트리거가 행
-  UPDATE를 막아 회수는 삭제, 부여는 재삽입으로만 한다.
-- 감사 기록(`publisher.granted`·`publisher.revoked`)은 권한 쓰기와 같은 D1 batch이고 직전
-  쓰기가 1행을 바꿨을 때만 INSERT한다. no-op(부여 중복·대상 없음)이면 권한 쓰기도 이력
-  추가도 없다. 1행을 바꾼 뒤 감사 INSERT가 실패하면 같은 batch라 권한 변경도 함께
-  롤백된다. 같은 요청을 다시 보내도 새 이력이 남지 않는다.
-- 상태 코드는 200·400·401·403·405·413·415·503이고 DELETE에만 409가 더해진다. 405 Allow는
-  `GET, PUT, DELETE`다.
+- The PUT body contains only `{issuer,subject}`, and the DELETE body is `{issuer,subject,expectedGrantId}`.
+  There is no role, credential, or additional field. Issuer and subject follow the core `validGrantIdentity`, and the
+  project ID format is also checked.
+- `expectedGrantId` is the immutable grant generation last read, as a 32-character lowercase hex string or null.
+  Null means the caller observed no authorization. A request with granted true does not accept expectedGrantId.
+  Sending the former `expectedCreatedAt` field returns 400.
+- The body accepts `application/json` and `text/plain`; over 16 KiB returns 413, and another media type or
+  nonidentity encoding returns 415. Query parameters return 400.
+- The response is `{projectId,issuer,subject,granted,grantId,createdAt,changed}`. `granted`, `grantId`, and
+  `createdAt` are paired. A grant is true with the grant ID and creation time; revocation is false with null values, and
+  credentials and roles are not included.
+- Granting an existing publishing authorization again returns `changed=false` without changing the existing row or `grantId`.
+  If the target grant row is absent, the operation is a no-op with `changed=false` regardless of `expectedGrantId` (whether the ID just read or null).
+  After revocation, resending the same valid ID or null also succeeds as a no-op because the row is already absent. It returns
+  `changed=true` only when the row remains and its stored `grant_id` equals `expectedGrantId`.
+- The revocation CAS compares `expectedGrantId` with stored `grant_id`; a mismatch returns
+  `publisher_conflict` (409), and the caller must read again. A new `grant_id` is assigned on every regrant, so
+  grants regranted in the same millisecond remain distinguishable. The `immutable_publisher_generation` trigger prevents row
+  UPDATE, so revocation deletes and granting reinserts.
+- Audit records (`publisher.granted` and `publisher.revoked`) share the D1 batch with the authorization write and are inserted only when the preceding
+  write changes one row. A no-op (duplicate grant or no target) performs neither the authorization write nor a history
+  addition. If the audit INSERT fails after one row changed, the same batch rolls back the authorization change. Resending the same request leaves no new history.
+- Status codes are 200, 400, 401, 403, 405, 413, 415, and 503, with 409 added only for DELETE. The 405 `Allow` header is
+  `GET, PUT, DELETE`.
 
-설정의 owner 전용 `LivePublishers`를 `LiveGrants`와 `LiveAdminChanges` 사이에 로컬 연결했다.
-25건 목록·다음 페이지·처음부터 새로고침, issuer/subject 부여와 관측한 `grantId` 회수를
-제공하며 명시적 확인 뒤에만 쓴다. 충돌은 최신 목록을 다시 읽고, 결과가 불확실하면 원래
-요청 그대로 재시도한다. 진행 중이거나 결과가 불확실한 쓰기는 설정 폼과 grant 변경을 잠그며,
-저장 뒤 기존 관리자 변경 이력을 갱신한다. 취소·늦은 응답 폐기와 권한 거부·프로젝트 전환 시
-식별자 삭제를 적용했다. 화면 동작과 로컬 브라우저 확인은 [관리자 경계](./administrator.md#발행자-관리-화면)에 둔다.
-실제 Chrome·임시 OIDC·로컬 D1 스모크와 관리자 집중 19/19, api·모델 153/153,
-관리자 타입 검사·빌드·번들 2/2·sites 9/9를 로컬에서 통과했다. 상세 결과는
-[검증 기록](../../VALIDATION.md)에 둔다.
-CLI(`publisher-grant`·`publisher-revoke`)도 그대로 쓸 수 있다.
-이 API는 자격증명을 발급하지 않고 관리자 grant도 바꾸지 않는다. DB는 0009의 `grant_id`를
-쓰고 감사는 0008 action을 그대로 쓴다. 이 슬라이스에서 원격 DB 적용·푸시·배포는 하지
-않았다.
+The owner-only `LivePublishers` in settings is connected locally between `LiveGrants` and `LiveAdminChanges`.
+It provides a 25-item list, next page, refresh from the beginning, grant by issuer and subject, and revocation with the observed `grantId`, and writes only after
+explicit confirmation. On conflict it rereads the latest list, and when the result is uncertain it retries the original
+request unchanged. An in-progress write with an uncertain result locks the settings form and grant changes, and
+existing administrator change history refreshes after storage. Cancellation, late-response discard, and identifier clearing on authorization denial or project switch are applied. Screen behavior and local browser checks are in the [Administrator Boundary](./administrator.md#publisher-management-screen).
+A real Chrome, temporary OIDC, and local D1 smoke test and 19/19 focused administrator checks, 153/153 API and model checks,
+administrator type checking, build, bundling 2/2, and sites 9/9 passed locally. Detailed results are in
+[VALIDATION.md](../../VALIDATION.md).
+The CLI (`publisher-grant` and `publisher-revoke`) remains usable.
+This API does not issue credentials or change administrator grants. The database uses `grant_id` from 0009, and audit uses the 0008 action.
+This slice did not apply to a remote database or push or deploy.
 
-## 서버 출처 조회
+## Server-Source Reads
 
-`GET .../summary`와 `GET .../events/{eventName}/daily`가 선택 `source`(기본 browser,
-browser|server)를 받는다. 한 요청에 한 출처만 읽고 browser·server 건수를 합치지 않는다.
-server 정의도 daily 속성 분류를 지원한다. 그 출처에 정의가 없으면 summary는 `events=[]`·
-`totalEvents=0`, 다른 출처에만 있는 이름의 daily는 404다. workflow 조회는 browser 전용이라
-`source`를 받지 않는다. 조회 권한은 관리자 `project_grants` reader/owner로만 검사하고
-`project_publishers` 발행 권한으로는 읽을 수 없다. meta.latestReceivedAt는 출처·버전·날짜를
-가리지 않은 프로젝트 전체 최신 수신 시각이다. 화면은 로컬에서 연결했고 로컬 브라우저 검증을 마쳤다.
+`GET .../summary` and `GET .../events/{eventName}/daily` accept optional `source` (default browser;
+browser or server). A request reads only one source and never combines browser and server counts.
+Server definitions also support daily property classification. If that source has no definition, summary returns `events=[]` and
+`totalEvents=0`, and daily for a name present only in another source returns 404. Workflow reads are browser-only and do not accept
+`source`. Read authorization is checked only against administrator `project_grants` reader or owner;
+`project_publishers` publishing authorization cannot read. `meta.latestReceivedAt` is the project-wide latest receipt time
+regardless of source, version, or date. The screen is connected locally and local browser verification is complete.
 
-## 아직 정하지 않은 것
+## Not Yet Decided
 
-- 브라우저 시작과 서버 완료를 연결하는 전환율의 운영 적용. [순서 작업 퍼널 계약과
-  코어](../adr/0006-ordered-task-funnels.md)의 계약·정의 등록/발행/조회, 연결 이벤트
-  수집·저장, [브라우저 프로필](./browser-sdk.md)·[서버 SDK](./server-sdk.md) 전송,
-  `GET .../funnels/{funnelId}/daily`·`.../breakdown` 조회와 관리자 화면(속성 분류·직전
-  기간 비교·CSV)까지 로컬에서 구현·검증했다([검증 기록](../../VALIDATION.md)). 남은 것은
-  서비스 파일럿에서 운영 데이터로 확인하는 일이다.
-- 발행자 OIDC 운영 설정과 실제 audience 값·발급 절차. 공개 프로젝트 ID와 허용 오리진을
-  발행자 인증 수단으로 재사용하지 않는다는 것만 정했다. 운영 제공자와 audience 값 확정은
-  사용자가 운영 인증을 정한 뒤로 미룬다.
-- 출처별로 분당·일일 한도를 따로 둘지. 지금은 프로젝트 한 값을 공유한다.
-- 서버 출처 조회 화면의 실제 배포·운영 인증 연결. 화면 연결은 로컬에서 완료했고 로컬 브라우저 검증을 마쳤다.
+- Production application of conversion from a browser start to a server completion. The contract, definition registration, publication, and reads in the
+  [ordered task funnel contract and core](../adr/0006-ordered-task-funnels.md), linkage event
+  ingestion and storage, [browser profile](./browser-sdk.md) and [server SDK](./server-sdk.md) transmission, and
+  `GET .../funnels/{funnelId}/daily` and `.../breakdown` reads and the administrator screen (property classification, previous-period comparison, and CSV)
+  have been implemented and verified locally ([verification record](../../VALIDATION.md)). What remains is confirming them with production data in a service pilot.
+- Publisher OIDC production settings, real audience values, and issuance procedure. The only decision so far is not to reuse public project IDs and
+  allowed origins as publisher authentication. Finalizing the production provider and audience values is deferred until the user chooses the production authentication method.
+- Whether to have separate per-minute and daily limits by source. Currently the project shares one value.
+- Production deployment and production authentication connection for the server-source read screen. The screen is connected locally and local browser verification is complete.
 
-## 다음 슬라이스
+## Next Slice
 
-1. 운영 OIDC 설정값과 제공자 연결. 발행자 audience 값 확정과 원격 등록은 사용자가 운영
-   인증 방식을 정한 뒤에 채워 server 경로를 켠다.
-2. 원격 Worker·D1·Cron Trigger 등록과 운영 배포.
-3. 운영 backup·restore. 로컬 합성 복구 연습은 마쳤고 실제 운영 DB 백업·원격 복구는
-   아직 실행하지 않았다.
-4. Sembom 첫 파일럿과 다른 성격의 서비스 파일럿. 실제 연동·활성화는 아직 없고 두 번째
-   서비스는 미정이다.
+1. Production OIDC settings and provider connection. After the user chooses production authentication, finalize the publisher audience and remote
+   registration, then enable the server route.
+2. Register the remote Worker, D1, and Cron Trigger and deploy to production.
+3. Production backup and restore. Local synthetic recovery drills are complete; a real production database backup and remote recovery have
+   not been run.
+4. The first Sembom pilot and a pilot for a service of a different kind. There is no real integration or activation yet, and the second
+   service is undecided.
 
-관련: [이벤트·집계 계약](./event-contract.md), [수집기 구현](./collector.md),
-[관리자 조회·설정 경계](./administrator.md), [적용 메모](../../db/migrations/README.md),
-[OpenAPI](../../api/openapi.yaml).
+Related: [Event and Aggregation Contract](./event-contract.md), [Collector Implementation](./collector.md),
+[Administrator Read and Settings Boundary](./administrator.md), [application notes](../../db/migrations/README.md),
+and [OpenAPI](../../api/openapi.yaml).
