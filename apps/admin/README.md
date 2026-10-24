@@ -1,5 +1,7 @@
 # Tallyfin Administrator App
 
+The current administrator UI uses Korean. UI labels in this guide are described in English.
+
 The optional funnel definitions in the JSON schema editor in settings are preserved when validating,
 publishing, and re-reading them. The publication hash and lost-response checks include funnels, and
 form changes that affect linked events and classifications are locked. The funnel-specific stage
