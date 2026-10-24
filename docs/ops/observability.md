@@ -1,181 +1,216 @@
-# 운영 관측
+# Operational Observability
 
-상태: 수집기 완료 관측 로그를 로컬에서 구현·검증했다. 운영 로그 수집·대시보드·알림
-수신자·traces는 배포하지 않았고, 관리자 저장소 read 프로브는 코드에만 있고 원격 실행·
-스케줄이 없다. 임계값·담당자·로그 보존 기간 같은 실제 운영 설정값은 정하지 않았다
+Status: collector completion observability has been implemented and verified locally. Production log
+collection, dashboards, alert recipients, and traces have not been deployed. The administrator
+storage read probe exists only in code and has no remote execution or schedule. Actual operational
+settings such as thresholds, owners, and log retention periods have not been established
 (UNDECIDED).
 
-## 지금 있는 관측
+## What Observability Exists Today
 
-운영 관측은 수집기 앱 로그를 기본으로 한다. 응답이 준비된 시점에 `request-observation.ts`가
-고정 필드 `event: http_request`·`requestId`·`operation`·`status`·`code`·`latencyBucket`·
-`samplingDenominator` 일곱 개만 담은 JSON 한 줄을 남긴다. 성공(200·204)은 UUID 앞 두
-글자 기준 4/256(1/64)만 남기고 `samplingDenominator=64`, 실패는 전량 남기고 1이다.
-로그 수준은 5xx `console.error`, 4xx `console.warn`, 그 밖 `console.log`다. 정리 작업
-로그(`retention_cleanup`·`retention_cleanup_failed`)는 아래 실행 진단도 기록한다. 필드·측정 구간·한계는
-[로그 경계](../backend/06-logging-and-observability.md)에 둔다.
+Operational observability is based on the collector application log. When a response is ready,
+`request-observation.ts` writes one JSON line containing exactly seven fixed fields:
+`event: http_request`, `requestId`, `operation`, `status`, `code`, `latencyBucket`, and
+`samplingDenominator`. Successful responses (200 and 204) are logged for only 4/256 (1/64) of
+requests selected by the first 2 characters of the UUID, with `samplingDenominator=64`. Failures are
+logged in full with a denominator of 1. The log levels are `console.error` for 5xx,
+`console.warn` for 4xx, and `console.log` for other responses. Cleanup task logs
+(`retention_cleanup` and `retention_cleanup_failed`) also record the execution diagnostics
+described below. Fields, measurement intervals, and limitations are documented in the
+[logging boundary](../backend/06-logging-and-observability.md).
 
-Wrangler 관측 설정도 그대로다. `observability.logs`는 enabled·`invocation_logs` false·
-`head_sampling_rate` 1이고 `traces`는 disabled, `send_metrics`는 false다. 자동 traces와
-호출 로그에는 요청 URL이 들어가 제품 프라이버시 계약과 충돌하므로 켜지 않는다.
+The Wrangler observability settings are unchanged. `observability.logs` has
+`enabled`, `invocation_logs` false, and `head_sampling_rate` 1; `traces` is disabled and
+`send_metrics` is false. Automatic traces and invocation logs contain request URLs, which conflict
+with the product privacy contract, so they are not enabled.
 
-## 관리자 저장소 read 프로브
+## Administrator Storage Read Probe
 
-수집기에 관리자 전용 `GET /v1/health` 계약이 있다. 공개 헬스 체크가 아니고 검증된 관리자
-bearer가 있어야 한다. `/v1/identity`와 같은 `validGrantIdentity` 검사를 통과한 principal을
-요구하며 project grant나 creator 권한은 필요 없다. GET만 허용하고 쿼리 파라미터를 받지
-않고 요청 몸체를 읽지 않는다. 응답은 `Cache-Control: no-store`·`Vary: Authorization`을 쓰고
-CORS 허용 헤더를 붙이지 않는다.
+The collector has an administrator-only `GET /v1/health` contract. It is not a public health check
+and requires a verified administrator bearer. It requires a principal that passes the same
+`validGrantIdentity` check as `/v1/identity`; a project grant or creator permission is not
+required. Only GET is allowed, query parameters are not accepted, and the request body is not read.
+The response uses `Cache-Control: no-store` and `Vary: Authorization`, and adds no CORS allow
+headers.
 
-성공하면 `{status:'ok', scope:'administrator_storage_read'}` 두 필드만 돌려준다. 그때 D1에
-`projects`·`project_grants` 각각 `SELECT 1 AS available ... LIMIT 1`을 한 배치 두 읽기로
-실행한다. 빈 테이블도 성공이고 행 내용·project·identity는 노출하지 않는다. DB 쓰기·수집
-할당량·부하 백오프는 쓰지 않는다. `scope`의 뜻은 관리자 제어면 테이블 두 개를 그 시점에
-읽을 수 있었다는 것까지다.
+On success, it returns only 2 fields:
+`{status:'ok', scope:'administrator_storage_read'}`. It then executes a single batch with 2 reads
+in D1: `SELECT 1 AS available ... LIMIT 1` against each of `projects` and `project_grants`.
+An empty table still succeeds, and row contents, projects, and identities are not exposed. It does
+not write to the database, collect quota, or back off under load. The meaning of `scope` extends
+only to the fact that the 2 administrator control-plane tables could be read at that moment.
 
-실패는 기존 오류 형식 그대로다. 인증 없음·무효·비활성은 401에 `WWW-Authenticate: Bearer`,
-허용하지 않는 쿼리 파라미터는 400, GET이 아니면 405에 `Allow: GET`, D1 읽기 실패나 호스트
-probe 미연결은 503에 `Retry-After: 1`을 붙이고 `{error:{code,message,requestId}}`를
-돌려준다(기존 상관 ID 그대로).
+Failures use the existing error format. Missing, invalid, or inactive authentication returns 401
+with `WWW-Authenticate: Bearer`; unsupported query parameters return 400; a non-GET method returns
+405 with `Allow: GET`; and a D1 read failure or disconnected host probe returns 503 with
+`Retry-After: 1` and `{error:{code,message,requestId}}`, preserving the existing correlation ID.
 
-이 성공은 수집 쓰기·집계 정확성·16개 테이블 전체·Cron·로그 완전성·서비스 전체 정상을
-증명하지 않는다. native `createWorker`는 verifier가 있을 때 `admin.checkReadiness` 포트를
-연결하고, 호스트가 `createCollector`에 `admin.checkReadiness`를 넘기지 않으면 항상 503
-`storage_unavailable`이다. 지금은 코드 로컬 구현뿐이라 운영 probe 스케줄·실제 provider
-OIDC·알림 수신자·원격 배포는 없다. 이 계약은 로컬 검증을 마쳤고 결과는
-[VALIDATION.md](../../VALIDATION.md)에 있다.
+Success does not prove collection writes, aggregation accuracy, all 16 tables, Cron, log
+completeness, or overall service health. Native `createWorker` connects the
+`admin.checkReadiness` port when a verifier is present. If the host does not pass
+`admin.checkReadiness` to `createCollector`, the endpoint always returns 503
+`storage_unavailable`. Only the local code implementation exists today, so there is no production
+probe schedule, real-provider OIDC, alert recipient, or remote deployment. This contract has
+completed local verification, and the results are in [VALIDATION.md](../../VALIDATION.md).
 
-관리자 앱의 설정 화면에는 이 엔드포인트를 수동으로 부르는 `저장소 읽기 확인` 패널이 있다. 펼쳐도 요청하지
-않고 버튼을 눌러야 한 번 호출하며 자동 폴링·JSON·식별자 표시가 없다. 성공하면 이번 확인 시각을
-보여주는데 지표 갱신 시각이 아니고, 실패하면 오류 문구만 남기고 성공 표시는 지운다. 닫기·
-연결 교체에서는 요청을 취소하고 늦은 응답을 폐기한다. 요청은 5초 뒤 취소하고 직접 재시도할
-수 있다. Chrome·임시 서명 OIDC·로컬 D1로 정상·장애·잘못된 응답·시간 초과·재연결과
-320px 화면을 검증했다. 실제 OIDC 제공자·원격 상태 확인은 아직 없고 결과는
-[VALIDATION.md](../../VALIDATION.md)에 있다.
+The administrator application's settings screen contains a **Storage Read Check** panel that calls
+this endpoint manually. Expanding the panel does not send a request; one click makes one call, and
+there is no automatic polling or display of JSON or identifiers. On success, it shows the time of
+the current check, which is not a metric-refresh time. On failure, it shows only an error message
+and removes the success indication. Closing the panel or replacing the connection cancels the
+request and discards late responses. Requests are cancelled after 5 seconds and can be retried
+manually. Normal, failure, malformed-response, timeout, reconnection, and 320px screen cases were
+verified with Chrome, ephemeral signed OIDC, and local D1. A real OIDC provider and remote-state
+verification are still absent; results are in [VALIDATION.md](../../VALIDATION.md).
 
-## 지금 할 수 있는 증거
+## Evidence Available Today
 
-- 고정 필드로 묶어 `operation`·`status`·`code`별 빈도와 `latencyBucket` 분포를 볼 수 있다.
-- 4xx(입력·권한·설정 문제)와 5xx(저장소·서버 문제)를 나눠 급증을 볼 수 있다.
-- 같은 `requestId`가 오류 응답 본문과 로그에 함께 있으므로 한 건을 짚어 본문과 로그를
-  대조할 수 있다.
+- Group by fixed fields to view frequencies for each `operation`, `status`, and `code`, and the
+  `latencyBucket` distribution.
+- Separate 4xx responses (input, authorization, and configuration problems) from 5xx responses
+  (storage and server problems) to identify surges.
+- A `requestId` on an error response body is also present in the log line, so you can select a
+  response and compare its body with the corresponding log entry.
 
-`latencyBucket`은 거친 분포다. 배포된 Worker의 `performance.now()`는 I/O 뒤에만 진행하므로
-CPU 시간이나 실제 전체 지연이 아니고 SLO 판정 근거가 아니다. 로컬 타이머는 배포 시계와
-다르다.
+`latencyBucket` is a coarse distribution. On a deployed Worker, `performance.now()` advances only
+after I/O, so it is not CPU time or total real latency and cannot be used to judge an SLO. Local
+timers differ from deployed clocks.
 
-## 로그 요약 도구
+## Log Summary Tool
 
-관리자 설정의 `운영 로그 보고서`는 이 도구의 v2 JSON 파일을 브라우저 안에서 읽어 표로
-표시한다. 관측 수·가중 요청 어림·진단·HTTP 응답/지연 구간·정리 실행/처리 횟수를 구분한다.
-파일은 전송·저장하지 않고, 8MiB 상한과 합계 검증·페이지 나누기·닫기/재연결 시 지우기를
-적용한다. 로그 확보·원격 모니터링은 별도이며 [로컬 보고서 안내](local-report-viewer.md)에
-사용법과 범위를 적었다.
+**Operational Log Report** in administrator settings reads this tool's v2 JSON file inside the
+browser and displays it as a table. It distinguishes observation counts, weighted request estimates,
+diagnostics, HTTP response and latency buckets, and cleanup run and processed-operation counts. It
+does not upload or save the file, and it enforces an 8 MiB limit, aggregate validation, pagination,
+and clearing on close or reconnection. Log acquisition and remote monitoring are separate concerns;
+usage and scope are documented in the [local report guide](local-report-viewer.md).
 
 ```powershell
 Get-Content app-log.ndjson | node tools/runtime/summarize-observations.ts --stdin
 ```
 
-표준 입력의 앱 NDJSON에서 직접 낸 `http_request` 줄을 세어 `operation`·`status`·`code`·
-`latencyBucket`별 관측 수와 가중 어림을 JSON 한 건으로 낸다. `requestId`·원문은 출력에 넣지
-않고 조회·파일 쓰기·네트워크를 하지 않는다. Windows에서는 `npm.ps1` 파이프 대신 직접 node나
-`npm.cmd` 별칭을 쓴다. 계약과 한계는
-[로그 요약 안내](../../tools/runtime/LOG-SUMMARY.md)에 둔다.
+The tool counts the `http_request` lines it derives directly from application NDJSON on standard
+input and emits one JSON document with observation counts and weighted estimates for each
+`operation`, `status`, `code`, and `latencyBucket`. It does not include `requestId` or
+source text in the output and performs no queries, file writes, or network access. On Windows, use
+`node` directly or the `npm.cmd` alias instead of piping through `npm.ps1`. The contract and
+limitations are in the [log summary guide](../../tools/runtime/LOG-SUMMARY.md).
 
-확보한 Wrangler tail JSON은 `--stdin --wrangler-tail`로 읽는다. 여러 줄 객체에서 단일
-console JSON 문자열만 검증·집계하고 URL·헤더·예외는 버린다. 플랫폼의 추가 샘플링과 누락은
-보정하지 않으며, 앱 관측이 없으면 `no_observations`로 거부한다. 이 경로도 로컬 입력만 읽고
-원격 세션을 열지 않는다. 상한과 보고서 입력 수의 의미는 위 안내에 적었다.
+Captured Wrangler tail JSON is read with `--stdin --wrangler-tail`. The tool validates and
+aggregates only a single console JSON string from a multi-line object and discards URLs, headers, and
+exceptions. It does not correct for additional platform sampling or omissions, and it rejects input
+with `no_observations` when there are no application observations. This path also reads only local
+input and does not open a remote session. The limits and the meaning of report input count are in
+the guide above.
 
-`coverage`는 받은 앱 로그 줄에 한정하고 `exactRequestCounts`·`latencyPercentilesAvailable`·
-`timeWindowAvailable`은 항상 false다. 관측 응답 수와 가중 어림은 다르며 실패율·p95·SLO 근거로
-쓰지 않는다.
+`coverage` is limited to the application log lines received, and
+`exactRequestCounts`, `latencyPercentilesAvailable`, and `timeWindowAvailable` are always false.
+Observed response counts and weighted estimates are different, and neither is evidence for a
+failure rate, p95, or an SLO.
 
-표준 입력의 정리(cleanup) 로그도 같은 도구가 `runId`로 이어 붙인다. `attempted`는 프로젝트
-시도 횟수 합계, `completed`는 정리 호출 성공 수이지 삭제 행 수가 아니며 `cursorAdvanced=true`도
-프로젝트 실패가 없었다는 뜻이 아니다. 상세 보고가 없는 실행은 미관측으로 남는다. 정리 기록만
-있으면 `observedResponses=0`으로 정상 보고한다.
-`cleanup.reportedRuns`가 처리 횟수 집계의 범위이고, `cleanup.reportlessFailureRuns`는 상세가
-누락된 실패 실행 수다. `cleanup.failedProjects`·`cursorNotAdvancedReports`·`failureMarkerRuns`를
-함께 보되 서로 겹치는 실행 수를 더해서 총 실패 실행 수로 쓰지 않는다.
+The same tool joins cleanup logs on standard input by `runId`. `attempted` is the sum of project
+attempts; `completed` is the number of successful cleanup calls, not deleted rows; and
+`cursorAdvanced=true` does not mean that no project failed. Runs without a detailed report remain
+unobserved. When only cleanup records exist, the tool reports normally with
+`observedResponses=0`. `cleanup.reportedRuns` is the scope for processed-operation aggregation,
+and `cleanup.reportlessFailureRuns` is the number of failed runs whose details are missing. Review
+`cleanup.failedProjects`, `cursorNotAdvancedReports`, and `failureMarkerRuns` together, but do
+not add overlapping run counts to produce a total failure-run count.
 
-보고서에는 진단 객체 `diagnostics`가 additive로 붙는다(`tallyfin.observation-diagnostics/v1`).
-`serviceHealth`는 항상 `unknown`이고 `coverage`가 http·cleanup·cleanupDetails·otherLogsIgnored를 나눠
-본다. `findings`는 `error`·`review` 항목과 `observedCount`·고정 `action` 코드를 담고, HTTP 응답
-하나는 최대 한 항목에만 든다. `cleanup_failures`는 실패 표시·`failed>0`·커서 충돌·취소·저장소 오류 실행의 고유
-`runId` 합집합이고 `cleanup_report_missing`과 겹칠 수 있다. `observedCount`는 관측 수이지 가중치나
-실패율이 아니며, 관측 수가 0인 항목은 넣지 않으므로 오류 0건도 서비스 정상 근거가 아니다. 4xx
-`review`는 정상 보호 동작일 수 있다. CLI 옵션·상한·종료 코드는 그대로이고 알림·네트워크·임계값은
-없다.
+The report includes an additive `diagnostics` object
+(`tallyfin.observation-diagnostics/v1`). `serviceHealth` is always `unknown`, and
+`coverage` separates http, cleanup, cleanupDetails, and otherLogsIgnored. `findings` contains
+`error` and `review` items with `observedCount` and fixed `action` codes, and each HTTP
+response belongs to at most one item. `cleanup_failures` is the union of unique `runId` values for
+runs with a failure marker, `failed>0`, a cursor conflict, cancellation, or a storage error, and it
+can overlap with `cleanup_report_missing`. `observedCount` is an observation count, not a weight
+or failure rate, and items with 0 observations are omitted, so 0 errors is not evidence that the
+service is healthy. A 4xx `review` can be a normal protective response. CLI options, limits, and exit
+codes are unchanged, and there is no alerting, network access, or thresholding.
 
-## 지금 할 수 없는 증거
+## Evidence Not Available Today
 
-로그 줄 수로 실패 비율을 바로 계산할 수 없다. 성공은 1/64, 실패는 전량이라 섞어 세면
-왜곡된다. 전체 규모는 성공 줄×64 + 실패 줄×1로 어림하며, 그 값은 정확한 방문자·요청 수나
-p95 같은 백분위가 아니다.
+A failure ratio cannot be calculated directly from log line counts. Successes are sampled at 1/64
+and failures are logged in full, so counting them together would distort the result. Overall scale
+is estimated as successful lines × 64 + failed lines × 1; that value is not an exact visitor or
+request count and is not a percentile such as p95.
 
-로그가 없다고 장애가 없었다고 할 수 없다. 앱은 실패 응답도 전량 남기려 하지만 플랫폼의
-로그 수집·표본·절단이 줄일 수 있고, Worker 시작 실패·요청 처리 밖 예외·플랫폼이 거부한
-요청·호스트가 관측 포트를 넘기지 않은 구성은 남지 않는다. 관측 콜백이 실패하면 그 줄만
-없어지고 응답은 그대로이며, 실패 자체를 알리는 경로는 없다.
+The absence of logs does not prove that no incident occurred. The application attempts to log every
+failed response, but platform log collection, sampling, and truncation can reduce the record.
+Worker startup failures, exceptions outside request handling, requests rejected by the platform,
+and configurations where the host does not pass the observability port are not logged. If an
+observability callback fails, only that line disappears while the response is unchanged, and there
+is no path that reports the callback failure itself.
 
-운영 알림 수신자·대시보드·로그 보존 기간은 배포하지 않았다. 관리자 read 프로브는 코드에만
-있고 원격 실행·스케줄이 없다. 임계값과 담당자는 정하지 않았고 임의로 만들지 않는다
-(UNDECIDED).
+No production alert recipients, dashboard, or log retention period has been deployed. The
+administrator read probe exists only in code and has no remote execution or schedule. Thresholds and
+owners are not established and must not be invented (UNDECIDED).
 
-## 알림 설계 근거
+## Alerting Design Rationale
 
-로컬 명령 `monitor:access`는 기존 인증 접근 검사 세 개를 호출당 한 번 실행하고 상태
-파일로 연속 실패·복구를 판단한다. 임계 횟수와 허용 관측 간격을 명시적으로 받아
-문제 열림/복구 때만 `notify=true`를 낸다. 실제 알림 전달·주기 실행·토큰 발급/갱신은
-연결하지 않는다. 검사 범위는 관리자 접근과 두 제어 테이블 읽기까지다. CLI와 잠금·
-출력 유실의 한계는 [반복 접근 점검](../../tools/runtime/ACCESS-MONITOR.md)을 따른다.
+The local `monitor:access` command runs the 3 existing authentication access checks once per
+invocation and uses a state file to detect consecutive failures and recovery. It takes an explicit
+failure threshold and allowed observation interval and emits `notify=true` only when a problem
+opens or recovers. It does not connect actual alert delivery, periodic execution, or token issuance
+and refresh. Its inspection scope covers administrator access and reads of the 2 control tables. For
+CLI, locking, and output-loss limitations, see
+[repeated access monitoring](../../tools/runtime/ACCESS-MONITOR.md).
 
-임계값·수신자·억제 규칙은 운영 리소스와 담당자를 정한 뒤 확정한다. 그전에 쓸 수 있는
-근거는 위 고정 필드 그룹이다. 예를 들어 `operation`·`status`·`code`로 묶은 5xx 급증이나
-`storage_unavailable`·`quota_exceeded`·`origin_denied` 같은 특정 코드의 증가를 보는 식이다.
-어떤 그룹을 어떤 값으로 어디에 알릴지는 UNDECIDED다.
+Thresholds, recipients, and suppression rules will be finalized after operational resources and
+owners are assigned. Until then, the available evidence is the fixed-field groups above. Examples
+include a surge in 5xx responses grouped by `operation`, `status`, and `code`, or an increase in
+specific codes such as `storage_unavailable`, `quota_exceeded`, and `origin_denied`. Which groups
+trigger alerts, at what values, and where notifications go are UNDECIDED.
 
-관측 로그는 증거의 일부일 뿐이다. 거부 진단은 프로젝트별 분당/일별 고정 원인만 최근 7개
-UTC 날짜 동안 보존하고 거부율 분모를 제공하지 않는다. 장애 조사 기록과 보존 정책은
-[장애 대응](./incident-response.md)과 [운영 계약](./00-operational-contract.md)을 따르며,
-실제 수치와 담당자는 그 문서들이 확정될 때 맞춘다.
+Observability logs are only part of the evidence. Rejection diagnostics retain fixed per-project
+per-minute and per-day reasons for the most recent 7 UTC dates and do not provide a rejection-rate
+denominator. Incident investigation records and retention policy follow
+[incident response](./incident-response.md) and the
+[operational contract](./00-operational-contract.md), and actual figures and owners will be aligned
+when those documents are finalized.
 
-## 검증
+## Validation
 
-- 필수 검증 이름: [VALIDATION.md](../../VALIDATION.md)
-- 릴리스 차단 여부: UNDECIDED
-- 남은 운영 위험: UNDECIDED
+- Required validation names: [VALIDATION.md](../../VALIDATION.md)
+- Release blocking status: UNDECIDED
+- Remaining operational risk: UNDECIDED
 
-## 정리 처리량 관측 — 2026-10-23
+## Cleanup Throughput Observability — 2026-10-23
 
-정리 로그와 보고서의 선택적 `metrics`에 deletedRows, saturatedTables,
-oldestExpiredReceiptAgeMs, measuredProjects, capacityLimitedProjects를 담는다.
-중복 로그는 한 번만 합산하고 최장 지연은 최댓값을 유지한다. 측정하지 않은 과거 로그는
-0으로 만들지 않는다. 지연은 성공적으로 처리한 프로젝트에 남은 만료 영수증만 나타내며
-삭제 한도 도달은 적체의 확정 판정이 아니다. 이전 최대 20개 프로젝트 로그도 계속 읽는다.
+Cleanup logs and the optional report `metrics` contain deletedRows, saturatedTables,
+oldestExpiredReceiptAgeMs, measuredProjects, and capacityLimitedProjects. Duplicate logs are summed
+once, and the maximum is retained for the oldest delay. Past logs that were not measured are not
+turned into 0. The delay reflects only expired receipts remaining in projects that were processed
+successfully, and reaching a deletion limit is not a definitive indication of a backlog. Logs from
+up to 20 projects are still read.
 
-## 정리 실행의 지연과 중단 이유
+## Cleanup Execution Latency and Interruption Reasons
 
-새 retention_cleanup 로그는 execution에 elapsedMs·stopReason·interruptedProjects·
-checkpointedProjects를 기록하며 예약 실행에서는 scheduleLagMs도 기록한다.
-실행 시간은 performance.now() 기준의 내림한 밀리초 값이다. Worker 시계의 제약이 있어
-CPU 시간·실제 전체 지연·SLO로 해석하지 않는다. 예약 지연은 실행 시작 때의 벽시계와
-scheduledTime 차이이며 미래 예약은 0으로 제한한다. 삭제 기준은 계속 예약 시각이다.
+New retention_cleanup logs record elapsedMs, stopReason, interruptedProjects, and
+checkpointedProjects under execution, and scheduled runs also record scheduleLagMs. Execution time
+is a floored millisecond value based on performance.now(). Because of Worker clock constraints, do
+not interpret it as CPU time, total real latency, or an SLO. Schedule lag is the difference between
+the wall-clock time at run start and scheduledTime, with future schedules clamped to 0. The deletion
+cutoff continues to be based on the scheduled time.
 
-stopReason은 page_limit·time_budget·cycle_complete·empty_page·cursor_conflict·
-cancelled·storage_error 중 하나다. 프로젝트별 정리 실패는 failed에 따로 센다.
-page_limit·time_budget는 이월이며 성공 여부나 만료 데이터 전체 삭제를 보장하지 않는다.
-interruptedProjects는 결과를 확인하지 못한 작업 수이고 실제 삭제가 없었다는 뜻이 아니다.
-checkpointedProjects는 CAS로 확인한 순회 진행량이며 실패한 프로젝트도 포함할 수 있다.
+stopReason is one of page_limit, time_budget, cycle_complete, empty_page, cursor_conflict,
+cancelled, or storage_error. Per-project cleanup failures are counted separately in failed.
+page_limit and time_budget mean work was carried over and do not guarantee success or deletion of
+all expired data. interruptedProjects is the number of operations whose result could not be
+confirmed; it does not mean that no deletion occurred. checkpointedProjects is traversal progress
+confirmed by CAS and can include failed projects.
 
-예외·취소 때도 같은 runId의 최종 보고서와 실패 표시를 함께 남기고 요약기는 한 실행으로
-센다. execution이 없는 과거 로그는 계속 읽되 시간·이유를 0으로 채우지 않는다. 과거 로그의
-실패 분류에는 기존 커서 미전진 기준을 유지한다. 새 로그의 시간 이월은 커서 미전진만으로
-실패로 만들지 않는다. execution은 닫힌 필드·건수 합계·범위를 검사하며 모순되거나
-사적인 필드가 있으면 부분 보고서를 만들지 않고 입력을 거부한다.
+During an exception or cancellation, the final report and failure marker for the same runId are both
+recorded, and the summarizer counts them as one run. Past logs without execution are still read, but
+their time and reason fields are not filled with 0. Failure classification for past logs keeps the
+existing criterion of a cursor that did not advance. For new logs, time carry-over alone does not
+create a failure from a non-advancing cursor. Execution validation checks closed fields, count
+totals, and ranges, and rejects the input without producing a partial report when fields contradict
+each other or contain private data.
 
-요약 보고서 cleanup.execution은 진단을 기록한 실행 수·중단 이유별 실행 수·중단 작업 수·
-확인된 커서 진행량과 관측 최대 실행 시간·예약 지연을 제공한다. 예약 지연 표본 수도 따로
-남긴다. 이 범위는 제공된 로그뿐이며 오래된 로그가 섞이면 전체 실행을 대표하지 않는다.
-원본 오류·프로젝트 ID·설정·예약 시각 자체는 로그와 보고서에 추가하지 않는다.
+The summary report's cleanup.execution provides the number of runs with diagnostics, the number of
+runs by interruption reason, the number of interrupted operations, confirmed cursor progress, and
+the maximum observed execution time and schedule lag. It keeps a separate schedule-lag sample count.
+This scope covers only the supplied logs; a mix of older logs may not represent all runs. The tool
+does not add source errors, project IDs, configuration, or the scheduled time itself to logs or the
+report.

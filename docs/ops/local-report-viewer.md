@@ -1,12 +1,14 @@
-# 관리자 화면에서 운영 로그 보고서 읽기
+# Reading Operational Log Reports in the Administrator UI
 
-관리자 API 연결 모드의 **설정 → 운영 로그 보고서**에서 `logs:summary` 출력 JSON을 선택한다.
-파일은 브라우저의 Worker에서 읽고 검증하며 서버로 보내거나 브라우저 저장소에 저장하지 않는다.
-프로젝트 권한이 없어도 이미 가지고 있는 보고서를 읽을 수 있다.
+In the administrator API connection mode, select the JSON produced by `logs:summary` under
+**Settings → Operational Log Report**. The browser Worker reads and validates the file; the file is
+not sent to a server or saved in browser storage. You can read a report you already have even
+without project permission.
 
-## 보고서 만들기
+## Creating a Report
 
-앱 로그를 확보한 뒤 저장소 루트에서 실행한다. 원문 로그를 화면에 넣지 않고 먼저 요약한다.
+After obtaining application logs, run the following from the repository root. Summarize the logs
+first rather than placing the source logs in the UI.
 
 ```powershell
 Get-Content -LiteralPath app-log.ndjson -Encoding utf8 |
@@ -14,38 +16,48 @@ Get-Content -LiteralPath app-log.ndjson -Encoding utf8 |
   Set-Content -LiteralPath observation-summary.json -Encoding utf8
 ```
 
-CLI가 성공 종료한 JSON만 사용한다. `npm.cmd` 별칭은 `--silent`를 넣어 배너가 섞이지 않도록
-한다. 로그 형식·수집 범위·실패 코드는 [로그 요약 안내](../../tools/runtime/LOG-SUMMARY.md)에 있다.
+Use only JSON from a CLI run that exited successfully. When using the `npm.cmd` alias, add
+`--silent` so the npm banner does not mix with the JSON. The
+[log summary guide](../../tools/runtime/LOG-SUMMARY.md) explains the log format, collection scope,
+and failure codes.
 
-확보한 Wrangler tail JSON에는 `--stdin --wrangler-tail`을 쓴다. 여러 줄 객체에서 console의
-앱 기록만 추리며 기존 v2 보고서를 만든다. 보고서의 입력 줄 수는 console 기록 수다.
-원본의 URL·헤더·예외는 화면에 넣지 않고, 추가 샘플링·누락은 있을 수 있다.
-유한한 로그 파일을 사용하며 계속 열린 스트림은 30초 후 실패한다.
+For captured Wrangler tail JSON, use `--stdin --wrangler-tail`. This extracts only the console
+application records from multi-line objects and produces an existing v2 report. The report's input
+line count is the number of console records. Source URLs, headers, and exceptions are not placed in
+the UI, and additional sampling or omissions may occur. Use a finite log file; a stream that remains
+open fails after 30 seconds.
 
-## 화면에서 읽는 값
+## Values in the UI
 
-- 관측 응답은 중복을 뺀 로그 줄 수다. 가중 요청 어림은 성공 표본에 64를 곱한 값이며 정확한
-  전체 요청 수와 구분한다.
-- 오류와 확인이 필요한 항목은 기존 CLI 진단 규칙으로 표시한다. 4xx는 보호 동작일 수 있으므로
-  오류와 구분한다. 진단 항목이 없으면 그 사실만 표시한다.
-- HTTP 응답은 작업 종류·상태 코드·고정 오류 코드별로 읽는다. 긴 목록은 페이지로 나누며,
-  지연 구간은 거친 관측 분포다.
-- 정리 실행과 처리 횟수를 구분한다. 성공 처리 횟수는 삭제 행 수가 아니며, 상세 없는 실패의
-  처리 횟수는 알 수 없다. 실패 표시와 상세 실패는 같은 실행에서 겹칠 수 있다.
-- 입력 줄·무시한 로그·중복 줄도 표시한다. 이전 v2의 additive 진단이 없으면 진단 없음으로 남긴다.
+- The observed response count is the number of unique log lines. The weighted request estimate
+  multiplies the successful sample by 64 and is distinct from an exact total request count.
+- Errors and items requiring review use the existing CLI diagnostic rules. A 4xx can be a protective
+  response, so it is shown separately from errors. When there are no diagnostic items, the UI says
+  only that none were found.
+- HTTP responses are grouped by operation, status code, and fixed error code. Long lists are
+  paginated, and latency buckets are a coarse observed distribution.
+- Cleanup runs and processed-operation counts are separate. A successful processed-operation count
+  is not a deleted-row count, and the processed count for a failure without details is unknown. A
+  failure marker and a detailed failure can both appear for the same run.
+- The UI also shows input lines, ignored logs, and duplicate lines. If an older v2 report has no
+  additive diagnostics, it remains marked as having no diagnostics.
 
-보고서는 수집기 전체의 제공된 로그를 다룬다. 위 프로젝트·조회 기간 선택으로 나누지 않으며
-보고서의 시간 범위·정확한 오류율·퍼센타일·서비스 전체 상태는 계산하지 않는다.
+The report covers the supplied logs from the entire collector. It is not split by the project or
+lookback-period selectors above it, and it does not calculate a time window, exact error rate,
+percentiles, or overall service health.
 
-## 읽기와 지우기
+## Reading and Clearing
 
-파일 상한은 8MiB다. 지원하는 `tallyfin.observation-summary/v2`의 필드·표본 가중치·집계 합계·
-진단을 검사하고, 원문 NDJSON·여분 식별자·형식 오류·불일치는 고정 오류 문구로 거부한다.
-파일 이름이나 원문 내용을 오류에 넣지 않는다. 읽기가 10초를 넘으면 Worker를 종료한다.
+The file limit is 8 MiB. The reader checks the fields, sample weights, aggregate totals, and
+diagnostics of supported `tallyfin.observation-summary/v2` reports. It rejects raw NDJSON, extra
+identifiers, format errors, and inconsistencies with a fixed error message. File names and source
+content are not included in errors. The Worker is terminated if reading takes longer than 10
+seconds.
 
-새 파일을 고르면 이전 결과를 지우고 새로 읽는다. **보고서 지우기**, 패널 닫기, 설정 화면에서
-나가기, 연결 교체·끊기에서는 읽기 작업과 결과를 정리한다. 늦게 도착한 결과는 반영하지 않는다.
-파일 선택으로 API 요청·자동 폴링·알림 전송을 추가하지 않는다.
+Selecting a new file clears the previous result and starts a new read. **Clear report**, closing the
+panel, leaving the settings screen, or replacing or disconnecting the connection cancels the read
+and clears its result. Results that arrive late are ignored. Selecting a file does not add API
+requests, automatic polling, or alert delivery.
 
-실제 운영 로그 수집·스케줄·알림 수신자 연결은 별도다. 현재 검증 결과는
-[VALIDATION.md](../../VALIDATION.md)에 기록한다.
+Production log collection, scheduling, and alert-recipient integration are separate concerns. The
+current verification results are recorded in [VALIDATION.md](../../VALIDATION.md).

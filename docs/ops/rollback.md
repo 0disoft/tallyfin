@@ -1,89 +1,103 @@
-# 롤백
+# Rollback
 
-상태: 문서 전용 런북이다. 실제 롤백·원격 복원·장애 전환은 실행하지 않았다.
-원격 `rollback`과 복원·트래픽 전환은 원격 상태를 바꾼다. 원격 export는 DB를 읽어 로컬 SQL을
-만든다. 변경은 승인된 대상과 범위에서 실행한다.
+Status: documentation-only runbook. No actual rollback, remote restoration, or failover has been
+performed. A remote `rollback`, restoration, or traffic switch changes remote state. A remote export
+reads the database and creates a local SQL file. Execute changes only against an approved target and
+scope.
 
-## 결정 트리
+## Decision Tree
 
-1. 실패가 코드에만 있는지, DB 데이터에도 있는지 먼저 나눈다.
-2. 코드·API·DB 호환이 검증된 경우에만 이전 코드로 되돌리고 DB는 그대로 유지한다.
-3. 스키마를 되돌리는 다운 마이그레이션은 없다. 앞으로 고치는 편을 먼저 검토한다.
-4. 기존 DB를 백업으로 덮어쓰는 복원은 코드 롤백이 아니다. 새 DB 복원은 별도 승인 작업으로 한다.
+1. First determine whether the failure is confined to code or also affects database data.
+2. Return to the previous code only when code, API, and database compatibility has been verified,
+   and leave the database in place.
+3. There is no down migration for reverting a schema. Prefer fixing the problem forward.
+4. Restoring an existing database from a backup is not a code rollback. Restoring a new database is
+   a separately approved operation.
 
-## Worker 롤백
+## Worker Rollback
 
-`wrangler rollback [version-id]`는 Worker 코드와 버전에 포함된 설정(바인딩·vars)을 되돌린다.
-D1 데이터와 스키마는 되돌리지 않는다.
+`wrangler rollback [version-id]` rolls back the Worker code and the configuration included in that
+version (bindings and vars). It does not roll back D1 data or schema.
 
 ```powershell
 node node_modules/wrangler/bin/wrangler.js deployments list --config .tmp/installation/collector.wrangler.json --json
 node node_modules/wrangler/bin/wrangler.js rollback <version-id> --config .tmp/installation/collector.wrangler.json
 ```
 
-- 롤백은 배포 ID가 아니라 Worker 버전 ID를 받는다. `deployments list`의 최근 10개 기록에서 확인한 값만
-  쓴다.
-- 루트 `wrangler.jsonc`가 아니라 재검증한 준비 묶음 config를 `--config`로 쓴다.
-- 참조하는 바인딩 리소스가 삭제됐으면 롤백이 막힐 수 있다. D1·서비스 바인딩이 살아 있는지 먼저
-  확인한다.
-- 라우팅·도메인·Cron Trigger는 별도 인벤토리로 확인한다. 버전 롤백만으로 그 설정이 복원됐다고
-  판단하지 않고 필요하면 따로 복원한다.
-- 관리자 문제만 있으면 검토한 관리자 config와 버전 ID로 같은 절차를 수행한다. 수집기와
-  관리자 버전은 독립이므로 API·자산 호환을 확인하고 DB는 그대로 유지한다.
-- 되돌린 뒤 [릴리스의 배포 후 검증](./release.md#배포-후-검증-필수)을 다시 확인하고
-  오류가 해소되면 쓰기를 재개한다. 호환되지 않으면 쓰기를 중단한 채 앞으로 고친다.
+- Rollback takes a Worker version ID, not a deployment ID. Use only a value confirmed from the most
+  recent 10 records in `deployments list`.
+- Pass the revalidated preparation bundle configuration through `--config`; do not use the root
+  `wrangler.jsonc`.
+- Rollback can be blocked when a referenced binding resource has been deleted. First verify that D1
+  and service bindings are still present.
+- Verify routing, domains, and Cron Triggers from a separate inventory. Do not assume a version
+  rollback restored those settings; restore them separately if needed.
+- If only the administrator is affected, perform the same procedure with the reviewed administrator
+  config and version ID. Collector and administrator versions are independent, so verify API and
+  asset compatibility and keep the database in place.
+- After rollback, repeat the
+  [release post-deployment verification](./release.md#post-deployment-verification-required) and resume writes after
+  the errors are resolved. If the versions are incompatible, keep writes stopped and fix the
+  problem forward.
 
-## 마이그레이션별 되돌림 위험
+## Migration-Specific Rollback Risks
 
-이전 코드로 돌아갈 때 스키마는 보존한다. 예전 리더·writer가 새 스키마를 해석하지 못하면
-되돌리지 않는다.
+Preserve the schema when returning to previous code. Do not roll back if older readers or writers
+cannot interpret the new schema.
 
-| 마이그레이션 | 되돌릴 때 위험 | 판정 |
+| Migration | Risk when rolling back | Decision |
 | --- | --- | --- |
-| `0006_server_collection.sql` | 예전 browser 코드가 source 필터·server 지원을 확인하지 않으면 확장 CHECK·저장된 server 행과 어긋날 수 있음 | 재사용 전 예전 코드의 source 처리 지원을 확인한다. 확장 테이블·server 행·발행 권한은 유지 |
-| `0008_publisher_history.sql` | 새 action을 모르는 예전 관리자 이력 리더 | 예전 리더로 되돌리지 않음. action을 아는 리더를 유지 |
-| `0009_publisher_generations.sql` | 예전 CLI의 `createdAt` CAS 회수는 같은 밀리초 재부여를 지울 수 있음 | 예전 발행자 writer 차단. `grant_id` 기준 코드 유지 |
-| `0009` + 관리자 화면 | 새 API 뒤 예전 화면의 `expectedCreatedAt` DELETE는 400 | 자산과 API를 맞춘다. 예전 자산만 올리지 않음 |
-| `0010_grant_revision.sql` | 예전 관리자·CLI가 `grant_revision`·`expectedRevision`을 보내지 않거나 읽지 못하면 grant 쓰기가 거부되거나 호환되지 않음 | revision 열과 세 트리거는 남긴다. 새 관리자/API를 유지하고 예전 grant writer를 차단 |
-| `0011_analytics_lookup.sql` | 인덱스를 지우면 조회 계획·지연이 달라질 수 있고 재생성은 기존 집계를 다시 스캔함 | 인덱스는 남긴다. 공간을 회수해야 할 때만 두 인덱스를 한 batch로 지우고, 0011 재적용으로 복원 |
-| `0012_workflow_duration.sql` | 예전 Collector는 계속 동작하지만 새 완료의 소요시간을 집계하지 않아 미측정이 늘어남 | 열은 남긴다. 이전 완료를 역산·backfill하지 않는다 |
-| `0013_workflow_failure_reasons.sql` | 예전 Collector는 새 실패 원인 슬롯을 쓰지 않아 미측정이 늘어남 | 열은 남긴다. 과거 실패 원인을 역산하지 않고 새 Collector를 앞으로 수정 |
+| `0006_server_collection.sql` | If the previous browser code does not recognize the source filter and server support, it can conflict with the extended CHECK constraint and stored server rows | Confirm the previous code's source handling before reuse. Retain the extended table, server rows, and publishing permissions |
+| `0008_publisher_history.sql` | An older administrator history reader does not know the new actions | Do not roll back to an older reader. Keep a reader that understands the actions |
+| `0009_publisher_generations.sql` | The previous CLI's `createdAt` CAS revocation can delete a regrant made in the same millisecond | Block the old publisher writer. Keep the code that revokes by `grant_id` |
+| `0009` + administrator UI | A `DELETE` from the old UI using `expectedCreatedAt` returns 400 behind the new API | Match the assets and API. Do not deploy only the old assets |
+| `0010_grant_revision.sql` | If the previous administrator or CLI does not send or cannot read `grant_revision` and `expectedRevision`, grant writes are rejected or incompatible | Keep the revision column and the three triggers. Keep the new administrator and API, and block the old grant writer |
+| `0011_analytics_lookup.sql` | Dropping the indexes can change query plans and latency, and recreating them rescans existing aggregates | Keep the indexes. When space must be reclaimed, drop both indexes in one batch and restore them by reapplying 0011 |
+| `0012_workflow_duration.sql` | The previous Collector still works but does not aggregate duration for new completions, so the number of unmeasured events increases | Keep the column. Do not calculate or backfill durations for earlier completions |
+| `0013_workflow_failure_reasons.sql` | The previous Collector does not write the new failure-reason slots, so the number of unmeasured failures increases | Keep the column. Do not infer past failure reasons; fix the new Collector going forward |
 
-발행 권한 회수의 호환 경로는 두지 않는다. 새 화면은 `grantId` CAS를 쓰고 예전 `expectedCreatedAt`
-요청은 400으로 거부된다.
+There is no compatibility path for publisher revocation. The new UI uses `grantId` CAS, and old
+`expectedCreatedAt` requests are rejected with 400.
 
-## 되돌리기 전 쓰기 중지
+## Stopping Writes Before Rollback
 
-- 코드 롤백도 새 스키마에 맞는 writer를 다시 세우는 작업이다. 이전 코드가 재생성 테이블(0008
-  `admin_changes`, 0009 `project_publishers`)과 호환되는지 확인하기 전에는 쓰기를 재개하지 않는다.
-- 재생성 구간에는 Cron과 관련 writer를 전역으로 멈춘다. server 전용 쓰기만 있어도 백업과 행
-  무결성 확인이 필요하다.
-- 0010 적용 뒤에는 grant 수정 경로를 새 revision 계약에 맞춘 상태로 유지한다. 0012·0013은
-  열을 유지한 채 코드를 되돌릴 수 있지만 새 측정값은 늘지 않는다. 0011 인덱스는 코드 롤백의
-  대상이 아니다.
-- Cron만 멈추면 수집이 멈추지 않는다. 프로젝트 일시 중지로도 관리자 읽기·쓰기와 신뢰된 CLI는
-  막히지 않는다. 외부 호스트 ingress와 writer를 호스트 운영에서 함께 막는다.
+- A code rollback still means putting writers back on the new schema. Do not resume writes until the
+  previous code is confirmed compatible with the regenerated tables (0008 `admin_changes` and 0009
+  `project_publishers`).
+- Globally stop Cron and related writers during a table-recreation interval. Even server-only writes
+  require a backup and row-integrity checks.
+- After 0010 is applied, keep the grant-edit path aligned with the new revision contract. Code for
+  0012 and 0013 can be rolled back while retaining the columns, but new measurements will not
+  increase. The 0011 indexes are not part of a code rollback.
+- Stopping only Cron does not stop collection. Pausing a project does not block administrator reads
+  and writes or trusted CLI operations. Stop external host ingress and writers together in host
+  operations.
 
-## DB 복원 (별도 승인)
+## Database Restore (Separate Approval)
 
-- 기존 DB를 백업으로 덮어쓰지 않는다. 새 DB에만 복원하고 접근을 제한한다.
-- 복원은 백업 이후의 영수증·권한 회수·집계·감사 변경을 되돌린다. 백업 시각 이후 회수·재부여·
-  감사가 사라진다.
-- 전체 백업 SQL을 빈 DB에 넣을 때 같은 마이그레이션을 먼저 중복 적용하지 않는다.
-- 복원 후 행 내용·개수, 스키마·외래 키, `PRAGMA quick_check`, `foreign_key_check`를 확인하고,
-  회수·재부여·중복 재전송을 복구 환경에서 확인한다.
-- 트래픽을 전환하기 전에 손실 범위·복구 시간·새 대상·전환 계획을 검토한다.
-- 실제 준비 검사는 운영 DB와 분리한 별도 검증 프로젝트에서 한다.
-- 세부 명령은 [백업·복구](./backup-and-restore.md)를 따른다.
+- Do not overwrite an existing database with a backup. Restore only into a new database with
+  restricted access.
+- Restoration rolls back receipts, permission revocations, aggregates, and audit changes made after
+  the backup. Revocations, regrants, and audit records created after the backup time disappear.
+- When loading a full backup SQL dump into an empty database, do not apply the same migrations again
+  first.
+- After restoration, verify row content and counts, schema and foreign keys, `PRAGMA quick_check`,
+  and `foreign_key_check`; then verify revocation, regrant, and duplicate replay in the recovery
+  environment.
+- Review the scope of loss, recovery time, new target, and cutover plan before switching traffic.
+- Run actual readiness checks in a separate verification project isolated from the production
+  database.
+- Follow [backup and restore](./backup-and-restore.md) for detailed commands.
 
-## 중지 조건
+## Stop Conditions
 
-- 롤백 대상 코드·API·DB 호환이 검증되지 않았다.
-- 마이그레이션 head 상태를 알 수 없다.
-- DB 복원이 필요한데 적용 전 백업이 없거나 복구 가능성이 검증되지 않았다.
-- 예전 리더·writer가 새 스키마나 새 action을 해석하지 못한다.
-- 되돌릴 바인딩 리소스가 삭제됐다.
-- 개인정보·비밀값이 노출됐다.
+- Compatibility among the rollback target's code, API, and database has not been verified.
+- The migration head state is unknown.
+- A database restore is needed, but no pre-application backup exists or recoverability has not been
+  verified.
+- Older readers or writers cannot interpret the new schema or new actions.
+- A binding resource required by the rollback has been deleted.
+- Personal information or secrets have been exposed.
 
 ## Owners
 
@@ -93,12 +107,12 @@ node node_modules/wrangler/bin/wrangler.js rollback <version-id> --config .tmp/i
 
 ## Validation
 
-- 필수 검증 이름: [VALIDATION.md](../../VALIDATION.md)
-- 릴리스 차단 여부: UNDECIDED
-- 남은 운영 위험: UNDECIDED
+- Required validation names: [VALIDATION.md](../../VALIDATION.md)
+- Release blocking status: UNDECIDED
+- Remaining operational risk: UNDECIDED
 
-## 근거
+## Evidence
 
-- [Cloudflare Workers 롤백](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
-- [Wrangler D1 명령](https://developers.cloudflare.com/d1/wrangler-commands/)
+- [Cloudflare Workers rollback](https://developers.cloudflare.com/workers/versions-and-deployments/rollbacks/)
+- [Wrangler D1 commands](https://developers.cloudflare.com/d1/wrangler-commands/)
 - [D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/)

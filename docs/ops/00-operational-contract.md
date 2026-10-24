@@ -1,70 +1,74 @@
-# 운영 계약
+# Operational Contract
 
-상태: 문서 전용 초안이다. 실제 운영 배포·SLO 확정·알림 수신자 지정은 하지 않았다. 여기 적은
-수치는 현재 구현의 확인된 성질이고 새 목표를 만들지 않는다.
+Status: documentation-only draft. No production deployment, established SLO, or designated alert recipient has been provided. The figures below are confirmed properties of the current implementation; they do not create new targets.
 
-## 핵심 사용자 여정
+## Core User Journeys
 
-1. browser 수집: 페이지가 batch를 보내고 집계에 반영된다.
-2. server 수집: 서버 SDK가 발행자 토큰으로 batch를 보내고 집계에 반영된다.
-3. 관리자 조회: owner/reader가 로그인해 프로젝트별 지표를 읽는다.
-4. 관리자 쓰기: owner가 설정·스키마·grant·발행 권한을 바꾸고 변경 이력이 남는다.
-5. 만료 정리: scheduled 실행이 오래된 행을 지운다.
+1. Browser collection: a page sends a batch, and the batch is reflected in the aggregates.
+2. Server collection: a server SDK sends a batch with a publisher token, and the batch is reflected in the aggregates.
+3. Administrator reads: an owner or reader signs in and reads metrics for each project.
+4. Administrator writes: an owner changes settings, schemas, grants, or publishing permissions, and the change history is preserved.
+5. Expiration cleanup: a scheduled run deletes old rows.
 
-## 우선순위
+## Priorities
 
-1. 테넌트 격리·권한 경계.
-2. 수집 정확성(중복·유실 최소화).
-3. 관리자 조회·쓰기 가용성.
-4. 정리·보존.
-5. 관측.
+1. Tenant isolation and authorization boundaries.
+2. Collection accuracy, minimizing duplicates and loss.
+3. Availability of administrator reads and writes.
+4. Cleanup and retention.
+5. Observability.
 
-## 의존 계층
+## Dependency Layers
 
-| 계층 | 대상 | 로컬 증거 | 운영 상태 |
+| Layer | Component | Local evidence | Production status |
 | --- | --- | --- | --- |
-| 1 | D1(저장) | 저장 어댑터·마이그레이션 `0001`~`0013` Miniflare 검증 | 원격 DB 미적용 |
-| 1 | OIDC 검증(인증) | 임시 서명 토큰·로컬 D1 검증 | 실제 provider 없음 |
-| 2 | 수집기 Worker | 로컬 workerd 검증 | 원격 배포 없음 |
-| 2 | 관리자 Worker·프록시 | 로컬 프록시·스모크 검증 | 원격 배포 없음 |
-| 3 | Cron 정리 | 로컬 scheduled 검증 | Cron Trigger 미등록 |
-| 3 | 관측 로그 | 로컬 검증 | 수집·대시보드·알림 없음 |
+| 1 | D1 (storage) | Storage adapter and migrations `0001`–`0013` verified with Miniflare | Not applied to a remote database |
+| 1 | OIDC verification (authentication) | Verification with ephemeral signed tokens and local D1 | No real provider |
+| 2 | Collector Worker | Verified with local workerd | Not deployed remotely |
+| 2 | Administrator Worker and proxy | Verified with a local proxy and smoke tests | Not deployed remotely |
+| 3 | Cron cleanup | Verified with a local scheduled run | Cron Trigger not registered |
+| 3 | Observability logs | Verified locally | No log collection, dashboard, or alerting |
 
-## 현재 로컬 전용 증거
+## Current Local-Only Evidence
 
-- 마이그레이션 `0001`~`0013` 열세 개·애플리케이션 테이블 16개, 현재 head는
-  `0013_workflow_failure_reasons.sql`이며 Miniflare에서만 적용.
-- 복구 연습 `verify:restore`는 로컬 합성 DB만 사용한다. 성공 20초·실패 3초 시도의 집계,
-  `error=range` 종료 먼저 도착 순서, 복원·재전송 뒤 관리자 workflow 조회 일치를 로컬 D1에서
-  통과했다(7c2fab8). 운영 RTO·RPO 근거는 아니다.
-- 설치·검사 도구(`install:prepare`·`install:check`·`install:database-check`·
-  `install:access-check`)는 로컬·fixture 검증까지다. 실제 provider·원격 DB·원격 쓰기는 없다.
-- 운영 로그는 완료 관측 한 줄과 정리 로그다. 대시보드·알림 수신자는 없다.
-- 관리자 전용 `GET /v1/health` read 프로브가 코드에 있다. 검증된 관리자 bearer만 통과하고
-  `projects`·`project_grants`를 각각 `SELECT 1 ... LIMIT 1`로 읽어 성공하면
-  `{status:'ok', scope:'administrator_storage_read'}`를 돌려준다. 이건 두 제어면 테이블을
-  읽을 수 있다는 뜻까지이고 수집 쓰기·집계·전체 테이블·Cron·로그 완전성·서비스 전체 정상의
-  근거가 아니다. 운영 probe 스케줄·실제 provider OIDC·알림 수신자·원격 배포는 없다.
+- Thirteen migrations, `0001`–`0013`, create 16 application tables. The current head is
+  `0013_workflow_failure_reasons.sql`, and it has been applied only in Miniflare.
+- The recovery drill `verify:restore` uses only a local synthetic database. On local D1, it passed
+  aggregation for 20-second successful and 3-second failed attempts, the ordering where an
+  `error=range` termination arrives first, and matching administrator workflow results after
+  restoration and retransmission (7c2fab8). This is not evidence for a production RTO or RPO.
+- The installation and inspection tools (`install:prepare`, `install:check`,
+  `install:database-check`, and `install:access-check`) have been verified only locally and with
+  fixtures. They have not touched a real provider, remote database, or remote writes.
+- Production logs consist of a one-line completion observation and cleanup logs. There is no
+  dashboard or alert recipient.
+- The code contains an administrator-only `GET /v1/health` read probe. It accepts only a verified
+  administrator bearer and reads `projects` and `project_grants` with
+  `SELECT 1 ... LIMIT 1`; on success it returns
+  `{status:'ok', scope:'administrator_storage_read'}`. This proves only that the two
+  control-plane tables can be read at that moment. It does not prove collection writes,
+  aggregation, all tables, Cron, log completeness, or overall service health. There is no
+  production probe schedule, real-provider OIDC, alert recipient, or remote deployment.
 
-## 릴리스 차단 조건
+## Release Blocking Conditions
 
-- 준비 묶음 SHA-256 불일치 또는 수정·이동.
-- 마이그레이션 head 불명 또는 로컬·원격 불일치. 현재 기준 head는
-  `0013_workflow_failure_reasons.sql`이다.
-- 적용 전 백업 미확인.
-- 개인정보·비밀값 노출.
-- 인증·권한 게이트(issuer·audience·PKCE·owner/reader·테넌트) 실패.
-- 필수 검사 실패·미확인.
+- A SHA-256 mismatch in the preparation bundle, or a modified or moved file.
+- An unknown migration head, or a mismatch between local and remote state. The current head is
+  `0013_workflow_failure_reasons.sql`.
+- No confirmed backup before applying a migration.
+- Exposure of personal information or secret values.
+- Failure of an authentication or authorization gate (issuer, audience, PKCE, owner/reader, tenant).
+- Failure or lack of confirmation for a required check.
 
-[릴리스 런북](./release.md)과 같은 기준이며 새 게이트를 추가하지 않는다.
+These are the same conditions as the [release runbook](./release.md); this document adds no new gate.
 
-## 미정 항목
+## Undecided Items
 
-- SLO, RTO, RPO: UNDECIDED.
-- 담당자(Primary·Backup owner), 에스컬레이션 경로, 알림 수신자: UNASSIGNED·UNDECIDED.
-- 임계값·로그 보존 기간: UNDECIDED.
+- SLO, RTO, and RPO: UNDECIDED.
+- Primary and backup owners, escalation path, and alert recipients: UNASSIGNED and UNDECIDED.
+- Thresholds and log retention period: UNDECIDED.
 
-숫자 목표는 근거가 생길 때까지 만들지 않는다.
+Do not invent numerical targets until evidence exists.
 
 ## Owners
 
@@ -74,11 +78,11 @@
 
 ## Validation
 
-- 필수 검증 이름: [VALIDATION.md](../../VALIDATION.md)
-- 릴리스 차단 여부: UNDECIDED
-- 남은 운영 위험: UNDECIDED
+- Required validation names: [VALIDATION.md](../../VALIDATION.md)
+- Release blocking status: UNDECIDED
+- Remaining operational risk: UNDECIDED
 
-## 근거
+## Evidence
 
-- [릴리스 런북](./release.md), [롤백 런북](./rollback.md), [장애 대응](./incident-response.md)
-- [운영 관측](./observability.md), [백업·복구](./backup-and-restore.md)
+- [Release runbook](./release.md), [rollback runbook](./rollback.md), [incident response](./incident-response.md)
+- [Operational observability](./observability.md), [backup and restore](./backup-and-restore.md)

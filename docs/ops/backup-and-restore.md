@@ -1,100 +1,121 @@
-# 백업과 복구
+# Backup and Restore
 
-상태: 현재 전체 마이그레이션의 로컬 합성 데이터 복구 연습을 구현·검증했다.
-운영 DB 백업·원격 복구·장애 전환·운영 RTO/RPO는 아직 검증하지 않았다.
-설치를 관리하는 DB 운영자가 수행하며 실제 담당자·주기·보관 기간·RTO/RPO 목표는
-운영 리소스를 정한 뒤 확정한다(UNDECIDED).
+Status: a local synthetic-data recovery drill for all current migrations has been implemented and
+verified. Production database backups, remote restoration, failover, and production RTO/RPO have not
+been verified. A database operator who manages the installation performs these tasks, and the actual
+owners, cadence, retention period, and RTO/RPO targets will be set after operational resources are
+assigned (UNDECIDED).
 
-## 로컬 복구 연습
+## Local Recovery Drill
 
 ```powershell
 npm run verify:restore -- --help
 npm run verify:restore
 ```
 
-매번 `.tmp/restore-drill/run-*` 아래에 서로 다른 새 로컬 DB를 만든다. 기존 개발 DB·
-운영 DB·사용자 백업을 열지 않으며 원격/대상/파일 옵션도 받지 않는다.
-전체 연습은 기본 CI에 추가하지 않았고 필요한 시점에 명시적으로 실행한다.
+Each run creates a separate new local database under `.tmp/restore-drill/run-*`. It never opens an
+existing development database, production database, or user backup, and it accepts no remote,
+target, or file options. The full drill is not part of the default CI run; run it explicitly when
+needed.
 
-현재 마이그레이션 0001~0013과 브라우저 workflow·혼합 출처 4단계 퍼널·관리자·발행 권한과
-그 세대 ID·생성 이력·관리자 이력·영수증·사용량/거부·정리 커서를 저장한다. 0010의 권한
-revision, 0012의 소요시간 구간, 0013의 실패 원인 슬롯도 포함한다. 마지막 퍼널 단계가 먼저
-도착한 실행과 최대 안전 정수 카운터도 넣는다. DB를 닫은 뒤 실제 Wrangler의
-`d1 export --local`로 전체 SQL을 내보내고 별도 새 DB에 `d1 execute --local --file`로 복원한다.
+The current drill stores browser workflows, the four-stage mixed-source funnel, administrator and
+publishing permissions with their generation IDs, creation history, administrator history,
+receipts, usage and rejection data, and cleanup cursors for migrations 0001 through 0013. It also
+includes the permission revision from 0010, the duration buckets from 0012, and the failure-reason
+slots from 0013. It covers runs where the final funnel stage arrives first and the maximum safe
+integer counters. After closing the database, the drill exports all SQL with the real Wrangler
+`d1 export --local` command and restores it into a separate new database with
+`d1 execute --local --file`.
 
-복원 검사는 다음을 확인한다.
+The restore check verifies the following:
 
-- 16개 애플리케이션 테이블이 모두 비어 있지 않고 모든 행의 내용 해시·개수가 동일하다.
-- 테이블·인덱스·트리거의 스키마 해시가 동일하다. 행의 물리적 순서와 SQL의 따옴표 밖
-  공백만 비교에서 제외하며, 문자열 안의 공백은 그대로 비교한다.
-- `PRAGMA quick_check`가 `ok`이고 `PRAGMA foreign_key_check`에 위반이 없다.
-- 브라우저·서버 이벤트 재전송이 새 집계를 만들지 않는다.
-- 스키마 정의·생성 이력 변경과 잘못된 퍼널 누계, 관리자 이력·발행자 권한 세대 UPDATE를
-  DB가 거부하고 데이터가 그대로다.
+- All 16 application tables are non-empty, and every row has the same content hash and count.
+- The schema hashes for tables, indexes, and triggers match. Only the physical row order and
+  whitespace outside SQL quotes are excluded from the comparison; whitespace inside string values
+  is compared exactly.
+- `PRAGMA quick_check` returns `ok`, and `PRAGMA foreign_key_check` reports no violations.
+- Replaying browser and server events does not create new aggregates.
+- The database rejects schema-definition and history changes, invalid funnel totals, and
+  `UPDATE` statements against administrator history or publisher permission generations, while
+  leaving the data unchanged.
 
-확장 복구 연습은 성공 시도 20초·실패 시도 3초를 측정 데이터로 넣어 집계가 유지되는지,
-`error=range`에서 종료 먼저 도착 순서가 유지되는지, 복원 DB와 재전송 뒤 관리자 workflow
-조회가 같은 결과를 내는지 실제 로컬 D1에서 확인했다. 7c2fab8의 실행 결과는
-`.tmp/restore-drill/run-oIKTrh/report.json`에 있다. 이는 합성 로컬 검증이며 운영 복구
-시간·RTO·원격 전환의 근거가 아니다.
+The extended recovery drill inserts 20-second successful attempts and 3-second failed attempts as
+measurement data and checks that the aggregates are preserved, that the ordering where termination
+arrives first for `error=range` is preserved, and that administrator workflow queries return the
+same results from the restored database and after replay on a real local D1 database. Results from
+7c2fab8 are in `.tmp/restore-drill/run-oIKTrh/report.json`. This is synthetic local verification,
+not evidence of production recovery time, RTO, or remote failover.
 
-복원 대조를 마치면 합성 복원 DB에서만 발행 권한 회수·재부여 흐름을 연습한다. 실제
-`publisher-revoke`·`publisher-grant`를 적용해 회수 뒤 새 non-funnel 서버 이벤트가
-`forbidden`으로 거부되고 DB가 그대로인지, 같은 밀리초에 재부여하면 `grant_id`는 바뀌고
-`created_at`은 같은지, 회수 전에 잡아 둔 stale 회수 계획이 `apply_conflict`로 거부되고
-데이터·감사가 그대로인지, 이미 원하는 상태인 no-op 부여가 감사 행을 만들지 않는지
-확인한다. 실제 회수·재부여로 늘어나는 감사 행은 회수 1·재부여 1로 정확히 2개이고, 재부여
-뒤 같은 이벤트가 `accepted=1`·`duplicates=0`으로 저장된다. 이 변이는 합성 복원 DB에만
-적용하며 원본 백업 SQL과 원본 DB는 바뀌지 않는다. 실행 결과는
-[검증 기록](../../VALIDATION.md)에 둔다.
+After completing the restore comparison, the drill exercises publishing permission revocation and
+regrant only against the synthetic restored database. It applies the real `publisher-revoke` and
+`publisher-grant` commands and verifies that a new non-funnel server event after revocation is
+rejected as `forbidden` without changing the database; that regranting in the same millisecond
+changes `grant_id` while keeping `created_at`; that a stale revocation plan captured before the
+revocation is rejected as `apply_conflict` without changing data or audit records; and that a no-op
+grant for an already-desired state creates no audit row. The real revocation and regrant add exactly
+2 audit rows: 1 for the revocation and 1 for the regrant. The same event is stored after
+the regrant with `accepted=1` and `duplicates=0`. These mutations apply only to the synthetic
+restored database; the source backup SQL and source database remain unchanged. Record the execution
+results in the [validation record](../../VALIDATION.md).
 
-근거는 [D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/)와
-[지원 PRAGMA](https://developers.cloudflare.com/d1/sql-api/sql-statements/#pragma-quick_check),
-설치된 CLI의 로컬 실행이다. `integrity_check`는 이 D1 환경에서 허용되지 않아
-`quick_check`와 별도 내용·스키마·제약 조건 검사를 사용한다.
+The evidence is [D1 import/export](https://developers.cloudflare.com/d1/best-practices/import-export-data/),
+[supported PRAGMAs](https://developers.cloudflare.com/d1/sql-api/sql-statements/#pragma-quick_check),
+and local execution with the installed CLI. This D1 environment does not allow `integrity_check`,
+so the drill uses `quick_check` together with separate content, schema, and constraint checks.
 
-`report.json`은 실행 버전·마이그레이션 파일 해시·SQL 크기/해시·테이블별 내용 해시와
-행 수·재전송/검사 결과·소요 시간을 담는다. 발행자 연습 결과는 `publisherRecovery`의
-고정 boolean과 `addedAuditRows` 개수만 담고 subject·issuer·grantId 같은 식별값은 넣지
-않는다. 발행자 변이 전에 기록한 복원 fingerprint는 `restored` 항목에 그대로 남는다.
-원본 행이나 인증 토큰을 보고서에 넣지 않는다.
-`backup.sql`과 두 DB는 조사용으로 남긴다. 공개 예제·합성 계정만 사용한다.
-실패는 0이 아닌 종료 코드와 `failure.json`, 내용 불일치는 `mismatch.json`으로 남긴다.
-소유한 Miniflare 인스턴스는 성공·실패 뒤 닫는다.
+`report.json` records the execution version, migration file hashes, SQL size and hash, per-table
+content hashes and row counts, replay and inspection results, and elapsed time. Publisher-exercise
+results contain only fixed booleans in `publisherRecovery` and the `addedAuditRows` count; they
+do not include identifiers such as subject, issuer, or grantId. The restore fingerprint captured
+before the publisher mutation remains unchanged in the `restored` entry. The report never includes
+source rows or authentication tokens. `backup.sql` and both databases remain available for
+investigation. Only public example and synthetic accounts are used. Failures produce a non-zero exit
+code and `failure.json`; content mismatches produce `mismatch.json`. Every owned Miniflare instance
+is closed after success or failure.
 
-## 운영 백업 준비
+## Preparing a Production Backup
 
-대상 계정·DB ID·수집기·마이그레이션 상태를 [설치 묶음](../backend/installation.md)과
-대조한다. 운영 백업은 별도 승인한 작업으로 수행한다. 다음 예시는 **원격** export이며
-로컬 연습 명령과 다르다.
+Compare the target account, database ID, collector, and migration state with the
+[installation bundle](../backend/installation.md). A production backup is a separately approved
+operation. The following example is a **remote** export and differs from the local drill command.
 
 ```powershell
-node node_modules/wrangler/bin/wrangler.js d1 export DB --config .tmp/installation/collector.wrangler.json --remote --output <새-백업-SQL-경로>
+node node_modules/wrangler/bin/wrangler.js d1 export DB --config .tmp/installation/collector.wrangler.json --remote --output <new-backup-SQL-path>
 ```
 
-SQL export는 다른 DB 요청을 막을 수 있어 작업 시간을 정하고 수집 쓰기를 중단하며
-진행 중 쓰기의 완료를 확인한다. 관리자 조회·서버 SDK 전송도 고려한다.
-계정/DB ID·백업 시각·코드/마이그레이션 버전·파일 해시·수집 중지 범위를 기록한다.
-파일이 생성됐다는 사실만으로 복구 가능한 백업이라고 판단하지 않는다.
-현재 카운터의 최대 안전 정수 보존을 로컬에서 확인했으며 다른 int64 스키마는 미검증이다.
+A SQL export can block other database requests. Choose a maintenance window, stop collection
+writes, and confirm that in-flight writes have completed. Consider administrator reads and server
+SDK submissions as well. Record the account and database ID, backup time, code and migration
+version, file hash, and the scope of the collection pause. A generated file is not by itself a
+recoverable backup.
 
-운영 SQL은 관리자 식별자·제품 집계를 포함한다. 접근/보관을 제한하고 암호화한 별도
-위치에 두며 공개 저장소·정적 자산·로그에 넣지 않는다. 인증 제공자·Worker 설정·배포
-자격증명은 SQL 백업과 별도로 관리한다.
+The maximum-safe-integer preservation of the current counters has been verified locally; other
+int64 schemas have not been verified.
 
-## 운영 복구 순서
+Production SQL contains administrator identifiers and product aggregates. Store it in a separate,
+access-controlled, encrypted location, and keep it out of public repositories, static assets, and
+logs. Manage authentication-provider settings, Worker configuration, and deployment credentials
+separately from the SQL backup.
 
-1. 장애 범위와 마지막 백업 시각을 확인하고 수집/설정 쓰기를 중단한다.
-2. 원본을 보존한 채 별도 새 DB와 접근이 제한된 복구 환경을 준비한다.
-3. 백업의 코드·마이그레이션 버전과 SQL 해시를 확인한다. 전체 스키마 SQL을 빈 DB에
-   복원할 때 같은 마이그레이션을 먼저 중복 적용하지 않는다.
-4. SQL을 복원하고 스키마·행 내용/개수·외래 키·정수 값·변경 금지/퍼널 제약을 검사한다.
-   프로젝트·권한·영수증·workflow·퍼널·사용량·정리 커서를 일부만 골라 복원하지 않는다.
-5. 실제 OIDC·owner/reader 조회·권한 회수·새 이벤트·중복 재전송·정리 작업을 복구
-   환경에서 확인한다. 원본 서비스에 시험 이벤트를 보내지 않는다.
-6. 데이터 손실 범위·복구 시간·새 DB 대상·트래픽 전환 계획을 검토한 뒤 전환한다.
+## Production Recovery Sequence
 
-현재 도구는 합성 로컬 DB만 검증하며 사용자 제공 운영 백업의 자동 복원이나 원격
-전환은 제공하지 않는다. 실제 DB 크기·리전·네트워크·동시 수집을 포함한 연습과 시간
-측정은 별도로 필요하다. 로컬 수초 측정은 운영 RTO의 근거가 아니다. 복구는 백업 이후의
-영수증·권한·집계 변경을 되돌릴 수 있으므로 이후 재전송·권한 회수 상태도 확인한다.
+1. Determine the scope of the incident and the time of the latest backup, then stop collection and
+   configuration writes.
+2. Preserve the source and prepare a separate new database and a recovery environment with
+   restricted access.
+3. Verify the backup's code and migration version and the SQL hash. When restoring a full schema
+   SQL dump into an empty database, do not apply the same migrations again first.
+4. Restore the SQL and check the schema, row content and counts, foreign keys, integer values, and
+   immutability and funnel constraints. Do not restore only selected projects, permissions,
+   receipts, workflows, funnels, usage data, or cleanup cursors.
+5. In the recovery environment, verify real OIDC, owner and reader access, permission revocation,
+   new events, duplicate replay, and cleanup. Do not send test events to the source service.
+6. Review the data-loss scope, recovery time, new database target, and traffic-cutover plan before
+   switching traffic.
+
+The current tooling verifies only synthetic local databases. It does not automatically restore
+user-provided production backups or switch remote traffic. Separate exercises and timing
+measurements are required for the real database size, region, network, and concurrent collection.
+A few seconds of local measurement is not evidence of a production RTO. Recovery can undo changes
+to receipts, permissions, and aggregates made after the backup, so verify replay and revocation
+state afterward.
