@@ -1,376 +1,138 @@
-# 검증 이력 05
+# Verification History 05
 
-원문의 구간 순서를 유지한 과거 기록이다. 명령과 코드 경로는 저장소 루트 기준이다.
+This is a historical record that preserves the order of the original sections. Commands and code paths are relative to the repository root.
 
-## 설정 저장 전 실패·저장 후 응답 유실 실브라우저 검증 (2026-10-12)
+## Real-Browser Verification of Pre-Save Failure and Post-Save Response Loss (2026-10-12)
 
-옵트인 `verify:admin-settings-recovery`를 추가했다. 실제 관리자 컴포넌트·API client·
-서명된 수집기 HTTP·새 Miniflare D1로 네 경로를 확인했다. 저장 전 합성 503은 DB에
-전달하지 않고 초안을 보존한 뒤 재조회·명시적 변경 유지·한 번의 저장으로 복구했다.
-실제 D1 commit 후 응답을 버린 경우는 저장 결과 불명·초안 잠금에서 현재 서버 값을
-비교하고 채택해 추가 PATCH 없이 끝났다. 별도 실제 commit 응답을 client의 기존
-15초 제한을 넘겨 보류하고, 재조회·변경 유지 뒤 늦게 해제해 화면과 쓰기 수가 유지됨을
-확인했다. 가짜 시계나 client 제한 시간 변경은 없다.
+The opt-in `verify:admin-settings-recovery` command was added. It verified four paths with the actual admin components, the API client, signed collector HTTP, and a new Miniflare D1. A synthetic 503 before saving was not delivered to the DB; the draft was preserved, and recovery used a reread, explicit retention of the change, and a single save. When the response was discarded after an actual D1 commit, the result was treated as unknown; the current server value was compared and adopted under the draft lock, and the process finished without an additional PATCH. A separate actual commit response was held beyond the client's existing 15-second limit, and after rereading and retaining the change it was released late; the screen and write count remained stable. No fake clock or client timeout change was used.
 
-마지막은 commit 응답 유실 뒤 로컬 owner grant를 reader로 바꾸고 readback해 편집
-잠금을 확인했다. 서버 설정을 사용해도 저장은 잠겼으며, owner 복원·명시적 새로고침
-이후에만 다시 편집됐다. 연결 해제 후 설정 UI와 storage/cookie 제거도 확인했다.
-제품 코드의 새 결함은 관측하지 않았고 런타임을 바꾸지 않았다. 공유 fixture는 access
-프로필의 두 테스트 프로젝트 PATCH만 응답 유실 대상으로 허용하며 onboarding의
-기존 POST/PUT 제한과 access의 afterCommit 검증을 유지한다.
+The final case changed a local owner grant to reader and read it back after a lost commit response to verify the edit lock. Saving remained locked while the server settings were used, and editing resumed only after the owner was restored and the page explicitly refreshed. Removing the connection also removed the settings UI, storage, and cookies. No new defect was observed in product code, and the runtime was not changed. The shared fixture allows response loss only for the two test-project PATCHes in the access profile and preserves onboarding's existing POST/PUT limits and access's afterCommit validation.
 
-최종 Chromium 156.0.8078.4는 exit 0·verified=true, browser PATCH 시도 5,
-전달 전 실패 1·버린 성공 응답 2·대기 초과 1·forwarded API 쓰기 4·읽기 93,
-로그인 1·pageErrors 0·routeError=false였다. 보고서는
-`.tmp/admin-settings-recovery-UCZVNv/report.json`이다. 앞선 중간 실행도 통과했으나
-최종 보고서는 제한된 barrier 대기와 쓰기 수 assertion까지 포함한다.
+The final Chromium 156.0.8078.4 run exited 0 with verified=true, 5 browser PATCH attempts, 1 pre-delivery failure, 2 discarded success responses, 1 wait overrun, 4 forwarded API writes, 93 reads, 1 login, pageErrors 0, and routeError=false. The report is `.tmp/admin-settings-recovery-UCZVNv/report.json`. An earlier intermediate run also passed, but the final report also includes the bounded barrier wait and the write-count assertion.
 
-공유 fixture 회귀 `verify:admin-access`도 exit 0·verified=true, deniedValidation 1·
-deniedSettings 1·heldWrites 2·reads 126·writes 5·pageErrors 0·routeError=false였다.
-보고서 `.tmp/admin-access-mx79JO/report.json`에 프로젝트 전환·연결 해제의 늦은 응답
-폐기와 이미 commit된 DB 보존을 기록했다. 설정/요청 수명 Node 검사 19/19도 통과했다.
+The shared-fixture regression `verify:admin-access` also exited 0 with verified=true, deniedValidation 1, deniedSettings 1, heldWrites 2, reads 126, writes 5, pageErrors 0, and routeError=false. The report `.tmp/admin-access-mx79JO/report.json` records the disposal of late responses after a project switch or connection removal and preservation of the already committed DB. Settings and request-lifetime Node tests 19/19 also passed.
 
-새 도구/공유 fixture 구문 검사·실행 없는 help·diff 검사와 선택 실행 안내를 추가했다.
-제품 런타임·API·DB 스키마·SDK·버전·의존성·위생 정책·CI는 변경하지 않았다. 실행 도구와
-package script만 변경했다. 타입/빌드·번들·전체 backend/admin은 제품 소스가 불변이라
-반복하지 않았고 일반 소스 lint 명령은 없다. 실제 운영 제공자·원격 DB·다른 브라우저와
-여러 운영자 동시 수정은 미검증이며 푸시·게시·배포는 없다. 전체 72항목 목표는 진행 중이다.
+Syntax checks for the new tool and shared fixture, help without execution, the diff check, and optional execution guidance were added. Product runtime, APIs, the DB schema, the SDK, versions, dependencies, hygiene policy, and CI were not changed. Only the execution tools and the package script changed. Type and build, bundle, and full backend and admin checks were not repeated because product source was unchanged, and there is no general source lint command. Actual production providers, remote DB, other browsers, and concurrent edits by multiple operators are unverified, and there was no push, publication, or deployment. The full 72-item goal is in progress.
 
-## 목표·퍼널 분석 권한 회수 실브라우저 검증 (2026-10-12)
+## Real-Browser Verification of Goal and Funnel Analytics Permission Revocation (2026-10-12)
 
-옵트인 `verify:admin-goal-access`를 추가했다. 공유 로그인 fixture의 goals 프로필만
-작업 흐름·퍼널과 보조 소유자를 등록하며 기존 login/access/onboarding 프로필은 유지한다.
-Core 검증·D1 commit으로 현재와 직전 기간의 합성 이벤트 16개를 준비하고, 실제
-RS256 로그인·서명 API·Miniflare D1 grant 회수로 목표/퍼널의 여섯 읽기 경로에서
-403을 확인했다. 표·분류·비교·내보내기 제거 또는 비활성화와 명시적 새로고침 복구를
-검사했다. 일곱 번째는 이전 프로젝트의 실제 403 응답을 보류했다가 전환 뒤 해제해
-새 프로젝트 화면·CSV에 영향을 주지 않는지 확인했다. 제품 코드 수정은 필요하지 않았다.
+The opt-in `verify:admin-goal-access` command was added. Only the goals profile of the shared login fixture registers workflows, funnels, and an auxiliary owner; the existing login, access, and onboarding profiles are preserved. Core validation and D1 commits prepared 16 synthetic events for the current and previous periods. Actual RS256 login, signed APIs, and Miniflare D1 grant revocation produced 403 errors in the six goal and funnel read paths. The test checked removal or disabling of tables, breakdowns, comparisons, and exports and recovery through an explicit refresh. The seventh case held a real 403 response from the previous project and released it after switching to verify that it did not affect the new project screen or CSV. No product code change was required.
 
-최종 Chromium 156.0.8078.4 실행은 exit 0·verified=true, 시나리오 7·실제 403 관측 7,
-API reads 67·writes 0·browserBatches 0·pageErrors 0·routeError=false다.
-정상 퍼널 비교의 loan/current와 timer/previous 행을 화면 셀로 정확히 대조했고,
-실제 다운로드 CSV의 양 기간 시작·완료 1건·완료율 100 및 속성별 1/0·0/1을 확인했다.
-D1 workflow 시작 합계 4·funnel 시작 합계 4, 다른 프로젝트 CSV의 이전 ID 부재와
-연결 해제 뒤 분석 제거도 통과했다. 근거는
-`.tmp/admin-goal-access-mwpKGf/report.json`과 두 화면 스크린샷이다.
+The final Chromium 156.0.8078.4 run exited 0 with verified=true, 7 scenarios, 7 actual 403 observations, 67 API reads, 0 writes, browserBatches 0, pageErrors 0, and routeError=false. The loan/current and timer/previous rows in a normal funnel comparison matched the screen cells, and the actual downloaded CSV showed start and completion 1, completion rate 100, and property values 1/0 and 0/1. D1 workflow start total 4 and funnel start total 4 were checked, as were the absence of the previous ID in another project's CSV and analytics removal after connection removal. The evidence is in `.tmp/admin-goal-access-mwpKGf/report.json` and two screen screenshots.
 
-초기 실행은 첫 거부·화면 차단을 통과한 뒤, 이미 제거된 비교 checkbox를 복구 전에
-읽으려는 검증 도구의 오류로 exit 1이었다. 서버 새로고침으로 화면을 복구한 뒤 checkbox를
-읽도록 고쳤으며 실패를 제품 버그나 전체 통과로 세지 않았다. 정상 행/CSV 검증을
-추가하기 전 중간 실행도 통과했지만 최종 근거는 위 실행이다.
-공유 fixture 회귀로 `verify:admin-login -- --channel chromium`을 실행해 exit 0·
-verified=true, PKCE·서명 API·공유 토큰 갱신·갱신 실패·재로그인·연결 해제·새로고침·
-빈 storage를 확인했다. reads 27·writes 0·pageErrors 0이다.
+After the initial run passed the first denial and screen block, it exited 1 because a verification-tool error tried to read the already removed comparison checkbox before recovery. The tool was changed to refresh the screen and then read the checkbox, and the failure was not counted as a product bug or a full pass. An intermediate run before the normal row and CSV checks was added also passed, but the final evidence is the run above. The shared-fixture regression `verify:admin-login -- --channel chromium` was run and exited 0 with verified=true, checking PKCE, signed APIs, shared-token refresh, refresh failure, re-login, connection removal, reload, and empty storage. It recorded 27 reads, 0 writes, and pageErrors 0.
 
-새 도구·공유 fixture 구문 검사, 실행 없는 `--help`, `git diff --check`를 통과했다.
-안내 `tools/browser-bench/ADMIN-GOAL-ACCESS.md`와 이 기록을 추가했다. 선택 실행 명령과
-합성 fixture만 변경했고 제품 런타임·API·DB·SDK·의존성·위생 정책·CI는 바꾸지 않았다.
-제품 소스가 불변이므로 타입/빌드·관리자 단위·백엔드 전체·루트 check는 반복하지 않았다.
-일반 소스 lint 명령은 없다. 실제 제공자·원격 DB·Chrome/Edge·모바일은 미검증이고
-푸시·게시·배포는 하지 않았다. 전체 저장소 목표는 계속 진행 중이다.
+Syntax checks for the new tool and shared fixture, `--help` without execution, and `git diff --check` passed. The guidance `tools/browser-bench/ADMIN-GOAL-ACCESS.md` and this record were added. Only optional execution commands and the synthetic fixture changed; product runtime, APIs, the DB, the SDK, dependencies, hygiene policy, and CI were not changed. Because product source was unchanged, type and build, admin unit, full backend, and root checks were not repeated. There is no general source lint command. Actual providers, remote DB, Chrome and Edge, and mobile are unverified, and there was no push, publication, or deployment. The full repository goal remains in progress.
 
-## SDK 차원 enum 순서 불일치 수정 (2026-10-12)
+## Fixing SDK Dimension Enum Order Mismatch (2026-10-12)
 
-Core가 동일한 enum 집합으로 인정한 스키마도 단계별 허용 값 순서가 다르면 브라우저의
-workflow·funnel 클라이언트가 비활성화되고 서버 SDK 생성이 실패하던 경로를 수정했다.
-공식 예제 레지스트리의 종료 단계 값 순서만 뒤집어 투영한 소스·minified ESM 회귀
-6개가 수정 전 모두 실패했다. 각 SDK의 내부 JSON 스냅샷에서 enum을 정렬해 비교하고,
-호스트의 동결된 원본·예제·레지스트리 해시와 wire 형식은 바꾸지 않는다.
+A path was fixed where Core accepted the same enum set but a different order of allowed values within a step disabled the browser workflow and funnel clients and caused server SDK creation to fail. The 6 source and minified ESM regressions that reversed only the terminal-step value order in the official example registry all failed before the fix. Each SDK now sorts the enums in its internal JSON snapshot before comparison, without changing the host's frozen original, example, or registry hashes or the wire format.
 
-회귀는 실제 Core `prepareBatch`·`prepareServerBatch`로 전송 본문과 단계 정보를
-검사하고, 다른 집합·누락·중복 값 거부와 원본 보존도 확인한다. 브라우저·서버 SDK와
-Core 스키마 관련 검사 82/82, 루트 `tsc --noEmit`, 양쪽 SDK 빌드(타입 선언 포함)를
-통과했다. 브라우저 퍼널의 UTC 검사에서 만든 Date를 재사용해 추가 변환을 줄였다.
-초기 수정의 생성 코드 gzip 3,078바이트와 중간 후보 3,077바이트 실패는 통과로
-세지 않았다. 최종 `check:browser-size`는 기본 SDK 2,780·Sembom 예제 3,053·퍼널 SDK
-2,918·퍼널 참조 예제 3,047·관리자 생성 퍼널 코드 3,069바이트로 모두 종료 0이다.
-서버 SDK는 minified 9,015바이트·gzip 3,701바이트, 런타임 의존성 0개다.
+The regressions check the transmission body and step information with actual Core `prepareBatch` and `prepareServerBatch` and verify rejection of a different set, missing values, and duplicate values and preservation of the original. Browser, server SDK, and Core schema-related tests 82/82, root `tsc --noEmit`, and both SDK builds, including type declarations, passed. The browser funnel's UTC check reuses the Date it creates, reducing extra conversions. The initial fix's generated-code gzip size of 3,078 bytes and an intermediate candidate at 3,077 bytes were not counted as passes. The final `check:browser-size` produced exit 0 for default SDK 2,780, Sembom example 3,053, funnel SDK 2,918, funnel reference example 3,047, and admin-generated funnel code 3,069 bytes. The server SDK was minified 9,015 bytes, gzip 3,701 bytes, with 0 runtime dependencies.
 
-`verify:server-recovery`는 종료 단계 enum 순서를 뒤집은 합성 레지스트리로 기본 Node
-fetch·실제 루프백 소켓·Miniflare 수집기 3개·새 D1을 사용했다. 종료 0·verified=true,
-저장 전 503 뒤 accepted 2·duplicates 0·attempts 2, 저장 후 연결 유실 뒤 accepted 0·
-duplicates 2·attempts 2였다. 영수증 8개·완료 run 2개와 동일 본문 재시도, 발행자 회수
-후 403·단일 요청·DB 불변도 통과했다. 리포트는
-`.tmp/server-recovery/run-6A8lEC/report.json`에 있다. 로컬 relay와 Miniflare는 정리했다.
-브라우저 새 회귀는 합성 host와 minified ESM에서 확인했으며 실브라우저는 이번에 실행하지 않았다.
+`verify:server-recovery` used a synthetic registry with the terminal-step enum order reversed, the default Node fetch, actual loopback sockets, 3 Miniflare collectors, and a new D1. It exited 0 with verified=true; before save, a 503 produced accepted 2, duplicates 0, and attempts 2, while after save a connection loss produced accepted 0, duplicates 2, and attempts 2. 8 receipts, 2 completed runs, retransmission of the same body, a 403 after publisher revocation, a single request, and an unchanged DB also passed. The report is `.tmp/server-recovery/run-6A8lEC/report.json`. The local relay and Miniflare were cleaned up. The new browser regression was checked with a synthetic host and minified ESM; a real browser was not run this time.
 
-소유 문서 `docs/backend/browser-sdk.md`·`docs/backend/server-sdk.md`·
-`tools/runtime/SERVER-RECOVERY.md`와 이 기록을 갱신했다. 복구 도구의 합성 fixture만
-확장했고 API·DB·공개 타입·의존성·위생 정책·CI workflow 변경은 없다. 변경 없는 관리자와
-백엔드 전체 검사·루트 전체 check는 생략했으며 일반 소스 lint 명령은 없다.
-실제 운영 OIDC·원격 DB·서비스 설치는 미검증이고 푸시·게시·배포는 하지 않았다.
-전체 목표는 계속 진행 중이다.
+The owned documents `docs/backend/browser-sdk.md`, `docs/backend/server-sdk.md`, `tools/runtime/SERVER-RECOVERY.md`, and this record were updated. Only the recovery tool's synthetic fixture was extended; there are no changes to APIs, the DB, public types, dependencies, hygiene policy, or CI workflows. Unchanged full admin and backend checks and the full root check were skipped, and there is no general source lint command. Actual production OIDC, remote DB, and service installation are unverified, and there was no push, publication, or deployment. The full goal remains in progress.
 
-## 생성 브라우저 퍼널 SDK 크기 복구 (2026-10-12)
+## Restoring Generated Browser Funnel SDK Size (2026-10-12)
 
-이전 관리자 전체 검사에서 확인한 `funnel-setup.test.mjs` 생성 코드 초과를
-단독 재실행해 gzip 3,099바이트·종료 1로 재확인했다. 기존 예제 크기 명령은 퍼널
-참조 예제 3,072바이트로 통과해 실제 관리자 생성 팩토리의 초과를 포착하지 못했다.
+The `funnel-setup.test.mjs` generated-code overrun found by the earlier full admin run was rerun alone and confirmed at gzip 3,099 bytes with exit 1. The existing example-size command passed the funnel reference example at 3,072 bytes and did not detect the overrun in the actual admin-generated factory.
 
-`common.ts`의 객체 검사를 workflow 종료·속성 snapshot·퍼널 입력 검증에서 공유하고,
-Retry-After 하한을 한 번 계산하며, 타이머에서만 쓰는 중계 함수와 beacon 결과
-임시값을 제거했다. 입력 검증·10분 만료·1초 하한·원래 바디 재시도·종료 정리는
-그대로다. 퍼널 이벤트 조회를 Set으로 바꾸는 후보는 크기가 늘어 최종 변경에서
-제외했다. 중간 후보 생성 코드 3,084/3,093바이트 실패도 통과로 세지 않았다.
+The object checks in `common.ts` are now shared across workflow terminal, property snapshot, and funnel input validation, the Retry-After lower bound is calculated once, and a relay function used only by timers and a temporary beacon-result value were removed. Input validation, the 10-minute expiry, the 1-second lower bound, retransmission of the original body, and terminal cleanup remain. A candidate that changed funnel event lookup to a Set increased size and was excluded from the final change. Intermediate candidates at generated-code sizes 3,084 and 3,093 bytes were not counted as passes.
 
-`tools/browser/check.mjs`는 관리자 `sdkSetup`의 참조 생성 코드를 직접 번들링해
-endpoint·스키마 포함 3KiB 예산과 외부 런타임·서버/관리자 런타임·다른 프로필
-번들 유입 금지까지 기존 명령에서 검사한다. 예산·fixture·공개 SDK/HTTP 키를
-바꾸지 않았다. 최종 gzip은 기본 SDK 2,775·Sembom 예제 3,047·퍼널 SDK 2,920·
-퍼널 참조 예제 3,050·관리자 생성 퍼널 코드 3,072바이트이며 모두 종료 0이다.
-이는 고정 참조 레지스트리·endpoint 기준이며 임의 크기의 사용자 스키마 보장은 아니다.
-생성 코드의 예산 여유는 0바이트로 향후 변경 때 재측정이 필요하다.
+`tools/browser/check.mjs` now directly bundles the reference generated code from the admin's `sdkSetup` and checks the 3KiB budget including endpoint and schema plus prevention of bundling an external runtime, server and admin runtimes, or other profiles in the existing command. The budget, fixture, and public SDK and HTTP keys were not changed. Final gzip sizes were default SDK 2,775, Sembom example 3,047, funnel SDK 2,920, funnel reference example 3,050, and admin-generated funnel code 3,072 bytes, all with exit 0. This covers the fixed reference registry and endpoint and does not guarantee an arbitrary user schema. Generated-code budget headroom is 0 bytes, so it must be measured again for future changes.
 
-브라우저 전체 45/45·관리자 전체 242/242, `build:browser`(선언 포함),
-`npx --no-install tsc --noEmit`, `git diff --check`를 통과했다. minified 프로필의
-재시도·공개 키·동일 바디, 잘못된 입력·핸들 보존, beacon false/예외 fallback,
-숨김/종료 처리가 기존 회귀에서 유지됐다. `verify:admin-onboarding -- --channel
-chromium --lost-responses`도 종료 0·verified=true, Chromium 156.0.8078.4에서
-빈 프로젝트 생성·스키마 발행·생성 SDK 실제 실행·첫 이벤트 DB/표 1건·단계 3·
-생성/발행 유실 각 1회 복구를 통과했다. API reads 31·writes 5·browserBatches 1·
-pageErrors 0·routeError=false이고 `.tmp/admin-onboarding-1oB1FB/report.json`에 남겼다.
-로컬 Vite·Miniflare·브라우저는 종료했다. 실브라우저는 기본 생성 SDK 전송을
-확인했고 퍼널 생성 팩토리는 합성 host와 minified/크기 검사로 확인했다.
+The full browser suite 45/45, full admin suite 242/242, `build:browser` including declarations, `npx --no-install tsc --noEmit`, and `git diff --check` passed. Existing regressions preserved minified-profile retry, public keys, and identical bodies; invalid input and handle retention; beacon false and exception fallback; and hidden and terminal behavior. `verify:admin-onboarding -- --channel
+chromium --lost-responses` also exited 0 with verified=true in Chromium 156.0.8078.4, covering empty-project creation, schema publication, actual execution of the generated SDK, the first event in DB and table 1, step 3, and recovery with 1 loss each for creation and publication. It recorded 31 API reads, 5 writes, browserBatches 1, pageErrors 0, and routeError=false in `.tmp/admin-onboarding-1oB1FB/report.json`. The local Vite, Miniflare, and browser were stopped. The real browser checked the default generated SDK transmission, while the funnel generated factory was checked with a synthetic host and minified and size tests.
 
-소유 문서 `docs/backend/browser-sdk.md`와 이 기록을 갱신했다. API·DB·공개 타입·
-의존성·CI workflow·러너·위생 정책 변경은 없다. 불변 관리자 빌드/번들/Sites는
-직전 `d2f20f7`의 결과를 재사용했고 전체 백엔드 검사는 변경 없어 생략했다.
-일반 소스 lint 명령은 없다. 실제 서비스 설치·원격 OIDC/DB·배포·모바일 브라우저는
-미검증이고 푸시·게시·배포는 하지 않았다. 전체 목표는 계속 진행 중이다.
+The owned documents `docs/backend/browser-sdk.md` and this record were updated. There are no changes to APIs, the DB, public types, dependencies, CI workflows, runners, or hygiene policy. Unchanged admin build, bundle, and Sites results were reused from the previous `d2f20f7`, and the full backend check was skipped because there were no changes. There is no general source lint command. Actual service installation, remote OIDC and DB, deployment, and mobile browsers are unverified, and there was no push, publication, or deployment. The full goal remains in progress.
 
-## 이벤트 상세 시간대 불일치 차단 — 2026-10-12
+## Blocking Event Detail Time Zone Mismatch — 2026-10-12
 
-`LiveDashboard`가 상세 응답의 프로젝트 시간대를 대조하지 않아, CSV에서는 거부하는
-응답을 일별 차트에는 표시하던 경로를 수정했다. 기존 `assertMeta`를 값 분석 전에
-호출해 현재 레지스트리·요청 기간·출처·coverage와 일치하는 상세만 표시한다.
-API 클라이언트가 보장하는 프로젝트·버전·기간·출처 검사는 그대로 유지한다.
+`LiveDashboard` did not compare the project time zone in a detail response, so a response that the CSV rejected was still displayed in the daily chart. The existing `assertMeta` is now called before value analysis, and a detail is displayed only when it matches the current registry, request period, source, and coverage. The project, version, period, and source checks guaranteed by the API client remain unchanged.
 
-`verify:admin-analysis-access`에 로컬 서명 API의 정상 상세 응답을 다른 유효 시간대
-(`America/New_York`)로 바꾸는 브라우저 회귀를 추가했다. 수정 전 실행은
-`mismatched-event-time-zone`에서 종료 1이었고, 실패 화면에는 Asia/Seoul 프로젝트의
-일별 차트와 활성 CSV 버튼이 남았다. 수정 후 Chromium 156.0.8078.4 실행은 종료 0·
-verified=true로 계약 오류·차트 없음·CSV 잠금, 정상 응답 재시도 뒤 차트와 실제 다운로드
-CSV의 Asia/Seoul·선택 이벤트 행을 확인했다. 권한 회수·다른 프로젝트 CSV·늦은 거부
-응답·연결 해제 회귀도 통과했다. reads 29·writes 0·browserBatches 0·pageErrors 0·
-routeError=false였고 리포트는 `.tmp/admin-analysis-access-Uj9soi/report.json`이다.
-로컬 Vite·Miniflare·브라우저는 종료했다. 응답 변경은 합성 route 주입이며 실제 운영
-서버에서 시간대 불일치가 발생했다는 증거는 아니다.
+A browser regression was added to `verify:admin-analysis-access` that changes a valid detail response from the local signed API to another valid time zone (`America/New_York`). Before the fix, the run exited 1 at `mismatched-event-time-zone`, and the failure screen still showed the Asia/Seoul project's daily chart and active CSV button. After the fix, Chromium 156.0.8078.4 exited 0 with verified=true and showed a contract error, no chart, and the CSV lock; after retrying the normal response, it showed the chart and the selected event rows in the actual downloaded Asia/Seoul CSV. Permission revocation, another project's CSV, late denial responses, and connection removal also passed. There were 29 reads, 0 writes, browserBatches 0, pageErrors 0, and routeError=false, and the report is `.tmp/admin-analysis-access-Uj9soi/report.json`. The local Vite, Miniflare, and browser were stopped. The response change was injected through a synthetic route and is not evidence that a real production server produced a time-zone mismatch.
 
-관리자 타입 검사·빌드, 번들 분리·Sites 11/11, `git diff --check`는 통과했다.
-관리자 전체 검사는 242개 중 241개 통과·1개 실패였다. 실패한 기존
-`funnel-setup.test.mjs` 크기 검사는 관리자 UI가 아닌 `packages/browser/src/funnels.ts`
-생성 통합 코드를 직접 번들링하며, gzip 3,099바이트로 3,072바이트 예산을 넘었다.
-이 결과를 전체 통과로 취급하지 않고 별도 SDK 크기 후속으로 남긴다.
+The admin type check and build, bundle separation and Sites 11/11, and `git diff --check` passed. Of 242 admin tests, 241 passed and 1 failed. The failing existing `funnel-setup.test.mjs` size test directly bundles the generated integration code in `packages/browser/src/funnels.ts`, outside the admin UI, and its gzip 3,099 bytes exceeded the 3,072-byte budget. This result is not treated as a full pass and is left as a separate SDK-size follow-up.
 
-설계 기준 문서 `docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록만 갱신했다.
-API·DB·SDK·의존성·CI·러너·위생 정책은 변경하지 않았다. 변경 없는 전체 백엔드 검사와
-일반 소스 lint(명령 없음)는 생략했다. 실제 운영 OIDC·원격 DB는 미검증이고
-푸시·게시·배포는 하지 않았다. 전체 목표의 완료로 표시하지 않는다.
+Only the design baseline `docs/frontend/FRONTEND_DESIGN.md` and this validation record were updated. APIs, the DB, the SDK, dependencies, CI, runners, and hygiene policy were not changed. The unchanged full backend check and general source lint (no command exists) were skipped. Actual production OIDC and remote DB are unverified, and there was no push, publication, or deployment. This is not marked as completion of the full goal.
 
-## 서버 SDK 배치 빈 항목 검증 — 2026-10-12
+## Server SDK Batch Sparse Slot Validation — 2026-10-12
 
-`send`가 `Array.map`으로 이벤트를 검사하면서 희소 배열의 빈 칸을 건너뛰고, 이를 JSON의
-`null`로 전송하던 경로를 수정했다. 고정한 배치 길이의 모든 위치가 배열 자신의 항목인지
-확인한 뒤 이벤트 스냅샷을 만든다. 잘못된 항목은 `invalid_event`·`attempts: 0`으로
-거부하며 자격증명 조회·HTTP 요청·재시도를 시작하지 않는다.
+A path was fixed where `send` checked events with `Array.map`, skipped holes in a sparse array, and transmitted them as JSON `null`. It now confirms that every position in the fixed batch length is an own property before creating the event snapshots. An invalid entry is rejected with `invalid_event` and `attempts: 0`, and credential lookup, HTTP requests, and retries do not start.
 
-새 `packages/server/test/batch-slots.test.ts`의 소스·minified ESM 검사 2개는 수정 전
-모두 실패했고, 수정 후 `npm run test:server` 26/26이 통과했다. 빈 배열 슬롯·앞/중간/끝
-빈 칸·삭제된 항목·상속 항목·undefined·null 거부와, 실패 후 동일 클라이언트의 정상
-동결 배치 전송을 확인했다. 정상 본문은 Core `parseServerBatch`로 직접 검사한다.
-이 검사는 Node 합성 transport이며 실제 HTTP·원격 수집기 검증은 아니다.
+The 2 source and minified ESM tests in the new `packages/server/test/batch-slots.test.ts` both failed before the fix, and `npm run test:server` passed 26/26 after it. The tests checked rejection of an empty array slot, holes at the beginning, middle, and end, deleted entries, inherited entries, undefined, and null, and a normal frozen batch sent by the same client after a failure. The normal body is checked directly with Core `parseServerBatch`. This is a synthetic Node transport test, not verification over actual HTTP or a remote collector.
 
-`npx --no-install tsc --noEmit`, `npm run build:server`(타입 선언 포함),
-`git diff --check`를 통과했다. 서버 SDK는 런타임 의존성 0개, minified 9,008바이트·gzip
-3,699바이트다. 소유 문서 `docs/backend/server-sdk.md`와 이 기록만 갱신했다.
-API·DB·공개 타입·의존성·저장소 위생·CI 러너 변경은 없다. 변경 없는 관리자·브라우저·
-전체 백엔드 검사는 생략했으며 일반 소스 lint 명령은 없다. 실제 운영 OIDC·원격 DB는
-미검증이고 푸시·배포는 하지 않았다.
+`npx --no-install tsc --noEmit`, `npm run build:server` including type declarations, and `git diff --check` passed. The server SDK has 0 runtime dependencies and is minified 9,008 bytes with gzip 3,699 bytes. Only the owned document `docs/backend/server-sdk.md` and this record were updated. There are no changes to APIs, the DB, public types, dependencies, repository hygiene, or CI runners. Unchanged admin, browser, and full backend checks were skipped, and there is no general source lint command. Actual production OIDC and remote DB are unverified, and there was no push or deployment.
 
-## 프로젝트 생성 알림 예외 격리 — 2026-10-12
+## Isolating Project Creation Notification Exceptions — 2026-10-12
 
-`ProjectCreator`의 최초 구독 통지·상태 변경 통지와 `onOpened` 인계 콜백에서 동기 예외가
-성공한 POST의 receipt·생성 완료 상태를 바꾸거나 나머지 구독자 통지와 열기 인계를 막는
-경로를 수정했다. 생성·설정 조회 상태를 알린 뒤 generation과 파괴 여부를 다시 확인해, 종료된
-화면에서는 새 요청이나 인계를 시작하지 않는다. 파괴된 뒤 등록한 구독자는 호출하지 않는다. 새
-`project-notifications.test.mjs` 5개는 수정 전 5/5 실패했다. 수정 후 project-notifications·
-project-creation·request-lifecycle 검사 합계 27/27이 통과했다.
+A path was fixed where a synchronous exception in `ProjectCreator`'s initial subscription notification, state-change notification, or `onOpened` handoff callback altered the receipt and completion state of a successful POST or blocked notification of the remaining subscribers and the open handoff. After notifying the creation and settings-query states, generation and destruction are checked again, and a terminated screen starts no new request or handoff. A subscriber registered after destruction is not called. The 5 new `project-notifications.test.mjs` tests failed 5/5 before the fix. After the fix, project-notifications, project-creation, and request-lifecycle tests passed 27/27 in total.
 
 `npm run typecheck:admin`, `npm run build:admin`, `node --test
-apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11,
-`git diff --check`를 통과했다. `npm run verify:admin-onboarding -- --channel chromium
---lost-responses`는 exit 0·verified=true였고 Chromium 156.0.8078.4에서 emptyProjectCreated·
-schemaPublished·generatedSdkExecuted·correctOnboardingStep·eventVisible·lostResponseRecovery가
-모두 true, firstEventCount 1, 유실된 생성 1·발행 1, 교체 대화상자 3, routeError=false·
-pageErrors=0, auth 1·exchanges 1·refreshes 0, API 읽기 31·쓰기 5, 브라우저 배치 1이었다.
-이 실행은 로컬 서명 OIDC·D1 smoke이며, UI 콜백 예외는 합성 포트로 주입한 단위 검사이고
-브라우저에서 예외를 직접 주입한 검사는 아니다.
+apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11, and `git diff --check` passed. `npm run verify:admin-onboarding -- --channel chromium
+--lost-responses` exited 0 with verified=true in Chromium 156.0.8078.4. emptyProjectCreated, schemaPublished, generatedSdkExecuted, correctOnboardingStep, eventVisible, and lostResponseRecovery were all true; firstEventCount was 1, lost creation was 1, lost publication was 1, replacement dialogs were 3, routeError was false and pageErrors 0, auth was 1, exchanges 1, refreshes 0, API reads 31, writes 5, and browser batches 1. This run is a local signed OIDC and D1 smoke test; the UI callback exceptions were injected through synthetic ports in unit tests, not directly in a browser.
 
-설계 기준 문서 `docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록을 갱신했다. API·DB·SDK·
-의존성·위생 정책·CI 러너 변경과 소스 계약 변경은 없다. 변경 없는 전체 백엔드 검사는
-생략했고 일반 소스 lint 명령은 없다. 실제 운영 OIDC 제공자·도메인·원격 DB는 미정·미검증이며
-푸시·배포는 하지 않았다.
+The design baseline `docs/frontend/FRONTEND_DESIGN.md` and this validation record were updated. There are no changes to APIs, the DB, the SDK, dependencies, hygiene policy, CI runners, or source contracts. The unchanged full backend check was skipped, and there is no general source lint command. Actual production OIDC providers, domains, and remote DB are undecided and unverified, and there was no push or deployment.
 
-## 스키마 편집기 알림 예외 격리 — 2026-10-12
+## Isolating Schema Editor Notification Exceptions — 2026-10-12
 
-`SchemaEditor`의 초기 구독·상태 변경·권한 상실 통지에서 동기 예외가 조회와 검증·발행
-결과를 바꾸거나 다음 구독자·부모 권한 갱신을 막는 경로를 수정했다. 새
-`schema-notifications.test.mjs` 5개는 수정 전 모두 실패했다. 수정 후 스키마·설정·권한
-알림·요청 수명 검사 합계 59/59가 통과했다. 초기 통지, 검증 결과 보존, 확인된 발행
-상태와 단일 쓰기 유지, 초안 보존·권한 잠금·권한 신호 재활성화, 파괴 후 구독을 확인했다.
-콜백 예외는 합성 client 포트로 주입했으며 실제 HTTP 인증이나 브라우저 예외 주입은 아니다.
+A path was fixed where a synchronous exception in `SchemaEditor`'s initial subscription, state-change, or access-loss notification altered a query or verification or publication result or blocked the next subscriber or parent permission refresh. The 5 new `schema-notifications.test.mjs` tests all failed before the fix. After it, schema, settings, permission-notification, and request-lifetime tests passed 59/59 in total. Initial notification, preservation of verification results, the confirmed publication state and a single write, draft retention, the permission lock and permission signal reactivation, and subscription after destruction were checked. Callback exceptions were injected through a synthetic client port, not through actual HTTP authentication or browser exception injection.
 
-`npm run typecheck:admin`, `npm run build:admin`, 번들·Sites 검사 11/11,
-`npm run verify:admin-access -- --channel chromium`을 통과했다. 브라우저 검사는
-verified=true, Chromium 156.0.8078.4, 검증/설정 거부 각 1회, 섹션 사이 권한 갱신·
-초안 보존·명시적 복구·프로젝트 전환 뒤 늦은 응답 폐기·연결 해제 모두 true였다.
-보류 쓰기 2회, routeError=false·pageErrors=0, API 읽기 130·쓰기 요청 5,
-브라우저 배치 0이었다. 이 실행은 기존 권한/수명 회귀 검사이며 새 콜백 예외 경로를
-브라우저에서 직접 재현한 검사는 아니다. 도구는 로컬 Vite·Miniflare·브라우저를 정리했다.
+`npm run typecheck:admin`, `npm run build:admin`, bundle and Sites tests 11/11, and `npm run verify:admin-access -- --channel chromium` passed. The browser test produced verified=true in Chromium 156.0.8078.4 with 1 denied request each for verification and settings, and all of these were true: permission refresh across sections, draft preservation, explicit recovery, disposal of a late response after a project switch, and connection removal. There were 2 held writes, routeError=false and pageErrors 0, 130 API reads, 5 write requests, and 0 browser batches. This was the existing permission and lifetime regression, not a direct browser reproduction of the new callback-exception path. The tool cleaned up local Vite, Miniflare, and the browser.
 
-설계 기준 문서 `docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록을 갱신했다.
-API·DB·SDK·의존성·위생 정책·CI 러너 변경은 없다. 변경 없는 전체 백엔드 검사는
-생략했고 일반 소스 lint 명령은 없다. 실제 운영 OIDC 제공자·원격 DB는 미검증이며
-푸시·배포는 하지 않았다.
+The design baseline `docs/frontend/FRONTEND_DESIGN.md` and this validation record were updated. There are no changes to APIs, the DB, the SDK, dependencies, hygiene policy, or CI runners. The unchanged full backend check was skipped, and there is no general source lint command. Actual production OIDC providers and remote DB are unverified, and there was no push or deployment.
 
-## 브라우저 SDK 종료 속성 검증 — 2026-10-12
+## Browser SDK Terminal Property Validation — 2026-10-12
 
-`succeed([])`나 `fail(0)`처럼 객체가 아닌 속성이 빈 객체로 바뀌어 정상 종료로
-기록되고 핸들이 소진되던 문제를 수정했다. 배열·null·원시값·함수는 속성을 복사하기
-전에 거부한다. 잘못된 입력 뒤 올바른 호출은 같은 핸들로 가능하며, 시작 dimensions를
-한 번 합쳐 비교·전송하여 중복 복사를 줄였다. 생략한 속성과 빈 객체는 계속 허용한다.
+A problem was fixed where a non-object property in `succeed([])` or `fail(0)` was converted to an empty object and recorded as a successful terminal while consuming the handle. Arrays, null, primitives, and functions are rejected before properties are copied. After invalid input, a valid call can use the same handle, and the starting dimensions are merged once before comparison and transmission, reducing duplicate copying. Omitted properties and empty objects remain allowed.
 
-새 `terminal-input.test.ts`는 수정 전 3개 중 2개가 실패했다. 수정 후
-`npm run test:browser` 45/45, `npm run build:browser`(타입 선언 포함),
-`npm run check:browser-size`, `git diff --check`를 통과했다. 빌드된 SDK를 실제 Node에서
-불러온 완료·실패 복구 스모크도 2/2 통과했고 전송 본문은 Core `parseBatch`로 확인했다.
-gzip 크기는 기본 SDK 2,787바이트·Sembom 예제 포함 3,067바이트·퍼널 예제 포함
-3,072바이트로 기존 3KiB 예산을 유지했다.
+Of the 3 new `terminal-input.test.ts` tests, 2 failed before the fix. After it, `npm run test:browser` 45/45, `npm run build:browser` including type declarations, `npm run check:browser-size`, and `git diff --check` passed. A completion and failure recovery smoke test that loaded the built SDK in actual Node also passed 2/2, and the transmission body was checked with Core `parseBatch`. gzip sizes were default SDK 2,787 bytes, 3,067 bytes including the Sembom example, and 3,072 bytes including the funnel example, preserving the existing 3KiB budget.
 
-소유 문서는 브라우저 SDK 안내와 이 검증 기록만 변경했다. API·DB 계약·공개 타입·
-의존성·위생 정책·CI 러너 변경은 없다. 변경 없는 관리자·백엔드 전체 검사는 생략했고,
-일반 소스 lint 명령은 없다. 실제 서비스 연동·원격 운영은 미검증이며 푸시·배포는 없다.
+The owned documents changed are the browser SDK guidance and this validation record only. There are no changes to APIs, the DB contract, public types, dependencies, hygiene policy, or CI runners. Unchanged full admin and backend checks were skipped, and there is no general source lint command. Actual service integration and remote operations are unverified, and there was no push or deployment.
 
-## 브라우저 SDK 날짜형 재시도 안내 — 2026-10-12
+## Browser SDK Date-Form Retry Guidance — 2026-10-12
 
-`packages/browser`의 재시도 대기가 정수 초와 표준 IMF-fixdate(예 `Thu, 08 Oct
-2026 15:01:15 GMT`)를 함께 처리한다. `common.ts`는 정규 UTC 문자열 왕복 파싱으로
-날짜를 받아들이고, 남은 시간은 브라우저 호스트 현재 시각 기준으로 계산한다. 하한은
-1초라 이미 지난 시각도 1초를 기다리고, 형식이 어긋나면 1·2초 백오프를 쓴다. 대기가
-배치 시작부터 10분 이상이 되면 재전송 없이 버리고, `flush`와 숨김 콜백은 대기를
-우회하지 못하며 재시도는 원래 ID·시각·본문을 유지한다. 새
-`packages/browser/test/retry-after.test.ts` 6개는 수정 전 HEAD에서 6/6 실패했고 수정
-후 전체 `npm run test:browser` 42/42를 통과했다.
+Retry waiting in `packages/browser` handles both integer seconds and the standard IMF-fixdate format, for example `Thu, 08 Oct
+2026 15:01:15 GMT`. `common.ts` accepts a date through round-trip parsing of a canonical UTC string, and the remaining time is calculated from the browser host's current time. The lower bound is 1 second, so a time already in the past still waits 1 second, and a malformed value uses 1 and 2 second backoff. If the wait would make the batch more than 10 minutes old from its start, the batch is discarded without retransmission; `flush` and the hidden callback cannot bypass the wait, and retries retain the original ID, time, and body. The 6 new `packages/browser/test/retry-after.test.ts` tests failed 6/6 against pre-fix HEAD, and the full `npm run test:browser` passed 42/42 after the fix.
 
-esbuild minified `build.test` 2개는 HTTP-date 헤더 대기 검증으로 넓혀 별도 2/2를
-통과했다(기존 42개에 포함되므로 44로 합산하지 않는다). 첫 확장 실행은 fixture 시각이
-50ms 밀린 탓에 HTTP-date 초 정밀도와 어긋나 59999ms 기대값으로 2/2 실패했고, 대기
-시간을 HTTP-date 기준 차이로 계산하도록 fixture를 고친 뒤 2/2를 통과했다. 이 실패는
-검사 fixture 문제이며 제품 결함이 아니다. 전체 42/42 뒤에는 검사 파일만 바뀌어 관련
-2/2만 다시 확인했고 `npm run build:browser`, `npx --no-install tsc --noEmit`,
-`git diff --check`, `npm run check:browser-size`(sdk 2786·Sembom 3065·funnelSdk 2947·
-funnelExample 3072 gzip bytes, 예산 3072)는 같은 결과를 재사용했다.
+The 2 esbuild minified `build.test` tests were expanded to check HTTP-date header waits and passed 2/2 separately; they are included in the existing 42 and are not added to make 44. The first expanded run failed 2/2 with a 59999ms expected value because the fixture time was 50ms late relative to the HTTP-date second precision. After the fixture was changed to calculate the wait from the HTTP-date difference, 2/2 passed. This was a test-fixture problem, not a product defect. After the full 42/42 run, only test files changed, so only the related 2/2 was rechecked; `npm run build:browser`, `npx --no-install tsc --noEmit`, `git diff --check`, and `npm run check:browser-size` (sdk 2786, Sembom 3065, funnelSdk 2947, funnelExample 3072 gzip bytes, budget 3072) reused the same results.
 
-검사는 합성 호스트 fake clock, esbuild minified 번들, Node 네이티브 어댑터 대역으로만
-확인했고 실제 Chromium 실행과 원격 서비스는 검증하지 않았다. 변화가 없는 기존 백엔드·admin
-전체 검사는 돌리지 않았고 lint 스크립트는 없다. API·DB·공개 타입·의존성·CI·runner·위생
-변경은 없고 SDK 재시도 동작 확장과 소유 문서 `docs/backend/browser-sdk.md`·
-`docs/backend/event-contract.md` 갱신만 있었으며 푸시·배포는 하지 않았다.
+The tests used only a synthetic-host fake clock, the esbuild minified bundle, and a Node native adapter stand-in; they did not verify an actual Chromium run or a remote service. Unchanged full backend and admin checks were not run, and there is no lint script. There are no changes to APIs, the DB, public types, dependencies, CI, runners, or hygiene. The changes were the SDK retry behavior expansion and updates to the owned documents `docs/backend/browser-sdk.md` and `docs/backend/event-contract.md`, and there was no push or deployment.
 
-## 브라우저 SDK 이름·식별자 원시 문자열 검사 — 2026-10-12
+## Browser SDK Name and Identifier Primitive String Validation — 2026-10-12
 
-`packages/browser`가 이벤트 이름·workflow ID·attempt ID·이벤트 ID를 강제 변환 전에
-원시 문자열인지 검사하도록 좁혔다. 이벤트 이름은 `common.ts`의 스냅샷이, `start`의
-workflow ID·attempt ID는 `index.ts`가, 이벤트 ID는 `common.ts`의 enqueue가
-`typeof === 'string'`을 통과해야 한다. `toString`·`toJSON`을 가진 객체는 이 단계에서
-거부되므로 등록 조회나 직렬화가 일어나지 않고, 등록되지 않은 내용이 이름·식별자 자리에
-실려 나가지 않는다.
+`packages/browser` now checks that the event name, workflow ID, attempt ID, and event ID are primitive strings before coercion. The event name must pass this check in the `common.ts` snapshot, the workflow ID and attempt ID in `start` are checked by `index.ts`, and the event ID is checked by enqueue in `common.ts` with `typeof === 'string'`. An object with `toString` or `toJSON` is rejected at this stage, so no registry lookup or serialization occurs, and unregistered content cannot be carried out through a name or identifier field.
 
-수정 전 HEAD를 `.tmp`에 격리한 대역 호스트에서는 `track({ toString: () => 'view',
-toJSON: () => 'unregistered text 한글' }, { tool: 'loan' })`이 `true`를 돌려주고 flush
-뒤 전송 본문의 이벤트 이름이 `unregistered text 한글`로 기록됐다. 이는 합성 SDK 본문
-증거이며 실제 HTTP·수집기·브라우저 실행이 아니다. 새
-`packages/browser/test/identities.test.ts` 4개는 수정 전 HEAD를 격리해 같은 파일을
-돌리면 3개가 실패하고 1개만 통과했다.
+Before the fix, a stand-in host isolated at pre-fix HEAD returned `true` for `track({ toString: () => 'view',
+toJSON: () => 'unregistered text \uD55C\uAE00' }, { tool: 'loan' })`, and after flush the event name in the transmission body was recorded as the same string (the Hangul characters are shown here with Unicode escapes). This is synthetic SDK-body evidence, not an actual HTTP, collector, or browser run. Of the 4 new tests in `packages/browser/test/identities.test.ts`, running the same file against isolated pre-fix HEAD produced 3 failures and 1 pass.
 
-배치 16384와 이벤트 16000 한도는 UTF-8 바이트가 아니라 JavaScript 문자열 길이로 재도록
-바꿨다. 직렬화되는 이름·키·enum은 ASCII 패턴으로 제한되고 UUID·ISO 시각·불리언·정수도
-ASCII라서 두 값이 같지만, 자유 문자열이나 비ASCII 값을 허용 범위에 넣는 확장을 하면
-UTF-8 바이트 측정으로 되돌려야 한다. 스키마 32768 한도는 이전부터 문자열 길이
-기준이고 이번에 바뀌지 않았다.
+The batch limit 16384 and event limit 16000 now use JavaScript string length rather than UTF-8 bytes. Serialized names, keys, and enums are restricted to ASCII patterns, and UUIDs, ISO times, booleans, and integers are ASCII, so the two values are equal. If a future extension allows free-form strings or non-ASCII values within the allowed limit, measurement must return to UTF-8 bytes. The schema limit 32768 was already based on string length and did not change.
 
-최종 `npm run test:browser` 36/36, `node --test
-apps/admin/src/api/funnel-setup.test.mjs` 6/6, `npm run build:browser`,
-`npx --no-install tsc --noEmit`, `npm run check:browser-size`(sdk 2754·Sembom
-3034·funnelSdk 2919·funnelExample 3043 gzip bytes, 예산 3072), `git diff --check`를
-통과했다. 네이티브 어댑터 검사는 Node 전역 `fetch`·`Response` 대역을 쓰며 실제
-Chromium 실행이 아니고, 이번 변경의 실브라우저·배포 수집기 smoke는 없다. API·DB 공개
-계약은 그대로이며 SDK 검증만 강화했고 의존성·CI·runner·위생 정책 변경과 푸시·배포는
-없다. 변경 범위 밖인 전체 백엔드 검사와 관리자 전체 빌드는 생략했고 lint 스크립트는 없다.
-기준 문서 `docs/backend/browser-sdk.md`와 이 기록을 갱신했다.
+The final `npm run test:browser` 36/36, `node --test
+apps/admin/src/api/funnel-setup.test.mjs` 6/6, `npm run build:browser`, `npx --no-install tsc --noEmit`, `npm run check:browser-size` (sdk 2754, Sembom 3034, funnelSdk 2919, funnelExample 3043 gzip bytes, budget 3072), and `git diff --check` passed. The native adapter test uses Node global `fetch` and `Response` stand-ins and is not an actual Chromium run; there was no real-browser or deployed-collector smoke test for this change. Public API and DB contracts are unchanged, only SDK validation was strengthened, and there are no changes to dependencies, CI, runners, or hygiene policy and no push or deployment. Full backend checks and the full admin build were outside the changed scope and were skipped, and there is no lint script. The baseline `docs/backend/browser-sdk.md` and this record were updated.
 
-## 권한 편집기 알림 예외 격리 — 2026-10-12
+## Isolating Permission Editor Notification Exceptions — 2026-10-12
 
-`GrantEditor`와 `PublisherEditor`의 `subscribe` 최초 통지와 `#set` 구독자 호출에서
-동기 예외가 상태 갱신 밖으로 전파되던 경로를 수정했다. 각 호출을 감싼 `#notify`는
-파괴된 편집기에서 콜백을 부르지 않고 돌아온다. 새
-`apps/admin/src/api/permission-notifications.test.mjs` 4개는 수정 전 모두 실패했고(유효
-fixture로 재실행 확인), 수정 후 관련 grant-editor·publishers·settings-editor·요청 수명
-검사와 합계 36/36이 통과했다. 기존 `onSaved`·`onAccessLost` 격리는 유지했다. 이 fault는
-client 포트를 대역으로 바꾼 합성 notification 검사이며 실제 인증·브라우저에서 알림 예외를
-주입한 검사는 아니다.
+A path was fixed where synchronous exceptions in the first `subscribe` notification and in `#set` subscriber calls in `GrantEditor` and `PublisherEditor` escaped the state update. `#notify`, which wraps each call, returns without invoking callbacks on a destroyed editor. The 4 new `apps/admin/src/api/permission-notifications.test.mjs` tests all failed before the fix, confirmed by rerunning with a valid fixture. After the fix, the related grant-editor, publishers, settings-editor, and request-lifetime tests passed 36/36 in total. The existing isolation of `onSaved` and `onAccessLost` is preserved. This fault is exercised by synthetic notification tests with a client-port stand-in and is not a test that injected notification exceptions through actual authentication or a browser.
 
-`npm run typecheck:admin`·`npm run build:admin`,
-`node --test apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11,
-`npm run verify:admin-access -- --channel chromium`을 통과했다. 브라우저 검사는 exit 0,
-verified=true, Chromium 156.0.8078.4, 스키마·설정 권한 거부 각 1회,
-crossSectionPermissionsRefreshed·preservedDraft·explicitPermissionRecovery·
-staleWriteAcrossProjectSwitchIgnored·disconnectedUiCleared·serverCommitsNotRolledBack 모두 true,
-heldWrites 2, routeError=false·pageErrors=0, authorizations 1·exchanges 1·refreshes 0,
-API 읽기 128·쓰기 요청 5, 브라우저 배치 0이었다. 이 브라우저 실행은 기존 설정/스키마
-회귀 smoke이고 이번 grant/publisher 알림 예외 경로를 겨냥하지 않았다.
+`npm run typecheck:admin`, `npm run build:admin`, `node --test apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11, and `npm run verify:admin-access -- --channel chromium` passed. The browser test exited 0 with verified=true in Chromium 156.0.8078.4, with 1 permission denial each for schema and settings. crossSectionPermissionsRefreshed, preservedDraft, explicitPermissionRecovery, staleWriteAcrossProjectSwitchIgnored, disconnectedUiCleared, and serverCommitsNotRolledBack were all true; heldWrites was 2, routeError=false and pageErrors 0, authorizations 1, exchanges 1, refreshes 0, API reads 128, write requests 5, and browser batches 0. This browser run was the existing settings and schema regression smoke test and did not target this change's grant and publisher notification exception path.
 
-API·DB·SDK·의존성·CI·runner·hygiene은 바꾸지 않았고 푸시·배포도 없다. lint 스크립트가 없어
-린트를 생략했고, 변경 없는 전체 백엔드 검사와 native 운영 검사는 변경 범위가 admin 편집기
-알림 격리뿐이라 생략했다. 실제 운영 OIDC 제공자와 원격 DB는 미검증이다. 설계 기준 문서
-`docs/frontend/FRONTEND_DESIGN.md`와 이 검증 기록을 갱신했다.
+APIs, the DB, the SDK, dependencies, CI, runners, and hygiene were not changed, and there was no push or deployment. Lint was skipped because there is no lint script, and the unchanged full backend and native production checks were skipped because the change scope was admin editor notification isolation. Actual production OIDC providers and remote DB are unverified. The design baseline `docs/frontend/FRONTEND_DESIGN.md` and this validation record were updated.
 
-## 설정 편집기 콜백 격리 — 2026-10-12
+## Isolating Settings Editor Callbacks — 2026-10-12
 
-`SettingsEditor`의 UI 구독자 호출과 `onSaved`·`onAccessLost` 콜백이 던진 동기
-예외가 상태 갱신 밖으로 전파되던 경로를 수정했다. 새
-`apps/admin/src/api/settings-editor.test.mjs` 5개는 수정 전 모두 실패했고, 확인된 저장
-결과가 `ready` 대신 review에 머물거나 성공한 조회가 error로 처리되고 던진 구독자·권한
-콜백이 나머지 통지와 잠금 처리를 끊는 재현이었다. 수정 후 settings-editor·client·요청
-수명 검사 합계 55/55가 통과했다. 이 콜백 fault는 합성 단위 검사로만 확인했고 브라우저에서
-콜백 예외를 재현한 것은 아니다.
+A path was fixed where synchronous exceptions thrown by `SettingsEditor`'s UI subscriber calls and `onSaved` and `onAccessLost` callbacks escaped the state update. The 5 new `apps/admin/src/api/settings-editor.test.mjs` tests all failed before the fix. The reproductions caused a confirmed save result to remain in review instead of `ready`, treated a successful query as an error, and let a thrown subscriber or permission callback stop the remaining notifications and lock handling. After the fix, settings-editor, client, and request-lifetime tests passed 55/55 in total. These callback faults were confirmed only in synthetic unit tests; callback exceptions were not reproduced in a browser.
 
-`npm run typecheck:admin`·`npm run build:admin`, `node --test
-apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11,
-`git diff --check`를 통과했다. `npm run verify:admin-access -- --channel chromium`은
-verified=true, Chromium 156.0.8078.4, 스키마·설정 권한 거부 각 1회, 보류 저장 2회,
-crossSectionPermissionsRefreshed·preservedDraft·explicitPermissionRecovery·
-staleWriteAcrossProjectSwitchIgnored·disconnectedUiCleared·serverCommitsNotRolledBack
-모두 true, routeError=false·pageErrors=0, API 읽기 127·쓰기 요청 5, 브라우저 배치 0이었다.
+`npm run typecheck:admin`, `npm run build:admin`, `node --test
+apps/admin/tests/bundle-split.test.mjs apps/admin/tests/sites-worker.test.mjs` 11/11, and `git diff --check` passed. `npm run verify:admin-access -- --channel chromium` produced verified=true in Chromium 156.0.8078.4, with 1 permission denial each for schema and settings, 2 held saves, and crossSectionPermissionsRefreshed, preservedDraft, explicitPermissionRecovery, staleWriteAcrossProjectSwitchIgnored, disconnectedUiCleared, and serverCommitsNotRolledBack all true. routeError was false and pageErrors 0, API reads 127, write requests 5, and browser batches 0.
 
-이 브라우저 실행은 기존 정상/권한/유실/프로젝트 전환 회귀 스모크이고 이번 콜백 격리
-경로를 단독으로 겨냥하지는 않았다. API·DB 계약, UI 레이아웃, SDK, 의존성, CI와 runner는
-바꾸지 않았고 푸시·배포도 없다. 변경 없는 전체 백엔드 검사는 생략했고 lint 스크립트가
-없어 린트도 생략했다. 실제 운영 OIDC 제공자와 원격 DB는 미검증이다. 설계 기준 문서와
-검증 기록도 갱신했다.
+This browser run was the existing normal, permission, loss, and project-switch regression smoke test and did not target the callback-isolation path on its own. API and DB contracts, UI layout, the SDK, dependencies, CI, and the runner were not changed, and there was no push or deployment. The unchanged full backend check was skipped, and lint was skipped because there is no lint script. Actual production OIDC providers and remote DB are unverified. The design baseline and validation record were updated.
 
-## 서버 프로젝트 권한 경계 — 2026-10-12
+## Server Project Permission Boundary — 2026-10-12
 
-기존 HTTP/D1 권한 검사 31개, 퍼널·서버 이벤트·생성 권한 검사 10개와 설치 접근 검사
-3개를 실행해 모두 통과했다. 다른 프로젝트·발급자, 권한 회수, 저장 직전 소유권 재확인과
-마지막 owner 보호를 확인했다. 정확한 명령·범위·제한은
-`docs/ops/admin-server-access-audit-2026-10-12.json`에 기록했다.
+The 31 existing HTTP and D1 permission tests, 10 funnel, server event, and creation permission tests, and 3 installation access tests were run and all passed. They checked different projects and issuers, permission revocation, ownership recheck immediately before saving, and last-owner protection. The exact commands, scope, and limitations are recorded in `docs/ops/admin-server-access-audit-2026-10-12.json`.
 
-앞선 41개는 인증 검증 포트를 시험 대역으로 바꿔 grant 경계를 검증한다. 추가 3개는
-일회용 RS256 키·로컬 JWKS와 실제 프록시/D1을 사용해 관리자 토큰 허용, 게시자용
-audience 거부, 잘못된 upstream 신원 중단, 보고서 비밀정보 제거와 DB 상태 보존을 확인했다.
-저장소 장애 검사는 로컬 D1을 의도적으로 종료해 workerd 소켓 오류와 예상 503을 확인했다.
-운영 제공자·원격 DB와 모든 grant 사례의 서명 토큰 조합을 검증한 것은 아니다.
+The earlier 41 tests use a test-double authentication verification port to verify the grant boundary. The additional 3 use a disposable RS256 key, local JWKS, and the actual proxy and D1 to verify that an admin token is accepted, a publisher audience is rejected, a bad upstream identity is stopped, secrets are removed from reports, and DB state is preserved. The storage-failure test intentionally stopped local D1 and checked the workerd socket error and expected 503. Production providers, remote DB, and every signed-token combination for every grant case were not verified.
 
-이 범위에서 추가 제품 수정은 필요하지 않았다. 제품/API/DB/의존성/CI 변경과 푸시·배포는
-없고, 전체 저장소 준비가 완료됐다고 판단하지 않는다.
+No additional product fix was required in this scope. There are no product, API, DB, dependency, or CI changes and no push or deployment, and the repository is not considered fully ready.
