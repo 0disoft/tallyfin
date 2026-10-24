@@ -1,4 +1,5 @@
 import { configurationKey, configureCollector } from './config.ts';
+export { CollectorMaintenance } from './maintenance-runtime.ts';
 
 // Cache trusted configuration and verifier keys, never request data or DB bindings.
 let cached: { key: string; worker: ReturnType<typeof configureCollector> } | undefined;

@@ -14,5 +14,5 @@
     "skipLibCheck": true
   },
   "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "examples/**/*.ts", "tools/provision/*.ts", "tools/runtime/*.ts", "tools/browser-bench/*.ts"],
-  "exclude": ["apps/collector/src/runtime.ts", "apps/admin", "apps/auth"]
+  "exclude": ["apps/collector/src/runtime.ts", "apps/collector/src/maintenance-runtime.ts", "apps/admin", "apps/auth"]
 }

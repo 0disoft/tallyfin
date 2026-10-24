@@ -1,5 +1,36 @@
 # Validation
 
+## Free-plan maintenance scheduling — 2026-10-25
+
+The authenticated provider deployed and real password login returned 200 with a
+secure cookie. Registering another Cron failed because the account already uses
+all five Free-plan Cron slots. Successful code/URL changes were not rolled back
+by Cloudflare; this partial deployment was not treated as a complete rollout.
+
+Added optional `collector.scheduler=auth-alarm`, retaining Cron by default for
+other installations. A SQLite Durable Object in auth invokes the existing
+bounded Collector cleanup through a private named service-binding RPC every
+minute and cleans auth rate-limit keys at most hourly. Session-protected control
+arms it explicitly. It persists the next wakeup before dependencies and records
+fixed success/failure metadata without exposing identities or tokens.
+
+- Auth and alarm runtime tests: 5/5 passed. A real Workers/SQLite alarm instance
+  was armed repeatedly without resetting its schedule, called a separate
+  Worker RPC, removed only expired keys, recorded injected dependency failure,
+  retained its next wakeup, and recovered on the following invocation.
+- Installation, target and auth-topology tests: 10/10 passed.
+- Auth generated-binding type check: passed, including the cross-Worker RPC type.
+- Collector and administrator type checks passed before that final auth check.
+- Generated auth and Collector Wrangler dry runs: passed.
+- Configured administrator rebuild: passed. Existing 375 administrator tests and
+  the successful real-Chromium synthetic-provider login check remain applicable;
+  no administrator source changed.
+
+No paid upgrade, unrelated Worker/schedule change, scheduled CI runner, analytics
+HTTP/DB schema change or new secret was needed. ADR 0009 and the installation
+guide document the optional scheduler and activation/status checks. A live
+alarm wakeup and the completed three-Worker rollout remain to be recorded below.
+
 ## Self-hosted Better Auth administrator provider — 2026-10-25
 
 Added the optional `apps/auth` Worker, a separate Better Auth v1 D1 schema,

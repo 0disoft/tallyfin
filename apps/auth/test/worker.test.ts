@@ -9,7 +9,7 @@ import { bootstrapSql } from '../src/bootstrap.ts';
 test('Workers/D1 runtime signs in with native scrypt, closes signup and management routes, bounds bodies and preserves private metadata', async () => {
   const origin = 'https://auth.example.invalid', adminOrigin = 'https://admin.example.invalid';
   const bundle = await build({ entryPoints: [new URL('../src/runtime.ts', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')],
-    bundle: true, write: false, format: 'esm', platform: 'node', conditions: ['workerd'], target: 'es2023', external: ['node:*'] });
+    bundle: true, write: false, format: 'esm', platform: 'node', conditions: ['workerd'], target: 'es2023', external: ['node:*', 'cloudflare:workers'] });
   // Match the workerd build bundled with this checkout's locked Miniflare.
   const mf = new Miniflare({ modules: [{ type: 'ESModule', path: 'auth.mjs', contents: bundle.outputFiles[0]!.text }], compatibilityDate: '2026-07-30',
     compatibilityFlags: ['nodejs_compat'], d1Databases: ['AUTH_DB'], log: new Log(LogLevel.NONE),
@@ -28,6 +28,8 @@ test('Workers/D1 runtime signs in with native scrypt, closes signup and manageme
     assert.equal((await call('/api/auth/oauth2/register', { method: 'POST' })).status, 404);
     assert.equal((await call('/api/auth/admin/list-users')).status, 404);
     assert.equal((await call('/api/auth/token')).status, 404);
+    assert.equal((await call('/maintenance')).status, 401);
+    assert.equal((await call('/maintenance', { method: 'POST', headers: { Origin: adminOrigin } })).status, 403);
     const metadata = await call('/api/auth/.well-known/openid-configuration', { headers: { Origin: adminOrigin } });
     assert.equal(metadata.status, 200); assert.equal(metadata.headers.get('Access-Control-Allow-Origin'), adminOrigin);
     const denied = await call('/api/auth/sign-in/email', { method: 'POST', headers: { Origin: 'https://attacker.example.invalid', 'Content-Type': 'application/json' },

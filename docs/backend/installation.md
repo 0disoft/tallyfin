@@ -52,6 +52,11 @@ Create `.tmp/installation-input.json` filled with real values. Its top-level JSO
 | `collector` | The `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev`, and `settings` for the [collector target](./runtime.md#deployment-preparation). |
 | `login` | The public OIDC client's `issuer`, `clientId`, `scope`, optional `resource`, and `idTokenAlgorithm`. |
 
+`collector.scheduler` optionally selects `cron` (default) or `auth-alarm` when
+using the bundled [Better Auth scheduler](better-auth.md#scheduling-without-additional-cron-slots).
+The latter requires deploying and activating the auth clock; selecting it alone
+does not start cleanup.
+
 `admin.accountId` and `collector.accountId` must be the same, and `admin.collectorWorkerName` must equal
 `collector.workerName`. The administrator origin must be the configured custom domain or the actual workers.dev address of that
 administrator Worker. The collector requires `ADMIN_AUTH_MODE=oidc`,

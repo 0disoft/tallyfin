@@ -1,5 +1,6 @@
 import { createAuth } from './auth.ts';
 import { loginPage, loginScript, loginStyle } from './pages.ts';
+export { MaintenanceClock } from './maintenance.ts';
 
 const cache = new WeakMap<object, ReturnType<typeof createAuth>>();
 const reads = new Set(['/api/auth/.well-known/openid-configuration', '/api/auth/.well-known/oauth-authorization-server',
@@ -69,13 +70,21 @@ export default {
       if (url.pathname === '/login.js') return wrap(new Response(loginScript, { headers: { 'Content-Type': 'text/javascript; charset=utf-8' } }));
       if (url.pathname === '/login.css') return wrap(new Response(loginStyle, { headers: { 'Content-Type': 'text/css; charset=utf-8' } }));
     }
-    if (!(request.method === 'GET' && reads.has(url.pathname)) && !(request.method === 'POST' && writes.has(url.pathname)))
+    const maintenance = url.pathname === '/maintenance' && ['GET', 'POST'].includes(request.method);
+    if (!maintenance && !(request.method === 'GET' && reads.has(url.pathname)) && !(request.method === 'POST' && writes.has(url.pathname)))
       return wrap(new Response(null, { status: 404 }));
     try {
       let auth = cache.get(env);
       if (!auth) {
         auth = createAuth({ database: env.AUTH_DB, origin: env.AUTH_ORIGIN, adminOrigin: env.ADMIN_ORIGIN, secret: env.BETTER_AUTH_SECRET, adminEmail: env.ADMIN_EMAIL });
         cache.set(env, auth);
+      }
+      if (maintenance) {
+        if (request.method === 'POST' && origin !== env.AUTH_ORIGIN) return wrap(new Response(null, { status: 403 }));
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (session?.user.email.toLowerCase() !== env.ADMIN_EMAIL.toLowerCase()) return wrap(new Response(null, { status: 401 }));
+        const clock = env.MAINTENANCE.getByName('installation');
+        return wrap(Response.json(await (request.method === 'POST' ? clock.start() : clock.status())));
       }
       return wrap(await auth.handler(await boundedRequest(request, env.BETTER_AUTH_SECRET)));
     } catch (error) {

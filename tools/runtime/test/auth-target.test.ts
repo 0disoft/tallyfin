@@ -18,6 +18,13 @@ test('Better Auth configuration preserves account, isolated DB and exact OIDC to
   assert.equal(config.account_id, accountId); assert.equal(config.vars.ADMIN_ORIGIN, origin);
   assert.equal(config.vars.ADMIN_EMAIL, 'operator@example.invalid'); assert.equal(config.vars.AUTH_ORIGIN, new URL(issuer).origin);
   assert.deepEqual(config.secrets.required, ['BETTER_AUTH_SECRET']); assert.ok(!JSON.stringify(config).includes('password'));
+  const alarmPlan = installation({ ...input, collector: { ...input.collector, scheduler: 'auth-alarm' } }, process.cwd());
+  assert.deepEqual(alarmPlan.collector.triggers.crons, []);
+  const alarmConfig = authDeploymentTarget(target, alarmPlan, process.cwd());
+  assert.equal(alarmConfig.vars.MAINTAIN_COLLECTOR, 'true');
+  assert.equal(alarmConfig.services[0]!.entrypoint, 'CollectorMaintenance');
+  assert.deepEqual(alarmConfig.migrations[0]!.new_sqlite_classes, ['MaintenanceClock']);
+  assert.throws(() => installation({ ...input, collector: { ...input.collector, scheduler: 'unknown' } }, process.cwd()));
   for (const change of [{ databaseId: input.collector.databaseId }, { databaseId: '00000000-0000-0000-0000-000000000000' },
     { workerName: 'test-admin' }, { workerName: 'wrong-auth' }, { workersDev: false }, { domain: 'wrong.invalid' },
     { adminEmail: 'bad' }, { secret: 'not-allowed' }]) assert.throws(() => authDeploymentTarget({ ...target, ...change }, plan, process.cwd()));

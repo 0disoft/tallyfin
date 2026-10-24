@@ -5,7 +5,8 @@ import { DEFAULT_SETTINGS, configureCollector } from '../../apps/collector/src/c
 /** Validates supplied identifiers only; never contacts Cloudflare or provisions resources. */
 export function deploymentTarget(input: unknown, root: string) {
   try {
-    if (!closed(input, ['workerName', 'accountId', 'databaseName', 'databaseId', 'workersDev', 'settings']) ||
+    if (!closed(input, ['workerName', 'accountId', 'databaseName', 'databaseId', 'workersDev', 'settings'], ['scheduler']) ||
+      (input.scheduler !== undefined && !['cron', 'auth-alarm'].includes(String(input.scheduler))) ||
       !matches(input.workerName, /^[a-z][a-z0-9-]{0,62}$/) ||
       !matches(input.accountId, /^[0-9a-f]{32}$/) || /^0+$/.test(input.accountId) ||
       !matches(input.databaseName, /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/) ||
@@ -21,7 +22,7 @@ export function deploymentTarget(input: unknown, root: string) {
       compatibility_date: '2026-08-06', workers_dev: input.workersDev, preview_urls: false, send_metrics: false,
       d1_databases: [{ binding: 'DB', database_name: input.databaseName, database_id: input.databaseId,
         migrations_dir: resolve(root, 'db/migrations') }],
-      vars: settings, triggers: { crons: ['* * * * *'] },
+      vars: settings, triggers: { crons: input.scheduler === 'auth-alarm' ? [] : ['* * * * *'] },
       observability: { enabled: true, redact_query_string: true,
         logs: { enabled: true, invocation_logs: false, head_sampling_rate: 1 }, traces: { enabled: false } },
     };

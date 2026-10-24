@@ -52,7 +52,7 @@ credential manager. SQL contains a password hash and must be protected too.
 Bootstrap is idempotent and does not reset an existing password. It registers
 one account and the fixed public PKCE client; it exposes no setup HTTP route.
 
-Deploy the auth Worker with its generated config, then the Collector, then the
+Deploy the Collector, then the auth Worker with its generated config, then the
 configured administrator assets. The Collector can have `workers_dev: false`
 and remain reachable through the administrator's service binding for `/v1`.
 Public signup and dynamic registration return 404. Only the configured email
@@ -73,7 +73,7 @@ and refresh tokens, and existing access tokens can remain valid for five minutes
 
 Auth stores account email, password hashes, session/refresh-token metadata and
 encrypted signing keys in a separate D1. Session IP and user agent are null;
-rate-limit keys use keyed IP pseudonyms for abuse prevention. An hourly Cron
+rate-limit keys use keyed IP pseudonyms for abuse prevention. An hourly alarm
 removes rate-limit rows inactive for 24 hours (up to one additional hour before
 the next cleanup). Logs contain fixed
 failure codes, no request payloads. Automatic invocation logs, URL queries and
@@ -86,3 +86,29 @@ framework upgrades. Use a previous verified Worker version to roll back code;
 preserve the auth database. Back up and recover auth separately from analytics.
 Do not infer production health or a completed end-to-end service integration
 from local tests, a public login page or an empty project list.
+
+## Scheduling without additional Cron slots
+
+Set optional `collector.scheduler` to `auth-alarm` in installation input when
+using this provider and the account's Cron slots are occupied. The default is
+still `cron` for other installations. An auth-owned SQLite Durable Object wakes
+every minute and calls the Collector's `CollectorMaintenance.run` service-binding
+RPC. It executes the existing bounded cleanup; it cannot read auth data. No
+public Collector route invokes maintenance. Auth keys are cleaned at most hourly.
+SQLite Durable Objects are supported on Workers Free; normal resource limits
+still apply. This adds no GitHub scheduled runners or paid-plan upgrade.
+
+After signing into the auth origin, the installation operator sends a
+same-origin `POST /maintenance` with the secure session cookie. Only the configured
+administrator can arm the clock; a repeated request does not reset an existing
+alarm. `GET /maintenance` with that session returns only `nextAt` and `lastRun`
+(`completedAt`, `succeeded`). Without a session it returns 401, and a cross-origin
+start returns 403. No password, session or DB row appears in the response.
+
+The next wakeup is persisted before calling dependencies. Failures are recorded
+with a fixed code and the clock continues on the next minute; auth-key cleanup
+and analytics cleanup are independent. Alarm delivery is at least once, so the
+existing cleanup must remain safe to repeat. With Collector Cron retained, the
+same clock wakes hourly for auth cleanup only. Activating it and observing a
+successful real wakeup are required deployment checks. Keep the Durable Object
+namespace and migration tag when rolling back; do not delete its storage.

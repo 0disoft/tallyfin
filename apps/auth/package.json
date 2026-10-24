@@ -5,7 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "typecheck": "wrangler types ../../.tmp/auth-worker-types.d.ts --env-interface AuthEnv --config wrangler.jsonc && tsc --noEmit",
+    "typecheck": "wrangler types ../../.tmp/auth-worker-types.d.ts --env-interface AuthEnv --strict-vars=false --config wrangler.jsonc && tsc --noEmit",
     "test": "node --test --test-timeout=60000 test/*.test.ts"
   },
   "dependencies": {

@@ -61,3 +61,14 @@ drop the database to roll back code. Existing issued access tokens expire after
 five minutes; incident recovery may also require rotating the secret and keys
 and revoking sessions and refresh tokens. No automatic destructive down
 migration or authentication fallback is provided.
+
+### Free-plan scheduling
+
+The initial account has no remaining Cron slots. Optional
+`collector.scheduler=auth-alarm` replaces additional Cron triggers with one
+auth-owned SQLite Durable Object alarm. It calls a named Collector service-binding
+RPC every minute, preserving the existing bounded cleanup and DB ownership.
+Default installations retain Cron. The configured administrator explicitly arms
+the clock through a same-origin session-protected control; status exposes only
+timestamps and a success flag. Store the next alarm before dependency calls and
+continue after failures. No new scheduled CI runner or paid upgrade is required.
