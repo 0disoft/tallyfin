@@ -1,26 +1,26 @@
-# 기여 안내
+# Contributing
 
-상태: 로컬 구현의 코드·테스트·문서 변경 절차다. 라이선스와 CLA는 미결정이며, 외부 기여의 권리 처리와 공개 패키지 배포는 확정하지 않았다.
+Status: These are the procedures for code, test, and documentation changes in the local implementation. The license and CLA are undecided, and the handling of rights for external contributions and the distribution of public packages are not settled.
 
-## 기여 유형
-- 문서: 명확·간결, 반복적 템플릿 문구 금지.
-- 설계: 계획과 구현/검증/운영 상태를 명확히 구분.
-- 코드: 대상 패키지의 소유 경계를 지키고 변경 범위만 검증한다. 테스트·빌드 명령은 루트와 대상 패키지의 `package.json`에서 확인한다.
+## Types of contributions
+- Documentation: clear and concise, without repetitive template language.
+- Design: clearly distinguish plans from implementation, verification, and production state.
+- Code: respect the target package's ownership boundaries and verify only the changed scope. Check test and build commands in the root and target package `package.json` files.
 
-## 코드 변경
+## Code changes
 
-- API 요청·응답은 [OpenAPI](api/openapi.yaml), DB 구조는 [DBML](db/schema.dbml), 제품 범위는 [명세](docs/product/02-spec.md)를 함께 맞춘다.
-- SDK 변경은 해당 SDK 테스트·빌드와 `npm run check:browser-size`, 관리자 변경은 `npm run check:admin`, 저장/수집 변경은 관련 테스트와 타입 검사를 실행한다. 변경 없는 SDK의 크기 검사는 생략할 수 있다.
-- 실행한 검사·생략한 검사와 이유·운영 미확인 범위를 [검증 기록](VALIDATION.md)에 남긴다. 존재하지 않는 lint나 CI 성공을 가정하지 않는다.
-- 작은 논리 단위로 커밋하고 관계없는 변경을 포함하지 않는다. 버전 승격·푸시·게시·배포는 해당 작업에서 명시적으로 정한다.
+- Keep API requests and responses aligned with [OpenAPI](api/openapi.yaml), the database structure aligned with [DBML](db/schema.dbml), and product scope aligned with the [specification](docs/product/02-spec.md).
+- For SDK changes, run the relevant SDK tests and build plus `npm run check:browser-size`; for administrator changes, run `npm run check:admin`; and for storage or collection changes, run the relevant tests and type checks. You may skip the size check when the SDK did not change.
+- Record executed checks, skipped checks and reasons, and production scope that remains unverified in the [validation record](VALIDATION.md). Do not assume that lint exists or that CI passed.
+- Commit small logical units and exclude unrelated changes. Version bumps, pushes, publications, and deployments are decided explicitly for the task at hand.
 
-## 검토 기준
-- 프라이버시: 허용 목록 밖 데이터/영속 식별자/쿠키/저장소 사용 금지([ADR 0003](./docs/adr/0003-minimal-privacy-preserving-events.md)).
-- 성능: 동기 수집 I/O 금지, 렌더링/계산 대기 금지.
-- API 범위: 구현 전에 실제 전송 계약과 DB 계약을 확정한다([ADR 0002](./docs/adr/0002-contract-source-of-truth.md)).
+## Review criteria
+- Privacy: do not use data outside the allowlist, persistent identifiers, cookies, or storage ([ADR 0003](./docs/adr/0003-minimal-privacy-preserving-events.md)).
+- Performance: no synchronous collection I/O and no waiting for rendering or calculations.
+- API scope: settle the actual delivery contract and database contract before implementation ([ADR 0002](./docs/adr/0002-contract-source-of-truth.md)).
 
-## 문서
-문서의 상대 링크는 실제 파일로 연결한다. 구현하지 않은 기능과 실행하지 않은 검증을 완료 상태로 기록하지 않는다.
+## Documentation
+Relative links in documentation point to real files. Do not record unimplemented features or checks that were not run as completed.
 
-## 라이선스
-라이선스와 CLA는 미결정. 확정 전 권리를 가정하지 않는다.
+## License
+The license and CLA are undecided. Do not assume rights before they are settled.
