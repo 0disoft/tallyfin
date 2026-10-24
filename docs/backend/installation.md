@@ -1,5 +1,8 @@
 # Production Installation Configuration Preparation
 
+For the bundled self-hosted provider, follow [Better Auth setup](better-auth.md)
+alongside this guide. External OIDC installation remains supported.
+
 Status: The same-origin paths, OIDC client, server verifier, and local configuration tools have been implemented.
 Real provider, account, domain, and D1 values and remote installation verification do not exist yet. The commands below
 prepare local files only. They do not automatically perform registration, grant authorization, remote database application, or deployment.

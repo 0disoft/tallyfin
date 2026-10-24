@@ -7,6 +7,7 @@ Status: Partial implementation. npm workspaces and the packages below are implem
 - packages/storage-d1 — D1 analytics storage adapter (atomic commits, CAS guards, quotas, and expired-data cleanup). Local implementation and verification are complete.
 - apps/collector — Native Cloudflare Worker fetch ingestion boundary (no framework). Minimal browser collection is implemented and verified locally.
 - apps/admin — Private `@tallyfin/admin` workspace and React/Vite administrator app. The existing administrator source was moved and connected to root run and verification commands. Follows [ADR 0007](../adr/0007-admin-application.md).
+- apps/auth — Private `@tallyfin/auth` workspace; optional Better Auth/OAuth provider Worker and a separate authentication D1. Follows [ADR 0009](../adr/0009-self-hosted-better-auth.md). It does not enter Collector or SDK bundles.
 - packages/browser — Browser SDK (no external runtime dependencies and no server core or D1 runtime). Local implementation and verification are complete.
 - packages/server — Server publishing SDK (awaited `send` plus caller-owned lifecycle and credential callback, no external runtime dependencies, and no browser, core, or storage runtime). Local implementation and verification are complete, and local Node, Worker, and D1 integration has been verified.
 - packages/auth-oidc — OIDC JWT verification adapter for servers (`jose ^6`, no Cloudflare or D1 dependency). The collector connects it explicitly, and it is not included in core or the SDKs.

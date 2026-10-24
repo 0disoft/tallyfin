@@ -1,0 +1,15 @@
+{
+  "name": "@tallyfin/auth",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "wrangler types ../../.tmp/auth-worker-types.d.ts --env-interface AuthEnv --config wrangler.jsonc && tsc --noEmit",
+    "test": "node --test --test-timeout=60000 test/*.test.ts"
+  },
+  "dependencies": {
+    "better-auth": "^1",
+    "@better-auth/oauth-provider": "^1"
+  }
+}

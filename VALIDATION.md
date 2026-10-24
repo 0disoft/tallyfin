@@ -1,5 +1,37 @@
 # Validation
 
+## Self-hosted Better Auth administrator provider — 2026-10-25
+
+Added the optional `apps/auth` Worker, a separate Better Auth v1 D1 schema,
+private idempotent administrator/client bootstrap, closed signup and management
+routes, an administrator-email session gate, secure login/password-change pages,
+ES256 OIDC PKCE and rotating refresh tokens. `auth:prepare` validates a separate
+auth DB and the exact existing installation topology without changing the
+five-file installation format. Root type checks now include the auth workspace.
+
+- Auth tests: 4/4 passed (closed signup/idempotence, real PKCE/Collector verifier
+  compatibility plus refresh rotation/replay refusal, second-account denial,
+  and native Workers/D1 login, origin checks, cookie security, body cap and PII).
+- Auth topology test: 1/1 passed, including shared-DB, client, issuer host,
+  resource, algorithm, scope and private-field rejection.
+- `npm run typecheck`: passed across Collector, administrator and auth.
+- `npm run test:admin`: 375/375 passed.
+- `npm run check --prefix tools/contracts`: 69/69 passed.
+- Auth Wrangler dry run: passed, 2814.97 KiB / 479.65 KiB gzip before minification.
+- Configured production administrator build: passed.
+- `npm audit --omit=dev`: zero reported vulnerabilities in production dependencies.
+- `git diff --check`: passed.
+
+Source-of-truth changes: product specification, ADR 0009 and workspace boundaries.
+Analytics OpenAPI/DBML contracts are unchanged; authentication owns its separate
+upstream schema snapshot. Better Auth and its OAuth plugin are new major-v1
+runtime dependencies. No CI runners or hygiene policies changed. Remote resources
+and migrations were authorized for the initial installation: two isolated D1s,
+one auth migration and fourteen analytics migrations applied. Initial credentials
+are protected outside Git with Windows user DPAPI, never printed. Deployment and
+live verification are recorded separately when completed. Full unrelated backend
+and SDK suites were not rerun; no ingestion or SDK code changed.
+
 This guide explains which commands to use to verify Tallyfin changes. The commands below are based on the scripts declared in `package.json` at the repository root, `apps/admin/package.json`, and `tools/contracts/package.json`.
 
 Inline paths in commands and validation records are resolved from the repository root unless stated otherwise (paths such as `apps/admin/...` are also under the root). Dated reports in root documents and `docs/validation/history-NN.md` are evidence from when they were written. They do not automatically replace current code or the current remote state, so reproduce them with a new record using the same commands and scope.
