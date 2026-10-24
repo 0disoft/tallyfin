@@ -1,28 +1,28 @@
-# ADR 0003: 최소·프라이버시 우선 이벤트
+# ADR 0003: Minimal, Privacy-First Events
 
-상태: Draft(계획). 구현/검증되지 않음. 활성화 전 미결정 항목 확정 필요.
+Status: Draft (plan). Not implemented or verified. Undecided items must be settled before activation.
 
-## 결정
-경계가 정해진 최소 메타데이터와 카운터만 수집한다. 원시 입력·결과·콘텐츠는 수집하지 않는다.
+## Decision
+Collect only bounded minimal metadata and counters. Do not collect raw input, results, or content.
 
-## 허용 목록
-- 프로젝트 ID(라우팅 메타데이터, 비밀/인증 아님)
-- 프로젝트에 등록된 이벤트명과 스키마 버전
-- 프로젝트별로 검토·등록된 속성: 제한된 enum/불리언/카운터. 추가 수치 지표는 범위·집계 방식·개인정보 위험을 먼저 검토한다.
+## Allowlist
+- Project ID (routing metadata, not a secret or authentication credential)
+- Event names and schema versions registered for the project
+- Per-project properties that have been reviewed and registered: bounded enums, booleans, and counters. Additional numeric metrics are reviewed first for scope, aggregation method, and privacy risk.
 
-알 수 없는 이벤트·속성·버전과 잘못된 자료형/범위는 거부한다. 값 종류·속성 개수·길이·집계 조합 수에 한도를 둔다. `tool`, `mode` 같은 필드는 Sembom의 선택 속성이며 공통 필수 필드가 아니다. 제품 범위는 [ADR 0004](./0004-general-product-analytics.md)에서 확장했으며 이 문서의 개인정보 제한은 유지한다.
+Unknown events, properties, and versions, as well as invalid data types and ranges, are rejected. Limits apply to value types, property count, length, and the number of aggregation combinations. Fields such as `tool` and `mode` are optional Sembom properties, not common required fields. Product scope was expanded in [ADR 0004](./0004-general-product-analytics.md), and the privacy restrictions in this document remain.
 
-## 금지 목록
-원시 입력/결과/텍스트/건강·금융 정보/이메일, 계정·주문·파일 식별자, 전체 URL 쿼리·해시·리퍼러 경로, DOM, 세션 리플레이, 핑거프린트, 영속 식별자, 분석 쿠키, localStorage/sessionStorage. 요청 본문 로그 금지. 이벤트 등록으로 이 금지 목록을 우회할 수 없다.
+## Prohibited list
+Raw input, results, text, health or financial information, email addresses, account, order, and file identifiers, full URL queries, hashes, and referrer paths, the DOM, session replay, fingerprinting, persistent identifiers, analytics cookies, and localStorage or sessionStorage. Do not log request bodies. Event registration cannot bypass this prohibited list.
 
-## 일시적 보호
-보호 목적의 일시적 요청 IP는 분석 저장이 아니며, 활성화 전 정책 확정이 필요하다.
+## Temporary protection
+A temporary request IP for protection is not analytics storage, and a policy must be settled before activation.
 
-## 집계 한계
-봇/스팸/차단/전송 누락으로 집계가 왜곡될 수 있다. 초기 목표·완료율은 등록된 작업 흐름의 메모리 상태로 계산한다. 새로고침·기기·브라우저/서버를 가로지르는 연결, 임의 다단계 퍼널, 정확한 고유/재방문 사용자 수, 어트리뷰션은 초기 범위 밖이다.
+## Aggregation limits
+Bots, spam, blocking, and missing delivery can distort aggregates. Initial goals and completion rates are calculated from the in-memory state of registered workflows. Cross-refresh, cross-device, and browser-to-server linking, arbitrary multi-step funnels, exact unique and returning user counts, and attribution are outside the initial scope.
 
-## 보존
-[ADR 0005](./0005-event-and-aggregation-contract.md)에 일별 집계 90일·영수증 48시간·최소 시도 상태 72시간을 확정했다. 원시 이벤트와 방문자 정보는 저장하지 않는다. 실제 정리 작업은 구현 전이다.
+## Retention
+[ADR 0005](./0005-event-and-aggregation-contract.md) settled 90-day daily aggregates, 48-hour receipts, and 72-hour minimal attempt state. Raw events and visitor information are not stored. Actual cleanup work was not yet implemented.
 
-## 관리자 접근
-관리자 인증과 프로젝트별 권한이 필요하며 메커니즘은 미결정. 소비 서비스의 사용자 토큰을 분석용으로 차용하지 않는다.
+## Administrator access
+Administrator authentication and per-project permissions are required, and the mechanism is undecided. Do not borrow a consumer service's user tokens for analytics.

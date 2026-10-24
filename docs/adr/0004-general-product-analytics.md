@@ -1,17 +1,17 @@
-# ADR 0004: 일반 제품 분석 플랫폼으로서의 Tallyfin
+# ADR 0004: Tallyfin as a General Product Analytics Platform
 
-- 상태: 승인됨
-- 날짜: 2026-10-08
+- Status: Accepted
+- Date: 2026-10-08
 
-## 맥락
-초기 명세는 Sembom의 이벤트 6종과 계산 방문을 공통 제품 요구사항으로 두었다. 소유자는 2026-10-08에 Tallyfin을 대부분의 Rodisoft 서비스에서 사용하는 범용 제품 분석 도구로 설계하도록 정정했다. Sembom은 첫 적용 사례다.
+## Context
+The initial specification treated Sembom's 6 events and calculator visits as common product requirements. On 2026-10-08, the owner corrected the direction so that Tallyfin would be a general product analytics tool used by most Rodisoft services. Sembom is the first application.
 
-## 결정
-이벤트 집합과 허용 속성은 프로젝트별로 등록·검토한다. 이름·자료형·허용 값·범위·개수·길이·집계 조합 수에 한도를 두고 정의는 버전으로 관리한다. 공통 제품은 특정 서비스 이벤트명을 요구하지 않는다. Sembom의 6종은 [연동 예시](../integrations/sembom.md)로 분리한다.
+## Decision
+Event sets and allowed properties are registered and reviewed per project. Limits apply to names, data types, allowed values, ranges, counts, lengths, and the number of aggregation combinations, and definitions are versioned. The shared product does not require event names from a particular service. Sembom's 6 events are separated into an [integration example](../integrations/sembom.md).
 
-서비스별로 시작·성공·실패와 발행 출처를 정의한다. 같은 집계 대상의 시작 시도 중 완료한 비율을 계산하며, 단순 이벤트 수를 나눠 전역 완료율을 만들지 않는다. 브라우저와 서버의 같은 업무 기록은 재전송 중복과 별도로 구분한다.
+Each service defines start, success, and failure events and the publishing source. The system calculates the completed proportion among start attempts for the same aggregation target and does not divide simple event counts to create a global completion rate. Browser and server records of the same task are kept distinct from retransmission duplicates.
 
-이 결정은 초기 명세의 전역 계산기 이벤트와 방문 기준을 대체하고, [ADR 0003](./0003-minimal-privacy-preserving-events.md)의 속성 허용 범위를 프로젝트별 등록 기준으로 수정한다. 개인정보 금지 목록과 [초기 기술 방향](./0001-initial-architecture-boundaries.md)은 유지한다. MVP는 건수·추이·허용 속성별 집계와 같은 브라우저 메모리 작업 흐름의 완료율이다. 서버 연동·임의 다단계 퍼널·새로고침/기기 간 연결은 후속 계약과 구현으로 둔다.
+This decision replaces the initial specification's global calculator events and visit basis and changes the property allowlist in [ADR 0003](./0003-minimal-privacy-preserving-events.md) to per-project registration. The privacy prohibited list and [initial technical direction](./0001-initial-architecture-boundaries.md) remain. The MVP provides event counts, trends, aggregates by allowed property, and completion rates for workflows held in the same browser's memory. Server integration, arbitrary multi-step funnels, and cross-refresh or cross-device linking remain follow-up contracts and implementation work.
 
-## 결과
-프로젝트별 설정·권한·집계 격리가 필요하다. 서비스 간 정의가 다르면 전환율을 직접 비교하지 않는다. 정확한 고유/재방문 사용자 수는 초기 범위 밖이다. 첫 파일럿 외에 성격이 다른 서비스를 추가 적용하여 특정 제품에 종속된 부분을 확인한다. 이 결정의 승인과 런타임 구현·운영 활성화는 별개다.
+## Consequences
+Per-project configuration, permission, and aggregate isolation are required. When definitions differ between services, their conversion rates are not compared directly. Exact unique and returning user counts are outside the initial scope. Add a service with different characteristics beyond the first pilot to identify parts tied to a particular product. Approval of this decision is separate from runtime implementation and production activation.

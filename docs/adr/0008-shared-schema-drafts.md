@@ -1,28 +1,14 @@
-# ADR 0008 — 프로젝트 소유자가 공유하는 스키마 초안
+# ADR 0008 — Shared Schema Drafts Owned by the Project Owner
 
-상태: 로컬 구현. 원격 마이그레이션·배포는 별도 승인 범위.
+Status: Local implementation. Remote migration and deployment require separate approval.
 
-초안 파일만으로는 새로고침·다른 기기에서 이어 쓰기 어렵다. 기존 D1에 프로젝트별 한 행을
-추가하고 관리자 owner에게만 조회·조건부 저장을 허용한다. reader와 publisher는 접근하지
-못한다. 초안은 발행된 정의가 아니므로 미완성 JSON과 잘못된 버전 입력도 그대로 보존한다.
+A draft file alone is hard to continue after a refresh or on another device. Add one row per project to the existing D1 database and allow only the administrator owner to read and conditionally save it. Readers and publishers cannot access it. A draft is not a published definition, so incomplete JSON and invalid version input are preserved as entered.
 
-GET/PUT `/v1/projects/{projectId}/schemas/draft`를 사용한다. 생성은 expectedRevision=null,
-수정은 마지막으로 조회한 32자 revision을 요구하고 저장마다 새 revision을 발급한다.
-권한 재검사와 CAS·결과 조회는 같은 D1 batch에서 수행한다. DB가 경합을 판단하므로
-다른 Worker·기기에도 적용된다. [D1 batch 계약](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)을 따른다.
-재요청도 오래된 revision이면 409다. 불확실한 저장은 자동 재시도하지 않고 명시적 조회로
-내용을 확인한다. 충돌 때는 서버 초안·현재 입력을 보여준 뒤 사용자가 다음 동작을 고른다.
+Use GET/PUT with `/v1/projects/{projectId}/schemas/draft`. Creation uses expectedRevision=null, and an update requires the 32-character revision last read and issues a new revision on every save. Permission rechecks and CAS and result queries run in the same D1 batch. The database decides contention, so the rule also applies across Workers and devices. Follow the [D1 batch contract](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch).
+A repeated request with a stale revision returns 409. An uncertain save is not retried automatically; an explicit query checks its contents. On conflict, show the server draft and current input, then let the user choose the next action.
 
-저장은 명시적 동작이며 자동 저장·발행·버전 예약·검토 확인을 포함하지 않는다. 다른 소유자의
-초안을 알리지 않고 덮지 않으며, 불러오기는 현재 입력 교체 확인과 새 검증/개인정보 검토가
-필요하다. 파일 기능은 독립적으로 유지한다. 저장 가능한 내용은 기존 128KiB 다운로드 파일
-예산과 같고 서버 입력은 포장 여유를 포함해 129KiB로 제한한다.
+Saving is an explicit action and does not include auto-save, publishing, version reservation, or review confirmation. Do not overwrite another owner's draft without notice, and loading a draft requires confirmation to replace current input and a new validation and privacy review. File functionality remains independent. Savable content has the same existing 128KiB download-file budget, and server input is limited to 129KiB to allow for packaging overhead.
 
-관리자가 작성한 초안 원문은 이벤트/방문자 원문과 별도의 control-plane 데이터다. 소유자
-사이에서 공유되고 프로젝트 수명 동안 한 행만 유지하며 백업에도 포함한다. 프로젝트 삭제는
-초안을 연쇄 삭제한다. 개인정보·비밀값은 넣지 않도록 화면에 안내하며 요청·응답 본문과
-초안 원문을 로그·집계·관리 변경 이력에 넣지 않는다. 기존 90일 집계 보존과 혼동하지 않는다.
-삭제 API·이력 버전·자동 병합·버전 예약은 이번 범위에 포함하지 않는다.
+The draft text an administrator writes is control-plane data separate from event and visitor raw data. It is shared among owners, kept as one row for the project lifetime, and included in backups. Deleting a project cascades to its draft. The screen warns users not to include personal data or secrets, and request and response bodies and draft text are excluded from logs, aggregates, and administrator change history. Do not confuse this with the existing 90-day aggregate retention. Delete APIs, history versions, automatic merging, and version reservation are outside this scope.
 
-DB를 먼저 확장한 뒤 Collector와 관리자를 배포한다. 이전 코드로 롤백할 때 새 테이블을
-남겨 초안을 보존한다. 운영 적용·백업 보존 기간 변경은 이번 로컬 구현에서 실행하지 않는다.
+Extend the database first, then deploy the Collector and administrator. When rolling back to older code, keep the new table so drafts are preserved. Production application and backup-retention changes were not run for this local implementation.

@@ -1,34 +1,33 @@
-# ADR 0001 — 초기 아키텍처 경계
+# ADR 0001 — Initial Architecture Boundaries
 
-상태: 제안됨 / 초기 계획 기록. 구현·검증 상태가 아닙니다.
+Status: Proposed / record of the initial plan. This is not an implementation or verification status.
 
-## 맥락
+## Context
 
-Tallyfin은 여러 서비스에서 쓰는 최소·고속·프라이버시 우선 제품 이벤트 분석을 목표로 합니다. Sembom 계산기 포털은 첫 적용 사례입니다. 범용 제품 범위는 [ADR 0004](./0004-general-product-analytics.md)를 따릅니다. 현재 저장소에는 문서만 있고 애플리케이션/런타임/배포는 없습니다.
+Tallyfin aims to provide minimal, fast, privacy-first product event analytics used by multiple services. The Sembom calculator portal is the first application. General product scope follows [ADR 0004](./0004-general-product-analytics.md). At this point the repository contained only documentation; there was no application, runtime, or deployment.
 
-## 초기 구현 방향
+## Initial implementation direction
 
-- 언어는 TypeScript.
-- 브라우저 SDK는 외부 의존성 없이.
-- Worker는 Cloudflare 네이티브 fetch, 프레임워크 없이.
-- D1 분석 저장은 별도 어댑터로 분리.
-- 코어/SDK는 사설 ZDP나 Cloudflare에 의존하지 않는 이식 가능한 구조.
+- The language is TypeScript.
+- The browser SDK has no external dependencies.
+- The Worker uses Cloudflare's native fetch with no framework.
+- D1 analytics storage is isolated in a separate adapter.
+- Core and SDK code have a portable structure without private ZDP or Cloudflare dependencies.
 
-## 결과
+## Consequences
 
-- 이식성: 코어/SDK를 다른 제품/호스트로 옮길 수 있습니다.
-- 격리: 수집 실패가 연결된 서비스의 화면이나 업무 처리에 영향을 주지 않습니다.
-- 제약: D1 쓰기 처리량이 규모를 제한할 수 있어 확장 전에 측정이 필요합니다.
+- Portability: core and SDK code can move to another product or host.
+- Isolation: collection failures do not affect the connected service's UI or business processing.
+- Constraint: D1 write throughput may limit scale, so it must be measured before scaling.
 
-## 프레임워크 없음
+## No framework
 
-수집 Worker는 프레임워크를 두지 않는 계획입니다. 관리자 대시보드의 프레임워크는 미정입니다.
+The plan is to keep the collection Worker framework-free. The administrator dashboard framework is undecided.
 
-2026-10-11 관리자 미결정은 [ADR 0007](./0007-admin-application.md)의 React/Vite
-채택으로 대체했다. 위 내용은 초기 계획의 기록이며 수집기 프레임워크는 추가하지 않는다.
+On 2026-10-11, the administrator decision was superseded by the React/Vite adoption in [ADR 0007](./0007-admin-application.md). The text above is a record of the initial plan, and no framework is added to the collector.
 
-## 남은 결정
+## Remaining decisions
 
-패키지 범위, 빌드 스크립트, 도메인, 리소스, 시크릿, 인증, 보관, 라이선스, 전송 간격/용량/재시도/dedupe TTL/요청 크기 한도, 원시 보관 기간.
+Package scope, build scripts, domain, resources, secrets, authentication, retention, license, delivery interval, batch size, retries, dedupe TTL, request size limits, and raw retention period.
 
-관련: [아키텍처](../../ARCHITECTURE.md), [명세](../product/02-spec.md).
+Related: [architecture](../../ARCHITECTURE.md), [specification](../product/02-spec.md).

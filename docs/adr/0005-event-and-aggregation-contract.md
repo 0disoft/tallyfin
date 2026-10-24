@@ -1,27 +1,18 @@
-# ADR 0005: 이벤트 전송과 집계 계약 v0.1
+# ADR 0005: Event Delivery and Aggregation Contract v0.1
 
-- 상태: 계약 확정. 코어 검증·D1 저장 어댑터·최소 브라우저 수집기를 로컬에서 구현·검증했고 배포 전이다.
-- 날짜: 2026-10-08
+- Status: Contract settled. Core validation, the D1 storage adapter, and the minimal browser collector were implemented and verified locally and are pre-deployment.
+- Date: 2026-10-08
 
-## 결정
+## Decision
 
-공개 브라우저 수집과 인증된 관리자 조회를 분리한다. 이벤트마다 무작위 eventId를
-두고 원문 대신 중복 영수증과 payload 해시를 48시간 유지한다. 작업 완료율은 별도의
-무작위 attemptId로 같은 브라우저 메모리의 시작·종료를 연결한다. 방문자 식별자는 두지 않는다.
+Separate public browser collection from authenticated administrator queries. Each event has a random eventId, and duplicate receipts and payload hashes are retained for 48 hours instead of raw content. Work completion rates use a separate random attemptId to link a start and finish held in the same browser memory. No visitor identifier is kept.
 
-일반 이벤트는 발생일, 목표는 시작일 기준으로 센다. 시간대는 프로젝트 생성 시
-고정하고 스키마 변경은 새 버전으로 발행한다. 역순 도착한 종료는 시작이 실제로
-수신될 때까지 목표에 포함하지 않는다. 영수증·시도·할당량·집계는 한 트랜잭션으로 반영한다.
+General events are counted by occurrence date, and goals are counted by start date. The timezone is fixed when a project is created, and schema changes are published as new versions. An end that arrives out of order is excluded from the goal until its start is actually received. Receipts, attempts, quotas, and aggregates are applied in one transaction.
 
-배치는 최대 20개·16KiB, 시도 수명은 24시간, 최소 연결 상태는 72시간,
-일별 집계는 90일이다. 자유 텍스트·원문·방문자 ID는 저장하지 않는다. 관리자 조회는
-신뢰하는 검증기의 issuer/subject와 프로젝트 grant를 요구하며 미설정 배포는 닫는다.
+Batches contain at most 20 events and 16KiB, attempt lifetime is 24 hours, minimum connection state is 72 hours, and daily aggregates are retained for 90 days. Free text, raw content, and visitor IDs are not stored. Administrator queries require the issuer and subject from a trusted verifier plus a project grant, and an unconfigured deployment stays closed.
 
-## 결과
+## Consequences
 
-서버 수집, 새로고침·기기 간 연결, 설정 쓰기 API와 운영 인증 제공자 선정은 후속이다.
-validation_error는 자동으로 종료 실패가 되지 않는다. 실패 이벤트가 없는 목표는
-실패 건수를 null로 표시한다. 오리진 검사는 이벤트 진위나 전달 완전성을 증명하지 않는다.
+Server collection, cross-refresh and cross-device linking, the settings-write API, and selection of a production identity provider are follow-ups. A validation_error does not automatically become a terminal failure. A goal with no failure events shows a null failure count. Origin checks do not prove event authenticity or complete delivery.
 
-세부 기준은 [전송·집계 계약](../backend/event-contract.md), 요청과 응답은
-[OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml)을 따른다.
+Detailed rules are in the [delivery and aggregation contract](../backend/event-contract.md), requests and responses are in [OpenAPI](../../api/openapi.yaml), and the storage structure is in [DBML](../../db/schema.dbml).

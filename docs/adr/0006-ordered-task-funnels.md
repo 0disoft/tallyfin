@@ -1,118 +1,51 @@
-# ADR 0006: 순서가 있는 작업 퍼널과 출처 간 연결
+# ADR 0006: Ordered Task Funnels and Cross-Source Linking
 
-- 상태: 계약·코어·버전별 등록/검증/발행/정의 조회와 연결 상태·단계 집계 저장, 수집
-  경로의 연결 이벤트 수신·서버 SDK 전송·브라우저 SDK 퍼널 전송·관리자 SDK 코드 생성,
-  reader/owner 퍼널 일별 조회 API와 관리자 퍼널 분석 화면·CSV·단계 편집 폼을 로컬 연결했다.
-- 날짜: 2026-10-11
+- Status: The contract, core logic, per-version registration, validation, publishing, definition lookup, connection-state and step-aggregate storage, connection-event ingestion on collection paths, server SDK link delivery, browser SDK funnel delivery, administrator SDK code generation, the reader/owner funnel daily query API, and the administrator funnel analysis screen, CSV, and step edit form were connected locally.
+- Date: 2026-10-11
 
-## 결정
+## Decision
 
-다단계 퍼널은 방문자나 세션이 아닌 한 작업의 이정표를 센다. 프로젝트의 버전별
-등록 이벤트 중 2~10개를 순서대로 선택하고 각 단계의 browser/server 출처를 고정한다.
-첫 버전은 단계별로 다른 이벤트를 사용하며, 반복 작업은 새 runId로 시작한다.
-퍼널은 한 스키마에 최대 10개이며 전체 정의는 기존 32KiB 예산을 공유한다.
+A multi-step funnel counts the milestones of one task, not visitors or sessions. Select 2 to 10 events in order from a project's registered events for a schema version, and fix the browser or server source for each step. The first version uses a different event for each step, and a repeated task starts with a new runId. A schema can hold at most 10 funnels, and all definitions share the existing 32KiB budget.
 
-연결은 `funnel = {funnelId, runId, startedAt}`이다. runId는 작업마다 새 UUIDv4를 만든다.
-프로젝트·스키마 버전·퍼널·시작 시각·분류 값은 연결이 살아 있는 동안 바꾸지 않는다.
-실제 서비스의 주문 번호·파일명·계정 ID를 쓰거나 방문자 ID로 재사용하지 않는다.
-한 이벤트는 한 퍼널 작업에 명시적으로 연결하며, 같은 이벤트 정의를 다른 퍼널에서
-선택할 수 있다. 기존 workflow와 한 이벤트를 동시에 연결하는 기능은 두지 않는다.
+A link is `funnel = {funnelId, runId, startedAt}`. A new UUIDv4 is created for runId for each task. The project, schema version, funnel, start time, and classification values do not change while the link is alive. Do not use an actual service's order number, file name, or account ID, and do not reuse a visitor ID. An event is explicitly linked to one funnel task, and the same event definition can be selected in a different funnel. There is no feature that links one event to both a workflow and a funnel.
 
-단계마다 최초 논리 발생 시각을 유지한다. 재전송은 원래 eventId·발생 시각을 유지하고,
-같은 작업 단계에 새 eventId를 쓰더라도 발생 시각이 같으면 단계 중복이다. 다른 시각으로
-이미 본 단계를 다시 보내거나 단계 순서와 반대인 시각을 보내면 attempt_conflict(409)다.
-밀리초 시각이 같을 수 있으므로 같은 시각의 서로 다른 단계는 정의의 순서로 구분한다.
-실패 뒤 재시도처럼 새로운 시도로 평가할 작업은 새 runId를 쓴다.
+The first logical occurrence time is preserved for each step. A retransmission keeps its original eventId and occurrence time, and even when a new eventId is used for the same task step, the same occurrence time makes it a duplicate step. Resending an already-seen step at a different time or sending a time that reverses the step order produces attempt_conflict (409). Millisecond times can coincide, so different steps with the same time are ordered by their definition order. Work that should be evaluated as a new attempt, such as a retry after failure, uses a new runId.
 
-모든 단계는 시작 뒤 24시간 이내여야 하며 첫 단계의 발생 시각은 startedAt과 같다.
-연결 상태는 startedAt + 72시간까지만 유지한다. 영수증은 기존 source별 48시간 중복
-기준을 유지하고, 단계 집계는 시작일을 기준으로 90일 보존한다. 프로젝트-local 날짜
-끝 + 48시간까지 집계는 잠정값이다. 이 기준은 저장·조회 구현에서 적용할 계약이다.
+Every step must occur within 24 hours after the start, and the first step's occurrence time must equal startedAt. Link state is retained only until startedAt + 72 hours. Receipts keep the existing 48-hour per-source deduplication rule, and step aggregates are retained for 90 days based on the start date. Aggregates remain provisional through the project-local date end + 48 hours. This contract is applied by the storage and query implementation.
 
-## 집계와 전달 순서
+## Aggregation and delivery order
 
-수신 순서가 뒤집혀도 최소 연결 상태에 단계 시각을 보관한다. 실제 첫 단계부터
-연속으로 관찰한 단계까지만 reachedCount를 더한다. 1·3·4가 왔으면 1만 세고,
-2가 나중에 오면 2·3·4를 같은 시작일 집계에 함께 반영한다. 첫 단계가 끝내 없으면
-그 작업은 퍼널의 분모와 분자에 들어가지 않는다. 일반 이벤트 건수와는 구분한다.
+Even when arrival order is reversed, step times are kept in minimal link state. reachedCount increases only from the actual first step through the contiguous observed steps. If 1, 3, and 4 arrived, only 1 is counted; when 2 arrives later, 2, 3, and 4 are reflected together in the aggregate for the same start date. If the first step never arrives, the task is excluded from both the funnel denominator and numerator. This is separate from general event counts.
 
-단계 도달 수는 항상 `첫 단계 >= 두 번째 >= … >= 마지막`이다. 직전 단계 대비
-전환율과 첫 단계 대비 도달률을 나누고, 분모가 0이면 null이다. 인접 단계의 차이는
-“다음 단계 미도달”로 표시한다. 진행 중·전달 누락도 포함하므로 실패나 확정 이탈로
-단정하지 않는다. 실패 원인은 별도 등록 이벤트로 분석한다.
+The step reached count always satisfies `first step >= second step >= … >= last step`. The system calculates conversion against the immediately preceding step and reach rate against the first step; the result is null when the denominator is 0. The difference between adjacent steps is labeled "did not reach the next step." Because in-progress and missing-delivery tasks are included, do not treat that as failure or confirmed abandonment. Failure causes are analyzed through separately registered events.
 
-## 인증 경계
+## Authentication boundary
 
-browser는 기존 공개 수집의 Origin·한도 검사를, server는 기존 발행자 검증기와
-project_publishers 권한을 사용한다. 단계 정의와 수신 경로의 출처가 맞아야 한다.
-발행자 권한은 쓰기 직전에도 검사하고 영수증·연결·한도·집계를 원자적으로 반영해야 한다.
-runId는 인증 수단이나 소유권 증명이 아니다. 브라우저 단계는 공개·비신뢰 관찰이고,
-서버의 확인된 완료를 연결해도 앞선 브라우저 관찰까지 인증된 행위가 되는 것은 아니다.
+The browser path uses the existing public collection Origin and quota checks, and the server path uses the existing publisher verifier and project_publishers permission. The step definition and the ingestion path source must match. Publisher permission is checked immediately before the write, and receipts, links, quotas, and aggregates must be applied atomically. runId is not an authentication method or proof of ownership. Browser steps are public, untrusted observations, and linking a confirmed server completion does not make earlier browser observations authenticated actions.
 
-호스트 서비스는 해당 업무 요청에서 받은 무작위 연결 정보를 검증한 뒤 작업 컨텍스트에
-유지하고 실제 성공을 확인한 서버 코드에서 완료를 발행한다. 요청의 성공 플래그나
-임의 이벤트명을 그대로 서버 이벤트로 전달하지 않는다. 서비스 내부 업무 ID와 분석 ID를
-구분하며 Tallyfin에는 내부 업무 ID를 보내지 않는다. 분류는 검토된 유한 값만 유지한다.
-서버만으로 이루어진 퍼널도 같은 계약을 따른다.
+The host service validates the random link information received with the business request, keeps it in task context, and publishes completion from server code that confirms actual success. Do not pass the request's success flag or an arbitrary event name directly as a server event. Keep the service's internal business ID separate from the analytics ID and do not send the internal business ID to Tallyfin. Keep only reviewed finite classification values. Funnels made entirely on the server follow the same contract.
 
-## 브라우저 퍼널 프로필
+## Browser funnel profile
 
-브라우저 연결 전송은 기본 SDK 엔트리와 분리한 선택 프로필
-`@tallyfin/browser/funnels`의 `createTallyfinFunnels(options, host?)`가 맡는다. 버퍼·재시도·
-배치 전송은 기본 클라이언트와 같은 메모리 전송을 공유하고 별도 저장소나 엔드포인트를
-만들지 않는다. 프로필은 workflow 진입점을 두지 않으므로 workflow로 시작한 작업을
-퍼널 프로필로 이어받지 않고 그 반대도 같다.
+Browser link delivery is handled by the optional profile `@tallyfin/browser/funnels` and its `createTallyfinFunnels(options, host?)`, separate from the default SDK entry. Its buffer, retry, and batch delivery share the same in-memory transport as the default client and create no separate storage or endpoint. The profile has no workflow entry point, so work started as a workflow is not continued in the funnel profile, and the reverse also does not happen.
 
-`createFunnelRun(id)`는 `{funnelId, runId, startedAt}` 동결 값을 만들고 이벤트를 넣지
-않으며 네트워크·저장소·방문자 식별자를 쓰지 않는다. runId는 매번 새 UUIDv4다. 첫 단계가
-browser가 아닌 퍼널은 브라우저에서 작업을 만들 수 없고, 서버에서 시작해 브라우저로 넘어온
-연결은 `trackFunnel`로 browser 단계만 받는다. `track`은 일반 이벤트만 받고 등록된 퍼널
-단계 이름을 거부한다.
+`createFunnelRun(id)` creates a frozen `{funnelId, runId, startedAt}` value, adds no events, and uses no network, storage, or visitor identifier. runId is a new UUIDv4 every time. A funnel whose first step is not browser cannot be created in the browser, and a link started on the server and handed to the browser accepts only browser steps through `trackFunnel`. `track` accepts general events only and rejects registered funnel step names.
 
-`trackFunnel(name, properties, link, occurredAt?)`은 link를 복사해 `funnelId`·UUIDv4
-runId·엄격한 UTC startedAt을 검증하고 그 뒤에는 바꾸지 않는다. 수동 재시도에는 원래
-occurredAt을 넘겨 최초 논리 발생 시각을 유지하며, 같은 발생 시각의 재전송은 위 중복
-규칙으로 단계 중복이다. 분류값은 한 퍼널 안에서 단계마다 같은 유한 값 집합이어야 하고
-단계 사이에서 어긋나면 서버가 거부하므로 호스트는 연결이 살아 있는 동안 차원과 논리
-발생 시각을 바꾸지 않아야 한다. 서버 단계는 빌드 시점 투영에서 null 자리로만 남아 출처
-경계를 지킨다.
+`trackFunnel(name, properties, link, occurredAt?)` copies the link, validates `funnelId`, the UUIDv4 runId, and a strict UTC startedAt, and does not change them afterward. Manual retries pass the original occurredAt to preserve the first logical occurrence time, and retransmission with the same occurrence time is a duplicate step under the rules above. Classification values must be the same finite value set for every step in a funnel, and the server rejects inconsistency between steps, so the host must not change dimensions or logical occurrence times while the link is alive. Server steps remain only as null placeholders in the build-time projection, preserving the source boundary.
 
-기본 엔트리는 퍼널 코드를 포함하지 않는다. 예시는 `examples/funnels`에 두고, gzip 예산은
-퍼널 SDK 2912 B·퍼널+참조 예제 3038 B로 기존 3072 B 안이다.
+The default entry does not include funnel code. Examples are in `examples/funnels`, and the gzip budgets are 2912 B for the funnel SDK and 3038 B for the funnel plus reference example, both within the existing 3072 B.
 
-## 관리자 SDK 코드 생성
+## Administrator SDK code generation
 
-관리자 연결 안내는 발행 출처별로 코드를 만든다. browser는 기본 `standard` 프로필(기존
-`createTallyfin`·workflow)과 선택 `funnels` 프로필(`@tallyfin/browser/funnels`) 중에서
-고르고, server는 서버 규칙과 참여 퍼널(서버 단계는 이름, browser 단계는 `null` 자리)을
-싣는다. 퍼널 프로필의 스키마는 `tools/browser/schema.mjs`의 투영과 같고 일반 이벤트는
-두며 작업 흐름 전용 이벤트는 뺀다. 예제는 선택한 등록 퍼널 하나에만 붙고, 그 퍼널의
-첫 출처가 코드 출처와 같을 때만 `createFunnelRun`을 만들며 아니면 호스트가 검증한 전달
-컨텍스트를 쓴다. 예제는 자격 증명을 넣지 않고, 분류 값은 단계 이벤트의 등록 속성이지
-연결 정보가 아니며, 각 단계는 실제로 일어난 시각을 한 번만 기록한다. 출처가 참여하는
-등록 퍼널이 없으면 퍼널 프로필을 만들지 않는다.
+The administrator integration guide generates code by publishing source. Browser code chooses the default `standard` profile (the existing `createTallyfin` and workflow) or the optional `funnels` profile (`@tallyfin/browser/funnels`), and server code carries server rules and participating funnels (server steps by name and browser steps as `null` placeholders). The funnel profile schema matches the projection in `tools/browser/schema.mjs`, omits general events, and removes events used only for task workflows. The example attaches to only one selected registered funnel, and it creates `createFunnelRun` only when that funnel's first source matches the code source; otherwise the host uses the validated delivery context. The example inserts no credentials, classification values are registered properties of the step events rather than link information, and each step records its actual occurrence time once. If no registered funnel involves the source, no funnel profile is generated.
 
-## 구현 순서와 경계
+## Implementation order and boundaries
 
-1. OpenAPI의 독립 FunnelDefinition·FunnelLink·FunnelEvent·FunnelCounts와 코어
-   검증·진행 계획·집계 계산을 구현했다.
-2. 버전별 스키마 발행·조회·등록 도구에 funnels를 연결했다. 기존 정의는 변경 없이 읽는다.
-   관리자 JSON 편집·검증·발행과 해시/충돌 재확인도 선택 funnels를 보존한다.
-3. DBML에 funnel_runs·funnel_daily_counts를 더하고 0007 마이그레이션을 추가했다. 원자
-   저장·정리와 기존 출처별 수집 경로의 연결 이벤트 수신도 로컬에서 구현·검증했다.
-4. 서버 SDK 연결 전송과 Node·native Worker·실제 로컬 D1 통합을 구현·검증했다.
-   브라우저 SDK의 연결 전송은 선택 퍼널 프로필로 로컬 구현·검증했고, 관리자 SDK 코드
-   생성도 표준·퍼널 프로필과 서버 설정을 만들도록 로컬 구현·검증했다.
-5. reader/owner 퍼널 일별 조회 API를 로컬 구현·검증했고, 관리자 목표 화면의 퍼널 분석
-   화면·단계별 도달 표·일별 내역·퍼널 CSV·단계 편집 폼도 로컬 연결했다.
+1. Implemented the independent FunnelDefinition, FunnelLink, FunnelEvent, and FunnelCounts in OpenAPI as well as core validation, progress planning, and aggregate calculation.
+2. Connected funnels to the per-version schema publishing, query, and registration tools. Existing definitions are read unchanged. Administrator JSON editing, validation, publishing, and hash and conflict rechecks preserve optional funnels.
+3. Added funnel_runs and funnel_daily_counts to DBML and added migration 0007. Atomic storage, cleanup, and connection-event ingestion on each existing source's collection path were implemented and verified locally.
+4. Implemented and verified server SDK link delivery and integration with Node, a native Worker, and an actual local D1. Implemented and verified browser SDK link delivery through the optional funnel profile locally, and administrator SDK code generation with standard and funnel profiles and server settings locally.
+5. Implemented and verified the reader/owner funnel daily query API locally, and connected the administrator goal screen's funnel analysis view, per-step reach table, daily breakdown, funnel CSV, and step edit form locally.
 
-Registry·스키마 발행은 선택 funnels를 받으며 생략한 기존 정의의 해시는 유지한다.
-BrowserBatch·ServerBatch는 각 이벤트에 funnel 링크를 선택으로 받고, 등록된 그 출처의
-단계 정의와 맞을 때만 수집 경로가 연결을 저장한다. 한 이벤트에 attempt와 funnel을 함께
-넣으면 거부한다. 연결 이벤트의 payload hash는 funnel-v1 접두사를 쓰고 funnel이 없는
-일반 이벤트·workflow 해시는 그대로다. 서버 SDK와 브라우저 SDK의 선택 퍼널 프로필이
-연결 전송을 지원한다. 관리자 SDK 코드 생성은 출처별 표준·퍼널 프로필과 서버 설정을
-만들도록 로컬 구현·검증했다. reader/owner 퍼널 일별 조회 API는 로컬 구현·검증했고,
-관리자 퍼널 분석 화면·CSV·단계 편집 폼도 로컬 연결했다.
-코어 진행 함수는 인증이나 연결 상태 저장을 수행하지 않는다. 완료한 부분과 후속을
-[로드맵](../product/01-roadmap.md)에 구분한다. HTTP 계약의 원본은 [OpenAPI](../../api/openapi.yaml)다.
+Registry and schema publishing accept optional funnels, and the hash of an existing definition that omits them stays the same. BrowserBatch and ServerBatch accept an optional funnel link on each event, and the collection path stores the link only when it matches the registered step definition for that source. An event containing both attempt and funnel is rejected. The payload hash of a linked event uses the funnel-v1 prefix, while the hash of a general event without a funnel or workflow is unchanged. The server SDK and the optional browser SDK funnel profile support link delivery. Administrator SDK code generation with source-specific standard and funnel profiles and server settings was implemented and verified locally. The reader/owner funnel daily query API was implemented and verified locally, and the administrator funnel analysis screen, CSV, and step edit form were connected locally.
+The core progress function does not perform authentication or store link state. Completed work and follow-ups are separated in the [roadmap](../product/01-roadmap.md). The source of truth for the HTTP contract is [OpenAPI](../../api/openapi.yaml).
