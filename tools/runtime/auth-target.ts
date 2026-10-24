@@ -25,7 +25,7 @@ export function authDeploymentTarget(input: unknown, plan: ReturnType<typeof ins
   return {
     $schema: resolve(root, 'node_modules/wrangler/config-schema.json'),
     name: input.workerName, account_id: plan.collector.account_id, main: resolve(root, 'apps/auth/src/runtime.ts'),
-    compatibility_date: '2026-10-25', compatibility_flags: ['nodejs_compat'],
+    compatibility_date: '2026-10-24', compatibility_flags: ['nodejs_compat'],
     workers_dev: input.workersDev, preview_urls: false, send_metrics: false,
     triggers: { crons: ['17 * * * *'] },
     ...(domain === undefined ? {} : { routes: [{ pattern: domain, custom_domain: true }] }),

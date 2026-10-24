@@ -22,6 +22,12 @@ five-file installation format. Root type checks now include the auth workspace.
 - `npm audit --omit=dev`: zero reported vulnerabilities in production dependencies.
 - `git diff --check`: passed.
 
+The Workers/D1 test also invoked the actual scheduled handler: an inactive
+two-day-old rate-limit row was deleted and all current rows were retained.
+The first remote upload rejected the local-calendar compatibility date as future
+in UTC; both baseline and generated auth targets use 2026-10-24, the UTC date of
+deployment. This rejection did not publish an auth implementation.
+
 Source-of-truth changes: product specification, ADR 0009 and workspace boundaries.
 Analytics OpenAPI/DBML contracts are unchanged; authentication owns its separate
 upstream schema snapshot. Better Auth and its OAuth plugin are new major-v1
