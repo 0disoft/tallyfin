@@ -1,210 +1,225 @@
-# 성능 예산
+# Performance Budget
 
-이 문서는 Tallyfin의 성능 목표다. 코어·저장 어댑터·최소 수집기·브라우저 SDK는 로컬에서 검증했다. 합성 계산 화면의 실브라우저 측정과 합성 D1 수집기 부하 실험을 추가했으며 실제 서비스·운영 벤치마크는 남았다.
+This document states Tallyfin's performance targets. The core, storage adapter, minimal collector, and browser SDK have been verified locally. It includes real-browser measurements of a synthetic calculator screen and load experiments with a synthetic D1 collector; real service and production benchmarks remain.
 
-## 목표
+## Targets
 
-- 서비스 통합 현황은 최대 5개 프로젝트에 HTTP 요청 1회, D1 batch 최대 17회·SQL 최대
-  42개로 제한한다. 현재/직전 이벤트와 작업 흐름은 각각 합쳐 읽으며, 반환 행은 이벤트
-  101개·작업 흐름 15개를 프로젝트별로 상한 검사한다. 거부 기록은 한 서비스씩 최대
-  4,096행 페이지를 즉시 합산하고 원문을 보존하지 않는다. JSON 원문은 한 결과당 최대
-  8MiB이며 JS 객체·DB 런타임·문자열 표현 비용은 별도다. 실제 힙 최대치를 측정한 값은 아니다.
-  기존 17 SQL보다 호출 수는 늘지만 전체 서비스의 7일 원문을 한 batch에 모으지 않는다.
-  활성 스키마가 없으면 분석 SQL을 생략하고 수신·거부 진단만 읽는다. 권한 없는 ID는
-  거부 페이지를 시작하지 않는다. 운영 지연과
-  D1 rows-read 비용은 실측하지 않았으며 요청 수 감소를 처리 속도 향상률로 해석하지 않는다.
-  완료율 표본·집계 중 상태·실제 조회 기간은 기존 결과로 계산하며 SQL을 추가하지 않는다.
-  열린 표의 날짜 변경 확인은 로컬 시계만 사용하고 API 폴링을 추가하지 않는다.
+- Service integration overviews are limited to at most 5 projects, 1 HTTP request, at most 17 D1 batches, and at most 42 SQL statements. Current and previous events and workflows are each read together, and returned rows are capped per project at 101 events and 15 workflows. Rejection records sum pages of at most 4,096 rows one service at a time and retain no raw text. Raw JSON is limited to 8MiB per result; JavaScript object, database runtime, and string representation costs are separate. This is not a measured maximum heap. The call count increases compared with the existing 17 SQL statements, but the 7-day raw text of every service is not gathered in one batch. When no schema is active, analytics SQL is skipped and only ingestion and rejection diagnostics are read. Unauthorized IDs do not start a rejection page. Production latency and D1 rows-read cost have not been measured, and a reduction in request count is not interpreted as a percentage speedup. Completion-rate samples, in-progress state, and actual query periods are calculated from existing results without adding SQL. Date-change confirmation in an open table uses only the local clock and adds no API polling.
 
-- 공통 브라우저 SDK 단독 목표는 ≤3KiB gzip, 한 서비스의 연동 코드·필수 설정을 합친 증분 목표는 ≤3.25KiB gzip이다. 호스트 앱 전체나 모든 프로젝트의 설정 합계가 아니다. 프로젝트별 설정도 전송 크기와 초기 실행 비용에 포함한다.
-- 동기 수집 I/O를 두지 않으며 렌더링·계산에서 전송 완료를 기다리지 않는다.
-- 측정 전에는 달성 수치를 주장하지 않는다.
+- The shared browser SDK alone targets at most 3KiB gzip, and the incremental total of one service's integration code and required configuration targets at most 3.25KiB gzip. This excludes a whole host app and the combined settings of every project. Per-project settings are included in transfer size and initial runtime cost.
+- There is no synchronous collection I/O, and rendering or calculations do not wait for delivery to finish.
+- Do not claim target figures before measuring them.
 
-## 버퍼와 전송
+## Buffers and delivery
 
-- 크기가 제한된 메모리 버퍼에 이벤트를 모은다.
-- 주기적으로 배치를 전송하고, 탭이 숨겨질 때도 남은 배치 전송을 시도한다.
-- SDK는 네이티브 sendBeacon을 쓰지 않는다. sendBeacon은 credentials를 강제로 포함하므로 keepalive fetch로 omit/no-referrer를 유지한다.
-- 전송 수단과 무관하게 전달 보장은 없다.
-- 계약 한도: 40개 메모리 버퍼, 배치당 20개/16KiB, 5초 전송, 최대 2회/10분 재시도, 영수증 48시간. 브라우저 SDK에 로컬 구현했고, 2026-10-08 실측은 SDK gzip 2667 bytes·SDK+Sembom 2949 bytes다(예산 3072 bytes). 아래 합성 화면에서 초기 실행·전송 비용을 측정했고 실제 서비스 비용은 아직 측정하지 않았다.
-- 유계 재시도, 배치 멱등성, 원자적 집계, 입력·속도 제한이 필요하다. Worker 메모리 카운터는 영속 집계로 쓰지 않는다.
+- Gather events in a size-limited in-memory buffer.
+- Send batches periodically and attempt to send any remaining batch when the tab becomes hidden.
+- The SDK does not use native sendBeacon. sendBeacon forces credentials to be included, so keepalive fetch preserves omit and no-referrer.
+- Delivery is not guaranteed regardless of the transport.
+- Contract limits: 40-event memory buffer, 20 events and 16KiB per batch, delivery every 5 seconds, at most 2 retries over 10 minutes, and 48-hour receipts. This is implemented locally in the browser SDK, and the 2026-10-08 measurement was 2667 bytes gzip for the SDK and 2949 bytes gzip for the SDK plus Sembom (budget 3072 bytes). Initial runtime and delivery cost were measured below on the synthetic screen; real service cost has not been measured.
+- Bounded retries, batch idempotency, atomic aggregation, and input and rate limits are required. Worker memory counters are not used as persistent aggregates.
 
-## 측정 방법
+## Measurement Methods
 
-- 기준선(비활성)과 활성 상태를 동일 조건에서 비교한다.
-- 상호작용 지연, SDK 실행 시간, 전송 크기를 함께 본다.
-- Sembom 외의 다른 서비스에서도 확인한다. 모든 프로젝트의 이벤트 정의를 브라우저에 한꺼번에 내려주지 않는다.
-- 동시 전송량에 따른 쓰기·조회 지연은 로컬 합성 D1에서 한 번 측정했다(아래 2026-10-11). 프로젝트 수·등록 속성 조합 규모별 수집/저장 비용은 아직 측정하지 않았고, 서버 연동의 처리 지연 예산은 후속 구현에서 정한다.
-- 운영 지연·전송 예산은 UNDECIDED다. 아래 수치는 로컬 합성 화면의 관측값이다.
+- Compare the baseline (disabled) and enabled states under the same conditions.
+- Look at interaction latency, SDK execution time, and transfer size together.
+- Check services other than Sembom too. Do not send every project's event definitions to the browser at once.
+- Write and query latency under concurrent delivery was measured once on a local synthetic D1 (2026-10-11 below). Collection and storage cost by project count and registered-property combination scale has not been measured; the latency budget for server integration will be set in follow-up implementation.
+- Production latency and transfer budgets are UNDECIDED. The figures below are observations from local synthetic screens.
 
-## 2026-10-08 로컬 Chrome 측정
+## 2026-10-08 Local Chrome Measurement
 
-명령: `npm run bench:browser -- --channel chrome --samples 5`.
-Windows·Node 24.18.0·Chrome 154.0.8037.98·Playwright 1.64.0, headless 1280×800,
-CPU/네트워크 제한 없음. 비활성/활성 순서를 번갈아 바꾸며 모드별 새 컨텍스트 5개를
-실행했다. 자산은 no-store이며 브라우저 프로세스는 재사용한다.
-원시 기록은 로컬 무시 파일 `.tmp/browser-bench/1791469967935.json`이다.
+Command: `npm run bench:browser -- --channel chrome --samples 5`.
+Windows, Node 24.18.0, Chrome 154.0.8037.98, Playwright 1.64.0, headless 1280×800,
+no CPU or network throttling. Disabled and enabled order was alternated, and 5 new
+contexts were run for each mode. Assets used no-store, and the browser process was
+reused. The raw record is the local ignored file `.tmp/browser-bench/1791469967935.json`.
 
-| 측정 | SDK 없음 | SDK 활성 |
+| Measurement | No SDK | SDK enabled |
 | --- | ---: | ---: |
-| 동적 import 중앙값 | 해당 없음 | 48.9ms |
-| 클라이언트 초기화 중앙값 | 해당 없음 | 2.0ms |
-| 동기 SDK 호출 p95 | 해당 없음 | 0.4ms |
-| 입력/계산 핸들러 p95 | 0.1ms | 0.3ms |
-| 두 번째 rAF까지 p95 | 32.0ms | 31.2ms |
-| 화면당 수집 요청 | 0건 | 2건 |
-| 화면당 업로드 본문 합계 | 0 bytes | 6430 bytes |
+| Dynamic import median | Not applicable | 48.9ms |
+| Client initialization median | Not applicable | 2.0ms |
+| Synchronous SDK call p95 | Not applicable | 0.4ms |
+| Input/calculation handler p95 | 0.1ms | 0.3ms |
+| p95 to second rAF | 32.0ms | 31.2ms |
+| Collection requests per screen | 0 | 2 |
+| Total upload body per screen | 0 bytes | 6430 bytes |
 
-import 시간에는 네트워크·컴파일/연결·평가가 포함된다. 프레임 수치는 INP가 아니며
-31.2ms와 32.0ms 차이를 속도 개선으로 해석하지 않는다. FCP 중앙값은 비활성 76ms·
-활성 68ms였으나 최초 비활성 화면 712ms 편차가 있고 FCP가 SDK import보다 먼저
-발생할 수 있으므로 SDK 영향의 판정 근거로 쓰지 않는다. 이 실행의 long task 기록은
-비어 있었다. 소표본·브라우저 시계 해상도·자동화 환경의 한계가 있다.
+Import time includes network, compile and connect, and evaluation. Frame figures are not
+INP, and the 31.2ms versus 32.0ms difference is not interpreted as a speed improvement.
+FCP median was 76ms disabled and 68ms enabled, but the first disabled screen had a 712ms
+outlier and FCP can occur before the SDK import, so it is not used as evidence of SDK
+impact. The long-task records in this run were empty. The sample is small and limited by
+browser clock resolution and the automation environment.
 
-측정용 SDK·예시 스키마·로컬 연결 코드는 6373 bytes/gzip 2879 bytes였다. 이 번들은
-실제 Sembom 어댑터와 다르며 기존 SDK+Sembom 예산 검사는 2949 bytes로 유지됐다.
-측정 서버는 압축 없이 SDK를 제공하여 Resource Timing의 전송 크기는 6673 bytes였다.
-gzip 2879 bytes를 실제 다운로드나 업로드 크기로 사용하지 않는다.
+The SDK, example schema, and local integration code used for measurement were 6373 bytes,
+or 2879 bytes gzip. This bundle differs from the actual Sembom adapter, and the existing
+SDK+Sembom budget check remained at 2949 bytes. The measurement server served the SDK
+without compression, so the Resource Timing transfer size was 6673 bytes. Do not use
+2879 bytes gzip as the actual download or upload size.
 
-활성 화면 5개에서 120개 이벤트, 시작 55건·성공 55건을 D1에서 확인했다.
-수집기를 실제로 종료한 추가 화면에서도 계산 11회와 오류 복구가 동작했다.
-503 응답 4건을 관찰하고 SDK destroy 이후 추가 재시도가 없는 것을 확인했다.
-기능 확인과 측정 재실행 방법은 [측정 도구 안내](../../tools/browser-bench/README.md)에 있다.
+Five active screens showed 120 events, 55 starts, and 55 successes in D1.
+On an additional screen where the collector was actually stopped, 11 calculations and
+error recovery still worked. Four 503 responses were observed, and no further retries
+occurred after SDK destroy. Functional checks and instructions for rerunning the
+measurement are in the [measurement tool guide](../../tools/browser-bench/README.md).
 
-## 2026-10-11 관리자 차트 지연 로드
+## 2026-10-11 Administrator Chart Lazy Loading
 
-관리자 프로토타입 개요의 일별 추이 차트를 지연 로드로 분리하고 첫 전송을 측정했다.
-기준선은 커밋 `53aa645`다. 수치는 빌드가 만든 10진수 KB·gzip이다.
+The administrator prototype overview's daily trend chart was split into a lazy-loaded
+chunk, and first delivery was measured. The baseline is commit `53aa645`. Figures are
+decimal KB and gzip from the build.
 
-| 번들 | 기준선 | 지연 로드 |
+| Bundle | Baseline | Lazy loaded |
 | --- | ---: | ---: |
-| 첫 JS | 800.26kB/gzip 228.43kB | 446.61kB/gzip 125.83kB |
-| 차트 청크 | 없음(첫 JS에 포함) | 353.93kB/gzip 102.84kB |
-| 개요 총 JS gzip | 228.43kB | 228.67kB |
+| Initial JS | 800.26kB/gzip 228.43kB | 446.61kB/gzip 125.83kB |
+| Chart chunk | None (included in initial JS) | 353.93kB/gzip 102.84kB |
+| Overview total JS gzip | 228.43kB | 228.67kB |
 
-첫 JS는 약 44.9% 줄었지만 개요는 기본 화면에 차트가 있어 청크를 함께 받으므로 총량은
-거의 같고 요청 수가 1건에서 2건으로 는다. 초기 진입 JS는 모든 화면에서 줄고, 차트가
-없는 화면에서는 차트 다운로드 자체를 생략한다.
-모든 화면의 총량이나 로드 시간이 줄었다고 일반화하지 않는다. Vite가 500kB 초과 청크에
-내던 경고는 이 분리로 없어졌다.
+Initial JS fell by about 44.9%, but the overview includes the chart on its default screen,
+so the chunk arrives with it, the total is nearly unchanged, and requests increase from
+1 to 2. Initial entry JS is smaller on every screen, and screens without charts skip the
+chart download entirely. Do not generalize this to lower total bytes or load time on every
+screen. This split removed the Vite warning for chunks over 500kB.
 
-로컬 `vite preview`(프로덕션 빌드)에서 같은 탭·캐시 끔 상태로 기준선 3회 뒤 지연
-로드 3회를 연속 측정했다. FCP 중앙값은 376ms에서 296ms, DCL 중앙값은 266.3ms에서
-175.6ms가 됐고, 개요 main fetch 종료는 기준선 302/213.4/139.1ms에서
-77.3/93.3/88.4ms로 바뀌었으며 차트 청크 fetch 종료는 378/541.2/433ms였다. 표본 3회·
-순차 측정이라 warmup이 섞이고 개선을 보장하지 않는다. 로컬 preview 서버의 압축값과
-Vite 빌드의 gzip 수치는 서로 바꿔 쓰지 않는다.
+On a local `vite preview` (production build), with the same tab and caching off, the
+baseline was measured 3 times, followed by 3 consecutive lazy-load measurements. FCP
+median changed from 376ms to 296ms, DCL median from 266.3ms to 175.6ms, and overview main
+fetch completion from 302/213.4/139.1ms to 77.3/93.3/88.4ms, with chart chunk fetch
+completion at 378/541.2/433ms. There were 3 samples in a sequential run, warmup was mixed
+in, and no improvement is guaranteed. Do not interchange compression values from the local
+preview server with gzip figures from the Vite build.
 
-측정 조건·원시 수치와 차트 차단·320px·기간 변경 확인은 [검증 기록](../../VALIDATION.md)에 둔다.
+Measurement conditions, raw figures, and the chart-blocking, 320px, and date-change checks
+are in the [validation record](../../VALIDATION.md).
 
-## 2026-10-11 관리자 폰트 로딩 정리
+## 2026-10-11 Administrator Font Loading Cleanup
 
-관리자 프로토타입의 폰트를 굵기별 정적 CSS 9개에서 가변 폰트 CSS 2개
-(`@fontsource-variable/inter/wght.css`, `@fontsource-variable/noto-sans-kr/wght.css`)로
-바꾸고 첫 화면 전송을 다시 쟀다. 기준선은 커밋 `b12753d`의 빌드다.
+The administrator prototype fonts were changed from 9 static CSS files by weight to 2
+variable-font CSS files
+(`@fontsource-variable/inter/wght.css`, `@fontsource-variable/noto-sans-kr/wght.css`),
+and first-screen delivery was measured again. The baseline is the build from commit `b12753d`.
 
-| 항목 | 기준선 | 가변 폰트 |
+| Item | Baseline | Variable fonts |
 | --- | ---: | ---: |
-| 빌드 CSS | 380.42kB/gzip 119.38kB | 264.85kB/gzip 35.91kB |
-| 첫 화면 폰트 요청 | 28건/324224 bytes | 9건/178064 bytes |
-| CSS+폰트 전송 | 438007 bytes | 211796 bytes |
+| Built CSS | 380.42kB/gzip 119.38kB | 264.85kB/gzip 35.91kB |
+| First-screen font requests | 28/324224 bytes | 9/178064 bytes |
+| CSS plus font transfer | 438007 bytes | 211796 bytes |
 
-CSS gzip은 약 70% 줄었고 폰트 본문은 45.1%, CSS와 폰트 합계는 51.6% 줄었다. 가변
-woff2 한 파일을 unicode-range 서브셋마다 공유하고 굵기별 파일을 따로 받지 않아서다.
-초기 JS는 446.61kB/gzip 125.83kB로 그대로이며 모듈·차트 청크 크기는 바뀌지 않았다.
+CSS gzip fell by about 70%, font bodies by 45.1%, and CSS plus fonts by 51.6%. One variable
+woff2 file is shared across unicode-range subsets, so a separate file is not downloaded for
+each weight. Initial JS stayed at 446.61kB/gzip 125.83kB, and module and chart chunk sizes
+did not change.
 
-로컬 `vite preview`(프로덕션 빌드, 5180)에서 캐시를 끄고 `document.fonts.ready` 뒤
-Resource Timing을 기준선과 가변 폰트로 한 번씩 비교했다. 실제 preview가 내려준 encoded
-CSS는 113783에서 33732 bytes로 바뀌었다. 헤더는 뺐고 preview 서버의 압축값과 Vite
-빌드 gzip은 서로 바꿔 쓰지 않는다. 개요 제목·지표·표의 전후 geometry 일치를 확인했고
-글리프 전수 검증·운영 CWV·구형 브라우저는 미측정이다. 다른 언어·다른 화면·운영 환경
-수치로 일반화하지 않는다.
+On local `vite preview` (production build, port 5180), with caching disabled, Resource
+Timing was compared once for the baseline and once for variable fonts after
+`document.fonts.ready`. The encoded CSS served by preview changed from 113783 to 33732 bytes.
+Headers were excluded, and preview-server compression is not interchanged with Vite build
+gzip. The overview title, metrics, and table geometry matched before and after; exhaustive
+glyph validation, production CWV, and older browsers were not measured. Do not generalize
+these figures to other languages, other screens, or production.
 
-측정 조건·원시 수치와 서브셋 로드·WOFF2 차단 확인은 [검증 기록](../../VALIDATION.md)에 둔다.
+Measurement conditions, raw figures, and subset-loading and WOFF2-blocking checks are in the
+[validation record](../../VALIDATION.md).
 
-## 2026-10-11 로컬 수집기 부하 실험
+## 2026-10-11 Local Collector Load Experiment
 
-명령: `npm run bench:collector`(opt-in이며 기본 test/check/CI에 연결하지 않았다).
-새 합성 D1·loopback HTTP·실제 JWT 검증으로 216요청을 쟀고 204건이 200, 12건은 설계한
-할당량 429다. Worker 시계는 고정했고 HTTP 시간은 호스트 단조 시계 실측이다. JWKS는 메모리
-합성이고 실제 제공자는 연결하지 않았다.
+Command: `npm run bench:collector` (opt-in and not connected to default test, check, or CI).
+A fresh synthetic D1, loopback HTTP, and actual JWT verification measured 216 requests; 204
+returned 200 and 12 returned the designed quota 429. The Worker clock was fixed, and HTTP
+time is host monotonic-clock measurement. JWKS was synthetic in memory, and no actual
+provider was connected.
 
-| 동시성 | workflow 쓰기 p95 | 인증 조회 p95 |
+| Concurrency | Workflow write p95 | Authenticated query p95 |
 | ---: | ---: | ---: |
 | 1 | 47.13ms | 9.35ms |
 | 4 | 111.39ms | 109.87ms |
 | 8 | 190.01ms | 189.35ms |
 | 16 | 322.82ms | 321.15ms |
 
-각 단계는 12배치 240개 신규 이벤트와 같은 DB 조회 6건을 처리한다. 같은 20개 이벤트를
-16동시로 재전송한 단계는 accepted 20·duplicates 300이고, browser/server가 공유하는 분당
-한도 12는 성공 12·429 12로 끝났으며 이후 다른 프로젝트 2건은 정상 수락됐다. 최종 DB는
-영수증 1090개, workflow 시작·성공 480건, 4단계 퍼널 완료 24건이다.
+Each stage processed 12 batches of 240 new events and 6 queries against the same DB. The
+stage that replayed the same 20 events at concurrency 16 ended with accepted 20 and
+duplicates 300; the shared per-minute limit of 12 used by browser and server ended with 12
+successes and 12 429s, and 2 events for another project were accepted normally afterward.
+The final DB had 1090 receipts, 480 workflow start and success records, and 24 completed
+4-step funnel runs.
 
-작은 순차 스윕이라 단계마다 DB가 커지고 단계별 데이터 조건이 같지 않으며, 쓰기 12개·조회
-6개 표본의 p95는 최댓값이다. loopback HTTP 시간에는 호스트 스케줄링·에뮬레이터·암호화·DB
-작업이 섞여 있어 D1 몫만 분리할 수 없다. 지속 부하, 다중 Worker, 큰 보존 데이터셋, 원격
-한도·비용, 장애 복구, 정리 중 부하와 운영 SLO는 이 결과로 판단하지 않는다. 측정 조건과
-원시 수치는 [로컬 수집기 부하 안내](../../tools/runtime/COLLECTOR-BENCH.md)와
-[검증 기록](../../VALIDATION.md)에 둔다.
+This was a small sequential sweep, the DB grew at each stage, and each stage did not have
+the same data conditions; the p95 is the maximum of 12 write and 6 query samples. Loopback
+HTTP time mixes host scheduling, the emulator, cryptography, and DB work, so the D1 share
+cannot be isolated. Do not use this result to judge sustained load, multiple Workers, large
+retained datasets, remote limits or cost, failure recovery, load during cleanup, or
+production SLOs. Measurement conditions and raw figures are in the
+[local collector load guide](../../tools/runtime/COLLECTOR-BENCH.md) and the
+[validation record](../../VALIDATION.md).
 
-## 2026-10-11 누적 데이터·자동 정리 동시 실험
+## 2026-10-11 Concurrent Retained Data and Automatic Cleanup Experiment
 
-`npm run bench:retained`로 새 로컬 D1의 6개 프로젝트·네 데이터 테이블에 67,860행을
-넣고, 실제 Worker 시계로 120초 동안 HTTP 8건/초를 제공했다. SQL 합성 데이터 생성과
-인증 warmup은 측정에서 뺐다. 쓰기 480건·인증된 30일 요약 480건이 모두 성공했고,
-실제 scheduled 정리 24회도 성공했다. 정리를 포함한 동시 작업 상한은 16이며 이 실험은
-최대 처리 용량을 탐색한 것이 아니다.
+`npm run bench:retained` inserted 67,860 rows into 6 projects and four data tables in a new
+local D1, then served 8 HTTP requests per second for 120 seconds on the actual Worker clock.
+SQL synthetic-data generation and authentication warmup were excluded from measurement. All
+480 writes and all 480 authenticated 30-day summaries succeeded, and 24 actual scheduled
+cleanups also succeeded. The concurrent work cap including cleanup is 16, and this experiment
+did not explore maximum throughput.
 
-| 관측 | 표본 | p50 | p95 | 최대 |
+| Observation | Samples | p50 | p95 | Maximum |
 | --- | ---: | ---: | ---: | ---: |
-| HTTP 쓰기 | 480 | 28.98ms | 48.95ms | 169.98ms |
-| HTTP 조회 | 480 | 7.96ms | 10.96ms | 53.47ms |
-| scheduled 정리 | 24 | 54.12ms | 123.60ms | 158.71ms |
-| 작업 발행 지연 | 984 | 7.62ms | 13.96ms | 30.62ms |
+| HTTP write | 480 | 28.98ms | 48.95ms | 169.98ms |
+| HTTP query | 480 | 7.96ms | 10.96ms | 53.47ms |
+| Scheduled cleanup | 24 | 54.12ms | 123.60ms | 158.71ms |
+| Task publication latency | 984 | 7.62ms | 13.96ms | 30.62ms |
 
-새 이벤트 8,800건·중복 800건과 신규 workflow 4,400건을 확인했다. 만료된 16,920행을
-삭제하고 보존 중인 집계는 초기 행+수락된 변경분과 전부 일치했다. 정리 24회는 모두 HTTP
-작업과 겹쳤고 커서가 5개/1개 프로젝트를 번갈아 처리했다. 실제 부하 창은 120,011.575ms다.
-정리를 운영의 1분보다 빠른 5초 간격으로 호출했으므로 이 간격을 운영 정책으로 읽지 않는다.
+It confirmed 8,800 new events, 800 duplicates, and 4,400 new workflows. It deleted 16,920
+expired rows, and every retained aggregate matched the initial rows plus accepted changes.
+All 24 cleanups overlapped with HTTP work, and the cursor alternated between 5 projects and
+1 project. The actual load window was 120,011.575ms. Cleanup was invoked every 5 seconds,
+faster than the production 1 minute, so this interval is not read as a production policy.
 
-Node 24.18.0·Windows x64·Ryzen 5 7430U·Miniflare 4.20260730.0의 한 번 관측이다.
-JWKS는 메모리 합성이며 원격 D1·실제 인증·장기간/다중 Worker·네 테이블 외 대량 데이터·
-장애 상황은 미검증이다. 운영 처리량/SLO나 이전 짧은 동시성 실험과의 속도 비교로 쓰지 않는다.
-재실행 조건은 [누적 데이터 부하 안내](../../tools/runtime/RETAINED-BENCH.md)를 따른다.
+This is one observation on Node 24.18.0, Windows x64, Ryzen 5 7430U, and Miniflare
+4.20260730.0. JWKS was synthetic in memory, and remote D1, actual authentication,
+long-running or multiple Workers, large data outside the four tables, and failure scenarios
+were not verified. Do not use this as production throughput or an SLO, or as a speed
+comparison with the earlier short concurrency experiment. Rerun conditions are in the
+[retained data load guide](../../tools/runtime/RETAINED-BENCH.md).
 
-2026-10-11 `bench:cluster`는 초기 148,260행과 새 공유 로컬 D1·수집 Worker 3개에서
-실시간 120초·HTTP 7.5건/초(900건)·정리 24회를 실행했다. 동일 배치가 세 Worker에
-동시에 도착해도 accepted 3,600·duplicates 7,200과 workflow 600건·4단계 퍼널
-600건이 예상값과 일치했다. 관측 HTTP 동시 최대는 15건, 정리와 HTTP가 겹친 호출은
-12회다. p95는 workflow 360.163ms·browser/server 퍼널 쓰기 366.852/366.711ms·
-요약/퍼널 조회 85.994/92.917ms였다. 한 workerd 안의 별도 Worker이며 운영 다중 지역·
-장기간·최대 용량의 증거로 쓰지 않는다. 부하 종류·동시성·초기 데이터가 달라 이전 단일
-Worker 실험과 속도를 비교하지 않는다. [동시 부하 안내](../../tools/runtime/CLUSTER-BENCH.md)와
-[검증 기록](../../VALIDATION.md)에 재실행 조건과 전체 결과를 둔다.
+On 2026-10-11, `bench:cluster` ran 120 seconds of real time at 7.5 HTTP requests per second
+(900 requests) and 24 cleanups with an initial 148,260 rows and 3 collector Workers on a new
+shared local D1. Even when the same batch arrived at the 3 Workers concurrently, accepted
+3,600, duplicates 7,200, 600 workflows, and 600 4-step funnel runs matched expectations.
+Observed maximum HTTP concurrency was 15, and 12 calls overlapped cleanup and HTTP. p95 was
+360.163ms for workflows, 366.852/366.711ms for browser/server funnel writes, and
+85.994/92.917ms for summary/funnel queries. These are separate Workers within one workerd
+and are not evidence of production multi-region, long-running, or maximum-capacity behavior.
+Because load type, concurrency, and initial data differ, do not compare speed with the
+earlier single-Worker experiment. Rerun conditions and full results are in the
+[concurrent load guide](../../tools/runtime/CLUSTER-BENCH.md) and the
+[validation record](../../VALIDATION.md).
 
-2026-10-11 `bench:cluster -- --soak`는 같은 3-Worker·공유 로컬 D1 구성에 초기 148,260행을
-넣고 600초 동안 HTTP 4,500건(7.5건/초)·정리 120회를 실행했다. accepted 18,000·
-duplicates 36,000과 4단계 퍼널 run 3,000개가 예상값과 일치했고, HTTP 동시 최대 15건·
-정리·HTTP 겹침 60회·관리자/발행자 토큰 각 3회 발급을 확인했다. p95는 workflow
-310.971ms·browser/server 퍼널 쓰기 311.104/312.008ms·요약/퍼널 조회 56.607/57.264ms·
-정리 303.135ms이고 작업 발행 지연 p95는 14.434ms다. 만료 행 정리, cleanup revision
-120, 세 Worker의 단계 도달 합계 3,000을 확인했다. 표본 창이 다른 120초 실행과 속도를
-비교하지 않는다. 한 workerd 안의 별도 Worker이며 원격·다중 지역·장기간·최대 용량·운영
-SLO의 증거로 쓰지 않는다. 재실행 조건은
-[동시 부하 안내](../../tools/runtime/CLUSTER-BENCH.md)와 [검증 기록](../../VALIDATION.md)에 둔다.
+On 2026-10-11, `bench:cluster -- --soak` used the same 3-Worker shared local D1 setup,
+inserted an initial 148,260 rows, and ran 4,500 HTTP requests (7.5 per second) and 120
+cleanups over 600 seconds. accepted 18,000, duplicates 36,000, and 3,000 4-step funnel runs
+matched expectations; maximum HTTP concurrency was 15, cleanup/HTTP overlap was 60, and
+administrator and publisher tokens were issued 3 times each. p95 was 310.971ms for
+workflows, 311.104/312.008ms for browser/server funnel writes, 56.607/57.264ms for
+summary/funnel queries, and 303.135ms for cleanup, while task publication latency p95 was
+14.434ms. Expired-row cleanup, cleanup revision 120, and a total step reach of 3,000 across
+the 3 Workers were confirmed. Do not compare speed with the 120-second run that used a
+different sample window. These are separate Workers within one workerd and are not evidence
+of remote, multi-region, long-running, maximum-capacity, or production SLO behavior. Rerun
+conditions are in the [concurrent load guide](../../tools/runtime/CLUSTER-BENCH.md) and the
+[validation record](../../VALIDATION.md).
 
-## 실패 처리
+## Failure Handling
 
-- 수집 실패는 연결된 서비스의 화면이나 업무 처리에 영향을 주지 않는다.
-- 프로젝트 paused 상태는 수집기가 거부한다. SDK는 `enabled: false` 비활성과 `destroy()` 연결 해제를 구현했다.
+- A collection failure does not affect the connected service's UI or business processing.
+- The collector rejects projects in the paused state. The SDK implements disabling with `enabled: false` and disconnecting with `destroy()`.
 
-## 전달 진단과 용량 예산 — 2026-10-23
+## Delivery Diagnostics and Size Budget — 2026-10-23
 
-브라우저 SDK는 선택적 동기 onDelivery(state, events) 콜백으로 HTTP 수락·재시도·
-최종 실패·기한 초과·큐 초과·destroy 폐기·호스트 beacon 큐 수락을 구분한다. 이벤트
-내용이나 ID는 전달하지 않는다. 콜백 예외/재진입은 전송 상태를 바꾸지 않는다.
-SDK 단독 예산은 gzip 3KiB를 유지한다. 전달 진단 코드가 포함된 대표 연동 코드·필수
-설정 합계 예산은 3.25KiB(3,328B)로 조정한다. 기존 참조 예제가 3KiB에 근접해 있어
-진단을 빼거나 검증을 줄이는 대신 약 130B의 추가 코드 비용을 명시적으로 허용한다.
-이 단락이 앞선 3KiB 전체 연동 목표와 과거 측정값보다 우선한다.
+The browser SDK uses an optional synchronous onDelivery(state, events) callback to distinguish HTTP acceptance, retry,
+final failure, deadline expiry, queue overflow, destroy discard, and acceptance into the host beacon queue. It does not
+pass event contents or IDs. Callback exceptions and re-entry do not change delivery state.
+The SDK-only budget remains 3KiB gzip. The budget for representative integration code and required settings including
+delivery diagnostic code is adjusted to 3.25KiB (3,328B). Because the existing reference example was already close to 3KiB,
+this explicitly allows about 130B of additional code cost instead of removing diagnostics or reducing verification.
+This paragraph supersedes the earlier 3KiB full-integration target and past measurements.

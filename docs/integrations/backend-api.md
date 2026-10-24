@@ -1,72 +1,30 @@
-# 관리자 API 연결
+# Administrator API Integration
 
-## 실패 원인의 직전 기간 비교 계산
+## Previous-period comparison of failure causes
 
-관리자는 기존 두 기간 workflow daily를 재사용한다. compareFailureReasons는 두 응답의
-프로젝트·버전·시간대·작업 흐름·인접 동일 일수와 일별/기간 합계를 검증한다. 원인 비중은
-전체 확정 실패, 전체 실패율은 시작 시도를 분모로 쓴다. 두 기간 모두 원인 측정이 완전하고
-실패 분모가 있을 때만 원인 비중 차이(%p)를 제공한다. 미측정이 남으면 원인 변화는 보류하고
-관측 건수를 유지한다. 전체 미측정이나 구 응답의 원인 건수는 0으로 만들지 않는다.
+The administrator reuses workflow daily data from the existing 2 periods. compareFailureReasons validates the project, version, timezone, workflow, and adjacent equal day count, as well as the daily and period totals in both responses. The cause share uses all confirmed failures as its denominator, and the overall failure rate uses start attempts as its denominator. It provides the cause share difference in percentage points (%p) only when cause measurement is complete for both periods and a failure denominator exists. When unmeasured data remains, it holds the cause change and retains the observed counts. It does not turn an entirely unmeasured period or cause counts from an older response into 0.
 
-CSV는 기존 열 뒤에 previous_count·previous_share_percent·failure_reason_comparison_status를
-추가한다. comparison 기간의 workflow_failure_reason_comparison 행은 원인/누락/미측정,
-workflow_failure_rate_comparison 행은 전체 실패율이다. 이전 기간의 측정 범위와 분모는
-기존 previous 기간 workflow_total/day 행에 남는다. 집계 중 표시는 두 기간 중 하나라도
-집계 중이면 유지하며 새 API·DB 계약이나 요청은 없다.
+CSV adds previous_count, previous_share_percent, and failure_reason_comparison_status after the existing columns. The workflow_failure_reason_comparison rows for the comparison period report causes, missing reasons, and unmeasured failures, and the workflow_failure_rate_comparison rows report the overall failure rate. The previous period's measurement scope and denominator remain in the existing previous-period workflow_total and daily rows. The in-progress indicator remains when either period is in progress, and there is no new API or DB contract or request.
 
+## Failure reason response
 
-## 실패 원인 응답
+workflow.failureReasonProperty selects only an enum property on the failure event. The optional failureReasons on workflow daily and each days entry provide property, measuredFailures, missingReasonFailures, unmeasuredFailures, and buckets(value, failedAttempts). An unset value is null, and an omitted field in an older response means the information is unavailable. enum total plus missing equals measured, and measured plus unmeasured equals all confirmed failures. The screen and CSV use all confirmed failures as the denominator. The administrator parser and CSV validate the configured enum values and daily and period totals, and they do not turn missing fields in an older response into 0. Only the first confirmed failure is counted, once, separated by start date and version. The 0013 database expansion after 0012 is required before deploying the new collector.
 
-workflow.failureReasonProperty는 실패 이벤트의 enum 속성만 선택한다. workflow daily와
-각 days의 선택 failureReasons는 property, measuredFailures, missingReasonFailures,
-unmeasuredFailures, buckets(value, failedAttempts)를 제공한다. 미설정은 null, 구 응답의
-필드 생략은 정보 없음이다. enum 합계 + 누락 = 측정, 측정 + 미측정 = 전체 확정 실패다.
-화면과 CSV 비율은 전체 확정 실패를 분모로 사용한다. 관리자 파서와 CSV는
-설정된 enum과 일별/기간 합계를 검증하고 구 응답의 누락 필드를 0으로 만들지 않는다. 최초 확정 실패만 한 번 집계하며
-시작일·버전별로 분리한다. 새 수집기 배포 전에 0012 다음 0013 DB 확장이 필요하다.
+The optional duration on workflow daily provides the success and failure distribution across 6 fixed ordered buckets plus measuredAttempts and unmeasuredAttempts. New responses include it for the period and every date; older responses may omit the field. A definition with no failures also has null failedAttempts for each bucket. The administrator validates bucket totals, completion counts, and daily and period totals. It distinguishes a measured count of 0 from an unmeasured completion, and the period comparison CSV records each period's measurement scope separately. It reuses the existing query. The 0012 database expansion must be applied before the collector; remote application and production verification were not run.
 
+Status: The administrator query and settings API app was implemented and verified locally. A real OIDC provider and production remote D1 were not verified.
 
-작업 흐름 daily의 선택 duration은 6개 순서 고정 구간의 성공/실패 분포와
-measuredAttempts·unmeasuredAttempts를 제공한다. 새 응답에서는 기간과 모든 날짜에
-있으며, 구 응답은 필드가 없을 수 있다. 실패 없는 정의는 구간 failedAttempts도 null이다.
-관리자는 구간 합계·완료 건수·날짜별/기간 합계를 검증한다. 측정 건수 0과 미측정 완료를
-구분하고 기간 비교 CSV도 각 기간의 측정 범위를 따로 기록한다. 기존 조회를 재사용한다.
-0012 DB 확장을 수집기보다 먼저 적용해야 하며 원격 적용·운영 검증은 실행하지 않았다.
+The app uses the project list, schema, event summary, daily event, daily goal, and integration status GET endpoints defined by [OpenAPI](../../api/openapi.yaml) in API mode. The server checks a verified administrator principal and project grant.
+Periods are interpreted in the project's fixed timezone, and the exact schemaVersion is requested with them.
 
-상태: 관리자 조회·설정 API 앱은 로컬에서 구현·검증했다. 실제 OIDC 제공자·원격 D1
-운영은 검증하지 않았다.
+The optional `q` on the project list is a literal substring search over name and ID. The original is capped at 80 UTF-16 code units, surrounding whitespace is trimmed, ASCII case is ignored, an empty search term means no filter, and control characters are rejected. The URL-encoded query limit for this path is 1024 characters. Keep q when reading the next cursor, and clear the cursor when the search term changes. The response, sort, and per-page grant checks remain the same.
 
-[OpenAPI](../../api/openapi.yaml)가 정의한 프로젝트 목록·스키마·이벤트 요약·일별 이벤트·
-일별 목표·통합 현황 GET을 API 모드에서 사용한다. 서버는 검증한 관리자 주체와 프로젝트
-grant를 검사한다.
-기간은 프로젝트의 고정 시간대로 해석하고 정확한 schemaVersion을 함께 요청한다.
+The administrator stores search results separately from the full list so the current selection or draft is preserved. When a project selected from search falls outside the first page after refresh, it rechecks permission with the existing `GET /v1/projects/{id}` to keep the selection. This is the only case that needs one extra HTTP read, and it is not retried automatically.
 
-프로젝트 목록의 선택 `q`는 이름·ID의 리터럴 부분 검색이다. 원본 최대 80 UTF-16 코드
-단위, 앞뒤 공백 제거, ASCII 대소문자 무시, 빈 검색어는 필터 없음이며 제어 문자는
-거부한다. 이 경로의 URL 인코딩 쿼리 상한은 1024자다. q를 유지해 다음 cursor를 읽고
-검색어 변경 시 cursor를 비운다. 응답·정렬·페이지별 grant 검사는 기존과 같다.
+Schema draft validation and publish requests and the published definition's optional `representativeWorkflowId` point to the browser workflow in the same version's `workflows` that is used for the service overview. The value follows `^[a-z][a-z0-9_]{0,47}$`; when omitted, there is no representative, and the first workflow is not substituted. Include the field in storage, definition hashing, and same-version repeated-request comparisons only when it is present. Existing published schemas and hashes without the field remain unchanged, and selection changes only through publishing a new version. Existing schema JSON storage is used; there is no new DB column or migration, and `settingsHash` and the SQL budget do not change.
 
-관리자는 검색 결과를 전체 목록과 별도로 보관해 현재 선택/초안을 유지한다. 검색에서 고른
-프로젝트가 새로고침 첫 페이지 밖이면 기존 `GET /v1/projects/{id}`로 권한을 재확인해
-선택을 유지한다. 이때만 추가 HTTP 읽기 한 번이 필요하며 자동 재시도는 하지 않는다.
+The per-service completion rates in `GET /v1/overview` and the individual service overview explicitly query the workflow referenced by this field. Only omission is a valid unspecified state, leaving the workflow name and completion rate null. Invalid syntax or an ID absent from the same version's `workflows` is rejected during draft validation and publishing. If a stored definition violates the contract, the integration overview marks that row as an error and does not interpret it as unspecified or as the first workflow. The goal screen queries every registered workflow regardless of the representative selection.
 
-스키마 초안 검증·발행 요청과 발행된 정의의 선택 필드 `representativeWorkflowId`는 같은
-버전 `workflows` 중 서비스 개요에 쓸 browser 작업 흐름을 가리킨다. 값은
-`^[a-z][a-z0-9_]{0,47}$`를 따르며, 생략하면 대표 없음이고 첫 workflow로 대체하지 않는다.
-저장·정의 해시·같은 버전 재요청 비교에는 필드가 있을 때만 포함한다. 필드가 없는 기존
-발행 스키마와 해시는 그대로 유지되고 선택 변경은 새 버전 발행으로만 한다. 기존 스키마
-JSON 저장을 쓰며 새 DB 컬럼·마이그레이션은 없고 `settingsHash`와 SQL 예산은 바뀌지 않는다.
+The timeZone, coverage, and latestReceivedAt values in API meta are not replaced with fake values.
 
-`GET /v1/overview`의 서비스별 완료율과 개별 서비스 개요는 이 필드가 가리키는 작업 흐름을
-명시적으로 조회한다. 필드를 생략한 경우만 정상 미지정이며 흐름 이름과 완료율을 null로
-둔다. 문법이 틀리거나 같은 버전 `workflows`에 없는 ID는 초안 검증·발행에서 거부한다.
-저장된 정의가 계약을 위반하면 통합 현황은 해당 행을 오류로 표시하며 미지정이나 첫
-workflow로 해석하지 않는다. 목표 화면은 대표 선택과 관계없이 모든 등록 workflow를
-조회한다.
-
-API meta의 timeZone·coverage·latestReceivedAt을 가짜 값으로 대체하지 않는다.
-
-완료율은 workflow 응답을 사용하고 이벤트 합계끼리 나누지 않는다. 실패 단계 없는
-목표는 failedAttempts=null, 분모 없는 완료율은 null이다. 401/403/503을 각각 표시하고
-서로 다른 프로젝트/버전의 응답이 뒤늦게 화면을 덮어쓰지 않게 취소/세대 검사를 적용한다.
-로컬 구현·검증은 실제 OIDC 로그인·원격 D1 운영을 확인한 결과가 아니다.
+Completion rates use the workflow response and are not calculated by dividing event totals. A goal with no failure step has failedAttempts=null, and a completion rate with no denominator is null. Show 401, 403, and 503 separately and apply cancellation and generation checks so a late response for a different project or version does not overwrite the screen. Local implementation and verification are not evidence of a real OIDC login or production remote D1.

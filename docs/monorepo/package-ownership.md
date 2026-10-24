@@ -1,27 +1,25 @@
-# 패키지 소유권
+# Package Ownership
 
-상태: core·storage-d1·collector·browser·server와 React/Vite admin을 로컬 구현·검증했다(Sembom 예제 포함). 현재 `@tallyfin` 로컬 스코프로만 쓰고 공개 npm 스코프·릴리스 방식은 미결정.
+Status: Core, storage-d1, collector, browser, server, and the React/Vite admin app were implemented and verified locally, including the Sembom example. They currently use only the local `@tallyfin` scope; the public npm scope and release process are undecided.
 
-## 책임
-- core: 프로젝트별 이벤트/속성 등록 정의, 검증, 정규화, 목표·집계 기준. 특정 서비스 이벤트명을 전역 요구사항으로 두지 않는다. 로컬 구현·검증 완료.
-- browser: 최소 SDK. 동기 수집 I/O 없음, 렌더링/계산 대기 없음. 로컬 구현·검증 완료.
-- server: 서버 발행 SDK. `send`는 await하는 배치 전송이고 수명 주기·재시도 저장·`getToken` 콜백은 호출자가 쥔다. 외부 런타임 의존성이 없고 브라우저/core/storage 런타임을 번들하지 않는다. 로컬 구현·검증 완료, 로컬 Node·Worker·D1 통합 검증 완료.
-- storage-d1: D1 집계 저장 어댑터. 원자적 커밋·CAS 가드·할당량·만료 정리를 포함하며 로컬 구현·검증 완료.
-- auth-oidc: 서버용 JWT 서명·클레임·공개키 검증 어댑터. 호스트 설정을 받으며 Cloudflare·D1에 의존하지 않는다. core/SDK에 포함하지 않는다.
-- collector: Worker 수신 경계. 프로젝트·스키마·발행 출처에 맞춰 검증하고 집계한다. 최소 browser 수집 로컬 구현·검증 완료.
-- admin: 프로젝트별 조회·이벤트 분석·목표/작업 흐름·설정. 프로젝트 설정과 조회는 권한 검사를 거친다.
-- 서비스별 연동: 각 서비스 저장소 소유. Sembom은 첫 예시이며 다른 서비스의 연동 코드를 대신하지 않는다.
-- examples/sembom: Sembom 연동 예제. 실제 Sembom 저장소 적용은 별도 작업이다.
+## Responsibilities
+- core: Per-project event and property registration definitions, validation, normalization, and goal and aggregation rules. It does not treat a particular service's event names as global requirements. Local implementation and verification are complete.
+- browser: Minimal SDK. There is no synchronous collection I/O and no waiting for rendering or calculations. Local implementation and verification are complete.
+- server: Server publishing SDK. `send` is an awaited batch delivery, and the caller owns lifecycle, retry storage, and the `getToken` callback. It has no external runtime dependencies and bundles no browser, core, or storage runtime. Local implementation and verification are complete, and local Node, Worker, and D1 integration has been verified.
+- storage-d1: D1 aggregate storage adapter. It includes atomic commits, CAS guards, quotas, and expired-data cleanup. Local implementation and verification are complete.
+- auth-oidc: JWT signature, claim, and public-key verification adapter for servers. It takes host configuration and does not depend on Cloudflare or D1. It is not included in core or the SDKs.
+- collector: Worker ingestion boundary. It validates according to project, schema, and publishing source and aggregates the result. Minimal browser collection is implemented and verified locally.
+- admin: Per-project queries, event analytics, goals and workflows, and settings. Project settings and queries pass permission checks.
+- Service integrations: Owned by each service repository. Sembom is the first example and does not stand in for integration code in other services.
+- examples/sembom: Sembom integration example. Applying it to the actual Sembom repository is separate work.
 
-## 공개/비공개 통합
-공개 프로젝트 ID는 라우팅 메타데이터이며 비밀/인증이 아니다. 비공개 ZDP/Cloudflare 의존성은 core/SDK에 넣지 않는다.
+## Public and private integration
+A public project ID is routing metadata and not a secret or authentication credential. Do not add private ZDP or Cloudflare dependencies to core or the SDKs.
 
-## 기준 문서
-제품 범위는 제품 명세, API 형식은 OpenAPI, 저장 구조는 DBML을 따른다. v0.1 계약은 [ADR 0005](../adr/0005-event-and-aggregation-contract.md)에 확정했고 코어 검증·저장·수집기를 로컬에서 구현·검증했다. tools/contracts는 개발 전용 계약 검사이며 core/SDK의 런타임 의존성이 아니다.
+## Source of truth
+Product scope follows the product specification, API shapes follow OpenAPI, and storage structure follows DBML. The v0.1 contract was settled in [ADR 0005](../adr/0005-event-and-aggregation-contract.md), and core validation, storage, and the collector were implemented and verified locally. tools/contracts checks development-only contracts and is not a runtime dependency of core or the SDKs.
 
-## 버전 계획
-이벤트에 스키마 버전을 포함한다. 패키지 버전/배포 방식은 미결정.
+## Version plan
+Events include a schema version. Package versions and distribution method are undecided.
 
-SDK tarball의 파일 목록·외부 프로젝트 설치·타입·ESM 진입점은 선택 명령
-`npm run verify:sdk-packages`로 로컬 확인한다. 공개 게시와 버전 변경은 하지 않으며
-[패키지 확인 안내](../../tools/sdk/README.md)를 따른다.
+The SDK tarball's file list, installation in an external project, types, and ESM entry points are checked locally with the optional `npm run verify:sdk-packages` command. It does not publish packages or change versions; follow the [package verification guide](../../tools/sdk/README.md).
