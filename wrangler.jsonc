@@ -3,6 +3,7 @@
   "name": "tallyfin-collector",
   "main": "apps/collector/src/runtime.ts",
   "compatibility_date": "2026-08-06",
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "workers_dev": false,
   "preview_urls": false,
   "send_metrics": false,

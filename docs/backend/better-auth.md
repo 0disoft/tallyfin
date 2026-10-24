@@ -95,6 +95,8 @@ still `cron` for other installations. An auth-owned SQLite Durable Object wakes
 every minute and calls the Collector's `CollectorMaintenance.run` service-binding
 RPC. It executes the existing bounded cleanup; it cannot read auth data. No
 public Collector route invokes maintenance. Auth keys are cleaned at most hourly.
+Collector targets enable `global_fetch_strictly_public` so JWKS fetches can reach
+an auth Worker on the same Cloudflare account through its public HTTPS endpoint.
 SQLite Durable Objects are supported on Workers Free; normal resource limits
 still apply. This adds no GitHub scheduled runners or paid-plan upgrade.
 

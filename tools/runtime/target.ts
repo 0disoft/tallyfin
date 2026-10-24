@@ -20,6 +20,7 @@ export function deploymentTarget(input: unknown, root: string) {
       $schema: resolve(root, 'node_modules/wrangler/config-schema.json'),
       name: input.workerName, account_id: input.accountId, main: resolve(root, 'apps/collector/src/runtime.ts'),
       compatibility_date: '2026-08-06', workers_dev: input.workersDev, preview_urls: false, send_metrics: false,
+      compatibility_flags: ['global_fetch_strictly_public'],
       d1_databases: [{ binding: 'DB', database_name: input.databaseName, database_id: input.databaseId,
         migrations_dir: resolve(root, 'db/migrations') }],
       vars: settings, triggers: { crons: input.scheduler === 'auth-alarm' ? [] : ['* * * * *'] },

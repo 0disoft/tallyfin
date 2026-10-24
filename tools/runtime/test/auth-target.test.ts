@@ -20,6 +20,7 @@ test('Better Auth configuration preserves account, isolated DB and exact OIDC to
   assert.deepEqual(config.secrets.required, ['BETTER_AUTH_SECRET']); assert.ok(!JSON.stringify(config).includes('password'));
   const alarmPlan = installation({ ...input, collector: { ...input.collector, scheduler: 'auth-alarm' } }, process.cwd());
   assert.deepEqual(alarmPlan.collector.triggers.crons, []);
+  assert.ok(alarmPlan.collector.compatibility_flags.includes('global_fetch_strictly_public'));
   const alarmConfig = authDeploymentTarget(target, alarmPlan, process.cwd());
   assert.equal(alarmConfig.vars.MAINTAIN_COLLECTOR, 'true');
   assert.equal(alarmConfig.services[0]!.entrypoint, 'CollectorMaintenance');
