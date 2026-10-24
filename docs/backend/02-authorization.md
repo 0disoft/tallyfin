@@ -1,29 +1,27 @@
-# 프로젝트 권한
+# Project Authorization
 
-상태: grant 검사와 로컬 프로젝트 등록·권한 관리 CLI를 구현·로컬 검증했다.
-실제 인증 제공자의 사용자 등록과 원격 운영 배포는 아직 없다.
+Status: Grant checks and the local project registration and authorization management CLI have been implemented and verified locally.
+User registration in a real identity provider and remote production deployment do not exist yet.
 
-자기 계정만 반환하는 `GET /v1/identity`는 검증된 관리자 bearer가 필요하며 프로젝트
-grant는 요구하지 않는다. 이 경로는 DB 접근·다른 계정 조회·권한 부여를 하지 않는다.
-관리자 앱의 `로그인 계정 확인`에서 명시적으로 조회·복사할 수 있으며 프로젝트 목록이
-비어도 사용할 수 있다. 권한 등록은 신뢰된 운영자가 별도로 수행한다.
-[원격 생성 권한 도구](./remote-creator-provisioning.md)는 검증한 설치의 관리자 발급자와
-대상 DB를 고정하고 미리보기 해시·쓰기 직전 상태 조건으로 생성 권한만 변경한다.
-이 권한은 기존 프로젝트 조회 grant나 서버 발행 권한을 대신하지 않는다.
-프로젝트 관리자 조회마다 검증된 issuer/subject의 project_grants를 확인한다. D1 조회는 매
-statement에 `EXISTS (project_grants ... role IN ('reader','owner'))` 조건을 붙이고
-정의·버전 읽기와 집계를 한 배치 스냅샷으로 처리한다. reader와 owner는 조회 가능하고
-설정 PATCH·스키마 발행 PUT은 owner만 사용할 수 있다. 프로젝트 생성 POST는
-`project_creators`의 별도 권한·개수 한도를 요구하고 기존 owner에게서 추론하지 않는다.
-생성자의 최초 owner 부여는 생성과 같은 원자 저장에서만 수행한다. 생성 권한 회수는
-기존 project_grants를 지우지 않는다. 로컬 [등록·권한 관리 CLI](./provisioning.md)는
-DB 파일 접근 권한이 있는 신뢰된 운영자가 실행하며 로그인과 owner 역할을 검사하지
-않는다. 첫 owner 등록과 마지막 owner 보호를 지원한다. UI
-선택·cursor·공개 projectId로 권한을 얻지 않는다. 프로젝트 목록은 접근 가능한 항목만
-ID 오름차순으로 반환하며(limit 기본 25·최대 100, cursor) 모든 페이지에서 권한을 다시
-적용한다. 누락/잘못된 인증은 401, 해당 프로젝트 grant 부족은 403, 정의·버전이 없으면
-404, 저장소 오류는 503이다.
+`GET /v1/identity` returns only the caller's own account. It requires a verified administrator bearer token and does not require a project
+grant. This route does not access the database, read other accounts, or grant permissions.
+The administrator app can explicitly read and copy it from `Check signed-in account`, and the route remains available when the project list is
+empty. Authorization registration is performed separately by a trusted operator.
+The [Remote Creator Authorization Tool](./remote-creator-provisioning.md) pins the administrator issuer and
+target database of a verified installation and changes only creator authorization, using a preview hash and a condition on the state immediately before the write.
+This authorization does not replace an existing project read grant or server publishing authorization.
+Every administrator project read checks `project_grants` for the verified issuer and subject. Every D1 read
+attaches `EXISTS (project_grants ... role IN ('reader','owner'))` to the statement, and definition, version reads, and aggregation use one batch snapshot. Readers and owners can read;
+only owners can use settings PATCH and schema publishing PUT. Project creation POST requires a separate
+`project_creators` authorization and count limit; it is not inferred from an existing owner.
+The creator's initial owner grant is granted only in the same atomic write as project creation. Revoking creator authorization does not delete
+existing `project_grants`. The local [registration and authorization management CLI](./provisioning.md) is
+run by a trusted operator with access to the database file, and it does not check sign-in or the owner role.
+It supports first-owner registration and protection of the last owner. Authorization is not obtained from a UI
+selection, cursor, or public projectId. The project list returns only accessible projects in ascending
+ID order (default limit 25, maximum 100, cursor), and authorization is reapplied on every page. Missing or invalid authentication is 401, insufficient grant for the project is 403, a missing definition or version is
+404, and a storage error is 503.
 
-수집 경계는 프로젝트 활성 상태·등록 버전·browser 출처·오리진·한도를 검사한다.
-공개 수집이므로 봇 진위는 보장하지 않으며 IP 악용 방지 정책은 활성화 전에 확정한다.
-[관리자 조회 경계](./administrator.md)와 [이벤트 계약](./event-contract.md)을 참고한다.
+The ingestion boundary checks project active status, registered version, browser source, origin, and limits.
+Because ingestion is public, bot authenticity is not guaranteed, and the IP abuse prevention policy must be defined before activation.
+See the [Administrator Read Boundary](./administrator.md) and [Event Contract](./event-contract.md).

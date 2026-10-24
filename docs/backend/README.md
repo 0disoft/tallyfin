@@ -1,16 +1,16 @@
-# Tallyfin 백엔드 계약
+# Tallyfin Backend Contracts
 
-상태: v0.1 계약 확정. 코어·저장 어댑터·수집기·브라우저 SDK·서버 발행 SDK와 관리자 조회 API를 로컬에서 구현·검증했고, 로컬 Node·Miniflare Worker·D1 통합도 검증했고 운영 배포와 실제 인증 제공자는 아직 없다.
+Status: v0.1 contracts finalized. The core, storage adapters, collector, browser SDK, server publishing SDK, and administrator read API have been implemented and verified locally. Local Node, Miniflare Worker, and D1 integration have also been verified. Production deployment and a real identity provider do not exist yet.
 
-공개 브라우저 수집과 인증된 관리자 조회를 분리한다. 요청/응답은
-[OpenAPI](../../api/openapi.yaml), 저장 구조는 [DBML](../../db/schema.dbml),
-동작 의미는 [이벤트·집계 계약](./event-contract.md)을 따른다.
+Public browser collection and authenticated administrator reads are separate. Requests and responses follow
+[OpenAPI](../../api/openapi.yaml), the storage structure follows [DBML](../../db/schema.dbml),
+and behavioral semantics follow the [Event and Aggregation Contract](./event-contract.md).
 
-원문과 방문자 테이블은 없으며 일별 이벤트/시작 cohort를 집계한다.
-로컬 구동과 운영 대상 설정 준비는 [수집기 실행](./runtime.md)을 따른다.
-로컬 [프로젝트 등록·권한 관리 CLI](./provisioning.md)는 미리보기·등록·권한 부여·회수를
-지원한다. 설정 쓰기 API는 구현했고 [서버 이벤트](./server-events.md)는 코어 배치 검증과
-발행 권한을 재검사하는 출처별 저장 어댑터까지 구현했다. 인증된 서버 HTTP 수집과 서버 발행
-SDK는 로컬에서 구현했고 로컬 Node·Miniflare Worker·D1 통합도 검증했다. 실제 인증 제공자
-연결·토큰 발급과 운영 배포는 후속이다.
-형식 검증의 통과는 API 실행·원자적 저장·운영 권한 검증의 통과가 아니다.
+There are no raw event or visitor tables; daily events and entry cohorts are aggregated.
+For local operation and preparation of production targets, follow [Running the Collector](./runtime.md).
+The local [Project Registration and Authorization Management CLI](./provisioning.md) supports preview, registration, grant, and revocation.
+The settings write API has been implemented, and [Server Events](./server-events.md) has been implemented through source-specific storage adapters that recheck core batch validation and
+publishing authorization. Authenticated server HTTP ingestion and the server publishing
+SDK have been implemented locally, and local Node, Miniflare Worker, and D1 integration have also been verified. Connecting a real identity provider,
+issuing tokens, and production deployment remain follow-up work.
+Passing format validation is not proof that API execution, atomic storage, or production authorization have passed.

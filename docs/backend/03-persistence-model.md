@@ -1,25 +1,25 @@
-# 저장 모델
+# Persistence Model
 
-상태: [DBML](../../db/schema.dbml)와 SQL 마이그레이션을 Miniflare D1에서 로컬 검증했다.
-원격 DB에는 적용하지 않았다.
+Status: [DBML](../../db/schema.dbml) and the SQL migrations were verified locally in Miniflare D1.
+They have not been applied to a remote database.
 
-프로젝트/불변 스키마/관리자 grant와 일별 이벤트/목표/퍼널 집계를 저장한다.
-event_receipts는 원문 대신 eventId와 정규화된 payload 해시를 48시간,
-workflow_attempts는 작업별 최소 연결 상태를 시작 후 72시간 유지한다.
-funnel_runs는 작업별 연결 상태의 단계 시각(2~10개, 미도달 null)을 시작 후 72시간,
-funnel_daily_counts는 시작일·버전·퍼널·dimensions별 연속 도달 수를 90일 유지한다.
-방문자·원시 이벤트 테이블은 없다. 관리자 issuer/subject는 제어 영역이며
-방문자 분석에 사용하지 않는다.
+Projects, immutable schemas, administrator grants, and daily event, goal, and funnel aggregates are stored.
+`event_receipts` keeps an eventId and normalized payload hash instead of the raw event for 48 hours;
+`workflow_attempts` keeps the minimal linkage state for each workflow for 72 hours after it starts.
+`funnel_runs` keeps step timestamps for workflow linkage state (2 to 10 steps, with unreached steps as null) for 72 hours after start;
+`funnel_daily_counts` keeps consecutive reach counts by start date, version, funnel, and dimensions for 90 days.
+There are no visitor or raw event tables. Administrator issuer and subject belong to the control plane and are
+not used for visitor analytics.
 
-영수증·시도·UTC 일별 신규 영수증 할당량·집계·퍼널 연결 상태와 단계 delta는
-projects.ingest_revision을 올리는 같은 D1 batch에서 반영한다. 그래서 동시 쓰기나 발행
-권한 회수로 배치가 롤백되면 영수증·할당량·연결·집계가 일부만 남지 않는다. 일별 집계는
-프로젝트-local 오늘을 포함한 90일, 퍼널 단계 집계는 시작일 기준 90일이다. 프로젝트와
-버전은 모든 집계 키와 외래 키에 포함한다. 만료/범위/정수/흐름 제약과 함께 단계 시각의
-24시간 창·비감소 순서, 인접 단계 도달 수의 비증가를 SQL 트리거가 강제하고 코어도 같은
-규칙을 검사하며 로컬 테스트로 확인했다. 자세한 규칙은
-[이벤트 계약](./event-contract.md)을 따른다.
+Receipts, attempts, the UTC daily new-receipt quota, aggregates, funnel linkage state, and step deltas are
+written in the same D1 batch that increments `projects.ingest_revision`. If a concurrent write or a revocation of publishing
+authorization rolls back the batch, receipts, quota, linkage, and aggregates cannot be left partially written. Daily aggregates cover the 90 days including the
+project-local current day, while funnel step aggregates cover 90 days measured from the start date. The project and
+version are included in every aggregate key and foreign key. Along with expiration, range, integer, and flow constraints, SQL triggers enforce
+the 24-hour step-time window and nondecreasing order, and the nonincreasing count of consecutive reached steps; the core checks the same
+rules and confirmed them in local tests. Detailed rules follow the
+[Event Contract](./event-contract.md).
 
-`retention_cleanup_state`는 방문자/집계와 분리된 단일 행 운영 상태다. 만료 정리의
-마지막 프로젝트 ID와 revision을 보관해 Worker 재생성 뒤에도 순회를 이어간다.
-자세한 조건은 [자동 정리](./retention-cleanup.md)를 따른다.
+`retention_cleanup_state` is a single-row operational state separate from visitor and aggregate data. It stores the
+last project ID and revision for expiration cleanup so traversal can continue after a Worker restart.
+Detailed conditions follow [Automatic Cleanup](./retention-cleanup.md).
