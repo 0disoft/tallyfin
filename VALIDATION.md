@@ -1,5 +1,24 @@
 # Validation
 
+## Native Workers JWKS transport compatibility — 2026-10-25
+
+Live PKCE login issued and validated an ID token, but Collector identity reads
+returned 503 `storage_unavailable`. A temporary diagnostic restricted to the
+public JWKS transport identified native Workers rejecting `redirect: "error"`
+before any network request. The diagnostic was removed. JWKS transport now uses
+`manual` and the existing 200-only response check, preserving redirect refusal.
+Collector targets also explicitly allow public same-zone fetches through
+`global_fetch_strictly_public` for the separately deployed auth Worker.
+
+- `node --test --test-timeout=30000 packages/auth-oidc/test/*.test.ts`: 21/21
+  passed, including actual Workers global-fetch/ES256 verification, rejected
+  redirects, failure cooldown, cancellation and bounded key fetches.
+- Deployment/auth-target checks: 4/4 passed.
+- Full `npm run typecheck` passed after the alarm/RPC integration.
+
+No analytics HTTP/DB schema, credential, CI or hygiene-policy changes. Live
+verification after deploying the corrected transport is recorded separately.
+
 ## Free-plan maintenance scheduling — 2026-10-25
 
 The authenticated provider deployed and real password login returned 200 with a

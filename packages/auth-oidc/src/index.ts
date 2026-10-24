@@ -82,7 +82,9 @@ export function createOidcVerifier(options: OidcOptions): (bearer: string, optio
         try {
           // The gate owns the real transport, not the caller's deadline race.
           const response = await transport(url, {
-            ...init, signal, redirect: 'error', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
+            // Workers rejects redirect:"error" before sending. Manual plus the 200-only
+            // check below refuses every redirect without following it in either host.
+            ...init, signal, redirect: 'manual', credentials: 'omit', referrerPolicy: 'no-referrer', cache: 'no-store',
           });
           if (signal.aborted) { discard(response.body); signal.throwIfAborted(); }
           if (response.status !== 200 || !response.body) {

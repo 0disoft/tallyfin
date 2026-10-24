@@ -52,7 +52,7 @@ test('valid RSA access token returns only the verified identity and reuses publi
   assert.deepEqual(await verify(token), { issuer, subject: 'test-admin' });
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.input, config.jwksUri);
-  assert.equal(calls[0]!.init!.redirect, 'error');
+  assert.equal(calls[0]!.init!.redirect, 'manual');
   assert.equal(calls[0]!.init!.credentials, 'omit');
   assert.equal(calls[0]!.init!.referrerPolicy, 'no-referrer');
   assert.equal(new Headers(calls[0]!.init!.headers).has('Authorization'), false);
