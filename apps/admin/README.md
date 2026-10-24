@@ -1,371 +1,423 @@
-# Tallyfin 관리자 앱
+# Tallyfin Administrator App
 
-설정의 JSON 스키마 편집은 선택 funnels 정의를 검증·발행·재조회할 때 보존한다.
-발행 해시와 응답 유실 확인에 퍼널을 포함하고 연결 이벤트·분류의 폼 변경은 잠근다.
-퍼널 전용 단계 편집 폼과 단계 분석 화면·CSV를 로컬 연결했다.
+The optional funnel definitions in the JSON schema editor in settings are preserved when validating,
+publishing, and re-reading them. The publication hash and lost-response checks include funnels, and
+form changes that affect linked events and classifications are locked. The funnel-specific stage
+editing form, stage analysis screen, and CSV are connected locally.
 
-선택한 [개요 시안](../../docs/frontend/SELECTED_VISUAL.md)을 기반으로 구현한 관리자 앱이다.
-ModuFile·Sembom·Orchid Pass는 가상의 데이터이며 실제 서비스를 조회하지 않는다.
-기본 주소와 `/auth/callback`은 **API 연결**(같은 출처 `/v1` 관리자 API 조회·설정 저장)로
-시작한다. `/demo` 또는 `/demo/`에서만 **Sample**과 **API 연결** 모드 전환을 제공한다.
-일반 주소의 쿼리로 데모를 켜지 않는다. API 모드는 OIDC 로그인과 관리자 bearer 직접 연결을 제공한다.
-실제 인증 제공자 설정과 운영 배포는 아직 연결하지 않았다.
+This administrator app is based on the selected
+[overview visual concept](../../docs/frontend/SELECTED_VISUAL.md). ModuFile, Sembom, and Orchid Pass
+use virtual data and do not query real services. The default address and `/auth/callback` start in
+**API connection** mode (same-origin `/v1` administrator API reads and setting saves). Only
+`/demo` or `/demo/` offers the **Sample** and **API connection** mode switch. A query on the
+normal address does not enable the demo. API mode provides OIDC sign-in and direct administrator
+bearer connection. Real authentication-provider configuration and production deployment are not
+connected yet.
 
-관리 API 요청은 토큰 갱신 대기부터 응답 본문 읽기까지 기본 15초로 제한한다.
-시간이 지나면 로딩을 끝내고 다시 조회할 수 있는 오류를 표시한다. 호출 취소·연결 해제는
-진행 중 대기를 끝내며 늦은 응답을 버린다. 요청 하나의 취소가 공유 로그인 갱신을 취소하지는
-않는다. 이미 받은 401·403은 오류 본문이 멈춰도 권한 오류로 유지한다. 저장 결과를 확인하지
-못하면 자동 재전송하지 않고 입력값을 보존한 채 서버의 최신 상태를 확인하도록 안내한다.
-내부 `ApiClient` 생성 옵션 `requestTimeoutMs`로 10~120000밀리초 범위에서 제한을 조정할 수 있다.
+Administrator API requests have a default 15-second limit from waiting for token refresh through
+reading the response body. When the limit is reached, loading ends and the UI shows a retryable
+error. Cancelling a call or disconnecting ends an in-flight wait and discards a late response.
+Cancelling one request does not cancel a shared sign-in refresh. A 401 or 403 already received
+remains a permission error even if its error body stalls. If a save result cannot be confirmed, the
+UI does not resend automatically; it preserves the input and explains that the latest server state
+must be checked. The internal `ApiClient` constructor option `requestTimeoutMs` can adjust the
+limit from 10 to 120000 milliseconds.
 
-연결 후 `로그인 계정 확인`을 펼치면 `GET /v1/identity`로 서버가 검증한 issuer/subject를
-읽는다. 프로젝트 권한이 없는 첫 계정도 사용할 수 있고 접혀 있을 때는 조회하지 않는다.
-읽기 전용 필드와 JSON 복사를 제공하며 복사가 실패하면 JSON을 직접 선택할 수 있다.
-조회 실패 때 이전 식별자를 지우고 재시도를 제공한다. 닫기·연결 교체·연결 끊기에서는
-요청을 취소하고 늦은 응답을 폐기한다. 토큰·역할을 복사하거나 권한을 부여하지 않는다.
+After connecting, expanding `Account identity` reads the server-verified issuer and subject with
+`GET /v1/identity`. A first account without project permission can use it, and no query is made
+while it remains collapsed. Read-only fields and a JSON copy are provided; if copying fails, the user
+can select the JSON directly. On failure, it clears the previous identity and offers retry.
+Closing, replacing the connection, or disconnecting cancels the request and discards late responses.
+It does not copy tokens or roles, or grant permissions.
 
-설정 화면에서 `저장소 읽기 확인`을 펼친 뒤 버튼으로 `GET /v1/health`를 수동 호출하면 관리자 저장소의 두
-제어면 테이블 읽기만 확인한다. 펼치기만 해서는 요청하지 않고 자동 폴링·JSON·식별자 표시가
-없다. 성공하면 이번 확인 시각을 보여주는데 지표 갱신 시각이 아니고, 실패하면 오류 문구만
-보여주고 성공 표시는 남기지 않는다. 닫기·연결 교체·연결 끊기에서는 요청을 취소하고 늦은
-응답을 폐기한다. 요청은 5초 뒤 취소하고 직접 재시도할 수 있다. 수집 저장·정리 작업은 별도로
-확인해야 한다. Chrome·임시 서명 OIDC·로컬 D1로 화면을 검증했고 결과는
-[검증 기록](../../VALIDATION.md)에 있다. 실제 OIDC 제공자 연결은 아직 없다.
+In the settings screen, expanding **Storage Read Check** and then pressing the button manually calls
+`GET /v1/health` and verifies only reads of the 2 administrator control-plane tables. Expanding the
+panel alone makes no request, and there is no automatic polling, JSON display, or identifier display.
+On success, it shows the time of this check, which is not a metric-refresh time. On failure, it shows
+only an error message and leaves no success indicator. Closing, replacing the connection, or
+disconnecting cancels the request and discards late responses. Requests are cancelled after 5
+seconds and can be retried manually. Collection storage and cleanup work must be checked separately.
+The screen was verified with Chrome, ephemeral signed OIDC, and local D1, and results are in the
+[validation record](../../VALIDATION.md). A real OIDC provider is not connected yet.
 
-설정의 `운영 로그 보고서`에서 `logs:summary` v2 JSON 파일을 선택해 관측 수·가중 요청 어림·
-오류/확인 필요 항목·HTTP 응답/지연 구간·보존 정리 처리 횟수를 표로 읽는다. 최대 8MiB를
-Worker에서 검증하며 파일은 서버로 보내거나 저장하지 않는다. 긴 응답 표는 25줄씩 넘기고
-정리 상세가 없으면 처리 횟수를 `—`로 표시한다. 프로젝트·기간 선택과 구분한 전체 수집기
-보고서이며 닫기·새 파일·연결 교체/끊기에서는 읽기와 결과를 정리한다. 사용법은
-[로컬 보고서 안내](../../docs/ops/local-report-viewer.md)에 있다.
+Under **Operational Log Report** in settings, select a `logs:summary` v2 JSON file to read observation
+counts, weighted request estimates, error and review items, HTTP responses and latency buckets, and
+retention-cleanup processed counts in a table. The file, limited to 8 MiB, is validated in the
+Worker and is not sent to a server or stored. Long response tables paginate at 25 lines, and missing
+cleanup details show the processed count as `—`. This report covers the entire collector and is
+separate from project and period selection; closing it, selecting a new file, or replacing or
+disconnecting the connection clears the read and its result. Usage is in the
+[local report guide](../../docs/ops/local-report-viewer.md).
 
-배포용 Worker는 `/v1`·`/v1/*`를 고정 `COLLECTOR` 서비스 바인딩으로 수집기에 전달한다.
-연결 누락·장애는 503 JSON으로 응답하고 앱 HTML로 바꾸지 않는다. 실제 타깃 파일은
-루트 `npm run admin:config`로 준비한다. 빌드·같은 출처 운영 구성·롤백은
-[관리자 Worker 배포 준비](../../docs/backend/runtime.md#관리자-worker-배포-준비)를 따른다.
-기본 Sites 패키징에는 collector 바인딩이 없어 API 운영 연결을 제공하지 않는다.
+The deployment Worker forwards `/v1` and `/v1/*` to the collector through the fixed `COLLECTOR`
+service binding. A missing binding or failure returns a 503 JSON response instead of the app HTML.
+The actual target file is prepared with root `npm run admin:config`. Build, same-origin production
+configuration, and rollback follow
+[administrator Worker deployment preparation](../../docs/backend/runtime.md#administrator-worker-deployment-preparation).
+The default Sites packaging has no collector binding and therefore does not provide a production API
+connection.
 
-운영 로그인 값까지 함께 준비할 때는 루트 `install:prepare`로 설정 묶음을 만들고
-`admin:build-configured -- --dir <설치 디렉터리>`로 빌드한다. 기존 `.env`·`VITE_` 값을
-섞지 않고 공개 로그인 설정만 사용하며, 산출물은 해당 묶음의 `admin-assets`에 둔다.
-[운영 설치 안내](../../docs/backend/installation.md)를 따른다.
+To prepare production sign-in values as well, create the configuration bundle with root
+`install:prepare`, then build with
+`admin:build-configured -- --dir <installation-directory>`. It does not mix existing `.env` or
+`VITE_` values and uses only public sign-in configuration; output goes to that bundle's
+`admin-assets`. Follow the [production installation guide](../../docs/backend/installation.md).
 
-## 실행
+## Running
 
-수집기와 함께 실행하려면 저장소 루트에서 Node 24 이상을 사용한다.
-DB 초기화·등록과 의존성 설치를 마친 뒤 다음 명령을 실행한다.
+To run with the collector, use Node 24 or later from the repository root. After database
+initialization and registration and dependency installation, run:
 
 ```sh
 npm run dev -- --local --state-dir .tmp/collector-db
 ```
 
-관리자는 `http://127.0.0.1:5180`, 수집기는 `http://127.0.0.1:5188`에서 실행된다.
-포트 변경·설정·종료 절차는 [통합 실행 안내](../../docs/backend/runtime.md#통합-개발-실행)에 있다.
+The administrator runs at `http://127.0.0.1:5180` and the collector at
+`http://127.0.0.1:5188`. Port changes, configuration, and shutdown are covered in the
+[integrated development guide](../../docs/backend/runtime.md#integrated-development-run).
 
-Node 24 이상을 사용하고 의존성은 저장소 루트 lockfile로 설치한다.
+Use Node 24 or later and install dependencies from the repository root lockfile.
 
 ```sh
-# 저장소 루트에서
+# From the repository root
 npm ci --ignore-scripts
 npm run dev:admin -- --host 127.0.0.1 --port 5180 --strictPort
 ```
 
-이 독립 실행도 `/v1`을 기본 `http://127.0.0.1:5188` 수집기로 전달한다.
-서버 환경 변수 `TALLYFIN_COLLECTOR_ORIGIN`으로 다른 루프백 HTTP 포트를 지정한다.
-`/auth/callback`은 관리자 화면에서 처리한다. 수집기가 없으면 API 연결은 실패하지만
-샘플 모드는 사용할 수 있다.
+This standalone run also proxies `/v1` to the default collector at
+`http://127.0.0.1:5188`. Set the server environment variable `TALLYFIN_COLLECTOR_ORIGIN` to use
+another loopback HTTP port. The administrator UI handles `/auth/callback`. Without a collector, API
+connection fails, but sample mode remains usable.
 
-## 구현 범위
+## Implementation Scope
 
-- 프로젝트별 개요·이벤트 분석·목표·설정과 7/14/30일 필터.
-- 이벤트 검색·정렬·상세 추이와 차트의 수치 표.
-- 이름 변경·검증·초기화. 변경은 메모리에만 유지하며 새로고침하면 초기화된다.
-- 로딩·빈 데이터·조회 오류·오래된 데이터·권한 없음의 샘플 상태.
-- 모바일 메뉴와 표 내부 가로 스크롤.
-- API 연결 모드의 프로젝트 생성 화면과 SDK 연결 안내.
-- API 연결 목표 화면의 등록 퍼널 단계 분석·일별 내역·퍼널 CSV.
+- Per-project overview, event analysis, goals, settings, and 7/14/30-day filters.
+- Event search, sorting, detail trends, and numeric tables for charts.
+- Rename, validation, and reset. Changes exist only in memory and are reset on refresh.
+- Sample states for loading, empty data, query errors, stale data, and no permission.
+- Mobile menu and horizontal scrolling inside tables.
+- Project creation and SDK connection guidance in API connection mode.
+- Registered funnel-stage analysis, daily detail, and funnel CSV in the API connection goals screen.
 
-샘플 날짜는 2026-10-08로 고정한다. 전체 수집 건수에는 화면 조회도 포함하며,
-개요 표는 주요 이벤트 4종만 보여준다. 완료율은 시작 대비 성공 건수이며 분모가
-0이면 계산할 수 없음을 표시한다. 샘플 모드에서는 실제 코호트 계산·권한 강제·API·DB·SDK·수집기를
-구현하지 않았다(API 연결 모드는 같은 출처 관리자 API를 실제로 조회한다). React와 Recharts는
-[ADR 0007](../../docs/adr/0007-admin-application.md)에 따른 관리자 앱의 선택이다.
+The sample date is fixed at 2026-10-08. The total collection count includes screen views, and the
+overview table shows only 4 key events. Completion rate is successful events divided by starts, and
+is shown as uncomputable when the denominator is 0. Sample mode does not implement real cohort
+calculation, authorization enforcement, API, database, SDK, or collector (API connection mode does
+query the real same-origin administrator API). React and Recharts are the administrator app choices
+under [ADR 0007](../../docs/adr/0007-admin-application.md).
 
-## 검증
+## Validation
 
 ```sh
-# 저장소 루트에서
+# From the repository root
 npm run check:admin
 ```
 
-브라우저 검증과 시안 비교 기록은 [초기 디자인 QA](../../prototypes/admin/design-qa.md)에 있다.
-운영 성능 예산은 수집 SDK와 관리자 UI를 나누어 검증해야 한다. 현재 관리자
-번들은 화면별 코드 분리를 적용했고 첫 정적 그래프 gzip 100KiB·개별 JS 500kB 예산을
-검사한다. 실제 인증 제공자·운영 배포·서비스 파일럿 검증은 남아 있다.
+Browser verification and visual comparison records are in
+[initial design QA](../../prototypes/admin/design-qa.md). The production performance budget must be
+verified separately for the collection SDK and administrator UI. The administrator bundle now
+code-splits by screen and checks a 100 KiB gzip budget for the first static graph and a 500 kB budget
+for each JavaScript file. Verification with a real authentication provider, production deployment,
+and a service pilot remains.
 
-## API 연결 모드
+## API Connection Mode
 
-- 엔드포인트 기본값은 현재 출처의 `/v1`이고 다른 출처는 이번 범위가 아니라 거부한다.
-- 관리자 bearer 토큰은 메모리에만 두고 localStorage·sessionStorage·쿠키·쿼리·로그에 쓰지 않는다. `연결 끊기`는 토큰을 지우고 진행 중 요청을 중단한 뒤 조회 데이터를 비운다.
-- 사용 경로는 `GET /v1/projects`, `/projects/{id}/schemas/{version}`, `/summary`, `/events/{name}/daily`, `/workflows/{id}/daily`, `/funnels/{funnelId}/daily`이며 `from`/`to`는 프로젝트 시간대의 오늘과 7/14/30일로 계산한다. `/summary`와 `/events/{name}/daily`에는 선택 `source`(기본 browser)를 함께 보낸다.
-- 이벤트 분석은 선택한 출처의 등록 이벤트에서 속성 하나를 분류 기준으로 골라 값별 건수·비중과
-  선택 값의 일별 추이를 `GET .../events/{name}/daily?groupBy=속성`으로 조회한다. 비중의 분모는
-  그 이벤트 전체 건수이고 전환율이 아니며, 표시 비중은 소수점 한 자리로 반올림해 값별 합이 100.0%와
-  조금 다를 수 있다. 분모가 0이면 계산하지 않고 `—`로 둔다. true·false·null은 각각 구분하고
-  null은 필수 아님 속성의 별도 값(값 없음)으로 세며 합계 값을 지어내지 않는다. 값 버튼으로 선택한
-  값을 바꾸면 표와 일별 추이가 함께 갱신된다. 프로젝트·스키마 버전·이벤트가 바뀌거나 속성이 사라지면
-  분류 기준 선택을 초기화하고, 조건이 바뀌면 진행 중 조회를 취소해 늦은 응답이 화면을 덮지 않게 한다.
-- 개요·이벤트 분석의 발행 출처 선택(`source`, 기본 browser)은 조회·직전 기간 비교·CSV 입력과 로딩 키에 함께 들어간다. 출처를 바꾸면 진행 중 조회를 취소하고 늦은 응답을 버린다.
-- 다른 출처 행은 `다른 출처`로 표시하고 CSV에서는 `not_selected`·빈 값으로 내보내며 server CSV 파일명에는 `-server`가 붙는다. 샘플 모드는 그대로다.
-- 완료율과 시도 수는 작업 흐름 응답 값을 그대로 쓰고 이벤트 총수로 추론하지 않는다. 목표/작업 흐름은 browser 출처로 고정하고 server 개요에서는 시작·성공·완료율을 숨긴다. 퍼널 단계 분석은 등록 단계의 출처를 합쳐 조회하며 `source` 선택을 받지 않는다.
-- 401·403·404·503·네트워크·형식 오류·빈 등록·빈 집계를 구분하고, 실패를 0이나 샘플 수치로 채우지 않는다.
+- The default endpoint is `/v1` on the current origin; other origins are outside this scope and are rejected.
+- The administrator bearer token exists only in memory and is never written to localStorage, sessionStorage, cookies, queries, or logs. `Disconnect` clears the token, aborts in-flight requests, and clears queried data.
+- The paths used are `GET /v1/projects`, `/projects/{id}/schemas/{version}`, `/summary`, `/events/{name}/daily`, `/workflows/{id}/daily`, and `/funnels/{funnelId}/daily`; `from` and `to` are calculated as today and the last 7/14/30 days in the project time zone. `/summary` and `/events/{name}/daily` also send the optional `source` (default browser).
+- Event analysis chooses one property from the selected source's registered events as the breakdown, then queries counts and shares by value and the daily trend for the selected value with `GET .../events/{name}/daily?groupBy=<property>`. The share denominator is the event's total count and is not a conversion rate; displayed shares are rounded to one decimal place, so their sum can differ slightly from 100.0%. A denominator of 0 is not calculated and is shown as `—`. true, false, and null are distinct, and null is counted as a separate value for optional properties (no value) without fabricating totals. Changing the selected value with the value buttons updates the table and daily trend together. If the project, schema version, or event changes or the property disappears, the breakdown selection resets; when conditions change, in-flight queries are cancelled so late responses cannot overwrite the screen.
+- The published-source selector in overview and event analysis (`source`, default browser) is included in queries, previous-period comparison, CSV input, and loading keys. Changing the source cancels in-flight queries and discards late responses.
+- Rows from another source are labeled `Other source` and exported in CSV as `not_selected` or empty; server CSV filenames receive a `-server` suffix. Sample mode is unchanged.
+- Completion rate and attempt count use workflow response values directly and are not inferred from event totals. Goals and workflows are fixed to the browser source, and server overview hides starts, successes, and completion rate. Funnel stage analysis combines the sources of registered stages and does not accept a `source` selection.
+- The UI distinguishes 401, 403, 404, 503, network, format, empty registration, and empty aggregate results, and never fills a failure with 0 or sample values.
 
-## OIDC 관리자 로그인
+## OIDC Administrator Sign-In
 
-관리자 콘솔은 공개 클라이언트 OIDC와 PKCE(S256)로 로그인하고 access/refresh token은
-메모리에만 보관한다. 콜백 주소는 현재 출처의 `/auth/callback`이며 state/nonce/verifier는
-10분짜리 일회성 sessionStorage 기록으로 보관했다가 코드 교환 전에 지운다.
-새로고침하면 재로그인이 필요하며 연결 해제는 로컬 세션을 지운다.
+The administrator console signs in with a public-client OIDC flow and PKCE (S256), and keeps access
+and refresh tokens in memory only. The callback address is `/auth/callback` on the current origin.
+State, nonce, and verifier are kept in a one-time 10-minute sessionStorage record and deleted before
+code exchange. Refreshing requires signing in again, and disconnecting clears the local session.
 
-필수 빌드 환경 변수는 `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, `VITE_OIDC_SCOPE`
-(`openid` 포함)다. 선택값과 CORS·회전 갱신·같은 출처 `/v1` 라우팅 조건은
-[OIDC 연결 문서](../../docs/backend/oidc.md#브라우저-관리자-로그인)를 따른다.
-실제 제공자와 API audience는 UNDECIDED이며 실제 제공자 로그인은 아직 검증하지 않았다.
+The required build environment variables are `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, and
+`VITE_OIDC_SCOPE` (including `openid`). Optional values and the CORS, rotating-refresh, and
+same-origin `/v1` routing requirements follow the
+[OIDC connection guide](../../docs/backend/oidc.md#browser-administrator-sign-in). The real provider and API
+audience are UNDECIDED, and real-provider sign-in has not been verified.
 
-선택적 `npm run verify:admin-login -- --channel chrome`은 대역 제공자·실제 관리자 소스·로컬
-수집기/D1로 로그인 버튼부터 콜백·API 조회·토큰 갱신·재로그인을 검증한다. 준비와 격리 범위는
-[로그인 검증 안내](../../tools/browser-bench/ADMIN-LOGIN.md)에 있다.
+The optional `npm run verify:admin-login -- --channel chrome` verifies the path from the sign-in
+button through callback, API query, token refresh, and sign-in again with a synthetic provider, the
+real administrator source, and a local collector/D1. Setup and isolation scope are in the
+[sign-in verification guide](../../tools/browser-bench/ADMIN-LOGIN.md).
 
-## 프로젝트 설정 편집 (API 연결)
+## Project Settings Editing (API Connection)
 
-설정 화면은 이름·상태·허용 출처·수집 한도를 서버 설정 그대로 불러와 편집한다.
-이름은 1~80자, 허용 출처는 한 줄에 하나씩 최대 16개, 분당 요청은 1~600,
-UTC 하루 신규 수신은 1~1000000이며 프로젝트 ID·시간대는 읽기만 한다. 저장 중에는
-입력을 비활성화하고 진행 상태를 알린다. 서버가 준 canEdit가 false이거나 owner 권한이
-없으면 읽기 전용으로 열고, 409 충돌이나 응답 유실에서는 입력을 보존한 채 저장을
-잠근 뒤 최신 설정과 입력을 비교해 '서버 설정 사용' 또는 '내 변경 유지하고 검토'를
-고른다. 하단의 등록 이벤트·작업 흐름 표는 조회용이다. 실제 저장 경로 연결과 검증
-수치는 상위 작업에서 기록한다.
+The settings screen loads and edits name, status, allowed origins, and collection limits exactly as
+configured on the server. Names are 1–80 characters, allowed origins are one per line up to 16,
+requests per minute is 1–600, and UTC daily new receipts is 1–1000000; project ID and time zone are
+read-only. While saving, inputs are disabled and progress is announced. If the server's canEdit is
+false or the user lacks owner permission, the screen opens read-only. On a 409 conflict or lost
+response, input is preserved, saving is locked, and the latest settings are compared with the input
+so the user can choose `Use server settings` or `Keep my changes and review`. The registered event
+and workflow table below is read-only. Actual save-path integration and verification figures are
+recorded in the parent task.
 
-## 스키마 편집·검증·발행 (API 연결)
+## Schema Editing, Validation, and Publishing (API Connection)
 
-설정 아래 이벤트 스키마 섹션에서 버전 목록·최신 번호를 조회하고 정의를 JSON으로
-편집한다. 선택한 버전 불러오기는 초안을 바꾸며, 초안은 메모리에만 두고 화면/프로젝트를
-떠나거나 새로고침하면 사라진다. owner는 새 번호를 정하고 정의 검증을 통과한 뒤
-개인정보 검토 확인을 선택해야 발행할 수 있다. reader는 정의 조회·복사만 가능하다.
-초안이나 번호를 바꾸면 기존 검증·검토 확인은 취소된다.
+In the event schema section below settings, query the version list and latest number, and edit the
+definition as JSON. Loading a selected version changes the draft; the draft exists only in memory and
+disappears when leaving the screen or project or refreshing. An owner chooses a new number, passes
+definition validation, and selects privacy-review confirmation before publishing. A reader can
+query and copy definitions only. Changing the draft or number cancels existing validation and review
+confirmations.
 
-동시 발행 409·권한 변경·응답 유실에서는 초안을 보존하고 자동 재전송하지 않는다.
-서버 상태 확인으로 제출한 버전이 이미 같은 내용으로 저장됐는지 확인하고, 그렇지
-않으면 최신 정의와 초안을 비교해 서버 사용/초안 유지 후 재검증을 선택한다.
-발행해도 제품 SDK의 사용 버전은 바뀌지 않는다. API·DB 계약은
-[관리자 문서](../../docs/backend/administrator.md)를 따른다.
+On a concurrent-publish 409, permission change, or lost response, the draft is preserved and not
+resent automatically. Check server state to see whether the submitted version is already stored with
+the same content; if not, compare the latest definition with the draft and choose either the server
+version or keeping the draft and revalidating. Publishing does not change the version used by the
+product SDK. API and database contracts follow the
+[administrator documentation](../../docs/backend/administrator.md).
 
-## 프로젝트 생성·SDK 연결 안내 (API 연결)
+## Project Creation and SDK Connection Guidance (API Connection)
 
-툴바의 `프로젝트 추가`에서 이름·공개 프로젝트 ID(생성 후 변경 불가)·IANA 시간대·허용
-출처를 입력하고, 수집 한도를 펼쳐 분당 요청·UTC 하루 신규 수신을 정한다. 생성 권한은
-서버가 확인하며 프로젝트 owner 권한으로 추론하지 않는다. 403은 입력을 보존한 채 권한을
-확인하라고 알린다. 409는 입력을 보존한다. ID 충돌은 ID 필드에 오류를 표시해 포커스를
-옮기고, 생성 개수 한도는 한도 안내만 보여준다. 응답을 확인하지 못하면 입력을 잠그고
-같은 요청으로 생성 확인만 제공하며 자동 재전송하지 않는다. 생성이
-확인되면 목록에 넣고 그 프로젝트를 선택해 설정 화면으로 이동하고, 프로젝트→이벤트
-스키마→SDK 연결 단계를 표시한다. 입력은 메모리에만 두고 새로고침하면 사라진다.
+In `Add project` on the toolbar, enter the name, public project ID (immutable after creation), IANA
+time zone, and allowed origins; expand collection limits to set requests per minute and UTC daily
+new receipts. The server checks creation permission; it is not inferred from project ownership. A
+403 preserves input and asks the user to check permission. A 409 preserves input. An ID conflict
+marks the ID field and moves focus there, while the creation-count limit shows only limit guidance.
+If a response cannot be confirmed, inputs are locked, only a same-request creation check is offered,
+and the request is not resent automatically. Once creation is confirmed, the project is added to the
+list, selected, and opened in settings, showing project → event schema → SDK connection steps. Input
+exists only in memory and disappears on refresh.
 
-설정 아래 SDK 연결 안내는 최신 발행 스키마만 읽어 browser 출처 이벤트·작업 흐름을 담은
-연결 코드를 만들고, 서버 출처 이벤트·bearer·서버 전용 정의는 넣지 않는다. 수집 서버
-출처를 직접 입력하며 HTTPS 또는 로컬 개발 주소만 허용한다. SDK는 아직 공개 패키지가
-아니라 저장소에서 `npm run build:browser`로 로컬 빌드해 연결하도록 안내하고, 코드 복사는
-클립보드 실패 시 직접 선택하도록 안내한다. 새 버전을 발행하면 최신 번호로 갱신한다.
+The SDK connection guidance below settings reads only the latest published schema and creates
+connection code containing browser-source events and workflows; it excludes server-source events,
+bearer tokens, and server-only definitions. Enter the collection server origin directly; only HTTPS
+or local development addresses are accepted. Because the SDK is not yet a public package, the
+instructions build it locally with `npm run build:browser` and connect from the repository. Code
+copying offers manual selection if the clipboard fails. Publishing a new version updates the latest
+number.
 
-설정 스키마 섹션에는 이벤트 폼(`SchemaEventForm`)이 있다. 이벤트를 폼으로 추가·삭제하고
-name(최대 48자)·label(최대 80자)·출처(browser/server)를 입력한다. 새 이벤트는 browser
-출처와 빈 properties로 만들며 최대 50개까지 넣는다. 접힌 `JSON 직접 편집`과 같은 초안을
-쓰고 폼 변경도 검증·검토 확인을 취소한다. 이벤트의 나머지 키와 속성·작업 흐름은 보존하고,
-작업 흐름의 시작·성공·실패에 연결된 이벤트는 label만 수정한다. 초안이 파싱되지 않거나
-폼으로 나타낼 수 없으면 폼 대신 JSON 직접 편집을 안내하고 초안은 보존한다. reader는 폼도
-읽기 전용이다. 속성은 이벤트별 속성 폼에서, 작업 흐름은 작업 흐름 폼에서 편집한다.
+The schema section contains the event form (`SchemaEventForm`). Add and remove events in the form
+and enter name, label, and source (browser or server), with name up to 48 characters and label up to
+80. A new event starts with browser source and empty properties, and up to 50 events are allowed. It
+shares the same draft as the collapsed `Edit JSON directly` editor, and form changes also cancel
+validation and review confirmation. Other event keys, properties, and workflows are preserved; for
+events linked to workflow start, success, or failure, only the label is editable. If the draft cannot
+be parsed or represented in the form, the UI directs the user to `Edit JSON directly` and preserves
+the draft. The form is read-only for readers. Properties are edited in the per-event property form,
+and workflows in the workflow form.
 
-이벤트 폼의 각 이벤트 아래에는 접히는 속성 폼(`SchemaPropertyForm`)이 있다. 속성을 최대
-4개까지 추가·삭제하고 이름(최대 48자)·자료형(boolean/enum/integer)·필수 여부·수집
-목적(최대 240자)·enum 허용 값(한 줄에 하나)·정수 최솟값·최댓값을 편집한다. 새 속성은
-아직 쓰지 않은 `property_N` 이름과 boolean·필수 아님·빈 수집 목적으로 만든다. 자료형을
-바꾸면 이전 자료형의 허용 값·범위만 새로 설정하고 수집 목적·필수 여부는 유지한다. 이미
-쓰는 이름으로 바꾸면 다른 속성을 덮어쓰지 않고 거부한다. 정수 칸의 빈 값·불완전한 값·
-안전 정수 범위 밖 문자열과 enum 허용 값의 빈 줄·중복은 자동으로 고치지 않고 초안에
-그대로 두므로, 서버 검증을 통과하기 전에는 발행할 수 없다. 허용 값 32종·가능한 조합
-256개 한도는 폼에서 미리 계산해 안내하고 최종 판정은 서버 검증이 한다. 작업 흐름
-`dimensions`에 쓰는 속성은 수집 목적만 편집하고 이름·자료형·필수 여부·허용 값·범위·
-삭제를 잠근다. 속성 관련 검증 오류는 해당 이벤트의 속성 폼을 펼쳐 그 필드로 초점을
-옮기고, 추가·삭제 뒤에는 새 항목이나 다음 항목으로 초점이 간다. 속성 정의를 폼으로
-나타낼 수 없으면 폼 대신 JSON 직접 편집을 안내하고 초안은 보존한다. reader는 속성 폼도
-읽기 전용이다.
+Each event in the event form has a collapsible property form (`SchemaPropertyForm`). Add or remove
+up to 4 properties and edit name (up to 48 characters), type (boolean, enum, or integer), required
+status, collection purpose (up to 240 characters), allowed enum values (one per line), and integer
+minimum and maximum. A new property uses an unused `property_N` name and starts as boolean, not
+required, with an empty collection purpose. Changing the type resets only the previous type's allowed
+values or range while preserving purpose and required status. Changing to a name already in use is
+rejected without overwriting another property. Empty or incomplete integer values, integer strings
+outside the safe range, and blank lines or duplicates in enum values are preserved in the draft
+without automatic correction, so publication is blocked until server validation passes. The form
+precomputes and explains the limit of 32 allowed values and 256 possible combinations; server
+validation makes the final decision. For a property used in workflow `dimensions`, only collection
+purpose is editable; name, type, required status, allowed values, range, and deletion are locked.
+Property validation errors expand that event's property form and move focus to the field, and after
+adding or deleting, focus moves to the new or next item. If the property definition cannot be
+represented in the form, the UI directs the user to `Edit JSON directly` and preserves the draft.
+The property form is read-only for readers.
 
-이벤트 폼 아래, 접힌 `JSON 직접 편집` 위에는 작업 흐름 폼(`SchemaWorkflowForm`)이 있다.
-작업 흐름을 최대 10개까지 추가·삭제하고 ID(최대 48자)·표시 이름(최대 80자)·시작·성공·
-실패 이벤트·비교 기준 속성을 편집한다. 이벤트 선택은 browser 출처 이벤트만 보여주고,
-등록되지 않은 선택 문자열은 `(사용할 수 없음)` 옵션으로, 빈 문자열은 자리 표시자로 보존하며, 실패
-이벤트의 `null`은 `실패 단계 없음`, 빈 문자열은 별도 자리 표시자로 구분한다. 비교 기준은
-단계 이벤트의 필수 속성과 이미 선택된 항목의 합집합에서 최대 4개까지 고르고, 4개가 차면
-새 항목만 비활성화해 이미 선택한 항목은 해제할 수 있다. 단계 중복과 비교 기준의 자료형·
-허용 값 불일치는 실시간 경고로 알리고 최종 판정은 서버 검증이 한다. ID 중복은 로컬에서
-거부하고 문제 입력으로 초점을 옮기며, 추가·삭제 뒤에는 새 항목이나 다음 항목(없으면 추가
-버튼)으로 초점이 간다. 작업 흐름 관련 검증 오류는 해당 폼 필드로 초점을 옮긴다. 초안이
-파싱되지 않거나 폼으로 나타낼 수 없으면 폼 대신 JSON 직접 편집을 안내하고 초안은
-보존한다. reader는 작업 흐름 폼도 읽기 전용이며, 검증·발행·검토·더 보기 잠금은 그대로
-적용된다.
+The workflow form (`SchemaWorkflowForm`) is below the event form and above the collapsed
+`Edit JSON directly` editor. Add or remove up to 10 workflows and edit ID (up to 48 characters),
+display label (up to 80), start, success, and failure events, and comparison properties. Event
+selection shows only browser-source events; an unregistered selected string is represented by an
+`(unavailable)` option, an empty string remains a placeholder, and for a failure event, `null` is
+distinct from an empty-string placeholder and is shown as `No failure stage`. Comparison properties
+are selected from the union of required properties of the stage events and those already selected,
+up to 4; when 4 are selected, only new items are disabled and existing selections can still be
+cleared. Duplicate stages and mismatched comparison-property types or allowed values produce live
+warnings, with server validation making the final decision. Duplicate IDs are rejected locally and
+focus moves to the problem input; after adding or deleting, focus moves to the new or next item (or
+the add button when none exists). Workflow validation errors move focus to the form field. If the
+draft cannot be parsed or represented, the UI directs the user to `Edit JSON directly` and preserves
+the draft. The workflow form is read-only for readers, and validation, publish, review, and view-more
+locks still apply.
 
-## 직전 기간 비교 — 2026-10-10
+## Previous Period Comparison — 2026-10-10
 
-API 연결 모드의 개요·이벤트 분석·목표에서 `직전 기간과 비교`를 켜면 최근
-7·14·30일(오늘 포함) 또는 직접 선택한 기간과 직전 같은 일수의 결과를 표로 비교한다. 건수는 증감률(%),
-완료율은 차이(%p)로 표시하고 이전 0건이나 null 완료율은 계산 불가로 둔다.
-오늘과 확정 전 시작일 코호트의 값은 변경될 수 있다. 비교 실패 시 현재 결과는 유지하고
-`비교 다시 시도`로 이전 기간만 다시 조회한다. 끄면 진행 중 비교를 취소한다.
-동일 프로젝트·스키마·시간대로 기존 API를 조회하며 Sample 모드는 기존대로 유지한다.
-목표의 속성별 완료율과 이벤트 분석의 속성 분류도 같은 스위치로 비교하며, 이때는 같은
-분류로 기존 API를 한 번 더 조회한다.
+When `Compare with previous period` is enabled in API connection overview, event analysis, or goals,
+the UI compares the last 7/14/30 days (including today) or a directly selected period with the
+immediately preceding period of the same number of days. Counts show change rate (%), and completion
+rates show difference (%p); a previous count of 0 or a null completion rate is shown as
+uncomputable. Values for today and for start-day cohorts that are not final can change. If comparison
+fails, current results remain and `Retry comparison` queries only the previous period again.
+Turning it off cancels an in-flight comparison. It uses the existing API with the same project,
+schema, and time zone, and sample mode is unchanged. Goal completion by property and event-property
+breakdown use the same switch and make one more request to the existing API with the same breakdown.
 
-## CSV 내보내기 — 2026-10-10
+## CSV Export — 2026-10-10
 
-API 연결 모드의 개요·이벤트 분석·목표에서 `CSV 내려받기`를 누른다. 현재 검증한
-데이터만 사용하고 추가 API 요청은 없다. 현재 기간·스키마·시간대·검색어·선택 이벤트·
-분류 기준을 각 행에 넣는다. 비교를 켜면 직전 기간과 비교 변화량도 포함한다.
-이벤트 검색은 이벤트 합계에 적용하고 비교 표는 화면과 같이 전체 등록 이벤트 범위다.
-분류 상세는 관찰된 모든 값과 일별 수치를 담는다. 목표의 속성별 분류도 켠 경우 값별
-현재·직전 행과 값별 비교 지표 행(시작·성공 건수 증감률 %, 완료율 %p)을 담고, 비교가
-켜진 동안 준비되지 않은 분류가 있으면 잠근다. CSV의 record_type을 구분해 사용하며
-합계와 일별 행을 함께 더하지 않는다. period는 current/previous/comparison이고, 건수는
-숫자 원값, 비율은 percent, 완료율 차이는 percentage_point다. 빈 값은0과 다르며,
-value_type으로 null·false·숫자0·문자열을 구분한다. UTF-8 BOM을 포함해 한글을 보존한다.
-수식으로 읽힐 수 있는 텍스트 앞에는 작은따옴표가 붙을 수 있다. 상세나 비교가 조회 중/
-오류이면 완료하거나 상세를 닫고 비교를 끈 뒤 내려받는다. 토큰은 CSV에 포함하지 않는다.
+Press `Download CSV` in API connection overview, event analysis, or goals. It uses only the data
+currently verified and makes no additional API request. Each row includes the current period, schema,
+time zone, search term, selected event, and breakdown. When comparison is enabled, the previous
+period and comparison deltas are included. Event search applies to event totals, while the comparison
+table covers all registered events like the screen. Breakdown detail includes every observed value
+and daily figure. If goal property breakdown is enabled, it includes current and previous rows by
+value and comparison metric rows by value (start and success count change %, completion rate %p),
+and downloading is locked while comparison is enabled and any breakdown is not ready. CSV uses
+record_type to distinguish rows and does not add totals and daily rows together. period is
+current/previous/comparison, counts are raw numeric values, rates are percent, and completion-rate
+differences are percentage_point. Empty is different from 0, and value_type distinguishes null,
+false, numeric 0, and string. UTF-8 BOM preserves Korean characters. Text that could be interpreted
+as a formula can receive a leading apostrophe. If detail or comparison is loading or in error,
+finish it or close detail and turn off comparison before downloading. Tokens are never included in
+the CSV.
 
-## 작업 흐름 속성별 완료율 — 2026-10-10
+## Workflow Completion Rate by Property — 2026-10-10
 
-API 연결 모드의 목표 아래 `시작 시점 분류 기준`에서 등록된 비교 속성을 고른다.
-값마다 시작·성공·실패·대기·완료율이 나오고 값 버튼으로 시작일별 내역을 연다.
-완료율은 각 값의 성공/시작,0시도는 —, 실패 단계 없는 흐름의 실패 수는 —다.
-`분류 안 함`을 선택하면 요청과 분석을 해제한다. 실패 시 전체 목표는 유지하며
-속성별 조회 다시 시도로 복구한다. 오류/조회 중에는 CSV를 내려받을 수 없다.
-`직전 기간과 비교`를 켜면 같은 분류로 바로 앞 같은 일수 기간을 한 번 더 조회해
-`속성별 직전 기간 비교` 표를 더한다. 값마다 현재/이전 시작·성공 수와 완료율, 완료율
-차이(%p)를 보여주고 두 기간에 관찰된 값을 합쳐 한쪽에 없는 값의 건수는 0, 시작 0인
-기간의 완료율과 차이는 —다. 비교만 실패하면 현재 기간 결과는 그대로 두고
-`속성별 비교 다시 시도`로 직전 기간만 다시 조회한다. 비교를 끄면 추가 조회와 비교
-표가 사라진다.
+In API connection goals, choose a registered comparison property under `Start-time breakdown`.
+Each value shows starts, successes, failures, pending, and completion rate, and the value button
+opens detail by start date. Completion rate is successes divided by starts for each value; 0 attempts
+shows `—`, and failures for a workflow without a failure stage show `—`. Selecting `No breakdown`
+releases the request and analysis. On failure, the whole goal remains and
+retry property breakdown recovers it. CSV download is unavailable during an error or query. When
+`Compare with previous period` is enabled, it makes one more request with the same breakdown for the
+immediately preceding period of the same number of days and adds a
+`Previous-period comparison by property` table. Each value shows current and previous starts,
+successes, completion rates, and completion-rate difference (%p); values observed in either period
+are combined, a value absent from one period has count 0, and a period with 0 starts shows `—` for
+rate and difference. If only comparison fails, current-period results remain and
+`Retry property comparison` queries only the previous period. Turning comparison off removes the
+additional request and comparison table.
 
-CSV는 workflow_property_summary/total/day 행에 분류·값의 자료형과 관찰 값의 수치를
-담고, 직전 기간 행과 값별 비교 지표 행(workflow_property_comparison, 시작·성공 건수
-증감률 %, 완료율 %p)을 더한다.
-비교를 켠 동안 준비되지 않은 분류가 있으면 내려받기를 잠그고, 끄면 현재 기간 행만
-담는다. 빈 결과에서도 분류 조건을 summary 행에 남긴다. API와 관리자 화면을 함께
-업데이트해야 새 조회가 동작한다.
+CSV rows workflow_property_summary, workflow_property_total, and workflow_property_day contain the
+breakdown, value type, and observed numeric values, and add previous-period rows and per-value
+comparison metric rows (workflow_property_comparison, start and success count change %, completion
+rate %p). If any breakdown is not ready while comparison is enabled, download is locked; turning it
+off includes only current-period rows. Even an empty result retains breakdown conditions in summary
+rows. The API and administrator UI must be updated together for the new query to work.
 
-## 이벤트 속성 직전 기간 비교 — 2026-10-10
+## Event Property Previous-Period Comparison — 2026-10-10
 
-API 연결 모드의 이벤트 분석에서 속성을 분류 기준으로 고르고 `직전 기간과 비교`를 켜면
-별도 훅(`useEventPropertyComparison`)이 같은 분류로 바로 앞 같은 일수 기간을 기존 일별 API로
-한 번 더 조회하고, 현재 표 아래 `{분류 속성} 값별 직전 기간 비교` 표를 더한다(예: `tool 값별
-직전 기간 비교`). 현재 기간 표와 선택 값의 일별 추이는 그대로 두고, 비교 표는 값마다
-현재/직전 건수와 증감률(%), 비중과 비중 차이(%p)를 보여준다. 비중은 그 기간 선택 이벤트
-전체 건수로 나눈 값이며 전환율이 아니다. 두 기간에 관찰된 값을 합치고 null·false·0을
-구분하며, 한쪽에 없는 값의 건수는 0, 그 기간 전체 건수가 0이면 비중·차이는 —, 직전 건수가
-0이면 증감률은 —다. 비교만 실패하면 현재 결과와 차트는 유지하고 `이벤트 속성별 비교 다시
-시도`로 직전 기간만 다시 조회한다. 비교를 끄거나 분류를 해제하면 추가 조회와 비교 표가
-사라진다. 분류 기준을 고르지 않은 이벤트 분석에는 직전 기간 상세 조회를 보내지 않는다.
+In API connection event analysis, choose a property as the breakdown and enable
+`Compare with previous period`. A separate hook (`useEventPropertyComparison`) queries the
+immediately preceding period of the same number of days with the same breakdown through the existing
+daily API one more time and adds a `{breakdown property} values previous-period comparison` table
+below the current table (for example, `tool values previous-period comparison`). The current-period
+table and selected-value daily trend remain, while the comparison table shows current and previous
+counts and change rate (%) and share and share difference (%p) for each value. Share is the value
+divided by all events of the selected event in that period, not a conversion rate. Values observed
+in either period are combined; null, false, and 0 remain distinct; a value absent from one period has
+count 0; share and difference are `—` when the period's total event count is 0; and change rate is
+`—` when the previous count is 0. If only comparison fails, current results and the chart remain and
+`Retry event property comparison` queries only the previous period. Turning comparison off or
+clearing the breakdown removes the additional request and comparison table. Event analysis without a
+selected breakdown sends no previous-period detail query.
 
-CSV는 속성 값 행에 선택 이벤트 전체 건수·일별 수치와 속성 값 수치를 현재·직전 기간으로
-나눠 담고, 값별 비교 지표 행(property_comparison, metric=count/share, previous_value·
-change·change_unit)을 더한다. 값 없음은 빈 칸으로 두고 자료형을 보존한다. 선택한 분류의
-비교가 준비되지 않았거나 실패하면 내려받기를 잠근다. 분류를 해제하면 속성별 상세·비교
-행을 제외하고 전체 이벤트 기간 비교는 유지한다. 비교를 끄면 현재 기간 행만 담는다.
+CSV property-value rows contain selected-event totals, daily figures, and property-value figures for
+current and previous periods, and add per-value comparison metric rows (property_comparison,
+metric=count/share, previous_value, change, change_unit). No value is left as an empty cell while
+preserving its type. Download is locked if comparison for the selected breakdown is not ready or
+failed. Clearing the breakdown excludes property detail and comparison rows while retaining the
+overall event-period comparison. Turning comparison off includes only current-period rows.
 
-## 수집 상태 진단 — 2026-10-10
+## Collection Status Diagnostics — 2026-10-10
 
-API 연결의 설정 상단에서 프로젝트 수집 설정·선택 스키마 상태·프로젝트 전체 마지막
-신규 수신·오늘의 선택 버전 browser 이벤트·설정 한도를 확인한다. 기록 없음과 조회
-실패를 구분하며 수신이 뜸하다는 이유만으로 장애로 판단하지 않는다. 서비스 주소는
-탭 안에서만 출처 허용 목록과 비교한다. 주소를 보내거나 저장하지 않는다.
-`수집 상태 다시 확인`으로 명시적으로 갱신하며 자동 폴링이나 테스트 이벤트는 없다.
-프로젝트/버전 변경과 설정 저장 때도 갱신된다. 최근 7개 UTC 날짜의 프로젝트 전체
-거부 요청 건수와 마지막 시각을 보여주며 원인별 10종·일별 표를 펼쳐 확인할 수 있다.
-거부 집계 조회가 실패해도 설정·스키마·수신 기록은 유지하고 실패를 0건으로 채우지
-않는다. 저장 실패와 도입 전 이력은 누락될 수 있으며 거부율·남은 할당량을 추론하지
-않는다. 거부 기록의 시간은 UTC이며 프로젝트 시간대의 이벤트 집계와 구분한다.
-`수집되지 않을 때 확인할 항목`은 실패 이력이 아닌 확인 순서다.
+At the top of API connection settings, inspect project collection configuration, selected schema
+status, the project-wide last new receipt, today's browser events for the selected version, and
+configured limits. A missing record and a query failure are distinguished, and infrequent receipts
+alone are not treated as a failure. Service addresses are compared with the origin allowlist only
+inside the tab. They are neither sent nor stored. `Recheck collection status` refreshes explicitly;
+there is no automatic polling or test event. Status also refreshes when the project or version
+changes and when settings are saved. The panel shows rejected request count and last time for the
+project across the most recent 7 UTC dates and lets the user expand a 10-cause and daily table.
+Failure of the rejection aggregate does not remove settings, schema, or receipt records and never
+fills it with 0. Save failures and pre-adoption history can be missing; rejection rate and remaining
+quota are not inferred. Rejection timestamps are UTC and distinct from event aggregates in the project
+time zone. `Items to check when collection is absent` is a check order, not a failure history.
 
-## 조회 기간 직접 선택
+## Direct Selection of Query Period
 
-API 연결에서 상단 조회 기간의 `직접 선택`을 고르고 시작일·종료일을 입력한 뒤
-`기간 적용`을 누른다. 프로젝트 시간대 기준 최근 90일 안에서 최대 31일(양끝 포함)을
-조회한다. 입력 중에는 기존 결과와 CSV 기준을 유지하고 아직 미적용 상태를 표시한다.
-적용된 날짜는 개요·이벤트·목표·속성별 상세·직전 기간 비교·CSV에 함께 반영된다.
-직전 비교 기간이 보존 범위를 벗어나면 현재 결과만 유지하며 비교를 끄면 CSV도
-내려받을 수 있다. 날짜 초안과 적용 값은 메모리에만 두고 프로젝트·시간대·기본 기간
-변경과 재연결 때 초기화한다. Sample과 설정 화면에는 날짜 폼을 넣지 않는다.
+In API connection, select `Custom` in the top query period, enter a start and end date, and press
+`Apply period`. It queries up to 31 days inclusive within the most recent 90 days in the project time
+zone. While editing, existing results and the CSV basis remain and the UI marks the period as not yet
+applied. Applied dates are reflected in overview, events, goals, property detail, previous-period
+comparison, and CSV. If the previous comparison period falls outside retention, only current results
+remain and turning comparison off allows CSV download. Date draft and applied values exist only in
+memory and reset when the project, time zone, default period, or connection changes. Sample and
+settings screens do not include the date form.
 
-## 변경 이력 (API 연결) — 2026-10-11
+## Change History (API Connection) — 2026-10-11
 
-설정 화면의 권한 섹션 아래에 소유자 전용 변경 이력 섹션(`LiveAdminChanges`)을 붙인다.
-reader에게는 안내만 보이고 컨트롤러를 만들지 않아 이력 API를 호출하지 않는다. 최근 90일의
-기록을 한 페이지 25건씩 읽고 `처음부터 새로고침`·`다음 페이지`·`이 페이지 다시 시도`만
-제공하며 자동 폴링은 없다. 설정이나 권한 저장으로 갱신 신호가 오면 컨트롤러를 다시 만들어
-처음 페이지부터 읽고, 화면 잠금은 버튼만 비활성화하며 읽은 기록을 지우지 않는다.
+The settings screen adds an owner-only change history section (`LiveAdminChanges`) below the
+permissions section. Readers see guidance only and no controller is created, so history API is not
+called. It reads records from the last 90 days, 25 per page, and provides only
+`Refresh from beginning`, `Next page`, and `Retry this page`; there is no automatic polling.
+When a settings or permission save emits a refresh signal, the controller is recreated and reads
+from the first page. Screen lock disables only the buttons and does not erase records already read.
 
-표는 시각(프로젝트 시간대)·작업자·변경 세 열이다. 작업자는 관리자 API 변경이면 계정
-식별자와 발급자, 오프라인 CLI 변경이면 `로컬 운영자`와 `등록 도구에서 변경`을 보여준다.
-변경은 프로젝트 생성, 설정 변경의 바뀐 항목 한국어 이름, 스키마 발행/상태 변경과 버전
-번호, grant 부여·역할 변경·회수의 대상과 이전·이후 역할을 담는다. 상단 안내는 “도입 이후
-API와 등록 도구에서 기록한 최근 90일 변경”으로 짧게 두고, 이전 변경을 채우지 않으며 목록에
-없는 경로의 변경은 담기지 않고 모든 변경이 남았다는 뜻은 아니라는 설명은
-[프론트엔드 설계](../../docs/frontend/FRONTEND_DESIGN.md)에 둔다. 로딩·빈 이력·오류를
-구분하고 401·403은 섹션을 닫은 뒤 부모 전역 잠금을 알린다. API·DB·SDK 계약과
-의존성은 바꾸지 않으며 브라우저 검증 수치는 상위 작업에서 기록한다.
-## 서버 전용 프로젝트 연결 — 2026-10-11
+The table has time (project time zone), actor, and change columns. An administrator API change shows
+the account identifier and issuer; an offline CLI change shows `Local operator` and
+`Changed by registered tool`. A change description covers project creation, the localized name of
+each changed setting, schema publication or status changes with version number, and grant
+assignment, role change, or revocation with its target and previous and new roles. The short header
+is "API and registered-tool changes recorded during the last 90 days since adoption"; it does not
+backfill earlier changes, changes through paths not in the list are absent, and the list does not
+mean every change was retained. The fuller explanation is in
+[frontend design](../../docs/frontend/FRONTEND_DESIGN.md). Loading, empty history, and errors are
+distinct; 401 and 403 close the section and notify the parent's global lock. API, database, and SDK
+contracts and dependencies are unchanged, and browser verification figures are recorded upstream.
 
-browser 이벤트 없이 server 이벤트와 빈 workflows로 스키마를 발행할 수 있다. 프로젝트
-생성·설정에서 브라우저 허용 출처를 비우면 allowedOrigins=[]로 저장되어 browser 수집이
-차단된다. SDK 연결 안내는 server 전용이면 서버를 기본 선택하고, 혼합 정의에서는
-browser/server를 선택해 해당 출처만 투영한다. 서버 코드는 실제 서비스가 전용 발행자
-토큰을 제공하는 getToken 함수를 받으며 서버 SDK·토큰을 브라우저에 넣지 않도록 안내한다.
-토큰 입력·시험 이벤트 전송·특정 운영 인증 제공자 가정은 추가하지 않는다.
+## Server-Only Project Connection — 2026-10-11
 
-수집 상태 진단은 server 전용이면 서버 건수를 기본 조회하고 출처를 바꿔 별도로 확인한다.
-server 진단에는 발행 인증·권한·send 결과 확인 순서를, browser 진단에는 허용 출처
-비교와 빈 목록의 차단 안내를 보여준다. 마지막 수신·거부 기록은 프로젝트 전체이며
-출처 선택과 별개다. 스키마 조회 실패 시 연결 코드는 지우고 재조회로 복구한다.
+A schema can be published with server events and empty workflows and no browser events. If browser
+allowed origins are empty in project creation or settings, the value is stored as
+allowedOrigins=[] and browser collection is blocked. For a server-only project, SDK connection
+guidance defaults to server; for a mixed definition, the user selects browser or server and only
+that source is projected. Server code receives a getToken function from the actual service that
+provides a dedicated publisher token, and the guidance says not to put the server SDK or token in the
+browser. It adds no token input, test-event send, or assumption about a specific production identity
+provider.
 
-## 퍼널 분석·CSV (API 연결) — 2026-10-11
+For a server-only project, collection status diagnostics default to server counts and can switch
+source for a separate check. Server diagnostics show the order of publishing authentication,
+permission, and send-result checks; browser diagnostics show allowed-origin comparison and guidance
+for blocking an empty list. Last-receipt and rejection records are project-wide and independent of
+the source selector. If schema query fails, connection code is cleared and recovered by querying
+again.
 
-목표 화면은 `LiveGoals`(작업 흐름 완료율)와 `LiveFunnels`(퍼널 분석)로 나뉜다. 퍼널은
-등록 목록에서 고른 뒤에만 `GET /v1/projects/{projectId}/funnels/{funnelId}/daily`로 읽고,
-선택하기 전에는 요청하지 않는다. 모든 차원·출처를 합친 시작일 cohort 표에 단계
-이벤트·출처·도달 수·첫 단계 대비 도달률·직전 단계 대비 전환율·다음 단계 미도달 수와 진행
-막대를 보여주고, 일별 요약과 날짜 선택 시 그날 단계 내역을 펼친다. summary의 완료/시작
-건수와 완료율을 쓰고 오늘 포함 확정 전 날짜는 집계 중으로 표시하며 미도달 수에 진행
-중·미전달 실행이 섞임을 알린다.
+## Funnel Analysis and CSV (API Connection) — 2026-10-11
 
-별도 퍼널 CSV는 검증한 요약·일별 단계 값을 출처·잠정 여부와 함께 내보내고 분모 없는
-비율은 빈 칸으로 둔다. 일반 이벤트·작업 흐름 CSV와 파일·열을 구분한다. 조회 계층은 닫힌
-응답 형태와 정의·기간·건수·비율·선택 registry 일치를 검증한다. 선택 해제·프로젝트·기간·
-연결 전환에서 진행 중 조회를 취소하고 이전 결과·CSV를 가리며 403·응답 오류는 0 대신
-오류와 재시도로 처리한다. 퍼널 전용 편집 폼은 아래 항목에서 연결했다. 추가 패키지·DB·API·SDK·CI
-변경은 없다.
+The goals screen is divided into `LiveGoals` (workflow completion rate) and `LiveFunnels` (funnel
+analysis). A funnel is read with
+`GET /v1/projects/{projectId}/funnels/{funnelId}/daily` only after selection from the registered
+list; no request is made before selection. The start-date cohort table combines all dimensions and
+sources and shows stage event, source, reached count, reach relative to the first stage, conversion
+relative to the previous stage, unreached count for the next stage, and a progress bar. It also shows
+a daily summary and expands that date's stage detail when a date is selected. It uses summary
+completed and started counts and completion rate, marks today and not-yet-final dates as aggregating,
+and explains that unreached counts include in-progress and undelivered runs.
 
-## 관리자 화면 지연 로딩 — 2026-10-11
+The separate funnel CSV exports verified summary and daily stage values with source and provisional
+status, leaving ratios without a denominator empty. Its file and columns are distinct from event and
+workflow CSV. The query layer validates the closed response shape and agreement with definition,
+period, counts, ratios, and the selected registry. Deselecting, or changing project, period, or
+connection, cancels in-flight queries and masks old results and CSV; 403 and malformed responses
+produce an error and retry instead of 0. The funnel-specific edit form is connected as described
+below. There are no additional package, database, API, SDK, or CI changes.
 
-API 모드·설정 작업 공간·목표·프로젝트 생성 화면은 열 때 코드를 불러온다. 부모 연결
-상태는 메뉴 전환 동안 유지한다. 로딩 실패 시 새로고침을 안내하며 새로고침 때 입력과
-직접 연결한 토큰이 초기화되는 점을 알린다. 빌드 후 `npm run test:bundle`로 실제
-manifest 그래프의 초기 gzip 100KiB·개별 JS 500kB 예산과 지연 로딩 경계를 검사한다.
-`npm test`에는 빌드가 필요한 이 검사를 넣지 않았다.
+## Administrator UI Lazy Loading — 2026-10-11
 
-## 퍼널 단계 편집 (API 연결) — 2026-10-11
+API mode, the settings workspace, goals, and project creation load their code when opened. Parent
+connection state remains across menu changes. If loading fails, the UI asks for a refresh and notes
+that refresh resets input and directly connected tokens. After a build,
+`npm run test:bundle` checks the actual manifest graph's 100 KiB initial gzip and 500 kB per-JS
+budgets and the lazy-loading boundaries. This build-dependent check is not included in `npm test`.
 
-설정의 스키마 편집에서 퍼널 ID·이름, 출처별 이벤트 선택·단계 추가/삭제·순서 변경,
-필수 속성 비교 기준을 폼으로 편집한다. JSON 초안·서버 검증·개인정보 검토·발행을
-재사용한다. owner만 편집하고 reader는 읽기 전용이다. 표현할 수 없는 JSON은 보존하고
-직접 편집을 안내한다. 서버 오류 경로와 단계 이동·삭제는 해당 필드로 포커스를 옮긴다.
-기존 스키마의 funnels 부재를 읽기 때 유지하며 이벤트·속성·작업 흐름과 추가 키는
-변경하지 않는다. 분석 화면의 속성별 분류·퍼널 직전 기간 비교는 후속이다.
+## Funnel Stage Editing (API Connection) — 2026-10-11
+
+In the schema editor in settings, edit funnel ID and name, event selection by source, stage add,
+delete, and reorder, and required-property comparison criteria through a form. It reuses the JSON
+draft, server validation, privacy review, and publishing. Only an owner can edit; readers are
+read-only. JSON that cannot be represented is preserved and the UI directs the user to direct editing.
+Server error paths and stage move or delete move focus to the relevant field. The absence of funnels
+in an existing schema is preserved on read, and events, properties, workflows, and additional keys
+are not changed. Property breakdown in the analysis screen and funnel previous-period comparison are
+follow-up work.
