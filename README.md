@@ -2,7 +2,7 @@
 
 Tallyfin is a lightweight product event analytics platform shared across Rodisoft services. Per-project configuration counts different actions such as sign-ups, file conversions, purchases, and calculations while minimizing personal data collection. Sembom is the first integration example.
 
-This document is a guide for readers who want to download the project and try it locally. The production identity provider, remote database, and domain are still undecided, and no production deployment or service pilot has taken place.
+This document guides local development and self-hosting. The initial Rodisoft installation was deployed to Cloudflare on 2026-10-25 with Better Auth, separate auth/analytics D1 databases, and a private Collector service binding. Real browser sign-in, administrator reads and recurring maintenance were verified; an actual service-event pilot and remote backup/recovery remain follow-ups. See [Better Auth setup](docs/backend/better-auth.md) and [validation evidence](VALIDATION.md).
 
 ## What works locally now
 
@@ -22,9 +22,9 @@ The owner-only `LivePublishers` settings screen provides a 25-item list with pag
 
 ## What has not been verified yet
 
-- The production identity provider, remote D1, domain and deployment, and service pilot are undecided or have not been run.
-- No production values exist yet for publisher OIDC, and sign-in through a real provider has not been verified.
-- Local load, cleanup, and recovery experiments have been verified. Remote migrations, cleanup Cron jobs, backup and recovery, and production SLOs have not been verified; the production SLO is UNDECIDED.
+- The initial deployment uses Better Auth and workers.dev. Custom domains and an actual service-event pilot remain follow-ups; each independent installation needs its own resource and identity settings.
+- Publisher OIDC is disabled until an actual machine identity is configured. Administrator login through the deployed provider has been verified.
+- Remote migrations and recurring cleanup through a SQLite Durable Object alarm were verified. Remote load, backup/recovery, alert delivery and production SLOs remain unverified; the production SLO is UNDECIDED.
 - The API 401 shown under the administrator's default settings is a real response returned while authentication is disabled. Real sign-in requires separate OIDC configuration.
 
 ## Running locally
@@ -58,12 +58,12 @@ To summarize production logs, pass application NDJSON on standard input (`node t
 
 For captured Wrangler tail JSON, use `--stdin --wrangler-tail` on the same CLI. It extracts application console records from multi-line objects and produces the same report while discarding URLs, headers, and exceptions. Input must be a finite log that finishes within 30 seconds, and no remote log session is opened automatically.
 
-The administrator-only `GET /v1/health` endpoint uses a verified administrator bearer token to check the read state of 2 control tables. A successful response is `{status:"ok",scope:"administrator_storage_read"}`, and it does not confirm collection writes or cleanup execution. The query is read-only and returns no raw rows, accounts, or project information. Scope and errors are described in [production observability](docs/ops/observability.md). Recurring execution and production authentication configuration are not connected yet.
+The administrator-only `GET /v1/health` endpoint uses a verified administrator bearer token to check the read state of 2 control tables. A successful response is `{status:"ok",scope:"administrator_storage_read"}`, and it does not confirm collection writes or cleanup execution. The query is read-only and returns no raw rows, accounts, or project information. Scope and errors are described in [production observability](docs/ops/observability.md). Production authentication and this read probe were verified in the initial deployment; recurring access monitoring remains a follow-up.
 `install:access-check` also checks account resolution, then this read probe, then project queries, and it does not issue later requests when an earlier step fails.
 
 `monitor:access` runs the same authenticated access check once per invocation and outputs alert intent when a problem opens or recovers, based on the specified state file, failure and recovery counts, and maximum observation interval. The operator connects actual scheduling, token delivery, and notification delivery. Follow the [recurring access check guide](tools/runtime/ACCESS-MONITOR.md).
 
-The Storage read check in administrator settings also runs the same read check from a button and shows the check time. The request is cancelled after 5 seconds, and closing the screen or replacing the connection clears the previous result. It was verified with local Chrome and D1 without automatic polling, and real production authentication and remote status checks are still absent.
+The Storage read check in administrator settings also runs the same read check from a button and shows the check time. The request is cancelled after 5 seconds, and closing the screen or replacing the connection clears the previous result. The screen was verified with local Chrome and D1 without automatic polling; real production authentication and the remote read endpoint were also verified separately.
 
 The browser login flow can be verified separately with `npm run verify:admin-login -- --channel chrome`. It uses an isolated provider response and local D1 to check the PKCE redirect, callback, API queries, token refresh, and sign-in again. Playwright setup and output scope are in the [login verification guide](tools/browser-bench/ADMIN-LOGIN.md).
 

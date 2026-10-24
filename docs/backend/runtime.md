@@ -5,7 +5,7 @@
 - This is a native Worker and D1 architecture based on Node 24.
 - The compatibility date remains 2026-08-06, the existing verification baseline.
 - Wrangler is a local dependency on `^4`, with version 4.148.0 installed.
-- No real provider, account, D1, or domain values were provided. This work did not run remote commands.
+- The initial deployment was verified on 2026-10-25 with Better Auth and separate D1s; see [validation evidence](../../VALIDATION.md). The local preparation commands below do not perform deployment themselves.
 
 ## Local Execution
 
@@ -148,7 +148,7 @@ API and database contracts remain unchanged; this error occurs only at the admin
 `/auth/callback` and `/demo` are administrator app routes. OIDC client settings are read separately at build time from
 `VITE_OIDC_` in `apps/admin/.env`, and tokens are not included in the bundle.
 The callback must be `/auth/callback` on the final administrator HTTPS origin.
-Real provider behavior, sign-in, remote service binding, DNS, D1, and deployment have not been verified.
+The initial workers.dev provider, sign-in, service binding and D1 deployment were verified on 2026-10-25. Custom-domain DNS and other independent installations require separate verification. Static fallback must internally fetch `/`, because ASSETS redirects `/index.html` to `/` and would otherwise discard callback parameters.
 Sites packaging remains supported, but default hosting has no collector binding, so production connectivity uses the
 Wrangler configuration above. To roll back, restore the administrator Worker code and binding configuration together.
 Collector code, the database, and records are not changed.

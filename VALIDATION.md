@@ -1,5 +1,52 @@
 # Validation
 
+## Initial Better Auth production deployment — 2026-10-25
+
+Deployed the administrator at `https://tallyfin-admin.rodisoft1.workers.dev`
+and the provider at `https://tallyfin-auth.rodisoft1.workers.dev`. The Collector
+has no public workers.dev route and is reached through the administrator's
+private service binding. Analytics and authentication use separate D1 databases;
+all 14 analytics migrations and the auth schema were applied remotely.
+
+The selected initial account was bootstrapped privately. Its verified issuer
+and subject received project-creation permission with a limit of 10 projects.
+The initial password is stored outside Git using Windows user DPAPI, with a
+local clipboard helper. No passwords, secrets, cookies or tokens are recorded
+in this report or committed deployment files. Public signup and dynamic client
+registration are closed.
+
+- Real provider login, S256 PKCE, ID-token signature and Collector access-token
+  verification passed. Auth health, administrator page, authenticated storage
+  read and project-list read returned 200; unauthenticated API access returned
+  401, and signup/dynamic registration returned 404.
+- Chromium 156.0.8078.4 completed administrator → auth → callback → administrator
+  against the deployed Workers. The project read returned 200, callback query
+  parameters were removed, browser storage remained empty, and page errors were 0.
+- Two successful live SQLite Durable Object alarm wakeups were observed, with
+  the next alarm scheduled and private Collector maintenance RPC connected.
+  No extra Cron slot or paid-plan upgrade was configured. Cleanup against a
+  retained real-service dataset was not established by these wakeups.
+- Public `install:check` passed required discovery, CORS, S256 and key checks.
+  Its manual-readiness items are intentionally not automatic proof of login,
+  permissions or deployment; the live checks above provide separate evidence.
+- Local checks passed: auth/alarm runtime 5/5, OIDC 21/21, administrator 375/375,
+  Sites Worker 11/11, contract/documentation checks 69/69, root typecheck,
+  Wrangler dry runs, and production dependency audit (0 vulnerabilities).
+  These counts overlap earlier records and are not added together.
+
+Live sanitized reports and screenshots are in the ignored
+`.tmp/production-20261025-live/` folder. The final static fallback fetches `/`
+internally instead of `/index.html`, avoiding an ASSETS redirect that discarded
+OIDC callback parameters; the Sites Worker regression suite passed afterward.
+
+Publisher OIDC remains disabled. A live token-expiration/refresh wait, actual
+service-event integration, production load, remote backup/recovery, custom-domain
+DNS and recurring access alert delivery remain unverified. This deployment adds
+auth-specific storage and an optional maintenance RPC/scheduler; existing analytics
+HTTP and DB contracts are unchanged. No CI runner or hygiene policy was added.
+The product spec, roadmap, risk register, installation/OIDC/runtime guides,
+workspace boundaries and README were aligned with these results.
+
 ## Native Workers JWKS transport compatibility — 2026-10-25
 
 Live PKCE login issued and validated an ID token, but Collector identity reads

@@ -4,7 +4,7 @@ For the bundled self-hosted provider, follow [Better Auth setup](better-auth.md)
 alongside this guide. External OIDC installation remains supported.
 
 Status: The same-origin paths, OIDC client, server verifier, and local configuration tools have been implemented.
-Real provider, account, domain, and D1 values and remote installation verification do not exist yet. The commands below
+The initial Better Auth installation and remote verification completed on 2026-10-25; see [validation evidence](../../VALIDATION.md). Independent installations must supply their own real account, origin, identity and D1 values. The commands below
 prepare local files only. They do not automatically perform registration, grant authorization, remote database application, or deployment.
 
 ## Interactive Configuration — `install:setup`

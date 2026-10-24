@@ -1,6 +1,6 @@
 # Workspace Boundaries
 
-Status: Partial implementation. npm workspaces and the packages below are implemented locally. Production authentication and remote deployment are follow-ups.
+Status: The packages below are implemented locally. The initial Better Auth/Collector/administrator installation was deployed and verified on 2026-10-25; service-event integration and remote recovery remain follow-ups. See [validation evidence](../../VALIDATION.md).
 
 ## Created packages
 - packages/core — Per-project event and property definitions, validation, normalization, hashing, and goal and aggregation rules (no private ZDP or Cloudflare dependency). Local implementation and verification are complete.

@@ -4,7 +4,7 @@ Status: Signature and claim verification in `packages/auth-oidc` and the `create
 verified locally. PKCE sign-in and rotating refresh in the administrator prototype were also implemented locally. The publisher
 (machine) verifier, the `exclusiveAudience` policy, and the `PUBLISHER_*` settings wiring in `runtime.ts` and `config.ts`
 were implemented and verified locally. The current check scope follows VALIDATION.md.
-Real identity provider connections and production deployment have not been done. The server adapter verifies JWT access tokens.
+The initial self-hosted [Better Auth provider](better-auth.md) and Cloudflare deployment were verified on 2026-10-25, including real Chromium login and protected reads. Publisher identities and a service-event pilot remain follow-ups. The server adapter verifies JWT access tokens.
 
 ## Host Connection
 
@@ -34,7 +34,7 @@ export function configureAdministrator(options: OidcOptions) {
 | fetchImpl | Optional. A transport trusted by the host or a fetch implementation for isolated tests. |
 
 A configuration error throws during creation and sends no network request. The prototype provides OIDC
-sign-in and collapsed direct bearer entry. The real provider and API audience are undecided.
+sign-in and collapsed direct bearer entry. The bundled Better Auth provider uses the administrator origin followed by `/v1` as the API audience; external providers need their own settings.
 
 ## Publisher (Machine) Verification
 
@@ -126,7 +126,7 @@ Project authorization is checked against the server's D1 `project_grants`.
 
 The sign-in button is disabled when all three required variables are empty. Filling only some of them or using an invalid value
 shows a configuration error. `VITE_` values are included in the public bundle, so do not put secrets there.
-The real provider, client ID, scope, resource, and API audience values are **UNDECIDED**.
+For the bundled provider, the client is `tallyfin-admin`, scope is `openid profile offline_access`, issuer is the auth origin plus `/api/auth`, and resource/API audience is the admin origin plus `/v1`; both token algorithms are ES256. External providers require their own reviewed values.
 
 The administrator screen's `origin + /auth/callback` must be registered with the provider in advance. The screen allows
 sign-in only over HTTPS or local HTTP on localhost, 127.0.0.1, or [::1]. Provider discovery,
@@ -146,8 +146,7 @@ shared refresh. Disconnecting or switching to sample mode clears requests and lo
 Provider logout and token-revocation calls have not been implemented.
 
 Tests use keys generated at runtime and isolated provider responses to verify signatures, nonce and state, duplicate callback handling,
-rotating refresh, and cancellation. The real provider's CORS behavior, JWT access token issuance, resource and audience
-mapping, rotating refresh, and production deployment have not been verified.
+rotating refresh, and cancellation. The initial real provider's CORS, JWT issuance, resource/audience mapping and deployment were verified. Refresh rotation passed real Better Auth integration tests locally; waiting through an access-token expiration against the live provider remains unverified.
 
 The optional `verify:admin-login` walks through the real administrator app, Chrome, and a local collector and D1 from the sign-in button through
 the authorization redirect, callback, authenticated API read, and shared rotating refresh. It also checks refresh failure, invalid state,

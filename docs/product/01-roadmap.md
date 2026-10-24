@@ -1,13 +1,13 @@
 # Roadmap — Tallyfin
 
-Status labels: Planned / Not Started / Sample Implementation Complete / Local Implementation and Verification Complete. The administrator screen prototype; core, storage adapter, collector, browser SDK, administrator query/configuration API, publisher management API, screens, funnel daily query API, funnel analysis screen, and CSV have been implemented locally. An actual authentication provider and operational deployment have not yet been connected.
+Status labels: Planned / Not Started / Sample Implementation Complete / Local Implementation and Verification Complete / Initial Deployment Verified. Core analytics and administrator features have been implemented locally. Better Auth, two isolated D1s and the administrator/Collector Workers were deployed on 2026-10-25; real browser login, protected reads and recurring maintenance were verified. This does not establish a completed service-event pilot or remote backup/recovery.
 
-## Remaining Work — 2026-10-21
+## Remaining Work — 2026-10-25
 
 The current core analytics functionality has been implemented locally. Use the list below as the basis for the next work; do not treat past “next steps” left in dated records as a list of unimplemented work.
 
-1. Finalize the actual administrator/publisher OIDC provider, client, audience, operational accounts, D1, and domain, and connect them with the existing installation tool. The authentication code and installation tool are implemented; actual values and operational connections remain.
-2. Apply the remote Worker, D1 migration, Cron, and service bindings, then verify actual login, collection, cleanup, and backup/recovery. Distinguish local load/recovery results from remote results.
+1. Connect an actual service and, when needed, its separate publisher identity. Administrator Better Auth, client/audience, first operator account and project-creation permission are configured; publisher authentication remains disabled.
+2. Verify service-event collection, production load and remote backup/recovery. Remote Workers, D1 migrations, service bindings and real sign-in are complete. The initial account uses an explicitly activated SQLite Durable Object alarm instead of extra Cron slots; two live wakeups succeeded. Custom domains remain optional follow-up work.
 3. Connect the operational path for repeatedly running authentication-access checks, consecutive-failure/recovery criteria, and alert recipients. `monitor:access` uses explicit policy and state files to make local decisions about consecutive failures, recoveries, and alert intent. Manual access checks, log summaries, and a local report screen also exist. The actual schedule, recipients, SLO, owners, and retention period are undecided. [Access Monitor](../../tools/runtime/ACCESS-MONITOR.md).
 4. Activate the actual Sembom integration and verify aggregation, missing events, service latency, and mobile cost. Then verify generality in one service of a different type. Repository examples differ from an actual installation.
 5. Decide additional bot-blocking and temporary IP handling policies. Per-project per-minute and daily limits are currently implemented.
