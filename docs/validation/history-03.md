@@ -1,371 +1,166 @@
-# 검증 이력 03
-
-원문의 구간 순서를 유지한 과거 기록이다. 명령과 코드 경로는 저장소 루트 기준이다.
-
-## 자원 수명·경합 개선 최종 검증 (2026-10-23)
-
-전체 테스트를 `node --test --test-concurrency=2 --test-timeout=30000`과 기존
-package script의 테스트 경로로 실행해 489/489를 통과했다. 관리자 테스트 276/276,
-최종 OIDC/인증 테스트 18/18도 통과했다. 실제 Worker에서 인증 요청 12개를 동시에
-실행했을 때 모두 성공했고 JWKS 조회는 총 2회, 최대 동시 2개, 종료 후 활성 0개였다.
-역순으로 끝난 이전 조회의 실패가 최신 성공 이후 cooldown을 덮지 않도록 보호했다.
-관리자 빌드, 계약 검사 63개, 최종 루트 TypeScript 검사도 통과했다.
-
-기본 전체 병렬 실행에서는 로컬 Wrangler/Miniflare 부하로 30초 timeout이 발생했다.
-동시 실행 수 2에서는 전체 통과했으며 package script·CI 설정은 변경하지 않았다.
-관리자 브라우저 권한 초안/모드 이탈 검사도 pageErrors=0, routeError=false로 통과했다.
-
-API 목록의 grantRevision과 쓰기의 expectedRevision, DB 0010의 컬럼 및 세 트리거는
-함께 반영해야 한다. 원격에는 0010을 먼저 적용하고 Collector와 갱신된 관리자 UI를
-함께 배포한다. JWKS 제한은 verifier 인스턴스별이며 분산 전역 한도는 아니다.
-원격 DB 적용·푸시·배포·게시·의존성·CI 변경은 수행하지 않았다.
-
-## 관리자 fallback 응답 수명 (2026-10-23)
-
-SPA fallback에서 버리는 404 본문은 관리자 Worker의 finally에서 즉시 취소한다.
-정상 반환되는 asset/fallback 본문은 호출자가 소유하며, 취소의 예외·거부·끝나지 않는
-정리 Promise가 fallback 응답이나 원래 오류를 바꾸지 않는다. 성공/동기 예외/비동기
-실패/AbortError와 cleanup 네 가지 조합을 포함한 Sites Worker 검사 11/11 및 diff
-검사를 통과했다. API·DB·의존성·CI 변경은 없다.
-
-## OIDC 외부 조회와 대기 수명 제한 (2026-10-23)
-
-verifier마다 JWKS 외부 조회를 최대 2개, 대기자를 최대 32개로 제한한다. 대기는 각
-요청의 deadline/Promise에 속하며 취소 시 큐와 리스너를 제거한다. 슬롯은 finally에서
-반환하고 먼저 대기한 요청에 예약해 중복 반환/새 호출의 가로채기를 막는다. 대기 중
-갱신된 공개 JSON만 재사용하며 Response/stream은 요청별로 만든다. 역순 완료된 이전
-조회가 최신 공개 데이터 캐시를 덮지 않도록 시작 순서를 비교한다. 제한은 인스턴스별이며
-분산 전역 한도를 주장하지 않는다. OIDC/실제 Worker 검사 18/18, 순서 보호 후 OIDC
-17/17와 루트 TypeScript 검사를 통과했다. API·DB·의존성·CI 변경은 없다.
-
-## 관리자 권한 revision CAS (2026-10-23)
-
-0010은 기존 grant 행을 보존하고 projects.grant_revision과 세 트리거를 추가한다.
-직접 SQL/운영 도구/API의 권한 생성·삭제·역할 변경이 revision을 올린다. 목록은
-grantRevision을 제공하고 관리자 UI는 검토 시 expectedRevision을 고정해 PUT/DELETE에
-전달한다. 오래되거나 누락된 revision은 상태를 바꿀 수 없으며 grant_conflict로 끝난다.
-상태가 이미 같으면 쓰기 없는 재확인은 유지한다. 운영 도구 계획도 revision을 비교한다.
-필수 함수 인자는 유지하며 OpenAPI·DBML·마이그레이션 지침을 갱신했다. 0010 적용 후
-Collector와 관리자 UI를 함께 갱신해야 기존 관리자도 권한을 편집할 수 있다.
-
-권한 집중 검사 31/31, 마이그레이션/클라이언트 보강 13/13, 수정된 서버 수집/클라이언트
-검사 17/17, 계약 검사 63개와 루트/관리자 TypeScript 검사를 통과했다. 실제 브라우저의
-권한 저장 응답 손실·초안/이탈 검사도 성공했고 pageErrors=0, routeError=false였다.
-최초 전체 병렬 검사에서 새 컬럼 기대값 불일치와 부하에 따른 30초 타임아웃이 발생해
-기대값을 수정했으며 최종 전체 검사는 동시 실행 수를 낮춰 수행한다. 원격 DB 적용·
-푸시·배포·의존성·CI 변경은 없다.
-
-## 분당 한도 판정의 설정 경합 제거 (2026-10-23)
-
-admit의 필수 호출 인자는 유지하지만 승인과 minute_limit 집계는 같은 SQL 문에서
-읽은 projects.requests_per_minute로 판정한다. 설정을 읽은 뒤 한도가 낮아지거나
-높아져도 오래된 호출자 값으로 승인/거부하지 않는다. 거부 집계 SQL에 남아 있던
-TypeScript 상수 이름도 숫자 보간으로 바로잡았다. 실제 D1/Worker 집중 검사 28/28,
-루트 TypeScript 검사·diff 검사를 통과했다. API·DB 구조·의존성·CI 변경은 없다.
-
-## 리팩토링 최종 패키지 연계 검증 (2026-10-22)
-
-SDK 정책 파일 분리로 생성되는 내부 타입 선언 두 개를 정확한 tarball 파일 목록에
-추가했다. verify:sdk-packages는 두 SDK 재빌드·stale 출력 제거·오프라인 pack·작업공간
-밖 설치·NodeNext 선언 컴파일·세 진입점 실행을 통과했다. 네트워크/credential 호출은
-0이며 공개 API 형식과 런타임 의존성은 유지한다. 루트 전체 타입 검사도 통과했다.
-이번 후속 범위의 SDK 98/98·관리자 275/275·모니터/접근 19/19가 통과했다. 전체
-npm test와 원격 운영 검사는 범위 밖이라 실행하지 않았다. 푸시·배포·게시는 하지 않았다.
-
-## 모니터 파일 수명 분리 (2026-10-22)
-
-상태 파일 처리에서 잠금 소유·제한된 파일 읽기·취소 가능한 관측·임시 파일 발행을
-별도 함수로 분리했다. 다른 writer의 잠금/임시 파일을 삭제하지 않으며 close/unlink
-순서와 rename 이후 저장 성공 규칙을 유지한다. 파일/모니터/접근 검사 19/19와 루트
-TypeScript 검사·diff 검사를 통과했다. 실제 접근 장애 검사에서 기존 Windows
-workerd WSARecv #64 진단이 있었지만 검사는 정상 종료했다. API·DB·의존성·CI 변경은 없다.
-
-## 관리자 상태 소유권과 조회 수명 분리 (2026-10-22)
-
-SettingsEditor는 private 상태와 읽기 전용 getter/구독 view를 제공한다. API 스냅샷을
-복사해 동결하고 saved 콜백에도 별도 복사본을 전달하므로 호출자 원본을 동결하거나
-외부 변경으로 초안·권한·오류 상태가 바뀌지 않는다. 프로젝트 목록/페이지의 generation과
-AbortController는 useProjectPages에 모으고 본 조회·기간 비교·시계열은 별도 훅으로 옮겼다.
-검증 순서와 Hook 이전 반환 금지를 유지한다. 관리자 검사 275/275, 타입 검사·빌드와
-브라우저 설정 탐색(생성 후 전환·분석 새로고침 포함)/분석 권한 검사를 통과했다.
-초기 전체 검사에서 기존 100ms native 요청 테스트가 병렬 부하로 실패해 credential
-기한을 가상 시계로 검증하도록 바꾼 뒤 전체 통과했다. 브라우저 pageErrors/routeError는
-0/false다. Worker 종료 중 Windows WSASend #10053 진단이 있었으나 검사는 성공했다.
-API·DB·의존성·CI 변경과 원격 반영은 없다.
-
-## SDK 전송 단계와 정책 분리 (2026-10-22)
-
-서버 SDK의 배치 복사/검증·단일 요청·HTTP 종료 분류를 분리하고 전송 진행 상태의
-소유권을 send에 모았다. 실제 요청 횟수·오류 분류·인증/본문/재시도 취소 순서를 유지한다.
-브라우저의 Retry-After 계산은 순수 함수이며 큐·요청·재시도 한도는 경량 상수로 관리한다.
-SDK 검사 98/98, 서버 빌드·루트 TypeScript 검사를 통과했다. 브라우저 gzip 검사는
-Sembom 3056, 퍼널 3029, 생성 퍼널 3054 bytes로 3072 bytes 이하다. 내부 파일 분할을
-허용하도록 번들 검사를 소스 경로 기준으로 바꿨다. API·DB·의존성·CI 변경은 없다.
-
-## D1 스냅샷과 SQL/응답 계산 분리 (2026-10-22)
-
-수집 스냅샷의 선택적 publisher/funnel 결과는 어댑터 내부에서 이름으로 해석한다.
-commitIngest는 기존 권한/설정 확인·순수 계획·원자적 SQL 실행·충돌 재시도만 조율한다.
-관리자 조회 SQL과 응답 계산도 분리했다. 쿼리 순서와 grant predicate·단일 snapshot·
-write guard를 유지하며 SQL 행 한도는 도메인 정책에서 계산한다. D1/관리자 집중 검사
-59/59·루트 타입 검사를 통과했다. DB 스키마·API 형식·의존성·CI 변경은 없다.
-
-## Core 전이 계산과 정책 소유권 (2026-10-22)
-
-workflow 전이는 입력 상태를 복사한 순수 계산으로 분리했다. 영수증/단계 중복과 일일
-한도 순서는 유지하고 스키마 검증은 이벤트·workflow·차원 비교로 나눴다. 정의 투영은
-읽기 전용 borrowed view로 표시하며 퍼널 결과의 속성은 복사한다. 시간/보존/스키마/
-조회 정책 상수를 Core에서 공유하고 관리자 경로에도 적용했다. Core·실제 D1 집중
-검사 70/70·루트 타입 검사를 통과했다. 응답 형식·DB·의존성·CI 변경은 없다.
-
-## 관리자 경로와 수집 오류 처리 분리 (2026-10-22)
-
-administrator는 인증 뒤 기존 순서로 경로만 분기하며 읽기/쓰기 핸들러와 본문 해석을
-분리했다. Collector 오류 헤더는 입력 Headers를 복사해 계산하고 거부 집계는 별도
-함수에서 처리한다. 권한 확인 전 본문을 읽지 않는 경로와 settings PATCH의 기존
-본문 우선 검증을 유지한다. 집중 검사 61/61·루트 타입 검사·diff 검사를 통과했다.
-응답 형식·DB·의존성·CI 변경과 원격 반영은 없다.
-
-## 모니터 상태 파일 포트와 취소 (2026-10-22)
-
-withMonitorFile의 마지막 선택 옵션으로 좁은 files 포트·uuid·signal을 받는다. 관측
-콜백이 취소를 무시해도 대기를 끝내고 잠금을 해제하며 늦은 결과는 저장하지 않는다.
-파일 생성·쓰기·sync는 완료 후 소유 파일을 정리하고 rename 성공을 저장 완료로 취급한다.
-CLI는 signal과 선택적 파일/UUID/timeoutSignal 포트를 전달한다. 메모리 파일 회귀와
-기존 실제 파일/접근 검사 19/19, 루트 타입 검사·diff 검사를 통과했다. 쓰기/sync/rename
-실패·단계별 취소·4096바이트 전후·공유 잠금을 확인했다. DB·API·의존성·CI 변경은 없다.
-
-최종 관리자/서버 수집 검사 21/21와 Collector 런타임 타입 검사도 통과했다. 이번 변경의
-집중 검사 합계는 178/178이다. 실제 프록시 장애 검사에서 기존 Windows workerd WSARecv
-#64 진단이 있었지만 검사는 정상 종료했다. 전체 CI·원격 운영 검증·푸시·배포는 미실행이다.
-
-## SDK 재시도 시계와 가상 deadline (2026-10-22)
-
-BrowserPlatform에 선택적 monotonicNow를 추가했다. 기본 호스트는 날짜/HTTP-date와
-재시도 경과 시간을 분리하며 기존 커스텀 호스트는 now로 호환된다. 유한 입력 제한으로
-항상 16KiB에 들어가는 최대 20건을 한 번에 조립해 반복 문자열/크기 검사를 줄였다.
-ServerPlatform의 선택적 timer는 모든 제한 시간 대기에 사용하고 생략 시 기존 타이머다.
-SDK 검사 98/98, 두 SDK 빌드·루트 타입 검사·diff 검사를 통과했다. 원본/minified의
-10분 직전/정확히/직후·시계 역행/전진·최대 길이 20건·가상 credential/request/body/wait
-기한을 확인했다. gzip은 Sembom 3048, 퍼널 예제 3021, 생성 퍼널 3041 bytes로
-3072 bytes 이하다. 필수 호출 인자·응답 형식·DB·의존성·CI 변경은 없다.
-
-## OIDC 대기 제한과 선택적 시계/취소 (2026-10-22)
-
-JWKS 전송을 deadline과 경합하고 오류/초과/취소 본문 정리를 기다리지 않는다. 선택적
-now·monotonicNow·timeoutSignal로 JWT 시각·실패 cooldown·deadline을 제어한다. 호출별
-signal은 공유 키 조회를 취소하지 않고 자기 대기만 끝낸다. 수집기 관리자/발행자 인증은
-request.signal을 전달한다. 필수 인자·반환 타입·인증 실패 null 계약을 유지한다.
-OIDC/실제 Worker 인증 검사 16/16, 루트 타입 검사를 통과했다. 기본 5초 허용 오차,
-만료 경계·지연된 키 조회·끝나지 않는 cleanup·전송·공유 조회 취소를 확인했다.
-API 응답 형식·DB·의존성·CI 변경은 없다. jose 내부 캐시 시계는 기존 구현을 유지한다.
-
-## 수집 본문 취소와 요청 ID 주입 (2026-10-22)
-
-`readBody`는 요청/선택적 caller signal과 기본 10초 읽기 기한을 처리한다. 초과 본문과
-취소 시 reader 정리를 기다리지 않아 끝나지 않는 cancel promise가 오류 반환을 막지
-않는다. 기존 필수 인자·반환 타입을 유지하고 CollectorOptions에 선택적 uuid를 추가했다.
-본문·요청 ID·실제 Worker/D1 수집 검사 24/24를 통과했다. 16KiB 전후·멈춘 정리·
-읽기 중 취소·읽기 기한을 확인했다. API 응답 형식·DB·의존성·CI 변경은 없다.
-
-## SDK tarball과 외부 소비 프로젝트 (2026-10-21)
-
-`npm pack --dry-run --json --ignore-scripts`에서 browser tarball에 현재 빌드가 생성하지
-않는 `dist/src/index.d.ts`(1,999 bytes)가 포함되는 것을 확인했다. 두 SDK 빌드가 출력
-폴더를 정리하지 않아 예전 산출물이 섞일 수 있었다. SDK 실제 경로가 checkout 안에
-있는지 확인한 뒤 해당 `dist`만 지우도록 공통 출력 정리를 추가했다.
-
-선택 명령 `npm run verify:sdk-packages`는 오래된 파일 회귀 probe를 넣고 두 SDK를
-빌드·오프라인 pack한다. 정확한 파일 목록을 검사하고 작업공간 밖의 새 npm 프로젝트에
-tarball을 오프라인·ignore-scripts·no-save로 설치한다. 그곳에서 세 ESM 진입점과 선언을
-TypeScript NodeNext로 컴파일하고 비활성 browser/funnel 생성·해제와 server 이벤트
-생성을 실행했다. 네트워크/토큰 콜백 호출 0, 실제 설치가 workspace symlink가 아님을 확인했다.
-
-- 최종 `verify:sdk-packages`: 통과. browser 7파일/6,222 bytes, server 3파일/4,995 bytes.
-  SHA-256·파일 목록·타입/실행 결과는 `.tmp/sdk-packages/run-IIxWCx/report.json`과 tarball에 있다.
-- 초기 격리 설치는 상위 npm run이 재전달한 allow-scripts 설정 때문에 EALLOWSCRIPTS로
-  실패했다. 설치된 npm의 정책 코드를 확인해 자식 환경의 재전달 값만 지웠다. 사용자
-  .npmrc 정책과 ignore-scripts는 유지한다. 검증용 잘못된 프로젝트 ID도 수정한 뒤 최종 통과했다.
-- `npm run check:browser-size`: 통과. Sembom 포함 gzip 3,067 bytes, 퍼널 예제 3,046,
-  생성 퍼널 코드 3,068로 모두 3,072 bytes 이하이며 기존 값과 같다.
-- CLI `--help`, 문서 상대 링크, `git diff --check` 통과. 실행 중 만든 외부 소비 프로젝트는
-  정리했고 Git 제외 경로에 tarball과 보고서만 남겼다.
-
-SDK 실행 소스·공개 API·DB·의존성·runner는 변경하지 않았다. 변경 없는 기능 테스트와
-브라우저 온보딩 재실행은 생략했다. 버전 0.0.0·private true를 유지하며 registry 로그인·
-게시·원격 변경은 없다. 라이선스·공개 scope·실제 서비스 설치는 미결정/미실행이다.
-
-## 공개 제공자 검사 대기 제한 (2026-10-21)
-
-공개 OIDC discovery/JWKS 검사에도 취소를 무시하는 전송과 끝나지 않는 body.cancel이
-대기를 붙잡는 문제가 있었다. 새 회귀 검사는 수정 전 1초 제한으로 취소됐다. 기존 요청
-생명주기 함수로 헤더·본문 대기를 취소와 경합하고, 실패/OPTIONS 응답과 reader 정리는
-결과를 기다리지 않도록 고쳤다. 늦은 응답은 정리하고 검사 결과로 채택하지 않는다.
-
-`node --test tools/runtime/test/install-check.test.ts` 5/5·루트 타입 검사·`git diff --check`
-통과. 초기 수정 후 회귀 검사의 “모두 reject” 기대는 즉시 실패 보고서를 반환하는 정상
-거부 경로와 맞지 않아, 제한 안에 reject하거나 실패 보고서를 내는지 확인하도록 수정했다.
-공개 설정·키 fixture만 사용했으며 실제 제공자·원격 요청은 없다. API·DB·SDK·의존성·
-runner 변경은 없고 변경 없는 관리자/SDK 빌드와 전체 검사는 생략했다.
-
-## 현재 SDK 온보딩과 로컬 복구 확인 (2026-10-21)
-
-- `npm run build:browser` 및 `npm run verify:admin-onboarding -- --channel chromium --lost-responses`
-  통과. Chromium 156.0.8078.4에서 격리된 서명 로그인·빈 프로젝트 생성·첫 스키마 발행·
-  생성된 SDK 실행·첫 이벤트 1건·관리자 표 표시를 확인했다. 생성/발행 성공 응답을 각각
-  한 번 끊은 뒤 명시적 복구, 초안 교체, SDK 연결 단계도 통과했다. API read 31·write 5·
-  browser batch 1, route/page 오류 0이다. 실제 서비스·제공자 요청은 없다.
-- `npm run verify:restore` 통과. 새 합성 DB의 0001~0009 마이그레이션·16개 테이블을
-  실제 로컬 Wrangler SQL export/import로 복원했다. 스키마/행 fingerprint 일치,
-  quick_check ok·외래 키 위반 0·보호 쓰기 거부 5건을 확인했다. 복원 뒤 browser 재전송은
-  accepted 0/duplicates 2, server는 accepted 0/duplicates 1이다. 발행자 회수·같은 밀리초
-  재부여·stale 회수 거부·no-op 감사 보존도 통과했다. 백업 28,398 bytes, 총 약 18.3초다.
-  보고서는 `.tmp/restore-drill/run-tlQofv/report.json`에 있다.
-
-각 실행이 만든 브라우저·Vite·Miniflare는 종료했다. 합성 보고서/백업은 Git 제외 경로에
-남겼다. 원격·기존 DB·운영 계정은 사용하지 않았으며 실제 RTO/RPO·서비스 파일럿·
-모바일 검증으로 확대하지 않는다. 이 기록은 실행 코드·API·DB·의존성·runner를 바꾸지 않는다.
-
-## 인증 접근 반복 점검 명령 (2026-10-21)
-
-`monitor:access`를 추가했다. 기존 접근 검사 세 GET을 재사용하고 명시한 실패/복구 횟수·
-최대 관측 간격으로 연속 실패·복구를 판단한다. 설치 공개 설정의 fingerprint와 정책을
-상태에 묶으며 다른 대상·정책·시계 역행·손상 상태는 토큰을 읽기 전에 거부한다.
-상태에는 고정 메타데이터만 쓰며 독점 잠금·sync/rename으로 교체한다. 취소 시 토큰 입력·
-검사 대기를 끝내고 잠금을 정리한다. 알림 의도만 출력하며 실제 발송·주기 등록은 없다.
-
-- `node --test tools/runtime/test/access-monitor.test.ts tools/runtime/test/install-access-check.test.ts`:
-  14/14 통과. 실패/복구 임계값·간격 경계·정책/대상 불일치·손상/초과 파일·중첩 실행·
-  토큰 입력 중 취소·이전 파일 보존을 확인했다.
-- 실제 관리자 Worker 프록시·서명 OIDC·로컬 D1에서 정상 → 테이블 읽기 불가 3회 →
-  복구 2회, 총 6회/GET 15건을 실행했다. event는 healthy·failure_pending·incident_opened·
-  incident_ongoing·recovery_pending·incident_resolved였고 알림 의도는 열림/복구 두 번뿐이다.
-  설치 파일 불변과 출력/상태의 토큰·issuer·subject·URL·테이블명 미포함도 확인했다.
-- 루트 타입 검사·CLI `--help`·문서 상대 링크·`git diff --check` 통과.
-
-workerd의 기존 Windows WSARecv #64 경고가 있었지만 집중 검사는 종료 코드 0이다.
-실제 OIDC·원격 DB·스케줄러·알림 수신자는 미연결이다. 상태 교체와 stdout 전달은
-별도이므로 알림 전달 보장은 없다. 변경 없는 관리자/SDK 빌드·전체 검사는 생략했다.
-API·DB·의존성·runner·저장소 위생 설정 변경과 푸시·배포·게시는 없다.
-
-## 설치 접근 검사 대기 제한 (2026-10-21)
-
-취소를 무시하는 전송이나 끝나지 않는 응답 정리가 `install:access-check`를 붙잡던 경로를
-재현했다. 수정 전 새 회귀 검사는 2초 제한으로 취소됐다. 기존 요청 생명주기 함수를
-재사용해 헤더·본문 대기를 취소와 경합하고 정리는 결과를 기다리지 않는다. 늦게 도착한
-응답은 본문을 정리하고 후속 읽기를 시작하지 않는다. 401/403 판정·본문 한도는 유지한다.
-
-접근 검사 8/8(실제 관리자 프록시·서명 OIDC·로컬 D1 포함), 루트 타입 검사,
-`git diff --check`를 통과했다. workerd의 기존 Windows WSARecv #64 경고가 한 번 있었고
-검사 종료 코드는 0이다. 원격 제공자·D1·배포는 미실행이다. API·DB·SDK·의존성·runner·
-저장소 위생 설정 변경은 없으며 변경 없는 관리자 UI·수집기 전체 빌드는 생략했다.
-
-## 설계 상태와 남은 작업 정리 (2026-10-21)
-
-현재 소스·package scripts·OIDC/운영 문서를 대조해 ARCHITECTURE의 관리자 미구현 표기와
-위험 등록부의 재시도·영수증 TTL·권한·스키마·서버 발행·퍼널 미정 표기를 바로잡았다.
-CONTRIBUTING에 현재 코드 변경·검증·커밋 절차를 적고, 로드맵 맨 앞에 실제 운영 연결·
-파일럿·악용 방지 결정·공개 준비와 별도 후속 기능을 나눴다.
-
-문서 상대 링크 존재와 `git diff --check`를 확인했다. 실행 코드는 변경하지 않아 테스트·
-빌드는 생략한다. 라이선스·운영 정책·실제 제공자·원격 DB·푸시·배포·게시 상태는 바꾸지
-않았다. API·DB·의존성·runner·저장소 위생 설정 변경은 없다.
-
-## 브라우저 SDK 정의 맵의 객체 검사 (2026-10-13)
-
-이벤트 속성 정의가 `[]`, 숫자, 불리언 또는 빈 문자열이어도 `Object.entries`가
-빈 목록을 반환해 속성 없는 이벤트로 받아들였다. 빈 배열·스칼라 workflow 맵도
-정상적인 빈 workflow 목록으로 해석됐다. 두 맵이 객체인지 확인해 잘못된 설정은
-SDK 생성 시 비활성화한다. 정상적인 빈 객체 정의는 계속 지원한다. 검증된 버전의
-배치 JSON 접두부는 SDK 생성 때 한 번 만들어 배치별 재생성을 줄인다.
-
-- 새 `configuration.test.ts`의 원본·minified 일반/퍼널 검사 4개가 수정 전
-  `properties: []`에서 모두 실패했다. 수정 뒤 50개 잘못된 맵 조합에서 이벤트
-  대기·전송·Beacon·타이머·visibility listener가 없고 정상 빈 객체는 전송된다.
-- `npm run test:browser`: 53/53 통과. 원본과 실제 esbuild minified 모듈을 확인한다.
-- `npm run build:browser`, `npx --no-install tsc --noEmit`, `git diff --check` 통과.
-- `npm run check:browser-size`: 3,072 bytes gzip 예산 통과. Sembom 연동 포함
-  3,067 bytes, 퍼널 연동 포함 3,046 bytes, 생성된 퍼널 연동 포함 3,068 bytes.
-  초기 수정은 생성된 퍼널 예산을 넘었으며 최종 코드로 다시 확인했다.
-
-API·DB·SDK 공개 타입·의존성·CI·위생 정책 변경은 없다. 소유 문서는 이 검증 기록만
-갱신했다. 변경 없는 관리자·서버 SDK·수집기 전체 검사는 생략했고, 실제 Chromium과
-운영 OIDC·원격 DB·배포 환경은 확인하지 않았다. 설정 오류는 기존 비활성 SDK 방식으로
-처리되어 UI에 별도 오류 알림을 제공하지 않는다. 푸시·배포는 하지 않았다.
-
-## 분류별 집계 날짜 계산 재사용 (2026-10-12)
-
-흐름·퍼널 분류 조회가 각 버킷에서 같은 날짜의 시간대 경계를 반복 계산했다. 31일·32개
-버킷 회귀 검사에서 수정 전 두 경로 모두 `Intl.DateTimeFormat` 생성 992회로 실패했다.
-날짜별 확정 여부를 한 응답 안에서만 재사용해 31회로 줄였고, 빈 버킷 결과는 계산하지 않는다.
-다른 요청과 캐시를 공유하지 않아 시간 경계 이후 새 조회의 provisional 값은 다시 계산된다.
+# Verification History 03
+
+This is a historical record that preserves the order of the original sections. Commands and code paths are relative to the repository root.
+
+## Final Verification of Resource Lifetime and Race Improvements (2026-10-23)
+
+The full test suite was run with `node --test --test-concurrency=2 --test-timeout=30000` and the existing test path in the package script, and 489/489 tests passed. The admin tests 276/276 and the final OIDC and authentication tests 18/18 also passed. When 12 authentication requests were run concurrently on the actual Worker, all succeeded, there were 2 JWKS lookups in total, no more than 2 ran concurrently, and 0 remained active after completion. Protection was added so that a failure from an older lookup that completed out of order could not overwrite the cooldown after a newer success. The admin build, 63 contract tests, and the final root TypeScript check also passed.
+
+The basic full parallel run hit a 30-second timeout under local Wrangler and Miniflare load. With concurrency 2, the full suite passed, and the package script and CI settings were not changed. The admin browser permission draft and mode-exit tests also passed with pageErrors=0 and routeError=false.
+
+The API list's `grantRevision`, the write's `expectedRevision`, the DB 0010 columns, and its three triggers must be deployed together. For a remote deployment, apply 0010 first, then deploy the Collector and the updated admin UI together. The JWKS limit is per verifier instance and is not a distributed global limit. No remote DB application, push, deployment, publication, dependency, or CI change was performed.
+
+## Admin Fallback Response Lifetime (2026-10-23)
+
+The 404 body discarded by the SPA fallback is cancelled immediately in the admin Worker's `finally` block. Normally returned asset and fallback bodies are owned by the caller, and an exception, rejection, or unresolved cleanup Promise from cancellation does not alter the fallback response or the original error. Sites Worker tests 11/11, covering success, synchronous exception, asynchronous failure, AbortError, and cleanup combinations, and the diff check passed. There are no API, DB, dependency, or CI changes.
+
+## OIDC External Lookup and Waiting Lifetime Limits (2026-10-23)
+
+Each verifier limits external JWKS lookups to 2 and waiters to 32. A wait belongs to its request's deadline and Promise, and cancellation removes it from the queue and listeners. The slot is returned in `finally` and reserved for the earliest waiter, preventing a duplicate return or a new call from intercepting it. Only refreshed public JSON is reused while waiting, and a Response and stream are created for each request. Start order is compared so that an older lookup that completes out of order cannot overwrite the latest public-data cache. The limit is per instance and does not claim a distributed global limit. OIDC and actual Worker tests 18/18 passed, and OIDC 17/17 and the root TypeScript check passed after the ordering protection. There are no API, DB, dependency, or CI changes.
+
+## Admin Grant Revision CAS (2026-10-23)
+
+0010 preserves existing grant rows and adds `projects.grant_revision` and three triggers. Grant creation, deletion, and role changes through direct SQL, operations tools, or the API increment the revision. The list returns `grantRevision`, and the admin UI fixes `expectedRevision` at review time and passes it on PUT and DELETE. A stale or missing revision cannot change state and terminates with `grant_conflict`. If the state is already the same, the no-write recheck is retained. The operations tool plan also compares the revision. Required function arguments are preserved, and OpenAPI, DBML, and migration guidance were updated. After applying 0010, the Collector and admin UI must be updated together so the existing admin can edit grants.
+
+Grant focused tests 31/31, migration and client reinforcement 13/13, the corrected server collection and client tests 17/17, 63 contract tests, and the root and admin TypeScript checks passed. The real browser grant-save response loss, draft, and exit tests succeeded with pageErrors=0 and routeError=false. The first full parallel run found a fixture mismatch for the new column and a 30-second timeout under load; the expected value was corrected, and the final full run used lower concurrency. There was no remote DB application, push, deployment, dependency, or CI change.
+
+## Removing Configuration Races from Per-Minute Limit Decisions (2026-10-23)
+
+The required arguments to `admit` are preserved, but approval and `minute_limit` aggregation are decided from `projects.requests_per_minute` read in the same SQL statement. If the limit is lowered or raised after configuration is read, they are not approved or rejected using an old caller value. A TypeScript constant name that remained in the rejection-aggregation SQL was also corrected to numeric interpolation. Real D1 and Worker focused tests 28/28, the root TypeScript check, and the diff check passed. There are no changes to APIs, the DB structure, dependencies, or CI.
+
+## Final Package Integration Verification for the Refactor (2026-10-22)
+
+Two internal type declarations generated by the SDK policy file split were added to the exact tarball file list. `verify:sdk-packages` passed after rebuilding both SDKs, removing stale output, packing offline, installing outside the workspace, compiling NodeNext declarations, and running the three entry points. There were 0 network or credential calls, and the public API shape and runtime dependencies are preserved. The full root type check also passed. The SDK 98/98, admin 275/275, and monitor and access 19/19 test groups in this follow-up scope passed. The full `npm test` and remote production checks were out of scope and were not run. There was no push, deployment, or publication.
+
+## Separating Monitor File Lifetimes (2026-10-22)
+
+State-file handling was split into separate functions for lock ownership, bounded file reads, cancellable observation, and temporary-file publication. Another writer's lock or temporary file is not deleted, and the close and unlink order and the rule that a save succeeds after rename are preserved. File, monitor, and access tests 19/19, the root TypeScript check, and the diff check passed. The real access-failure test produced the existing Windows workerd WSARecv #64 diagnostic, but the test exited normally. There are no API, DB, dependency, or CI changes.
+
+## Separating Admin State Ownership and Query Lifetimes (2026-10-22)
+
+SettingsEditor exposes private state and a read-only getter and subscription view. It copies and freezes API snapshots and passes a separate copy to the saved callback, so the caller's original is not frozen and external changes cannot alter the draft, permission, or error state. Project-list and page generation and the AbortController were consolidated in `useProjectPages`, while the main query, period comparison, and time series moved into separate hooks. Verification order and the rule against returning before hooks are preserved. Admin tests 275/275, the type check and build, and browser settings navigation (including creation followed by a switch and analytics refresh) and analytics permission tests passed. In the initial full run, an existing 100ms native request test failed under parallel load; after the credential deadline was verified with a virtual clock, the full suite passed. Browser pageErrors and routeError were 0 and false. A Windows WSASend #10053 diagnostic appeared during Worker shutdown, but the test succeeded. There are no API, DB, dependency, or CI changes and no remote reflection.
+
+## Separating SDK Transport Stages and Policy (2026-10-22)
+
+The server SDK's batch copy and validation, single-request handling, and HTTP termination classification were separated, and ownership of transport progress state was centralized in `send`. The actual request count, error classification, and cancellation order for authentication, body, and retries are preserved. The browser's Retry-After calculation is a pure function, and the queue, request, and retry limits are managed with lightweight constants. SDK tests 98/98, the server build, and the root TypeScript check passed. Browser gzip checks measured Sembom at 3056 bytes, funnel at 3029 bytes, and generated funnel at 3054 bytes, all at or below 3072 bytes. The bundle test was changed to use source paths so internal file splitting is allowed. There are no API, DB, dependency, or CI changes.
+
+## Separating D1 Snapshots from SQL and Response Computation (2026-10-22)
+
+The optional publisher and funnel results in the ingestion snapshot are resolved by name inside the adapter. `commitIngest` coordinates only the existing permission and configuration check, the pure plan, atomic SQL execution, and conflict retry. Admin query SQL and response computation were also separated. Query order, the grant predicate, the single snapshot, and the write guard are preserved, and SQL row limits are calculated by domain policy. D1 and admin focused tests 59/59 and the root type check passed. There are no changes to the DB schema, API format, dependencies, or CI.
+
+## Core Transition Computation and Policy Ownership (2026-10-22)
+
+Workflow transitions were separated into pure computation that copies the input state. Receipt and step duplicate handling and the daily-limit order are preserved, and schema validation was split into event, workflow, and dimension comparisons. Definition projections are exposed as read-only borrowed views, while funnel-result properties are copied. Time, retention, schema, and query policy constants are shared in Core and are also applied on admin paths. Core and real D1 focused tests 70/70 and the root type check passed. There are no changes to response formats, the DB, dependencies, or CI.
+
+## Separating Admin Routes and Collection Error Handling (2026-10-22)
+
+`administrator` branches routes only after authentication and in the existing order, with read and write handlers and body parsing separated. Collector error headers are calculated by copying the input Headers, and rejection aggregation is handled by a separate function. Paths that must not read a body before the permission check and the existing body-first validation in the settings PATCH are preserved. Focused tests 61/61, the root type check, and the diff check passed. There are no changes to response formats, the DB, dependencies, or CI, and no remote reflection.
+
+## Monitor State File Port and Cancellation (2026-10-22)
+
+The last optional argument to `withMonitorFile` accepts narrow `files`, `uuid`, and `signal` ports. Even if an observation callback ignores cancellation, the wait ends and the lock is released, and a late result is not saved. File creation, writing, and sync clean up the owned file after completion, and a successful rename is treated as a completed save. The CLI passes the signal and optional file, UUID, and timeoutSignal ports. The in-memory file regression and existing real-file and access tests 19/19, the root type check, and the diff check passed. Write, sync, and rename failures, cancellation at each stage, sizes around 4096 bytes, and shared locking were checked. There are no DB, API, dependency, or CI changes.
+
+The final admin and server collection tests 21/21 and the Collector runtime type check also passed. The focused test total for this change is 178/178. The real proxy failure test produced the existing Windows workerd WSARecv #64 diagnostic, but the test exited normally. Full CI, remote production verification, push, and deployment were not run.
+
+## SDK Retry Clock and Virtual Deadline (2026-10-22)
+
+An optional `monotonicNow` was added to BrowserPlatform. The default host separates date and HTTP-date handling from retry elapsed time, and existing custom hosts remain compatible through `now`. The finite-input limit assembles up to 20 events at once, always within 16KiB, reducing repeated string and size checks. The optional `timer` on ServerPlatform is used for every timed wait, with the existing timer as the fallback. SDK tests 98/98, both SDK builds, the root type check, and the diff check passed. Source and minified tests checked 10 minutes immediately before, exactly at, and immediately after; clock regression and advance; 20 maximum-length events; and virtual credential, request, body, and wait deadlines. gzip sizes were Sembom 3048 bytes, funnel example 3021 bytes, and generated funnel 3041 bytes, all at or below 3072 bytes. There are no changes to required arguments, response formats, the DB, dependencies, or CI.
+
+## OIDC Wait Limits and Optional Clock and Cancellation (2026-10-22)
+
+JWKS transport races against the deadline and does not wait for cleanup of an error, timeout, or cancellation body. Optional `now`, `monotonicNow`, and `timeoutSignal` control JWT times, failure cooldown, and the deadline. A per-call signal does not cancel the shared key lookup and ends only its own wait. Collector admin and publisher authentication pass `request.signal`. Required arguments, return types, and the authentication-failure `null` contract are preserved. OIDC and actual Worker authentication tests 16/16 and the root type check passed. The default 5-second allowance, expiry boundaries, delayed key lookup, unresolved cleanup, transport, and shared-lookup cancellation were checked. There are no changes to API response formats, the DB, dependencies, or CI. The internal jose cache clock keeps the existing implementation.
+
+## Collection Body Cancellation and Request ID Injection (2026-10-22)
+
+`readBody` handles the request or optional caller signal and a default 10-second read deadline. It does not wait for reader cleanup after an oversized body or cancellation, so an unresolved cancel Promise cannot block the error return. Existing required arguments and return types are preserved, and an optional `uuid` was added to CollectorOptions. Body, request ID, and actual Worker and D1 collection tests 24/24 passed. Sizes around 16KiB, stalled cleanup, cancellation during a read, and the read deadline were checked. There are no changes to API response formats, the DB, dependencies, or CI.
+
+## SDK Tarballs and External Consumer Projects (2026-10-21)
+
+`npm pack --dry-run --json --ignore-scripts` showed that the browser tarball included `dist/src/index.d.ts` (1,999 bytes), which the current build does not generate. Neither SDK build cleaned its output directory, so old artifacts could remain. After confirming the SDK's actual path was inside the checkout, shared output cleanup was added to delete only that `dist`.
+
+The optional `npm run verify:sdk-packages` command places a stale-file regression probe, builds both SDKs, and packs them offline. It checks the exact file list and installs the tarballs into a new npm project outside the workspace with offline, `ignore-scripts`, and `no-save`. There it compiles the three ESM entry points and declarations with TypeScript NodeNext and runs inactive browser and funnel creation and disposal plus server event generation. It confirmed 0 network or token callback calls and that the actual installation was not a workspace symlink.
+
+- Final `verify:sdk-packages`: passed. browser 7 files/6,222 bytes, server 3 files/4,995 bytes. SHA-256 values, file lists, types, and execution results are in `.tmp/sdk-packages/run-IIxWCx/report.json` and the tarballs.
+- The initial isolated installation failed with EALLOWSCRIPTS because the parent `npm run` re-passed its allow-scripts setting. After checking the installed npm policy code, only the re-passed value was cleared in the child environment. The user's `.npmrc` policy and `ignore-scripts` are preserved. The intentionally wrong test project ID was also fixed before the final pass.
+- `npm run check:browser-size`: passed. Sembom-inclusive gzip 3,067 bytes, funnel example 3,046 bytes, and generated-funnel code 3,068 bytes, all at or below 3,072 bytes and equal to the existing values.
+- CLI `--help`, document-relative links, and `git diff --check` passed. The external consumer project created during the run was cleaned up, and only tarballs and reports remain in Git-excluded paths.
+
+The SDK execution source, public APIs, DB, dependencies, and runner were not changed. Unchanged functional tests and browser onboarding were not rerun. Version 0.0.0 and `private true` are retained, and there was no registry login, publication, or remote change. Licensing, the public scope, and actual service installation remain undecided or unexecuted.
+
+## Public Provider Check Wait Limits (2026-10-21)
+
+The public OIDC discovery and JWKS checks also had a problem where a transport that ignored cancellation and an unresolved `body.cancel` could hold the wait open. The new regression test was cancelled at the 1-second limit before the fix. The existing request-lifecycle function now races header and body waits against cancellation, and failure and OPTIONS responses and reader cleanup are not awaited for their results. A late response is cleaned up and not adopted as a test result.
+
+`node --test tools/runtime/test/install-check.test.ts` 5/5, the root type check, and `git diff --check` passed. After the initial fix, the regression test's "all reject" expectation did not match the normal rejection path that returns an immediate failure report, so it was changed to check for rejection within the limit or a failure report. Only public configuration and key fixtures were used; there were no actual provider or remote requests. There are no API, DB, SDK, dependency, or runner changes, and unchanged admin and SDK builds and the full suite were skipped.
+
+## Current SDK Onboarding and Local Recovery Verification (2026-10-21)
+
+- `npm run build:browser` and `npm run verify:admin-onboarding -- --channel chromium --lost-responses` passed. Chromium 156.0.8078.4 verified isolated signed login, empty-project creation, first schema publication, execution of the generated SDK, the first event 1, and the admin table display. After the create and publish success responses were each cut once, explicit recovery, draft replacement, and the SDK connection step also passed. There were 31 API reads, 5 writes, and 1 browser batch, with 0 route and page errors. No actual service or provider request was made.
+- `npm run verify:restore` passed. The 0001 through 0009 migrations and 16 tables of a new synthetic DB were restored through actual local Wrangler SQL export and import. Schema and row fingerprints matched, `quick_check` returned `ok`, foreign-key violations were 0, and 5 protected writes were rejected. After restore, browser retransmission produced accepted 0/duplicates 2 and server retransmission produced accepted 0/duplicates 1. Publisher revocation, reassignment in the same millisecond, stale-revocation rejection, and no-op audit preservation also passed. The backup was 28,398 bytes, and the run took about 18.3 seconds. The report is `.tmp/restore-drill/run-tlQofv/report.json`.
+
+The browser, Vite, and Miniflare instances created by each run were stopped. Synthetic reports and backups were left in Git-excluded paths. No remote or existing DB or production account was used, and the work was not extended to actual RTO/RPO, a service pilot, or mobile verification. This record does not change execution code, APIs, the DB, dependencies, or the runner.
+
+## Authentication Access Repeated Check Command (2026-10-21)
+
+`monitor:access` was added. It reuses the three GET checks from the existing access test and decides consecutive failure and recovery from the specified failure and recovery counts and maximum observation interval. The fingerprint and policy of the installed public configuration are bound to the state, and a different target or policy, a clock regression, or corrupted state is rejected before the token is read. The state contains only fixed metadata and is replaced with an exclusive lock and sync/rename. Cancellation ends token input and check waits and cleans up the lock. It outputs only notification intent; there is no actual send or periodic registration.
+
+- `node --test tools/runtime/test/access-monitor.test.ts tools/runtime/test/install-access-check.test.ts`: 14/14 passed. Failure and recovery thresholds, interval boundaries, policy and target mismatches, corrupted and oversized files, nested execution, cancellation during token input, and previous-file preservation were checked.
+- The test ran normal → 3 table-read failures → 2 recoveries, for 6 runs and 15 GETs in total, against a real admin Worker proxy, signed OIDC, and local D1. The events were healthy, failure_pending, incident_opened, incident_ongoing, recovery_pending, and incident_resolved, and there were only 2 notification intents, for opening and recovery. It also confirmed that the installed file remained unchanged and that output and state contained no token, issuer, subject, URL, or table name.
+- The root type check, CLI `--help`, document-relative links, and `git diff --check` passed.
+
+There was the existing Windows WSARecv #64 warning from workerd, but the focused tests exited with code 0. Actual OIDC, remote DB, scheduler, and notification recipients are not connected. State replacement and stdout delivery are separate, so delivery of a notification is not guaranteed. Unchanged admin and SDK builds and the full suite were skipped. There are no changes to APIs, the DB, dependencies, the runner, or repository hygiene, and no push, deployment, or publication.
+
+## Installation Access Check Wait Limits (2026-10-21)
+
+The path where a transport that ignored cancellation or an unresolved response cleanup blocked `install:access-check` was reproduced. The new regression test was cancelled at the 2-second limit before the fix. The existing request-lifecycle function is reused to race header and body waits against cancellation, and cleanup is not awaited. A late response has its body cleaned up and no subsequent read is started. The 401 and 403 decision and body limit are preserved.
+
+Access tests 8/8, including the real admin proxy, signed OIDC, and local D1, the root type check, and `git diff --check` passed. The existing Windows workerd WSARecv #64 warning appeared once, and the test exit code was 0. Remote providers, D1, and deployment were not run. There are no changes to APIs, the DB, the SDK, dependencies, the runner, or repository hygiene, and unchanged admin UI and full collector builds were skipped.
+
+## Design Status and Remaining Work (2026-10-21)
+
+The current source, package scripts, and OIDC and operations documents were compared, and ARCHITECTURE's note that the admin was unimplemented and the risk register's undecided notes on retry, receipt TTL, permissions, schema, server publication, and funnel were corrected. CONTRIBUTING now describes the current code-change, validation, and commit procedure, and the start of the roadmap separates actual production connection, a pilot, abuse-prevention decisions, and public readiness from follow-up features.
+
+The existence of document-relative links and `git diff --check` were confirmed. Execution code was not changed, so tests and builds were skipped. Licensing, operations policy, real providers, remote DB, push, deployment, and publication status were not changed. There are no changes to APIs, the DB, dependencies, the runner, or repository hygiene.
+
+## Object Checks for Browser SDK Definition Maps (2026-10-13)
+
+Even when an event property definition was `[]`, a number, a boolean, or an empty string, `Object.entries` returned an empty list and the event was accepted as having no properties. An empty array or scalar workflow map was also interpreted as a normal empty workflow list. Both maps are now checked to be objects, and an invalid configuration disables SDK creation. A normal empty-object definition remains supported. The batch JSON prefix for a verified version is built once at SDK creation to reduce regeneration per batch.
+
+- Across the original and minified general and funnel checks, the 4 new `configuration.test.ts` tests all failed before the fix at `properties: []`. After the fix, 50 invalid map combinations produced no event wait, send, Beacon, timer, or visibility listener, while a normal empty object was sent.
+- `npm run test:browser`: 53/53 passed. It checks the original and actual esbuild minified modules.
+- `npm run build:browser`, `npx --no-install tsc --noEmit`, and `git diff --check` passed.
+- `npm run check:browser-size`: passed the 3,072-byte gzip budget. Sembom integration was 3,067 bytes, funnel integration 3,046 bytes, and generated funnel integration 3,068 bytes. An initial fix exceeded the generated-funnel budget, and the final code was checked again.
+
+There are no changes to APIs, the DB, public SDK types, dependencies, CI, or hygiene policy. The owned documentation updated by this work is this validation record. Unchanged admin, server SDK, and full collector checks were skipped, and actual Chromium, production OIDC, remote DB, and deployment environments were not checked. Configuration errors use the existing disabled-SDK behavior and do not provide a separate error notice in the UI. There was no push or deployment.
+
+## Reusing Date Calculations for Classification Aggregates (2026-10-12)
+
+Flow and funnel classification queries repeatedly calculated the time-zone boundary for the same date in each bucket. In the 31-day, 32-bucket regression test, both paths failed before the fix with 992 `Intl.DateTimeFormat` constructions. The per-date decision is now reused within only one response, reducing the count to 31, and empty bucket results are not calculated. The cache is not shared with other requests, so a new query after a time boundary recalculates the `provisional` value.
 
 - `node --test --test-timeout=30000 packages/storage-d1/test/breakdown-dates.test.ts
-  apps/collector/test/admin.test.ts apps/collector/test/funnel-query.test.ts`: 34/34 통과.
-  새 검사 6개는 최대 버킷·기간, 빈 결과, 뉴욕 봄/가을 DST의 날짜 끝 +48시간 직전·경계·
-  직후와 누락 날짜의 0건·null 비율을 확인한다. 기존 로컬 Miniflare D1 API 검사도 통과했다.
-- `npx --no-install tsc --noEmit`, `git diff --check` 통과.
-- 로컬 Node 24.18.0에서 HEAD의 수정 전 코드와 수정 후 코드를 각각 한 번 예열하고
-  교대로 5회 실행했다. 31일·32개 버킷에서 흐름 992행 중앙값은 277.71→11.13ms,
-  퍼널 3,968행은 362.66→39.40ms였다. 모든 결과를 deepEqual로 비교해 일치를 확인했다.
-  `.tmp/breakdown-bench.mjs`는 임시 측정이며 네트워크·DB·Worker CPU와 운영 지연은 측정하지 않았다.
+  apps/collector/test/admin.test.ts apps/collector/test/funnel-query.test.ts`: 34/34 passed. The 6 new tests cover the maximum bucket and period, an empty result, and immediately before, at, and immediately after the date end plus 48 hours for New York spring and fall DST, plus a missing date with 0 count and a `null` ratio. The existing local Miniflare D1 API tests also passed.
+- `npx --no-install tsc --noEmit` and `git diff --check` passed.
+- On local Node 24.18.0, the pre-fix HEAD code and the fixed code were each warmed once and then run alternately 5 times. For 31 days and 32 buckets, the flow median across 992 rows was 277.71→11.13ms, and the funnel median across 3,968 rows was 362.66→39.40ms. All results were compared with `deepEqual` and matched. `.tmp/breakdown-bench.mjs` is a temporary local measurement and did not measure network, DB, Worker CPU, or production latency.
 
-API·DB·SDK 공개 계약·의존성·CI/러너·위생 정책 변경은 없다. 변경 없는 관리자 UI와 SDK,
-전체 저장소 검사는 반복하지 않았고 일반 lint 명령은 없다. 운영 환경·실제 OIDC 제공자와
-원격 DB는 미검증이며 푸시·배포는 하지 않았다. 소유 문서는 이 검증 기록만 갱신했다.
+There are no changes to APIs, the DB, public SDK contracts, dependencies, CI or runner configuration, or hygiene policy. Unchanged admin UI, SDK, and full-repository checks were not repeated, and there is no general lint command. Production environments, real OIDC providers, and remote DB are unverified, and there was no push or deployment. The owned documentation updated by this work is this validation record only.
 
-## 관리자 API 응답 본문 크기 제한 (2026-10-12)
+## Admin API Response Body Size Limit (2026-10-12)
 
-기본 native fetch 경로가 관리자 API 응답을 파싱할 때 크기 상한 없이 본문 전체를 메모리에
-올렸다. `apps/admin/src/api/response-body.ts`의 `readResponseJson`이 성공 4MiB·오류 16KiB
-상한(31일·32버킷·10단계 퍼널 분류 응답에 여유)을 두고, `Content-Length`가 숫자가 아니거나
-상한을 넘으면 읽기 전에 즉시 거부하며 스트림 누적 바이트가 상한을 넘으면 중단한다.
-401·403은 본문을 읽기 전에 상태만으로 확정해 알림·권한 잠금을 유지하고, 성공 본문을 JSON
-으로 읽지 못하면 `contract`, 오류 본문 파싱이 실패하면 기존 HTTP 상태 메시지를 그대로 쓴다.
+When the basic native fetch path parsed an admin API response, it loaded the entire body into memory without a size limit. `readResponseJson` in `apps/admin/src/api/response-body.ts` now uses a 4MiB limit for success and a 16KiB limit for errors, with headroom for a 31-day, 32-bucket, 10-step funnel classification response. If `Content-Length` is not numeric or exceeds the limit, the response is rejected before reading, and stream accumulation is aborted when the byte count exceeds the limit. 401 and 403 are decided from status before the body is read, preserving notices and the permission lock. If a successful body cannot be read as JSON, the result is `contract`; if an error body fails to parse, the existing HTTP status message is used.
 
-재현은 수정 전 새 `response-body.test.mjs` 2개가 2/2 실패한 것이다. bounded read 수정 뒤
-생명주기·접근·응답 본문 focused 실행이 31/31 통과했고, 이어서 `check:admin` 타입검사·
-`test:admin` 274/274·`build:admin`·번들 분리 2/2·Sites Worker 9/9가 통과했다. 이
-274·번들2·sites9 실행은 마지막 스트리밍 버퍼 최적화 전이다. 첫 실행은 273/274로
-native-fetch receiver 검사가 json-only mock 탓에 실패했고, 그 검사를 `Response.json` mock
-으로 고친 재실행 로그가 `.tmp/admin-response-check.log`다.
+The reproduction was 2/2 failures in the new `response-body.test.mjs` before the fix. After the bounded-read fix, the focused lifecycle, access, and response-body run passed 31/31, followed by `check:admin` type checking, `test:admin` 274/274, `build:admin`, bundle separation 2/2, and Sites Worker 9/9. These 274, bundle 2, and sites9 runs occurred before the final streaming-buffer optimization. The first run was 273/274 because the native-fetch receiver test failed with a json-only mock; after that test was changed to a `Response.json` mock, the rerun log is `.tmp/admin-response-check.log`.
 
-마지막 스트리밍 버퍼 최적화(4KiB에서 시작하는 단일 `Uint8Array`, 상한까지 지수 성장, 청크별
-문자열 배열 제거) 뒤 같은 변경을 다시 좁혀 확인했다. focused 34/34
-(`.tmp/admin-response-focused.log`), 관리자 타입검사와 `build:admin` 통과
-(`.tmp/admin-response-final-build.log`)이며, `npm run verify:admin-analysis-access`도
-Chromium 156.0.8078.4·격리 D1·로컬 RS256에서 verified true, oversizedReads 1, recovery true,
-pageErrors 0, routeError false, apiReads 31, apiWrites 0, authorizations 1이었다
-(`.tmp/admin-analysis-access-v5erlm/report.json`). 버퍼 최적화 뒤 이 러너에서 취소된 소켓의
-`workerd` WSASend 10053 진단이 한 번 찍혔지만 검사는 통과했다. runner `node --check`와
-`git diff --check`도 통과했다. 이 러너는 기존 opt-in 검증을 넓힌 것이며 UI·API·DB 계약은
-그대로다.
+After the final streaming-buffer optimization (a single `Uint8Array` starting at 4KiB, exponential growth to the limit, and removal of per-chunk string arrays), the same change was checked again with narrower scope. Focused tests 34/34 (`.tmp/admin-response-focused.log`), admin type checking, and `build:admin` passed (`.tmp/admin-response-final-build.log`), and `npm run verify:admin-analysis-access` on Chromium 156.0.8078.4 with isolated D1 and local RS256 produced verified true, oversizedReads 1, recovery true, pageErrors 0, routeError false, apiReads 31, apiWrites 0, and authorizations 1 (`.tmp/admin-analysis-access-v5erlm/report.json`). After the buffer optimization, a cancelled socket produced one `workerd` WSASend 10053 diagnostic in this runner, but the test passed. The runner `node --check` and `git diff --check` also passed. This runner expands existing opt-in verification, and the UI, API, and DB contracts are unchanged.
 
-API·DB·public SDK·의존성·CI 계약은 바꾸지 않았다. 원격 환경은 생략했고 변경 없는 backend·
-SDK 검사는 건너뛰었다. 소스 lint 명령은 없다. 푸시·배포는 하지 않았다.
+The API, DB, public SDK, dependencies, and CI contracts were not changed. Remote environments were skipped, and unchanged backend and SDK checks were skipped. There is no source lint command. There was no push or deployment.
 
-## 서버 SDK 응답 기한 검사 (2026-10-12)
+## Server SDK Response Deadline Checks (2026-10-12)
 
-전송 전 자격증명 기한 검사는 있었지만 응답 헤더·영수증 처리의 동기 지연은 타이머에만
-의존했다. 이벤트 루프가 막히면 기한 이후 정상 영수증을 `delivered`로 받아들였다.
-소스·minified·동일 배치 자동 재시도 회귀 3개가 수정 전 모두 실패했다. 헤더 수신 직후와
-영수증 해석 뒤 단조 시계로 시도/전체 기한을 확인해 늦은 응답은 결과 불명으로 처리한다.
-취소·재시도 횟수·총 예산·기존 이벤트 식별자는 유지한다.
+There was already a credential deadline check before transmission, but synchronous delays in response-header and receipt processing relied only on a timer. If the event loop was blocked, a valid receipt after the deadline was accepted as `delivered`. The original, minified, and same-batch automatic-retry 3 regressions all failed before the fix. The attempt and total deadlines are now checked with a monotonic clock immediately after the headers are received and after the receipt is parsed, and a late response is treated as an unknown result. Cancellation, retry counts, the total budget, and existing event identifiers are preserved.
 
-- `npm run test:server`: 38/38 통과. 새 결정적 검사는 timeout/총 budget의 정확한 경계와
-  초과를 헤더·본문 양쪽에서 확인한다. 후속 send가 동일 본문으로 중복 영수증을 받는다.
-  실제 루프백 HTTP의 100ms 동기 헤더/스트림 처리와 50ms timeout에서도 늦은 성공을
-  거부하며, 빠른 재시도가 같은 바이트를 보내는지 확인했다. 소표본 성능 측정은 아니다.
-- `npx --no-install tsc --noEmit`, `npm run build:server` 통과. 서버 번들 9110 bytes,
-  gzip 3718 bytes, runtimeDependencies 0. 브라우저 SDK 크기 예산과 별개다.
-- `npm run verify:server-recovery`: verified=true, defaultSdkFetch=true, 실제 임시
-  Miniflare 수집기 3개와 격리 D1. 커밋 전 503 뒤 accepted 2/attempts 2, 커밋 후 소켓 유실
-  뒤 duplicates 2/attempts 2, 403 뒤 attempts 1 및 추가 저장 없음. receipts 8,
-  completedRuns 2, byteIdenticalRetries=true. 기존/원격 DB 접근은 없다.
-  결과: `.tmp/server-recovery/run-tJXMUl`. runner가 검증 서버를 종료했다.
-- `git diff --check` 통과. SDK 동작 안내와 이 검증 기록을 갱신했다.
+- `npm run test:server`: 38/38 passed. The new deterministic tests check exact timeout and total-budget boundaries and overruns on both headers and body. A subsequent send with the same body receives a duplicate receipt. Real loopback HTTP with 100ms of synchronous header and stream processing and a 50ms timeout rejects a late success, and a fast retry sends the same bytes. This is not a small-sample performance measurement.
+- `npx --no-install tsc --noEmit` and `npm run build:server` passed. The server bundle was 9110 bytes, gzip 3718 bytes, with runtimeDependencies 0. This is separate from the browser SDK size budget.
+- `npm run verify:server-recovery`: verified=true, defaultSdkFetch=true, using 3 actual temporary Miniflare collectors and isolated D1. Before commit, a 503 was followed by accepted 2/attempts 2; after commit, socket loss was followed by duplicates 2/attempts 2; after 403, attempts 1 and no additional save. receipts 8, completedRuns 2, byteIdenticalRetries=true. No existing or remote DB was accessed. Result: `.tmp/server-recovery/run-tJXMUl`. The runner stopped the verification server.
+- `git diff --check` passed. The SDK behavior guidance and this validation record were updated.
 
-API·DB·SDK 공개 타입·의존성·CI/러너·위생 정책 변경은 없다. 변경 없는 관리자·수집기
-전체 검사와 브라우저 UI 검사는 반복하지 않았으며 일반 lint 명령은 없다. 원격 제공자·
-운영 DB·배포 환경은 미검증이다. 실제 서버 저장 후 기한이 지나면 결과가 불명일 수 있어
-기존 이벤트로 재시도해야 한다. 푸시·배포·게시는 하지 않았다.
+There are no changes to APIs, the DB, public SDK types, dependencies, CI or runner configuration, or hygiene policy. Unchanged admin and collector full checks and browser UI checks were not repeated, and there is no general lint command. Remote providers, production DB, and deployment environments are unverified. If the deadline passes after an actual server save, the result may be unknown and the existing event must be used for retry. There was no push, deployment, or publication.

@@ -1,345 +1,143 @@
-# 검증 이력 01
-
-원문의 구간 순서를 유지한 과거 기록이다. 명령과 코드 경로는 저장소 루트 기준이다.
-
-## 현재 구현과 운영 문서 대조 — 2026-10-23
-
-제품 스펙·로드맵·프론트엔드 설계에 수동 초안 파일과 서버 초안 저장의 범위를 구분했다.
-운영 계약·백업/복원·릴리스·롤백·마이그레이션 안내·설치/프로비저닝 문서는 현재 head
-0013과 13개 마이그레이션·16개 테이블을 기준으로 정리했다. 0010~0013 SQL·로컬 초기화·
-발행 권한 writer를 직접 대조해 적용 순서·이전 코드 호환·같은 batch의 발행자 이력을
-수정했다. 날짜별 과거 0009 검증 기록은 보존하고 현재 기준을 병기했다.
-
-`git diff --check`와 소스 대조를 확인했다. 동작 검증은 앞선 초안/복원 결과를 재사용하며
-문서 수정 때문에 반복하지 않았다. API·DB 계약/SQL·의존성·저장소 위생·CI 러너는 바꾸지
-않았다. 원격 리허설·실제 인증·운영 처리량은 미검증이며 푸시·배포·원격 적용은 없다.
-
-## 스키마 초안 파일 저장·불러오기 — 2026-10-23
-
-소유자가 편집 가능한 스키마 초안을 JSON 파일로 저장·복원한다. 프로젝트 ID가 맞는
-128KiB 이하의 닫힌 v1 봉투만 받아 미완성 JSON과 버전 입력을 보존한다. 정의/버전의
-미저장 변경 교체는 명시적 동의를 요구하며 가져오기는 검증 결과·개인정보 검토를 지운다.
-reader·조회/검증/발행 중·권한 상실·폐기된 편집기는 파일 동작을 허용하지 않는다.
-FileReader와 10초 타이머는 완료·실패·취소·편집기 전환 때 정리한다. 서버 저장은 없다.
-
-집중 검사 38/38, 관리자 전체 342/342, 관리자 타입 검사/빌드, bundle 2/2·Sites 11/11,
-`git diff --check`를 통과했다. 집중 검사는 전체 관리자 검사와 겹치므로 합산하지 않는다.
-잘못된 봉투·프로젝트·필드·UTF-8 크기 경계와 불완전 입력, 교체 동의·권한·수명·검증
-초기화·발행 전 추가 I/O 없음을 확인했다. 루트 `npx tsc --noEmit`도 복원 작업과 함께 통과했다.
-
-`verify:admin-onboarding` 최종 실행은 Chromium 156.0.8078.4·합성 서명 로그인·실제
-로컬 D1로 저장 파일의 실제 바이트·정상/미완성 복원·교체 취소/동의·잘못된 JSON/
-프로젝트/크기 거부·승인 초기화·파일 입력 초기화를 확인했다. 기존 생성·발행·SDK 실행·
-첫 수집 1건도 통과했다. pageErrors=0·routeError=false, fileDialogs=3이며 파일 시나리오의
-추가 쓰기 1건은 명시적 정의 검증 POST다. 파일 자체의 API 쓰기는 없다. 증거는
-`.tmp/admin-onboarding-rx0JXa/report.json`이며 데스크톱/390px 화면도 확인했다.
-브라우저·Vite·Miniflare를 정리했다. 초기 실패는 FileReader 완료 전 대화상자 수 단언과
-다른 로컬 검사 동시 실행 중 90초 watchdog 도달이었다. 완료 이벤트를 기다리게 하고
-확장한 수동 검사에 120초 상한을 둔 뒤 단독 실행은 통과했다.
-
-제품 스펙·로드맵·프론트엔드 설계·이 기록을 갱신한다. API·DB 계약/마이그레이션·
-의존성·저장소 위생·CI 러너는 바꾸지 않았다. 기존 옵트인 브라우저 검사만 확장했다.
-일반 소스 lint 명령은 없고 변경 없는 루트 전체·실제 OIDC/원격 DB 검사는 생략했다.
-파일은 사용자가 직접 보관해야 하며 자동 복구·서버 초안 저장·버전 예약은 제공하지 않는다.
-푸시·배포·원격 변경은 없다.
-
-## 소요시간·실패 원인 백업 복원 검증 — 2026-10-23
-
-합성 복원 fixture에 실패 이벤트의 enum 원인과 종료 먼저 도착하는 3초 실패 시도를
-추가했다. 기존 20초 성공과 함께 백업 전·복원 후·재전송 후의 실제 관리자 workflow
-조회로 기간/일별 측정·미측정과 원인 분포를 확인한다. 새 열이 빈 과거 데이터로
-복원되면 검증을 실패시키며, 성공·실패 영수증의 재전송은 각각 중복 2건이어야 한다.
-
-`npx tsc --noEmit`, 복원 관련 검사 5/5, `npm run verify:restore`를 통과했다.
-실제 로컬 D1을 SQL로 내보내고 새 DB에 복원해 16개 테이블·스키마·전체 행 fingerprint·
-5개 보호 쓰기·발행 권한 복구·무결성·외래 키를 확인했다. 13개 마이그레이션이며
-기간 완료율 50%, 측정 2건, 미측정 0건, range 원인 1건을 유지했다. 증거는
-`.tmp/restore-drill/run-oIKTrh/report.json`이다. Miniflare 프로세스는 정리했다.
-
-API·DB 계약/마이그레이션·의존성·CI 러너·저장소 위생 변경은 없다. 실행 도구와
-이 기록을 바꿨다. 변경 없는 루트 전체 검사는 생략했으며 일반 소스 lint 명령은 없다.
-운영 DB의 데이터 양·원격 복원 시간/비용은 확인하지 않았다. 푸시·배포·원격 변경은 없다.
-
-## 실패 원인 기간 비교 화면 — 2026-10-23
-
-LiveDashboard의 기존 직전 기간 결과를 LiveGoals에 전달하고 흐름별 실패 원인 비교를
-연결했다. 원인 건수·비중·차이와 전체 실패율/분자/분모를 구분한다. 미측정·0 분모·구 응답은
-변화를 만들지 않고 직전 로딩/실패 때는 비교 표만 숨긴다. 현재 분포·기존 CSV 잠금·재시도·
-권한 수명은 유지한다. 순수 계산과 CSV는 앞선 2b5367f 커밋의 함수를 공유한다.
-
-관리자 전체 338/338·집중 계산/CSV/실제 React 렌더링 6/6·루트/관리자 타입 검사·관리자
-빌드(6.45초)·bundle 2/2·Sites 11/11·git diff --check를 통과했다. 중복 범위는 합산하지 않는다.
-기존 일반 소스 lint 명령은 없다. API/DB 계약 변경이 없어 백엔드·계약 전체는 반복하지 않았다.
-
-verify:admin-goal-access는 Chromium 156.0.8078.4·실제 로컬 D1·서명 로그인으로 직전 503의
-현재 분포 유지/CSV 차단/재시도, 미측정 비교 보류와 빈 CSV 변화 값을 확인했다. 합성 과거
-집계의 누락 측정을 보완한 뒤 원인 -25%p·누락 +25%p·전체 실패율 0%p의 화면/실제 CSV
-일치, 집계 중 안내를 확인했다. 기존 권한 회수 7개·늦은 거부 응답 폐기·복구·연결 해제도
-통과했다. pageErrors=0, routeError=false이며 데스크톱/390px 캡처를 확인했다. 보고서는
-.tmp/admin-goal-access-HyY7Sf/report.json이다. apiWrites=2는 기존 읽기 전용 초안 검증 POST다.
-브라우저 발행은 없고 검사 프로세스는 정리했다. 합성 로그인과 임시 DB이며 운영 검증은 아니다.
-
-소유 문서는 제품 스펙·프론트엔드 설계·API 연결 문서(앞선 계산 커밋)와 이 기록이다.
-API·DB·마이그레이션·의존성·저장소 위생·CI 러너 변경은 없다. 기존 수동 브라우저 검사만
-확장했고 새 HTTP 조회는 추가하지 않았다. 전체 루트 테스트·운영 제공자/부하·원격 D1은
-변경 범위의 로컬 검사로 대체했다. 푸시·배포·원격 변경은 하지 않았다.
-
-
-## 실패 원인 기간 비교 계산·CSV — 2026-10-23
-
-compareFailureReasons는 기존 두 기간의 정의·메타·합계를 검증하고 원인별 건수·비중·차이와
-전체 실패율을 별도 계산한다. 실패 원인 비중은 전체 확정 실패, 전체 실패율은 시작 시도가
-분모다. 두 기간 모두 미측정이 없을 때만 원인 차이를 계산하며 분모 없음·구 응답·미설정은
-별도 상태다. 전체 미측정 원인을 0으로 바꾸지 않는다. CSV는 3개 열과 원인/전체 실패율 비교
-행을 추가하고 기존 열 순서를 유지한다. 화면 연결은 다음 단계다.
-
-집중 10/10·관리자 전체 337/337·관리자 타입 검사를 통과했다. 동결 인자·건수는 같지만
-비중은 상승하는 사례·전체 실패율 독립 계산·0 분모·부분/전체 미측정·구 응답·프로젝트/
-버전/시간대/날짜/정의 혼선·모순된 집계·CSV 값과 집계 중 상태를 검증했다. 검사 수는
-중복되므로 합산하지 않는다. UI·브라우저·빌드 검사는 화면 연결 뒤 수행한다.
-
-제품 스펙·API 연결 문서와 이 기록을 갱신했다. API·DB·마이그레이션·의존성·CI 러너·
-위생 정책 변경과 추가 네트워크 요청은 없다. 전체 루트 검사·원격 D1·운영 인증/부하는
-순수 계산과 관리자 관련 검사로 대체했다. 푸시·배포·원격 변경은 하지 않았다.
-
-
-## 작업 흐름 실패 원인 화면·CSV·설정 — 2026-10-23
-
-목표에 실패 원인별 건수와 전체 확정 실패 대비 비율, 속성·측정·누락·미측정·집계 중
-상태를 연결했다. 구 응답의 정보 없음·실패 없음·미설정을 구분한다. 설정에서 실패 이벤트의
-enum을 선택·해제하고 잘못된 참조의 검증 오류를 select에 초점 이동한다. 기존 발행 게이트와
-권한 수명을 유지한다. CSV의 기존 열 순서는 유지하고 6개 원인 열과 기간/일별 행을 추가했다.
-
-관리자 전체 332/332, 최종 정의 대조 보완 후 집중 5/5, 루트·관리자 타입 검사와 관리자
-빌드(2.09초), bundle 2/2·Sites 11/11을 통과했다. 범위가 겹치므로 합산하지 않는다.
-관련 백엔드 179/179·계약 68/68·OpenAPI lint는 앞선 집계 단계 결과를 재사용한다.
-
-verify:admin-goal-access는 Chromium 156.0.8078.4·실제 로컬 D1·서명 로그인으로 원인 2종·
-누락·미측정 각 1건의 화면 25%와 실제 다운로드 CSV 25% 일치를 확인했다. 설정 선택·해제·
-검증 초점, 기존 권한 회수 7개 시나리오·CSV 잠금·늦은 거부 응답 폐기도 통과했다.
-데스크톱/390px 캡처를 확인했으며 pageErrors=0, routeError=false다. 보고서는
-.tmp/admin-goal-access-3s27P2/report.json이다. apiWrites=2는 읽기 전용 초안 검증 POST다.
-브라우저에서 발행하지 않았고 검사 프로세스는 정리했다. 초기 실행은 새 refresh가 앞선
-권한 회수의 목록 변경을 반영해 기존 fixture의 2행 기대가 깨졌으며, 새 장면 전에 fixture
-권한을 복구한 뒤 통과했다. 화면/원인/CSV 검사는 초기 실행에서도 통과했다.
-
-소유 문서는 제품 스펙·프론트엔드 설계·API 연결·README·이 기록이다. API와 DB 0013은
-앞선 커밋이며 이 단계에서 의존성·위생·CI 러너는 바꾸지 않았다. 기존 수동 브라우저 검사만
-확장했다. 전체 루트 테스트·실제 제공자·운영 부하/원격 D1은 관련 로컬 검사로 대체했고
-일반 소스 lint 명령은 없다. 0012 다음 0013을 새 수집기보다 먼저 적용해야 한다.
-푸시·배포·원격 마이그레이션은 하지 않았다.
-
-
-## 작업 흐름 실패 원인 집계·조회 — 2026-10-23
-
-선택 failureReasonProperty를 실패 이벤트의 enum으로 제한하고 최초 확정 실패 원인을
-기존 CAS batch에 저장한다. 정렬한 enum 32칸과 누락 1칸을 시작일·버전별로 집계한다.
-누락은 측정에 포함하고 기존 실패와 차이는 미측정으로 제공한다. 종료 먼저 도착·재전송·
-서로 다른 원인의 동시 확정에서도 한 번만 세며 시도 정리 뒤에도 일별 분포는 보존된다.
-
-Core·D1·관리자 HTTP·provision 관련 179/179, 루트 타입 검사, 계약 68/68과 OpenAPI
-lint를 통과했다. 새 집중 검사에는 enum 참조·누락·불변 입력·과거 미측정·버전/권한 격리·
-동시 요청·알 수 없는 슬롯 503·마이그레이션 원자 롤백·반복 초기화·외래 키 검사가 있다.
-전체 루트 검사와 원격 D1·운영 부하/인증 검증은 관련 로컬 검사로 대체했다.
-
-소유 문서는 OpenAPI·DBML·마이그레이션 안내·제품 스펙·관리자 경계·API 연결과 이 기록이다.
-0012 다음 0013을 새 수집기보다 먼저 적용해야 한다. CHECK 검증의 운영 시간은 미측정이며
-이전 수집기로 롤백할 때 확장 열은 유지한다. SQL 수·의존성·CI 러너·저장소 위생은 그대로다.
-화면과 CSV는 다음 단계에서 연결한다. 푸시·배포·원격 마이그레이션은 하지 않았다.
-
-
-## 작업 흐름 소요시간 화면·CSV — 2026-10-23
-
-목표 화면에 6개 시간 구간의 성공/실패·측정 완료 중 비중과 측정/미측정 건수, 집계 중
-상태를 표시한다. 구 응답의 정보 없음·완료 없음·완료는 있지만 미측정·일부 측정을
-구분한다. 파서와 snapshot/CSV 검증은 구간·완료 건수·일별/기간 합계의 모순을 거부한다.
-기존 조회를 재사용하며 추가 API 요청·타이머·지속 저장은 없다.
-
-목표 CSV에 기간/일별 duration 행과 4개 duration 열을 추가했다. 기존 열 순서는 유지하고
-현재/직전 기간의 측정 범위를 별도로 기록한다. 측정값이 없는 분포의 건수·비율은 비운다.
-관리자 전체 327/327, 소요시간 파서·CSV·실제 React 렌더링 집중 4/4, 루트·관리자 타입
-검사와 빌드(1.99초), 번들 2/2·Sites 11/11을 통과했다. 현재/직전 측정 범위가 다른 CSV
-검사를 보완한 뒤 집중 4/4도 다시 통과했다. 검사 범위가 겹치므로 합산하지 않는다.
-
-npm run verify:admin-goal-access는 Chromium 156.0.8078.4·실제 로컬 서명 로그인/D1에서
-측정 1건의 6개 구간 표/100%와 CSV, 다른 프로젝트의 미측정 안내/표 숨김·CSV 상태를
-확인했다. 데스크톱·390px 화면 캡처를 확인했고 기존 권한 회수 7개 시나리오에서 새 표
-제거·CSV 차단·복구와 늦은 거부 응답 폐기까지 통과했다. pageErrors=0, routeError=false다.
-보고서는 .tmp/admin-goal-access-RyMgVX/report.json이다. apiWrites=1은 기존 읽기 전용
-스키마 초안 검증 POST이며, 브라우저에서 발행하지 않았다. 검사 서버·브라우저·D1은 정리한다.
-
-소유 문서는 제품 스펙·프론트엔드 설계·API 연결·이 기록이다. API duration과 DB 0012는
-앞선 백엔드 커밋에 포함되고 이 단계에서는 DB·의존성·CI·위생 설정을 바꾸지 않았다.
-기존 수동 브라우저 검사만 확장했으며 새 CI 러너는 없다. 전체 루트 테스트·원격 D1·
-실제 운영 인증/부하는 관련 로컬 검사로 대체했다. 일반 소스 lint 명령은 없다.
-원격 적용 전 DB 0012 확장이 필요하며 푸시·배포·원격 마이그레이션은 하지 않았다.
-
-## 작업 흐름 소요시간 집계·조회 — 2026-10-23
-
-0012는 기존 일별 workflow 집계 행에 12칸 정수 JSON 분포를 추가한다. 6개 고정 시간
-구간의 성공/실패를 기존 완료 delta와 같은 CAS batch/UPDATE에서 갱신한다. 기존 행은
-0 배열로 확장하며 기존 완료 건수와의 차이를 미측정으로 제공한다. 시작/종료 순서가
-바뀌거나 같은 단계가 다른 eventId로 반복돼도 한 번만 측정하고 최초 확정 종료를 유지한다.
-시도 정리 뒤에도 일별 집계 보존 기간에 남고 API 권한/프로젝트/버전/일별 합계를 유지한다.
-
-0ms·모든 구간 경계 직전/정각/직후·24h 포함·잘못된 범위·동결 인자·혼합 과거 데이터·
-실패 없는 null·동시 전송·역순·재전송·정리 후 보존·권한 회수·마이그레이션 원자 롤백/
-재실행/외래 키 검사를 집중 6/6에서 확인했다. D1 숫자 바인딩이 JSON 실수를 만들 수 있어
-갱신 시 INTEGER로 변환하고 CHECK를 유지한다. Core·D1 전체와 관리자/통합 현황·정리·
-provision 검사는 177건 중 176건을 통과했으며, 구 DB에 새 수집기를 사용하던 역사적 fixture
-1건을 구 열 계약으로 시딩하도록 고친 뒤 해당 파일 7/7을 통과했다.
-최종 관리자 HTTP·소요시간 D1 집중 20/20과 루트/관리자 타입 검사도 통과했다. 범위가
-겹치므로 검사 수는 합산하지 않는다. 전체 루트 테스트는 위 관련 범위 검사로 대체했다.
-
-API·DB 계약과 migration 문서를 갱신했다. 계약 67/67과 OpenAPI lint를 통과했다.
-검증 범위는 로컬이며 운영 부하·원격 D1·실제 OIDC·배포는 실행하지 않았다. DB 적용은
-새 수집기보다 먼저 필요하고 기존 CHECK 검증의 운영 소요시간은 미측정이다. SQL 수·
-삭제 쿼리 수·의존성·CI 러너·위생 설정은 바뀌지 않지만 행/응답 바이트는 늘어난다.
-관리자 표시와 CSV는 다음 커밋에서 연결한다. 푸시·배포·원격 마이그레이션은 하지 않았다.
-
-## 프로젝트 검색 화면·선택 유지 — 2026-10-23
-
-ProjectPicker와 독립 ProjectSearch에 이름·ID 검색, 250ms 지연, 요청/타이머 정리,
-세대 검사, 결과 페이지, 빈 결과와 오류 재시도를 연결했다. 전체 목록은 통합 현황용으로
-유지하며 검색은 현재 선택과 설정 초안을 바꾸지 않는다. 결과 밖 현재 선택을 명시하고
-실제 전환에만 기존 초안 이탈 확인을 적용한다. 첫 페이지 밖 선택은 새로고침 때 기존
-설정 읽기로 권한을 재확인하며 403/404는 제거하고 모호한 장애·취소는 전파한다.
-
-관리자 전체 테스트와 타입 검사·빌드, bundle 2/2·Sites 11/11을 통과했다. 이후 검색 상수
-공유와 경합/커서 검사 보완 뒤 집중 10/10, 관리자 타입 검사와 최종 빌드(2.69초)를
-재확인했다. 집중 검사는 전체 검사와 겹치므로 합산하지 않는다. 전체 루트 테스트는 관련
-검사로 대체했고 일반 소스 lint 명령은 없다. 백엔드 17/17·계약 66/66·OpenAPI lint·루트
-타입 검사는 앞선 서버 검색 항목 결과를 재사용했다.
-
-npm run verify:admin-project-search는 Chromium 156.0.8078.4의 실제 로컬 서명 로그인·D1에서
-권한 있는 검색 대상 30개와 권한 없는 동명 대상을 만들고 첫 25개 밖 프로젝트 검색·선택,
-빈 결과/검색 해제/새로고침 선택 유지, 검색 페이지 이동, 권한 밖 결과 제외, 503 복구,
-빠른 입력 변경과 설정 초안 유지·전환 거절을 확인했다. 최종 보고서는
-.tmp/admin-project-search-xA9uVH/report.json이다. pageErrors=0, routeError=false,
-apiWrites=0이며 데스크톱/390px 화면 캡처도 확인했다. 검사 후 서버·브라우저·D1을 정리한다.
-
-소유 문서는 제품 스펙·프론트엔드 설계·API 연결·이 기록이다. API의 선택 q는 앞선 서버
-커밋에 포함되며 DB 구조·마이그레이션·의존성·CI·위생 설정은 변경하지 않았다.
-package.json에 수동 브라우저 검사 명령만 추가했고 CI 러너는 추가하지 않았다. 원격 D1·
-실제 운영 인증·대규모 지연/부하는 미검증이며 부분 검색은 별도 인덱스 없이 실행한다.
-푸시·배포·게시는 하지 않았다.
-
-## 프로젝트 서버 검색 — 2026-10-23
-
-선택 q를 관리자 목록·AdminStore·D1Queries에 추가했다. 기존 필수 인자·응답·ID 정렬을
-유지하고 권한과 리터럴 부분 검색을 한 SQL에서 검사한다. 원본 80자·제어 문자 제한,
-URL 인코딩 쿼리 1024자, 한글·ASCII 대소문자·기호·빈 검색어·검색 후 페이지 이동·
-페이지 사이 권한 회수/다른 issuer·인증 우선·중복/잘못된 파라미터를 확인했다.
-
-관리자 HTTP/D1 17/17, 계약 66/66, OpenAPI lint, npx tsc --noEmit을 통과했다.
-소유 문서는 OpenAPI·제품 스펙·관리자 경계·API 연결·이 기록이다. DB 구조·마이그레이션·
-의존성·CI·위생 설정 변경은 없다. 화면은 다음 커밋에서 연결한다. 전체 루트 검사·원격
-D1·운영 부하는 생략했다. 부분 검색은 별도 인덱스 없이 실행하므로 대규모 지연은 미검증이다.
-푸시·배포·게시는 하지 않았다.
-
-## 정리 실행의 종료 진단 — 요약·관리자 연결 (2026-10-23)
-
-retention_cleanup의 선택적 execution을 닫힌 필드와 건수 관계로 검증한다. 중단된 작업을
-실패로 확정하지 않고, 시간·페이지 이월과 커서 충돌·취소·저장소 오류를 구분한다. 예전
-로그는 기존 실패 기준으로 읽고 진단이 없는 시간을 0으로 만들지 않는다. 동일 runId의
-보고서·실패 표시와 중복 로그는 한 실행으로 집계한다. 새·구 로그가 섞여도 진단을 기록한
-범위와 예약 지연 표본 수가 드러나며 프로젝트·원본 오류·설정은 출력하지 않는다.
-
-logs:summary의 NDJSON·Wrangler tail·스트림 수명·실제 Node CLI와 요약/진단 집중 검사는
-35/35를 통과했다. 관리자 전체 313/313, npm run typecheck, 관리자 빌드, bundle 2/2·Sites
-11/11과 계약 65/65도 통과했다. 기존 정확한 객체 비교 한 건을 새 execution 확장에 맞춰
-수정했다. 마지막 집계 모순 검증 보완 뒤 관련 13/13과 루트·관리자 타입 검사 및 빌드를
-재확인했다. 범위가 겹치므로 검사 수를 합산하지 않는다.
-
-실제 ObservationReportView를 React로 렌더링해 중단 이유·최대 실행 시간/예약 지연·진행량
-표시와 과거 보고서의 시간 미표시를 확인했다. 관리자 파일 읽기 worker와 네트워크 동작은
-바꾸지 않았다. 이 표시 변경은 브라우저 자동화 대신 실제 컴포넌트 렌더링과 파서 검사로
-검증했다. 전체 루트 테스트·원격 D1·실제 운영 부하와 배포는 생략했다. 실행 계층의
-12개 검사 결과(실제 로컬 Worker·D1 포함)는 앞선 항목을 재사용했다. 일반 소스 lint 명령은 없다.
-
-소유 문서는 docs/product/02-spec.md, docs/backend/retention-cleanup.md,
-docs/backend/06-logging-and-observability.md, docs/ops/observability.md,
-docs/frontend/FRONTEND_DESIGN.md와 이 기록이다. HTTP API·OpenAPI·DB 구조·마이그레이션·
-의존성·CI 러너·위생 설정 변경은 없다. 새 로그 필드는 로그 요약기와 함께 배포해야 하며,
-구 요약기는 새 필드를 거부한다. 새 요약기는 예전 로그를 계속 읽는다. 푸시·배포·운영 Cron
-변경·게시는 하지 않았다. 실행 시계는 CPU 시간이나 SLO 증거가 아니며, 취소된 D1 작업의
-실제 롤백도 보장하지 않는다.
-
-## 정리 실행의 종료 진단 — 실행 계층 (2026-10-23)
-
-runCleanup에 선택적 onReport를 추가해 정상·예외·취소 시 최종 보고서를 한 번 전달한다.
-기존 필수 인자와 취소 이유·저장소 예외 객체는 유지한다. execution에는 elapsedMs,
-stopReason, interruptedProjects, checkpointedProjects를 기록한다. 예약 실행은
-시작 시각과 예약 시각의 차이를 scheduleLagMs로 더하며 미래 예약 시각은 0으로 제한한다.
-진행 중이던 작업과 확인된 커서 진행량을 구분하고 관측 콜백의 실패·변경이 정리 결과나
-원본 예외를 바꾸지 못하게 한다. 시간·페이지 한도는 이월로 기록하며 삭제 실패와 구별한다.
-
-cleanup.test.ts 11/11과 cleanup-observation.test.ts 1/1, npx tsc --noEmit 및
-Collector runtime 타입 검사를 통과했다. 실제 로컬 Miniflare Worker·D1의 삭제 한도,
-live 행 보존, 기본 50 SQL 이하 예산과 커서 CAS를 포함한다. 20초 직전·정각·직후,
-순회 완료·페이지 한도·커서 충돌·빈 목록·조회/체크포인트 실패·취소·관측 콜백 실패와
-변경도 확인했다. DB 자체가 취소되거나 실행 중이던 삭제가 롤백됐음을 보장하지 않는다.
-
-소유 문서는 docs/backend/retention-cleanup.md와 이 기록이다. HTTP API·DB 구조·
-마이그레이션·의존성·CI·위생 설정 변경은 없다. 요약기의 새 로그 수용은 다음 단계다.
-전체 루트 테스트·브라우저·원격 D1·운영 부하는 실행 계층에 집중해 생략했다. 일반 소스
-lint 명령은 없다. 푸시·배포·운영 Cron 변경은 하지 않았다.
-
-## 대표 작업 흐름 프론트엔드 단계 (2026-10-23)
-
-스키마 작업 흐름 편집기에서 대표 흐름 선택·해제, 선택한 흐름 ID 변경 시 참조 갱신,
-선택한 흐름 삭제 시 자동 해제와 `role="status"` 안내를 연결했다. 잘못된 ID는 의미 검증
-오류와 초점·`aria-invalid`로 표시한다. 개별·통합 개요의 미지정 상태, 기존 권한 회수 7개
-시나리오와 CSV 잠금·복구·늦은 응답 폐기도 확인했다.
-
-앞선 전체 검사에서 관리자 312/312와 집중 스키마 34/34를 통과했다. 당시 `npm run typecheck`는
-루트·관리자·Collector runtime/worker 타입을 모두 통과했고 최신 관리자 빌드,
-bundle 2/2·Sites 11/11, 계약 65/65와 OpenAPI lint도 통과했다. 일반 소스 lint 명령은
-없어 OpenAPI lint만 실행했다.
-
-이후 CSV 도우미가 받아들이던 범위 없는 전체 workflow 스냅샷도
-`representativeWorkflowId`로 고르고 비교 행에 같은 선택을 적용했다. 대표가 두 번째
-workflow인 경우와 미지정인 경우, CSV 비교의 선택 ID를 집중 검사에 추가했고 현재
-client 39/39를 통과했다. 마지막 comparison assertion을 포함한 최종 재실행도 39/39였고,
-최종 관리자 타입 검사와 빌드(3.47초), 최종 빌드의 bundle 2/2도 통과했다. 이 CSV 도우미
-변경 뒤 전체 312/312와 브라우저 검사는 반복하지 않았다. 34/34와 39/39는 앞선 312/312와
-범위가 겹치며 합계에 더하지 않는다.
-
-Chromium 156.0.8078.4의 실제 로컬 서명 로그인·D1에서 `npm run verify:admin-goal-access`가
-통과했다. pageErrors 0·routeError false이며 보고서는
-`.tmp/admin-goal-access-7UOzOa/report.json`이다. apiWrites 1은 읽기 전용 스키마 검증
-POST이며 브라우저에서 발행하지 않는다. DB 발행은 백엔드 검사에서 확인했다.
-선택된 스냅샷 경로는 이번 CSV 보완에서 바뀌지 않아 브라우저 검사는 반복하지 않았다.
-
-초기 테스트 도우미의 `setDraft` 오타를 고쳤다. 주입한 503 중 일반 화면 대기와 숨겨진
-설정 테이블 잔여 수 확인은 서비스 제목 대기와 프로젝트 전환으로 설정 화면을 unmount하는
-방식으로 바로잡았고, 엄격한 테이블 제거 단언은 유지했다. 검사 도구 오류를 제품 실패로
-해석하지 않는다.
-
-소유 문서는 `api/openapi.yaml`, `db/schema.dbml`(설명만),
-`docs/product/02-spec.md`, `docs/frontend/FRONTEND_DESIGN.md`,
-`docs/integrations/backend-api.md`, `docs/backend/administrator.md`, `VALIDATION.md`다.
-
-API 필드는 앞선 백엔드 커밋에 포함됐고 새 DB 컬럼·마이그레이션은 없다. SDK·의존성·CI·
-위생 설정 변경은 없다. 원격 D1·실제 OIDC·운영 부하와 전체 루트 테스트는 실행하지 않았으며
-관련 검사로 대체했다. 푸시·배포·게시도 하지 않았다.
-
-## 대표 작업 흐름 백엔드 단계 (2026-10-23)
-
-스키마 정의에 선택 필드 `representativeWorkflowId`를 추가했다. ID 문법과 같은 버전의
-browser workflow 소속을 검사하며, 생략하면 대표 작업 흐름 없음으로 유지하고 첫 workflow로
-대체하지 않는다. 서비스 통합 현황과 개별 서비스 개요는 이 값을 명시적으로 선택하고,
-목표 화면은 계속 전체 workflow를 조회한다. 저장·해시·재요청 비교에는 필드가 있을 때만
-포함해 기존 발행 스키마와 해시는 바이트 단위로 유지한다. 선택 변경은 새 버전 발행으로만
-한다.
+# Verification History 01
+
+This is a historical record that preserves the order of the original sections. Commands and code paths are relative to the repository root.
+
+## Cross-Check of Current Implementation and Operations Documentation — 2026-10-23
+
+The scope of manual draft files was distinguished from server-side draft storage in the product spec, roadmap, and frontend design. The operations contract, backup and restore, release, rollback, migration guidance, and installation and provisioning documents were organized against the current head 0013, 13 migrations, and 16 tables. By directly cross-checking the 0010~0013 SQL, local initialization, and the publishing-permission writer, the application order, compatibility with earlier code, and the publisher history within the same batch were corrected. The historical verification records for 0009 by date were preserved, with the current baseline noted alongside them.
+
+`git diff --check` and a source cross-check were confirmed. Behavior verification reused the earlier draft and restore results and was not repeated because of the documentation changes. No changes were made to API/DB contracts, SQL, dependencies, repository hygiene, or CI runners. Remote rehearsal, real authentication, and production throughput remain unverified, and no push, deployment, or remote application was performed.
+
+## Schema Draft File Save and Load — 2026-10-23
+
+An owner-editable schema draft is saved to and restored from a JSON file. Only a closed v1 envelope of 128KiB or less with a matching project ID is accepted, preserving incomplete JSON and version input. Replacing unsaved changes to the definition or version requires explicit consent, and importing clears verification results and the privacy review. A reader, an editor while viewing, verifying, or publishing, an editor that has lost permissions, and a discarded editor may not perform file operations. The FileReader and 10-second timer are cleaned up on completion, failure, cancellation, or editor switch. There is no server-side storage.
+
+Focused tests 38/38, the full admin suite 342/342, the admin type check and build, bundle 2/2 and Sites 11/11, and `git diff --check` passed. The focused tests overlap with the full admin tests, so they are not added together. The run verified invalid envelopes, projects, fields, UTF-8 size boundaries, and incomplete input; replacement consent; permissions; lifetime; verification reset; and the absence of additional I/O before publishing. Root `npx tsc --noEmit` also passed along with the restore work.
+
+The final `verify:admin-onboarding` run used Chromium 156.0.8078.4, synthetic signed login, and a real local D1 to verify the saved file's actual bytes, normal and incomplete restore, replacement cancellation and consent, rejection of invalid JSON, project, and size, approval reset, and file input reset. The existing creation, publishing, SDK execution, and first collection of 1 item also passed. pageErrors=0 and routeError=false, fileDialogs=3, and the 1 additional write in the file scenario is an explicit definition verification POST. The file itself performs no API write. The evidence is in `.tmp/admin-onboarding-rx0JXa/report.json`, and the desktop and 390px screens were also checked. The browser, Vite, and Miniflare were cleaned up. The initial failure was a dialog-count assertion before FileReader completion and a 90-second watchdog timeout while other local checks ran concurrently. The test was changed to wait for the completion event, and the expanded manual check was given a 120-second limit; the standalone run then passed.
+
+This change updates the product spec, roadmap, frontend design, and this record. It does not change API/DB contracts, migrations, dependencies, repository hygiene, or CI runners. Only the existing opt-in browser test was expanded. There is no general source lint command, and the unchanged full-root suite and real OIDC and remote DB checks were skipped. Users must retain the file themselves, and automatic recovery, server-side draft storage, and version reservations are not provided. There was no push, deployment, or remote change.
+
+## Backup and Restore Verification for Durations and Failure Causes — 2026-10-23
+
+An enum cause for failure events and a 3-second failure attempt whose completion arrives before the end event were added to the synthetic restore fixture. Along with the existing 20-second success, the actual admin workflow query before backup, after restore, and after resend verifies measured and unmeasured durations and the cause distribution by period and day. Verification fails if a new column is restored with empty historical data, and resends of success and failure receipts must each produce 2 duplicates.
+
+`npx tsc --noEmit`, 5/5 restore-related tests, and `npm run verify:restore` passed. A real local D1 was exported as SQL and restored into a new DB, verifying 16 tables, the schema, the full-row fingerprint, 5 protected writes, publishing-permission recovery, integrity, and foreign keys. There are 13 migrations; the period completion rate of 50%, 2 measured items, 0 unmeasured items, and 1 range cause were preserved. The evidence is in `.tmp/restore-drill/run-oIKTrh/report.json`. The Miniflare process was cleaned up.
+
+There are no changes to API/DB contracts, migrations, dependencies, CI runners, or repository hygiene. The execution tool and this record were changed. The unchanged full-root suite was skipped, and there is no general source lint command. The production DB data volume and remote restore time and cost were not checked. There was no push, deployment, or remote change.
+
+## Failure Cause Period Comparison Screen — 2026-10-23
+
+The existing previous-period results from LiveDashboard are passed to LiveGoals, where the per-flow failure cause comparison is connected. Cause counts, shares, and differences are distinguished from the overall failure rate, numerator, and denominator. Unmeasured data, a 0 denominator, and an old response produce no change, and the comparison table alone is hidden during previous-period loading or failure. The current distribution, existing CSV lock, retry behavior, and permission lifetime are preserved. The pure calculation and CSV share functions from the earlier commit 2b5367f.
+
+The full admin suite 338/338, focused computation, CSV, and actual React rendering 6/6, root and admin type checks, the admin build (6.45 seconds), bundle 2/2, Sites 11/11, and git diff --check passed. Overlapping scopes are not added together. There is no existing general source lint command. Because the API/DB contract did not change, the full backend and contract suites were not repeated.
+
+verify:admin-goal-access used Chromium 156.0.8078.4, a real local D1, and signed login to verify that the current distribution was retained after the previous 503, CSV access was blocked, retry worked, the unmeasured comparison was withheld, and the change values in the empty CSV were correct. After completing the missing measurements in the synthetic historical aggregate, the screen and actual CSV matched for a cause difference of -25%p, a missing difference of +25%p, and an overall failure-rate difference of 0%p; the in-progress aggregation notice was also checked. The existing 7 permission-revocation scenarios, late rejection-response disposal, recovery, and disconnection passed. pageErrors=0 and routeError=false, and desktop and 390px captures were checked. The report is `.tmp/admin-goal-access-HyY7Sf/report.json`. apiWrites=2 accounts for the existing read-only draft validation POSTs. Nothing was published from the browser, and the test processes were cleaned up. This used synthetic login and a temporary DB, so it is not production verification.
+
+The owned documents are the product spec, frontend design, API integration document from the earlier computation commit, and this record. There are no changes to the API, DB, migrations, dependencies, repository hygiene, or CI runners. Only the existing manual browser test was expanded, and no new HTTP query was added. The full root test suite, production providers and load, and remote D1 were replaced by local checks within the changed scope. There was no push, deployment, or remote change.
+
+## Failure Cause Period Comparison Computation and CSV — 2026-10-23
+
+compareFailureReasons validates the definitions, metadata, and totals of the existing two periods and separately calculates the per-cause count, share, and difference and the overall failure rate. The cause share uses all confirmed failures as its denominator, while the overall failure rate uses start attempts as its denominator. Cause differences are calculated only when neither period has unmeasured data; a missing denominator, an old response, and an unconfigured value are separate states. An unmeasured overall cause is not converted to 0. The CSV adds 3 columns and cause and overall failure-rate comparison rows while preserving the existing column order. The screen integration is the next step.
+
+Focused tests 10/10, the full admin suite 337/337, and the admin type check passed. The tests covered frozen inputs with equal counts but an increasing share, independent calculation of the overall failure rate, a 0 denominator, partial and overall unmeasured data, an old response, project, version, time zone, date, and definition confusion, contradictory aggregates, CSV values, and the aggregating state. Test counts overlap, so they are not added together. The UI, browser, and build checks will be performed after the screen is connected.
+
+The product spec, API integration document, and this record were updated. There are no changes to the API, DB, migrations, dependencies, CI runners, or hygiene policy, and no additional network requests. The full root suite, remote D1, and production authentication and load were replaced by pure computation and admin-related checks. There was no push, deployment, or remote change.
+
+## Workflow Failure Cause Screen, CSV, and Settings — 2026-10-23
+
+The goal now shows the number of failures by cause and their share of all confirmed failures, along with the property, measured, missing, unmeasured, and aggregating states. An old response distinguishes no information, no failures, and not configured. Settings can select and clear the enum used for failure events, and a validation error for an invalid reference moves focus to the select. The existing publication gate and permission lifetime are preserved. The existing CSV column order is retained, and 6 cause columns and period and daily rows are added.
+
+The full admin suite 332/332, focused tests 5/5 after the final definition cross-check, root and admin type checks, the admin build (2.09 seconds), bundle 2/2, and Sites 11/11 passed. The scopes overlap, so they are not added together. The related backend 179/179, contracts 68/68, and OpenAPI lint results are reused from the earlier aggregation phase.
+
+verify:admin-goal-access used Chromium 156.0.8078.4, a real local D1, and signed login to verify that 2 causes, 1 missing item, and 1 unmeasured item showed 25% on screen and matched 25% in the actual downloaded CSV. The setting's selection and clearing behavior and validation focus were checked, and the 7 existing permission-revocation scenarios, CSV locking, and late rejection-response disposal passed. Desktop and 390px captures were checked; pageErrors=0 and routeError=false. The report is `.tmp/admin-goal-access-3s27P2/report.json`. apiWrites=2 accounts for the read-only draft validation POSTs. Nothing was published from the browser, and the test processes were cleaned up. In the initial run, the new refresh reflected the list change from the earlier permission revocation and broke the existing fixture's expectation of 2 rows; fixture permissions were restored before the new scene, and the test then passed. The screen, cause, and CSV checks had also passed in the initial run.
+
+The owned documents are the product spec, frontend design, API integration document, README, and this record. The API and DB 0013 were part of earlier commits, and this step did not change dependencies, hygiene, or CI runners. Only the existing manual browser test was expanded. The full root suite, real providers, production load, and remote D1 were replaced by related local checks, and there is no general source lint command. Apply 0013 after 0012 and before the new collector. There was no push, deployment, or remote migration.
+
+## Workflow Failure Cause Aggregation and Query — 2026-10-23
+
+The selected failureReasonProperty is restricted to the failure-event enum, and the first confirmed failure cause is stored in the existing CAS batch. Aggregation by start date and version uses 32 slots for the sorted enums and 1 slot for missing data. Missing data is included in the measured total, and the difference from existing failures is exposed as unmeasured. When completion arrives first, a request is retransmitted, or different causes are confirmed at the same time, the event is counted only once, and the daily distribution is preserved after attempt cleanup.
+
+Core, D1, admin HTTP, and provision-related tests 179/179, the root type check, contracts 68/68, and OpenAPI lint passed. New focused tests cover enum references, missing data, immutable input, historical unmeasured data, version and permission isolation, concurrent requests, an unknown slot returning 503, atomic migration rollback, repeated initialization, and foreign keys. The full root suite and remote D1, production load, and authentication verification were replaced by related local checks.
+
+The owned documents are OpenAPI, DBML, migration guidance, the product spec, the admin boundary, API integration, and this record. Apply 0013 after 0012 and before the new collector. The production time of the CHECK verification is unmeasured; rolling back to the previous collector retains the expanded columns. SQL counts, dependencies, CI runners, and repository hygiene are unchanged. The screen and CSV are connected in the next step. There was no push, deployment, or remote migration.
+
+## Workflow Duration Screen and CSV — 2026-10-23
+
+The goal screen displays the success and failure shares among completed measurements for 6 time buckets, the measured and unmeasured counts, and the aggregating state. An old response distinguishes no information, no completions, completions with no measurements, and partial measurements. The parser and snapshot/CSV validation reject contradictions in buckets, completion counts, and daily and period totals. Existing queries are reused, with no additional API request, timer, or persistent storage.
+
+The goal CSV adds period and daily duration rows and 4 duration columns. The existing column order is preserved, and the measured scope for the current and previous periods is recorded separately. The count and ratio are left empty for a distribution without measurements. The full admin suite 327/327, focused duration parser, CSV, and actual React rendering tests 4/4, root and admin type checks, the build (1.99 seconds), bundle 2/2, and Sites 11/11 passed. After completing the CSV test where the current and previous measurement scopes differ, the focused 4/4 tests passed again. Test scopes overlap, so they are not added together.
+
+npm run verify:admin-goal-access used Chromium 156.0.8078.4 with real local signed login and D1 to verify the 6-bucket table and 100% value for 1 measurement and the matching CSV, plus the unmeasured notice, hidden table, and CSV state for another project. Desktop and 390px screen captures were checked, and the 7 existing permission-revocation scenarios passed, including removal of the new table, blocking and recovery of CSV access, and disposal of late rejection responses. pageErrors=0 and routeError=false. The report is `.tmp/admin-goal-access-RyMgVX/report.json`. apiWrites=1 is the existing read-only schema draft validation POST, and nothing was published from the browser. The test server, browser, and D1 were cleaned up.
+
+The owned documents are the product spec, frontend design, API integration document, and this record. The API duration and DB 0012 were included in the earlier backend commit, and this step did not change the DB, dependencies, CI, or hygiene settings. Only the existing manual browser test was expanded, and no CI runner was added. The full root suite, remote D1, and real production authentication and load were replaced by related local checks. There is no general source lint command. The DB 0012 expansion is required before remote application, and there was no push, deployment, or remote migration.
+
+## Workflow Duration Aggregation and Query — 2026-10-23
+
+0012 adds a 12-slot integer JSON distribution to the existing daily workflow aggregate row. Success and failure counts for the 6 fixed time buckets are updated in the same CAS batch or UPDATE as the existing completion delta. Existing rows are expanded with a 0 array, and the difference from the existing completion count is exposed as unmeasured. Even if the start and end order changes or the same step repeats with a different eventId, it is measured only once and the first confirmed end is retained. Daily aggregates remain for the retention period after attempt cleanup, and API permissions, project, version, and daily totals are preserved.
+
+Focused tests 6/6 checked 0ms; each bucket boundary immediately before, exactly at, and immediately after; inclusion of 24h; invalid ranges; frozen inputs; mixed historical data; a null no-failure value; concurrent sends; reverse order; retransmission; retention after cleanup; permission revocation; atomic migration rollback; rerun; and foreign keys. Because D1 numeric bindings can produce JSON floating-point values, values are converted to INTEGER during the update and CHECK is preserved. The full Core and D1 suites and the admin, integration overview, cleanup, and provision tests passed 176 of 177 tests. One historical fixture that used the new collector with an old DB was fixed to seed using the old column contract, after which that file passed 7/7. The final admin HTTP and duration D1 focused tests 20/20 and the root and admin type checks also passed. The scopes overlap, so test counts are not added together. The full root suite was replaced by the related scoped checks.
+
+The API/DB contracts and migration documentation were updated. Contracts 67/67 and OpenAPI lint passed. Verification was local; production load, remote D1, real OIDC, and deployment were not run. The DB must be applied before the new collector, and the production duration of the existing CHECK verification is unmeasured. SQL counts, delete-query counts, dependencies, CI runners, and hygiene settings are unchanged, although row and response bytes grow. The admin display and CSV are connected in the next commit. There was no push, deployment, or remote migration.
+
+## Project Search Screen and Selection Retention — 2026-10-23
+
+Name and ID search, a 250ms delay, request and timer cleanup, generation checks, result pages, empty results, and error retry were connected to ProjectPicker and the independent ProjectSearch. The full list remains for the integrated overview, and search changes neither the current selection nor the settings draft. A current selection outside the results is identified explicitly, and the existing draft-exit confirmation applies only to an actual switch. A selection outside the first page rechecks permission through the existing settings read on refresh, while 403 and 404 remove the selection and ambiguous failures and cancellation propagate.
+
+The full admin tests, type check, and build, bundle 2/2, and Sites 11/11 passed. After sharing search constants and completing the race and cursor tests, focused tests 10/10, the admin type check, and the final build (2.69 seconds) were rechecked. Focused tests overlap with the full suite, so they are not added together. The full root suite was replaced by related checks, and there is no general source lint command. The backend 17/17, contracts 66/66, OpenAPI lint, and root type check results were reused from the earlier server search item.
+
+npm run verify:admin-project-search used a real local signed login and D1 in Chromium 156.0.8078.4 to create 30 authorized searchable targets and unauthenticated targets with the same names. It checked search and selection for a project outside the first 25, empty results, search clearing, selection retention after refresh, result pagination, exclusion of unauthorized results, recovery from 503, rapid input changes, and settings draft retention and switch refusal. The final report is `.tmp/admin-project-search-xA9uVH/report.json`. pageErrors=0, routeError=false, and apiWrites=0, and desktop and 390px captures were checked. The server, browser, and D1 were cleaned up after the test.
+
+The owned documents are the product spec, frontend design, API integration document, and this record. The API's optional q parameter was included in the earlier server commit, and the DB structure, migrations, dependencies, CI, and hygiene settings were not changed. Only a manual browser test command was added to package.json, and no CI runner was added. Remote D1, real production authentication, and large-scale latency and load are unverified, and partial search runs without a separate index. There was no push, deployment, or publication.
+
+## Project Server Search — 2026-10-23
+
+The optional q parameter was added to the admin list, AdminStore, and D1Queries. The existing required arguments, response, and ID sorting are preserved, and permission and literal partial matching are checked in one SQL statement. The run verified the 80-character source limit and control-character limit, a URL-encoded query of 1024 characters, Hangul and ASCII case and symbols, an empty query, page movement after search, permission revocation and a different issuer between pages, authentication precedence, and duplicate and invalid parameters.
+
+Admin HTTP and D1 tests 17/17, contracts 66/66, OpenAPI lint, and npx tsc --noEmit passed. The owned documents are OpenAPI, the product spec, the admin boundary, API integration, and this record. There are no changes to the DB structure, migrations, dependencies, CI, or hygiene settings. The screen is connected in the next commit. The full root suite, remote D1, and production load were skipped. Partial search runs without a separate index, so performance at large scale is unverified. There was no push, deployment, or publication.
+
+## Retention Execution Termination Diagnostics — Summary and Admin Integration (2026-10-23)
+
+The optional execution field from retention_cleanup is validated against closed fields and count relationships. Interrupted work is not recorded as failed, and time and page carryover are distinguished from cursor conflicts, cancellation, and storage errors. Old logs are read using the existing failure criteria, and a period without diagnostics is not turned into 0. Reports and failure displays with the same runId and duplicate logs are aggregated as one execution. When new and old logs are mixed, the diagnostic coverage and scheduled-lag sample count are visible, while project, raw errors, and settings are not output.
+
+The logs:summary NDJSON, Wrangler tail, stream lifetime, and actual Node CLI tests and the focused summary and diagnostic tests 35/35 passed. The full admin suite 313/313, npm run typecheck, the admin build, bundle 2/2, Sites 11/11, and contracts 65/65 also passed. One existing exact object comparison was changed to match the new execution expansion. After completing the final aggregation contradiction test, related tests 13/13 and the root and admin type checks and build were rechecked. The scopes overlap, so test counts are not added together.
+
+The actual ObservationReportView was rendered with React to verify the interruption reason, maximum execution time and scheduled lag, progress display, and the absence of a time display in old reports. The admin file-reading worker and network behavior were not changed. This display change was verified with actual component rendering and parser tests instead of browser automation. The full root suite, remote D1, real production load, and deployment were skipped. The 12 execution-layer test results, including the real local Worker and D1, reused the earlier item. There is no general source lint command.
+
+The owned documents are docs/product/02-spec.md, docs/backend/retention-cleanup.md, docs/backend/06-logging-and-observability.md, docs/ops/observability.md, docs/frontend/FRONTEND_DESIGN.md, and this record. There are no changes to HTTP APIs, OpenAPI, the DB structure, migrations, dependencies, CI runners, or hygiene settings. The new log fields must be deployed together with the log summarizer, and the old summarizer rejects the new fields. The new summarizer continues to read old logs. There was no push, deployment, production Cron change, or publication. The execution clock is not evidence of CPU time or SLOs, and it does not guarantee that a cancelled D1 operation actually rolled back.
+
+## Retention Execution Termination Diagnostics — Execution Layer (2026-10-23)
+
+An optional onReport callback was added to runCleanup so that a final report is delivered once on normal completion, an exception, or cancellation. The existing required arguments, cancellation reasons, and storage exception objects are preserved. execution records elapsedMs, stopReason, interruptedProjects, and checkpointedProjects. Scheduled execution adds the difference between start time and scheduled time to scheduleLagMs and clamps a future scheduled time to 0. Work that was in progress is distinguished from confirmed cursor progress, and an observation callback failure or change cannot alter the cleanup result or the original exception. Time and page limits are recorded as carryover and distinguished from deletion failure.
+
+cleanup.test.ts 11/11 and cleanup-observation.test.ts 1/1, npx tsc --noEmit, and the Collector runtime type check passed. These include the deletion limit, live-row retention, default budget of 50 or fewer SQL statements, and cursor CAS on a real local Miniflare Worker and D1. The run also checked 20 seconds immediately before, exactly at, and immediately after the limit; traversal completion; page limit; cursor conflict; an empty list; read and checkpoint failures; cancellation; and observation callback failure and change. It does not guarantee that the DB itself was cancelled or that an in-progress deletion rolled back.
+
+The owned documents are docs/backend/retention-cleanup.md and this record. There are no changes to HTTP APIs, the DB structure, migrations, dependencies, CI, or hygiene settings. Acceptance of the new logs by the summarizer is the next step. The full root suite, browser, remote D1, and production load were skipped in favor of the execution-layer focus. There is no general source lint command. There was no push, deployment, or production Cron change.
+
+## Representative Workflow Frontend Phase (2026-10-23)
+
+The schema workflow editor now supports selecting and clearing a representative workflow, updating the reference when the selected workflow ID changes, automatically clearing the selection and showing a `role="status"` notice when the selected workflow is deleted. An invalid ID displays a semantic validation error with focus and `aria-invalid`. The unassigned state in the individual and integrated overviews, the existing 7 permission-revocation scenarios, the CSV lock, recovery, and late-response disposal were also checked.
+
+The earlier full test run passed the admin 312/312 and focused schema tests 34/34. At that time, `npm run typecheck` passed for the root, admin, and Collector runtime and worker types, and the latest admin build, bundle 2/2, Sites 11/11, contracts 65/65, and OpenAPI lint also passed. There is no general source lint command, so only OpenAPI lint was run.
+
+The CSV helper, which also accepted an unscoped snapshot of all workflows, now selects a representative workflow by `representativeWorkflowId` and applies the same selection to comparison rows. Focused tests now cover a representative that is the second workflow and an unspecified representative, and the selected ID in the CSV comparison. The current client tests 39/39 passed. The final rerun, including the last comparison assertion, was also 39/39, and the final admin type check and build (3.47 seconds) and bundle 2/2 from the final build passed. The full 312/312 tests and the browser check were not repeated after this CSV helper change. The 34/34 and 39/39 scopes overlap the earlier 312/312, so they are not added to the total.
+
+`npm run verify:admin-goal-access` passed on Chromium 156.0.8078.4 with real local signed login and D1. pageErrors was 0 and routeError was false, and the report is `.tmp/admin-goal-access-7UOzOa/report.json`. apiWrites 1 is the read-only schema validation POST, and nothing was published from the browser. The DB publication was verified by the backend tests. The selected snapshot path did not change with this CSV update, so the browser test was not repeated.
+
+An initial typo in the `setDraft` test helper was fixed. For the injected 503, the general screen wait and the check for the remaining hidden settings table rows were corrected by waiting for the service title and unmounting the settings screen through a project switch, while the strict table-removal assertion was retained. Test tool errors are not interpreted as product failures.
+
+The owned documents are `api/openapi.yaml`, `db/schema.dbml` (descriptions only), `docs/product/02-spec.md`, `docs/frontend/FRONTEND_DESIGN.md`, `docs/integrations/backend-api.md`, `docs/backend/administrator.md`, and `VALIDATION.md`.
+
+The API field was included in the earlier backend commit, and there is no new DB column or migration. There are no changes to the SDK, dependencies, CI, or hygiene settings. Remote D1, real OIDC, production load, and the full root suite were not run and were replaced by related checks. There was no push, deployment, or publication.
+
+## Representative Workflow Backend Phase (2026-10-23)
+
+The optional `representativeWorkflowId` field was added to the schema definition. It checks the ID syntax and whether the ID belongs to a browser workflow in the same version; when omitted, the schema keeps no representative workflow rather than substituting the first workflow. The service integration overview and individual service overview explicitly select this value, while the goals screen continues to query all workflows. The field is included in storage and hash comparisons and re-request comparisons only when present, preserving the existing published schema and hash byte-for-byte. A selection change is made only by publishing a new version.
 
 `node --test --test-concurrency=2 --test-timeout=30000
 packages/core/test/schema.test.ts apps/collector/test/schema-publication.test.ts
-apps/collector/test/schema.test.ts apps/collector/test/overview.test.ts`는 39/39를 통과했다.
-`npm run check --prefix tools/contracts`는 65/65를 통과했고 `npm run lint --prefix
-tools/contracts`와 `npx tsc --noEmit`도 통과했다.
+apps/collector/test/schema.test.ts apps/collector/test/overview.test.ts` passed 39/39.
+`npm run check --prefix tools/contracts` passed 65/65, and `npm run lint --prefix
+tools/contracts` and `npx tsc --noEmit` also passed.
 
-스키마 JSON 기존 저장만 사용하며 `db/schema.dbml` 설명을 갱신했을 뿐 컬럼·마이그레이션은
-없다. API에는 선택 필드를 추가했고 `settingsHash`와 SQL 예산은 그대로다. CI·의존성·
-저장소 위생 설정 변경은 없다. 프론트엔드 검증은 다음 커밋에서 진행한다. 전체 루트 검사와
-원격 D1·부하는 실행하지 않았고 푸시·배포·게시도 하지 않았다.
+The schema JSON continues to use existing storage, and only the description in `db/schema.dbml` was updated; there are no columns or migrations. An optional field was added to the API, while `settingsHash` and the SQL budget remain the same. There are no changes to CI, dependencies, or repository hygiene settings. Frontend verification is handled in the next commit. The full root suite, remote D1, and load were not run, and there was no push, deployment, or publication.

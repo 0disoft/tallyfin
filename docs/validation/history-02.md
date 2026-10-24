@@ -1,353 +1,132 @@
-# 검증 이력 02
-
-원문의 구간 순서를 유지한 과거 기록이다. 명령과 코드 경로는 저장소 루트 기준이다.
-
-## 통합 현황의 조회 기준·실제 기간·날짜 변경 안내 (2026-10-23)
-
-서버가 생성한 서비스별 period(timeZone·from/to·previousFrom/previousTo)와 generatedAt을
-화면까지 보존한다. UTC 조회 기준 시각·실제 거부 기록 UTC 범위·서비스별 현재/직전
-현지 날짜를 표시한다. 스키마 없는 성공 행도 기간을 제공하고 오류/권한 상실 행은
-period=null로 지운다. 이전 서버의 기간 없는 응답은 기간 정보 없음으로 표시한다.
-서버 시각으로 기간을 검증하고 기존 프로젝트 시간대와 다르면 응답을 거부한다.
-
-열린 표는 60초 주기·포커스/탭 복귀에 로컬 시계만 재확인한다. 서비스 날짜나 UTC 날짜가
-달라지면 수동 새로고침 status 안내를 표시하며 API 요청을 추가하지 않는다. 숨김 상태는
-타이머를 중지하고 닫기/페이지/연결 변경·unmount에서 타이머와 이벤트 리스너를 해제한다.
-기기 시계는 안내에만 쓰며 서버 기간을 결정하지 않는다. 추가 SQL은 없다.
-
-관리자 전체 309/309, 번들 2/2·Sites 11/11·빌드, 전체 타입 검사와 계약 64/64·OpenAPI
-lint를 통과했다. HTTP/클라이언트 집중 29/29에는 연말·DST 23/25시간의 현지 자정
-직전/정각/직후·UTC 자정·잘못된 기간/시간대·동결 입력·타이머/리스너 해제를 포함한다.
-Chromium 156.0.8078.4의 로컬 서명 로그인·D1 검사에서 실제 기간·기준 시각 표시와
-기기 시각을 다음 날로 변경/복구할 때 안내 표시/제거·통합 API 요청 수 1회 유지를
-확인했다. 기존 표본·스키마 없는 진단·권한 회수/CSV 차단도 통과했고 pageErrors와
-routeError는 0이다. 보고서는 .tmp/admin-goal-access-kw1bjM/report.json이다.
-기간 필드의 own-property 검사 보완 뒤 관련 클라이언트 13/13과 git diff --check를
-재확인했다. 변경 없는 전체 검사·브라우저는 반복하지 않았다.
-
-소유 문서는 OpenAPI·제품 스펙·관리자 경계·프론트엔드 설계·성능 예산과 이 기록이다.
-API에 period를 추가했으며 필수 호출 인자는 유지한다. DB 구조·마이그레이션·SDK·의존성·
-CI·위생 설정 변경은 없다. 전체 루트 테스트는 관련 검사로 대체했고 일반 소스 lint는
-명령이 없어 생략했다. 실제 운영 부하·원격 D1·장시간 브라우저 대기는 미검증이며 시간
-경계는 주입 시각으로 확인했다. 푸시·배포·운영 DB 적용·게시는 실행하지 않았다.
-
-## 통합 완료율의 표본과 집계 상태 (2026-10-23)
-
-workflowStats에 현재/직전 시작·성공·실패·진행 중 건수와 provisional을 추가했다.
-기존 일별 응답의 합계와 날짜별 집계 중 여부를 재사용해 SQL 수는 그대로다. 실패
-이벤트가 없으면 실패 건수 null, 분모 0이면 완료율 null을 유지한다. 관리자는 두 기간이
-집계 중이 아니고 각각 시작 30건 이상일 때만 변화 %p를 표시한다. 30건은 표시 보류
-정책이며 통계 검정이나 자동 경고 기준은 아니다. 이전 서버의 필드 없는 응답도 받되
-변화는 보류한다. 입력을 수정하지 않고 건수·완료율·권한/패널 상태의 모순을 거부한다.
-
-집중 검사 25/25(29·30·31 경계·분모 0·동결 입력·불일치·실제 D1 포함), 루트·관리자
-타입 검사와 계약 64/64를 통과했다. Chromium 156.0.8078.4의 로컬 서명 로그인·D1
-검사에서 현재/직전 성공 1 / 시작 1 · 진행 중 0과 집계 중 비교 보류를 확인했다.
-기존 스키마 없는 진단·권한 회수/CSV 차단도 통과했고 pageErrors·routeError는 0이다.
-보고서는 .tmp/admin-goal-access-S6fS0a/report.json이다. 최초 타입 검사의 반환 유니언을
-명시적으로 좁혔고, 실패 이벤트가 없는 fixture의 기대 0을 계약대로 null로 수정했다.
-OpenAPI·제품 스펙·관리자 경계·프론트엔드 설계와 이 기록을 갱신했다. API 필드는
-추가됐고 DB 구조·마이그레이션·SDK·의존성·CI·위생 설정 변경은 없다. 전체 루트 테스트와
-운영 부하·원격 D1은 미검증이며 푸시·배포·게시는 실행하지 않았다.
-
-## 활성 스키마 없는 서비스의 수신·거부 진단 (2026-10-23)
-
-통합 현황의 분석과 프로젝트 진단을 분리했다. 스키마 미발행·전체 폐기 시에도 최근
-수신과 거부 합계를 조회하고 이벤트·완료율은 null로 유지한다. 거부 읽기만 실패하면
-알려진 최근 수신을 유지하며 부분 합계를 0으로 바꾸지 않는다. 각 페이지의 권한
-상실은 이미 읽은 수신/분석까지 비운다. 관리자 응답 검증·화면 설명·작업 흐름 칸도
-이 구분을 따른다. 분석 batch가 불필요한 경우 생략하지만 프로젝트 진단은 계속 읽는다.
-
-관리자 전체 302/302, 번들 2/2·Sites 11/11·빌드, 전체 타입 검사, 기존 관리자/D1 거부
-회귀 22/22, 새 HTTP/클라이언트 집중 21/21, OpenAPI 계약 64/64와 lint를 통과했다.
-범위가 겹치므로 합산하지 않는다. Chromium 156.0.8078.4의 실제 로컬 서명 로그인·D1
-검사에서 다른 프로젝트의 스키마를 폐기한 뒤 최근 수신과 거부 3건·이벤트 비교 불가가
-함께 표시됨을 확인했다. 기존 권한 회수·상세 수치/CSV 차단·목표 조회 복구도 통과했고
-pageErrors·routeError는 0이다. 보고서는 .tmp/admin-goal-access-Ri6nv8/report.json이다.
-최신 수신 시각 보존 보완 뒤 HTTP/클라이언트/페이지 집중 25/25를 다시 통과했다.
-변경 없는 전체 검사·브라우저는 반복하지 않았다.
-
-소유 문서는 OpenAPI 설명·제품 스펙·관리자 경계·프론트엔드 설계·성능 예산과 이 기록이다.
-기존 HTTP 필드와 필수 호출 인자는 유지하고 version=null에서 프로젝트 진단을 제공하는
-동작을 확장했다. DB 구조·마이그레이션·의존성·CI·위생 설정 변경은 없다. 전체 루트
-테스트는 관련 범위 검사로 대체했고 일반 소스 lint는 명령이 없어 생략했다. SDK 소스가
-같아 크기 검사는 반복하지 않았다. 실제 운영 부하·최대 힙·원격 D1은 미검증이며 푸시·
-배포·운영 DB 적용·게시는 하지 않았다.
-
-## 통합 현황 거부 기록의 순차 페이지 합산 (2026-10-23)
-
-통합 현황은 거부 기록을 분석 batch에서 분리해 서비스별 4,096행 페이지로 즉시
-합산한다. 한 번에 한 페이지만 처리하고 원문 배열을 누적하지 않는다. 원문 JSON
-상한은 페이지당 8MiB이며 실제 JS 힙 상한을 측정한 값은 아니다. 5개 서비스의 최대
-7일 범위를 모의한 검사에서 17 batch·42 SQL·최대 반환 행 4,096개를 확인했다.
-기존 17 SQL보다 호출 수가 늘어나는 대신 전체 원문을 한 batch에 모으지 않는다.
-페이지마다 권한을 재검사하고 회수되면 기존 분석을 포함해 행 전체를 비운다. 저장
-오류·손상·오버플로가 나면 부분 합계를 버리며 취소 이유를 유지하고 다음 페이지를
-읽지 않는다. 페이지별 스냅샷이므로 조회 중 과거 분당 기록의 변경은 재조회하지 않는다.
-
-실제 로컬 D1의 4,097행과 기존 상세 합계 비교, 최대 크기 JSON·정확한 페이지 경계·
-중간 손상/오버플로·커서 역행·취소·권한 회수 집중 검사 15/15가 통과했다. 기존 거부
-기록 회귀 7/7, 루트·관리자 타입 검사, OpenAPI 계약 64/64와 lint도 통과했다.
-첫 테스트 실행은 Node strip-types에서 지원하지 않는 테스트 클래스 parameter property로
-실패했고 일반 필드 선언으로 고친 뒤 통과했다. 제품 런타임 실패로 해석하지 않는다.
-소유 문서는 OpenAPI 설명·관리자 경계·프론트엔드 설계·성능 예산과 이 기록이다.
-HTTP 필드·DB 구조·마이그레이션·의존성·CI·위생 설정 변경은 없다. 전체 루트 테스트와
-브라우저 검사는 서버 내부 변경이라 생략했다. 운영 부하·최대 힙·원격 D1·푸시·배포는
-검증하거나 실행하지 않았다.
-
-## 서비스 통합 현황 일괄 조회 (2026-10-23)
-
-`GET /v1/overview`와 선택적 AdminStore.overview 포트·D1 구현을 추가하고 관리자 통합
-현황을 HTTP 1회로 연결했다. 최대 5개 ID를 입력 순서대로 반환하고 최신 활성 버전·
-프로젝트 현지 최근/직전 7일을 서버가 선택한다. 이벤트·작업 흐름의 두 기간을 합쳐
-읽으며 로컬 D1의 5개 서비스에서 batch 2회·SQL 17개를 계수했다. 전체 활성 스키마가
-없으면 메타데이터 SQL 1개다. 원격 지연·rows-read 비용 개선율은 측정하지 않았다.
-
-두 번째 batch에서 권한·선택 스키마를 다시 읽고 버전·정의·시간대가 달라지면 해당
-행을 비운다. 미등록과 권한 없음은 같은 accessDenied 행이다. 작업 흐름/거부 기록의
-검증 실패는 해당 패널만 격리한다. 공통 SQL 실행 실패는 전체 503이다. 취소 이유와
-기존 조회 기한·GET 동시 실행 제한을 유지하고, 취소 후 다음 DB batch를 시작하지 않는다.
-D1 실행 자체의 중단은 보장하지 않는다. 거부 응답의 공통 디코더를 재사용하며 발행
-완료 후 편집기 스냅샷의 최신 활성 버전도 갱신한다.
-
-관리자 전체 테스트·빌드, 전체 타입 검사(Collector/Admin 바인딩·runtime 포함),
-OpenAPI 계약 64/64와 lint가 통과했다. 최종 관련 관리자/D1/HTTP·번들·Sites 회귀
-74/74와 앞선 거부 기록 회귀를 포함한 집중 검사 19/19도 통과했다. 검사 범위는 겹친다.
-Chromium 156.0.8078.4의 실제 로컬 서명 로그인·D1 브라우저 검사에서 통합 현황 요청
-1회, 권한 회수 행의 상세 분석/CSV 차단과 기존 목표 조회 복구를 확인했다.
-pageErrors·routeError는 모두 0이며 보고서는 .tmp/admin-goal-access-pEpkjb/report.json이다.
-마지막 입력 스냅샷 복사·발행 후 활성 버전 갱신 검사 보완 뒤 관련 41/41과 루트·관리자
-타입 검사·계약 64/64를 다시 확인했다. 변경 없는 전체 검사와 브라우저는 반복하지 않았다.
-초기 브라우저 검사는 합성 보조 프로젝트의 마지막 owner 회수를 시도해 실패했고,
-백업 owner를 등록한 뒤 재검사했다. 시간대 직접 변경 경합 검사는 기존 DB 불변
-트리거가 거부해 제거했고 권한 회수·활성 스키마 폐기 경합을 실제 D1에서 검증했다.
-
-소유 문서는 OpenAPI·제품 스펙·관리자 경계·프론트엔드 설계·성능 예산과 이 기록이다.
-HTTP API와 코어 저장 포트는 추가됐고 DB 구조·마이그레이션·의존성·CI·위생 설정
-변경은 없다. 전체 루트 테스트는 관련 범위 검증으로 대체했고 일반 소스 lint 명령은
-없다. 브라우저 SDK 소스가 같아 SDK 크기는 반복하지 않았다. 실제 운영 OIDC·원격 D1·
-운영 부하는 미검증이며 푸시·배포·운영 DB 적용·게시는 하지 않았다.
-
-## 최신 활성 스키마 메타데이터 (2026-10-23)
-
-스키마 목록의 기존 D1 batch에 최신 활성 버전 계산을 추가했다. 페이지 커서·폐기된
-최신 버전·일시정지와 독립이며 권한 조건을 유지한다. OpenAPI와 코어 응답에 필드를
-추가하고 관리자는 이전 서버 응답의 페이지 탐색을 보존한다. DB 구조·마이그레이션·
-의존성·CI 변경은 없다. 운영 D1·부하·푸시·배포는 검증하지 않았다.
-
-실제 로컬 D1 발행/목록과 관리자 계약·자동 선택 검사 45/45, 루트·관리자 타입 검사,
-OpenAPI 계약 63/63을 통과했다. 전체 테스트와 브라우저 검사는 UI 변경이 없어 생략했다.
-
-## 외부 검토 5개 항목의 로컬 반영 최종 확인 (2026-10-23)
-
-원격 수정본 없이 현재 소스에서 재현한 OIDC 슬롯·관리자 본문 정리·서버 SDK 취소 이유와
-타입 출력 폴더·퍼널 차원 파싱을 각각 수정했다. 변경된 제품 소스의 루트 전체 검사는
-동시 실행 수 2·테스트당 30초로 완료해 총 515개 중 513 통과·1 실패·1 시간 초과 취소였다
-(약 447초, 종료 코드 1). 전체 통과로 보고하지 않는다.
-
-- runtime.test.ts의 로컬 수집기 검사가 30초를 넘겼다. 같은 30초 제한의 순차 재검사에서는
-  약 6.2초에 통과했고 리스너 해제도 확인했다. 병렬 실행의 지연 원인은 확정하지 않았다.
-- 기존 native HTTP 기한 검사는 요청이 실제 서버까지 도착하기 전에 취소되면 서버가 본
-  본문 개수 1과 기대 2가 달라졌다. 실제 HTTP를 유지한 채 주입 시계로 시간 경과를 제어해
-  네트워크 속도/CPU busy-wait 의존을 제거했다. 변경 파일 4/4, 이후 두 실패 파일의
-  순차 실행 6/6을 통과했다. 두 검사 외 제품 소스 변경은 없고 전체 검사는 반복하지 않았다.
-
-관리자 전체 291/291, 번들/Sites 13/13, 인증/Collector 집중 27/27, 퍼널/D1 22/22와
-마지막 새 파일 3/3, 서버 취소/기한 집중 8/8이 통과했다. 범위가 겹치므로 합산하지 않는다.
-Windows의 .tmp 없는 별도 소스 사본에서 npm run typecheck를 통과했고, 마지막 퍼널 수정
-뒤 루트 TypeScript 검사도 통과했다. 관리자·서버 SDK 빌드와 git diff --check를 확인했다.
-변경 문서는 OIDC·서버 SDK 안내, 프론트엔드 설계, DEVELOPMENT와 이 기록이다.
-
-HTTP API·DB·마이그레이션·의존성·CI·위생 설정 변경은 없다. 공개 SDK 필수 입출력은
-유지한다. 일반 lint는 명령이 없고 시각 변화가 없어 실브라우저 탐색은 생략했다.
-브라우저 SDK 소스가 같아 크기 검사는 반복하지 않았다. 별도 SDK 배포 패키지 소비자
-검사는 생략했으며 소스/minified 회귀와 서버 빌드로 확인했다. 실제 제공자·운영 부하·
-원격 D1은 미검증이다. 푸시·배포·운영 DB 적용·게시는 하지 않았다.
-
-## native HTTP 기한 검사의 실행 부하 의존 제거 (2026-10-23)
-
-전체 실행에서 기존 native HTTP 검사가 실패했다. 실제 네트워크가 50ms 안에 끝나야
-후속 성공이 가능하고, 100ms CPU busy-wait도 사용하는 검사였다. 실제 loopback HTTP와
-동일 본문 재전송 확인은 유지하며 처리 시간은 주입 단조 시계로 진행시키고 타이머 콜백은
-보류해, 헤더/본문의 기한 재확인이 늦은 성공을 거부하는 조건을 직접 제어한다.
-수정한 파일 4/4를 통과했다. 제품 동작·공개 API·DB·의존성·CI·위생 설정 변경은 없다.
-
-## 퍼널 차원의 요청 내부 파싱 재사용 (2026-10-23)
-
-funnelBreakdown은 차원 JSON의 파싱·등록 속성 검증·정규화 조합/버킷 키를 요청 안에서
-최대 256개 재사용한다. 256개를 넘는 원문 표기 변형은 캐시하지 않고 기존처럼 검증해
-정규화하면 같은 조합인 유효 입력을 새로 거부하지 않는다. 요청/스키마/groupBy 사이에
-캐시를 공유하지 않는다. 날짜·단계·행별 카운트·중복·순서·합계 오버플로 검사는 유지한다.
-최대 79,360행에서 JSON.parse 256회, 동결 입력 보존과 다른 groupBy의 숫자 0, 스키마
-변경·잘못된 카운트·정규화 중복·256개 초과 표기 변형을 확인했다. 실제 D1/Collector
-퍼널 조회·DST·기존 분류와 합쳐 22/22, 마지막 오버플로/스키마 검사 보완 뒤 새 파일
-3/3 및 루트 TypeScript 검사를 통과했다. 운영 지연이나 개선 배율은 측정하지 않았다.
-HTTP API·DB·SQL·인덱스·의존성·CI·위생 설정 변경과 원격 반영은 없다.
-
-## 새 소스 사본의 타입 출력 폴더 (2026-10-23)
-
-collector:types·admin:types는 Node mkdirSync의 recursive 옵션으로 .tmp를 먼저 준비한다.
-기존 생성 경로·검사 순서·의존성은 유지한다. Windows에서 Git 추적 소스와 현재 package.json을
-별도 사본으로 복사하고 .tmp가 없는 것을 확인한 뒤 기존 node_modules를 junction으로
-연결해 npm run typecheck를 통과했다. Collector/Admin 바인딩·공통/runtime·관리자 타입을
-모두 확인했으며 새 의존성 설치나 운영 호출은 없다. 개발 안내와 이 기록을 갱신했다.
-HTTP API·DB·의존성·CI·위생 설정 변경은 없고 제품 동작이 같아 전체 테스트는 이 단계에서
-반복하지 않았다. 별도 사본은 기존 설치 의존성을 재사용한 검사이며 새 npm ci 검사는 아니다.
-
-## 서버 SDK 취소 이유 보존 (2026-10-23)
-
-limited의 내부 AbortController에 호출자의 parent.reason을 전달한다. 공개 DeliveryResult와
-재전송 정책은 유지한다. 소스/minified에서 토큰·전송·본문·대기 단계의 객체 동일성,
-공개 결과 비노출·시도 횟수·본문 정리·남은 타이머 0을 확인했다. 기한 회귀를 포함한
-집중 검사 8/8과 build:server를 통과했다(10,148 bytes, gzip 4,074 bytes, 런타임 의존성 0).
-서버 SDK 안내와 검증 기록을 갱신했다. HTTP API·DB·의존성·CI·위생 설정 변경 및
-푸시·배포·게시가 없고 실제 운영 전송은 검증하지 않았다.
-
-## 취소·기한 뒤 관리자 응답 정리 (2026-10-23)
-
-기본 fetch의 body를 보존하고 늦은 응답 도착과 요청 finally에서 한 번만 폐기한다.
-본문 정리 실패나 끝나지 않는 cancel Promise가 요청 종료를 막지 않는다. json-only
-주입 전송, 원래 취소 이유, HTTP 오류·GET 슬롯 수명은 보존한다. 기본/주입 전송의 늦은
-헤더·슬롯 반환 뒤 다음 조회, 정확한 기한에서 JSON 미실행과 본문 폐기, 정리 예외/정체를
-포함한 집중 검사 40/40, 관리자 전체 291/291, 관리자 타입 검사·빌드를 통과했다.
-프론트엔드 설계와 검증 기록을 갱신했다. HTTP API·DB·의존성·CI·위생 설정 변경은 없다.
-시각 변경이 없어 실브라우저 탐색은 생략했고 실제 운영 연결은 검증하지 않았다.
-
-## OIDC 실제 전송 슬롯 유지 (2026-10-23)
-
-키 조회의 기한 대기를 gate 바깥으로 옮겨, 호출자가 시간 초과로 반환한 뒤에도 실제
-fetch가 끝날 때까지 실행 슬롯을 유지한다. 실패는 슬롯 반환 전에 기록하고 작업마다
-한 번만 cooldown을 갱신한다. 늦은 실패는 기한 때의 cooldown을 연장하거나 더 새로운
-성공을 덮지 않는다. 실행 2·대기 32·5초 기한·30초 cooldown과 기존 null/401/503을 유지한다.
-취소 무시 전송 두 개 뒤 세 번째가 대기하는 점, 늦은 응답 폐기, 슬롯 반환 뒤 성공,
-실제 활성 전송 0과 Workers 조건의 실패 대기열을 포함해 인증/Collector 검사 27/27,
-루트 TypeScript 검사와 git diff --check를 통과했다. OIDC 안내와 이 기록을 갱신했다.
-HTTP API·DB·의존성·CI·위생 설정 변경 및 원격 반영은 없다. 실제 제공자 부하는 미검증이다.
-
-## 성능 개선 최종 연계 검증 (2026-10-23)
-
-루트 package script의 테스트 경로를 동시 실행 수 2·파일당 30초 기한으로 한 번 실행해
-전체 508/508을 통과했다(약 182초). 새 0011을 포함한 모든 로컬 D1 테스트와 기존
-수집·인증·관리자·운영 도구의 연계를 확인했다. Windows 접근/취소 검사 중 workerd가
-WSARecv #64 연결 종료 진단을 출력했으며 해당 검사와 전체 프로세스는 종료 코드 0이다.
-관리자 최종 전체 287/287, 번들/Sites 13/13, 루트·Collector runtime·관리자 타입 검사,
-관리자 빌드와 git diff --check도 통과했다. CI 러너나 의존성 변경은 없다.
-UI 탐색·운영 부하·대규모 인덱스 생성 측정은 실행하지 않았다. 새로운 시각 변경이 없고
-운영 설치 설정이 없기 때문이다. 로컬 합성 검증은 운영 성능 수치로 해석하지 않는다.
-원격 DB 마이그레이션·푸시·배포·게시·운영 연결은 하지 않았다.
-
-## 정리 작업의 페이지·시간 예산 (2026-10-23)
-
-runCleanup의 기존 필수 인자를 유지하고 선택적 clock·signal·maxPages를 추가했다.
-20초가 지나면 새 프로젝트/페이지를 시작하지 않으며 시도한 앞부분만 커서 CAS로 저장한다.
-실패 프로젝트 격리와 기존 보고 형태는 유지하고 취소 이유는 상위로 전달한다.
-커서 충돌·빈 페이지·이미 처리한 프로젝트에서 중단한다. 호스트의 cleanupMaxPages는
-1~4를 받으며 OIDC factory에서도 전달한다. 기본 한 페이지·5개·최대 50 SQL은 D1 Free
-예산을 보존한다. 충분한 쿼리 예산을 확인한 호스트만 최대 4페이지·20개·200 SQL을 선택한다.
-프로젝트별 테이블당 500행 한도와 순차 삭제를 유지한다.
-
-실제 scheduled Worker의 기본 5개 제한, 실제 D1의 다중 페이지 처리·커서, 20초 직전/정각/
-직후, 취소·CAS 충돌, 로그·CLI 검증을 합쳐 39/39를 통과했다. 확대된 보고 한도를
-로그 분석기와 관리자 보고서 검증기에도 반영했다. 관리자 전체 287/287, 번들 2/2와
-Sites 11/11, 루트/Collector runtime/관리자 TypeScript 검사와 관리자 빌드를 통과했다.
-소유 문서는 collector·retention-cleanup·LOG-SUMMARY·검증 기록이다. HTTP API·DB 구조·
-의존성·CI 러너·위생 설정 변경은 없다. 브라우저 화면 변경이 없어 추가 UI 탐색 검사는
-생략했다. 원격 부하·대량 만료 적체는 미검증이며 대량 정리는 수집/조회와 같은 DB를 쓴다.
-푸시·배포·원격 DB 적용은 하지 않았다.
-
-## 집계 조회 인덱스 0011 (2026-10-23)
-
-DBML·신규 0011 마이그레이션에 이벤트/퍼널 조회 인덱스를 추가했다. 실제 Miniflare D1의
-기존 queryStatements 실행 계획에서 이벤트 일별 조회의 임시 정렬이 사라지고, 퍼널은
-funnel_id·날짜 범위로 탐색하며 일별 단계 집계의 임시 정렬도 사라졌다. 퍼널 속성 분류의
-일자 내 dimension/step 정렬은 남는다. workflow는 효과가 없어 인덱스를 추가하지 않았다.
-이벤트/퍼널 응답 동일성, 원자적 실패 롤백, 부분/잘못된 인덱스 거부, 중복 적용 방지,
-기존 0006~0010 업그레이드와 실제 Wrangler 로컬 스키마 확인까지 21/21을 통과했다.
-루트 TypeScript 검사도 통과했다. 소유 문서는 DBML·마이그레이션 README·검증 기록이다.
-API·CI·의존성 변경은 없다. 대규모 인덱스 생성 시간·저장 비용·운영 부하는 미측정이며,
-추가 인덱스는 수집 쓰기 비용을 늘린다. 푸시·배포·원격 DB 적용은 수행하지 않았다.
-
-## 관리자 읽기 동시 실행 제한 (2026-10-23)
-
-ApiClient별 GET은 본문 읽기 완료까지 최대 4개, FIFO 대기열은 최대 64개로 제한한다.
-선택적 maxConcurrentReads는 1~16을 허용한다. 여유 슬롯은 즉시 할당하고 쓰기와
-공유 로그인 갱신은 대기열 밖에서 실행한다. 대기 시간도 기존 요청 기한에 포함한다.
-취소한 대기 요청은 제거하며 실제 전송이 취소를 무시하면 종료될 때까지 슬롯을 유지한다.
-쓰기 재시도는 추가하지 않았다. 관리자 전체 286/286, 관리자 타입 검사·빌드를 통과했다.
-외부 HTTP API·DB·의존성·CI 변경은 없고 브라우저 UI/원격 부하 검사는 생략했다.
-제한은 클라이언트 인스턴스별이므로 서버 전체의 실행 용량을 보장하지 않는다.
-푸시·배포·운영 연결은 하지 않았다.
-
-## 수집·집계 반복 탐색 인덱싱 (2026-10-23)
-
-이벤트·workflow 정의는 배치마다 한 번 인덱싱하며 기존 find의 첫 일치 규칙을 유지한다.
-속성 집계는 날짜별 typed Map을 사용해 null/문자/숫자/boolean 구분과 addCounts의
-오버플로 검사를 보존한다. 날짜 검사는 Set으로, 퍼널 delta는 단계별 그룹으로 바꿨다.
-출력 정렬과 퍼널 0→9 단계 실행 순서는 그대로다. Core/실제 D1 집계·퍼널·수집 검사
-77/77과 루트 TypeScript 검사를 통과했다. API·DB 구조·의존성·CI 변경과 원격 반영은 없다.
-
-## 의존성 장애 격리 최종 연계 확인 (2026-10-23)
-
-전체 503개를 동시 실행 수 2로 실행해 502개가 통과했다. 나머지 한 건은 의도적으로
-실패시킨 관리자 이력 쓰기를 여전히 apply_conflict로 기대한 기존 테스트였다.
-database_unavailable과 비공개 cause 보존을 기대하도록 수정한 뒤 해당 파일 6/6을
-재검증했다. 제품 코드는 변경하지 않았으며 전체 테스트는 반복하지 않았다.
-관리자 전체 280/280도 통과했다. 관리자 native redirect 테스트의 기존 cause 없음
-기대값은 cause 보존·JSON 비노출 검증으로 갱신했다. 전체 typecheck(Collector/Admin
-생성 바인딩·runtime 포함), 관리자 빌드, 계약 63개, SDK 102/102, 오프라인 SDK 소비자
-검사 및 브라우저 3KiB 검사를 통과했다.
-
-공개 계약 문서 변경은 OpenAPI의 OIDC 장애 503 분류와 요청 기한 설명이다. DB 구조·
-의존성·CI·저장소 위생 설정 변경은 없다. 실제 원격 장애·운영 설치·분산 부하 검증과
-원격 DB 적용·푸시·배포·게시는 수행하지 않았다. D1 쓰기는 대기 취소 뒤에도 완료될
-수 있고 실행 용량 제한은 Worker 인스턴스 단위다. 배포 시 쓰기 결과 확인 계약을
-유지해야 한다. UI 흐름 변경이 없어 추가 브라우저 탐색 검사는 실행하지 않았다.
-
-## 멱등 수집 재전송의 jitter (2026-10-23)
-
-브라우저/서버 SDK의 기존 지수 백오프와 Retry-After 하한에 최대 1초의 양수 jitter를
-더한다. 기본 전송은 Math.random을 사용하고 주입한 플랫폼은 선택적 random으로
-제어하며, 생략한 기존 주입 플랫폼은 기존 일정대로 동작한다. ID·본문·횟수·총시간
-한도와 인증/검증/충돌 거부의 무재시도를 유지한다. 브라우저 string body의 기본
-Content-Type은 Fetch가 제공하므로 중복 명시를 제거하고 실제 Request 헤더로 검증했다.
-SDK 검사 102/102, 루트 TypeScript 검사, 오프라인 SDK pack/외부 소비자 설치·선언
-컴파일·세 진입점 실행을 통과했다(네트워크/credential 요청 0회).
-브라우저 gzip은 Sembom 3050, 퍼널 3023, 생성 퍼널 3046 bytes로 3072 이하다.
-공개 HTTP API·DB·의존성·CI 변경과 푸시·배포·게시는 없다.
-
-## OIDC 제공자 장애와 인증 거부 구분 (2026-10-23)
-
-OIDC 검증은 선택적 throwDependencyErrors 호출 옵션으로 키 조회/용량/기한 오류의
-cause와 호출자 취소를 전달한다. 기본 직접 호출의 null 반환은 유지한다. Collector는
-이 옵션을 사용해 제공자 장애를 storage_unavailable 503으로, 잘못된 토큰은 기존
-unauthorized 401로 반환한다. OpenAPI에 장애 분류와 쓰기 시간 초과의 결과 불명을
-명시했다. 실제 Worker의 관리자/발행자 경로를 포함한 인증 검사 25/25, 계약 검사
-63개 및 루트 TypeScript 검사를 통과했다. 응답 형식·DB·의존성·CI 변경과 원격
-반영은 없다.
-
-## Collector 요청·DB 실행 격리 (2026-10-23)
-
-Worker 요청은 인증부터 DB 처리까지 15초의 공통 기한과 원래 취소 이유를 사용한다.
-DB 배치는 기한 이후 시작하지 않으며 대기 취소 뒤에도 실제 I/O가 끝나야 실행 슬롯을
-반환한다. Worker 인스턴스당 최대 16개이며 초과 시 대기열 없이 503을 반환한다.
-정리 Cron도 같은 용량 경계와 30초 기한을 사용한다. background 거부 집계의 기한은
-응답 반환 이후에도 유지한다. D1 batch 자체를 취소하거나 분산 전역 용량을 보장하지는
-않는다. 쓰기 후 시간 초과는 결과 불명이며 재전송하지 않는다.
-수명/실제 Worker/인증 순서/준비 상태/Cron 검사 17/17과 루트 TypeScript 검사를
-통과했다. HTTP 형식·DB·의존성·CI 변경과 원격 반영은 없다.
-
-## DB 오류 분류와 운영 정리 실패 보존 (2026-10-23)
-
-CollectionError/ProvisionError에 선택적 cause를 추가했다. 운영 도구는 확정된 CAS
-충돌만 apply_conflict로 분류하고 전송·잘못된 DB 응답은 database_unavailable로
-보존한다. 원격 쿼리의 정리 실패는 원래 오류를 덮지 않으며 쿼리 완료 뒤의 정리 실패는
-cleanup_failed로 별도 보고한다. 자동 쓰기 재시도는 추가하지 않았다. 운영 도구
-23/23(실제 로컬 D1/Wrangler 포함)과 루트 TypeScript 검사를 통과했다.
-공개 API·DB 구조·의존성·CI 변경 및 원격 호출·반영은 없다.
-
-## 로그인 장애 대기와 원인 보존 (2026-10-23)
-
-로그인 fetch/본문은 취소 신호로 대기를 끝내며 늦은 응답을 폐기한다. 끝나지 않는
-cancel Promise가 실패 반환을 막지 않는다. LoginError/ApiError는 비공개 cause를
-보존하고 API 취소는 호출자의 reason을 유지한다. 관리자 인증/클라이언트 49/49와
-관리자 TypeScript 검사를 통과했다. 공개 API·DB·의존성·CI 변경과 원격 반영은 없다.
+# Verification History 02
+
+This is a historical record that preserves the order of the original sections. Commands and code paths are relative to the repository root.
+
+## Integrated Overview Query Basis, Actual Periods, and Date Change Notice (2026-10-23)
+
+The screen preserves the server-generated per-service `period` (`timeZone`, `from/to`, `previousFrom/previousTo`) and `generatedAt`. It displays the UTC query basis time, the UTC range of actual rejection records, and the current and previous local dates for each service. Successful rows without a schema also provide a period, while error and lost-permission rows clear it with `period=null`. Responses from earlier servers without periods are shown as having no period information. The period is validated using server time, and the response is rejected if it differs from the existing project time zone.
+
+An open table uses only the local clock to recheck every 60 seconds and on focus or tab return. If a service date or UTC date changes, it displays a manual-refresh status notice and adds no API request. Hidden state stops the timer, and timers and event listeners are released on close, page, connection change, and unmount. The device clock is used only for the notice and does not determine the server period. There is no additional SQL.
+
+The full admin suite 309/309, bundle 2/2, Sites 11/11, the build, the full type check, contracts 64/64, and OpenAPI lint passed. The HTTP and client focused tests 29/29 include local midnight immediately before, exactly at, and immediately after the year-end and DST 23/25-hour boundaries, UTC midnight, invalid periods and time zones, frozen inputs, and timer and listener cleanup. Chromium 156.0.8078.4 tests with real local signed login and D1 verified the actual period and basis time display and the notice appearing and disappearing when the device time was changed to the next day and restored, while the integrated API request count remained 1. The existing sample, no-schema diagnostic, permission revocation, and CSV blocking tests also passed, and pageErrors and routeError were 0. The report is `.tmp/admin-goal-access-kw1bjM/report.json`. After completing the own-property check for period fields, related client tests 13/13 and `git diff --check` were rechecked. The unchanged full checks and browser test were not repeated.
+
+The owned documents are OpenAPI, the product spec, the admin boundary, frontend design, the performance budget, and this record. `period` was added to the API, while the required call arguments are preserved. There are no changes to the DB structure, migrations, SDK, dependencies, CI, or hygiene settings. The full root suite was replaced by related checks, and the general source lint command was skipped because no command exists. Real production load, remote D1, and long browser waits are unverified; time boundaries were checked with injected times. There was no push, deployment, production DB application, or publication.
+
+## Integrated Completion Rate Samples and Aggregation State (2026-10-23)
+
+Current and previous start, success, failure, and in-progress counts and `provisional` were added to `workflowStats`. The totals from the existing daily response and the per-date aggregation state are reused, so the SQL count remains unchanged. If there are no failure events, the failure count remains `null`; if the denominator is 0, the completion rate remains `null`. The admin displays the change in percentage points only when neither period is aggregating and each period has at least 30 starts. The 30-start threshold is a display-withholding policy, not a statistical test or an automatic warning threshold. Responses from an older server without the fields are accepted, but their change is withheld. The input is not mutated, and contradictions among counts, completion rates, permissions, and panel states are rejected.
+
+Focused tests 25/25, including the 29, 30, and 31 boundaries, a 0 denominator, frozen inputs, mismatches, and real D1; the root and admin type checks; and contracts 64/64 passed. Chromium 156.0.8078.4 with real local signed login and D1 verified current and previous success 1 / start 1 / in-progress 0 and that the comparison was withheld during aggregation. The existing no-schema diagnostic, permission revocation, and CSV blocking tests also passed, and pageErrors and routeError were 0. The report is `.tmp/admin-goal-access-S6fS0a/report.json`. In the initial type check, the return union was narrowed explicitly, and a fixture with no failure events was corrected from an expected 0 to `null` under the contract. OpenAPI, the product spec, the admin boundary, frontend design, and this record were updated. An API field was added, and there are no changes to the DB structure, migrations, SDK, dependencies, CI, or hygiene settings. The full root suite, production load, and remote D1 are unverified, and there was no push, deployment, or publication.
+
+## Ingestion and Rejection Diagnostics for Services Without an Active Schema (2026-10-23)
+
+Analytics for the integrated overview were separated from project diagnostics. When a schema is unpublished or all schemas are discarded, recent ingestion and rejection totals are still queried, while events and the completion rate remain `null`. If only the rejection read fails, the known recent ingestion is retained and the partial totals are not changed to 0. Permission loss on each page clears the ingestion and analytics already read. Admin response validation, screen descriptions, and workflow columns follow this distinction. The analytics batch is skipped when unnecessary, but project diagnostics continue to be read.
+
+The full admin suite 302/302, bundle 2/2, Sites 11/11, the build, the full type check, existing admin and D1 rejection regression 22/22, the new HTTP and client focused tests 21/21, OpenAPI contracts 64/64, and lint passed. The scopes overlap, so they are not added together. Chromium 156.0.8078.4 with real local signed login and D1 verified that after discarding another project's schema, recent ingestion and 3 rejections were shown together with the unavailable event comparison. The existing permission revocation, detailed-value and CSV blocking, and goals-query recovery also passed, and pageErrors and routeError were 0. The report is `.tmp/admin-goal-access-Ri6nv8/report.json`. After completing the preservation of the latest ingestion timestamp, HTTP, client, and page focused tests 25/25 passed again. The unchanged full checks and browser test were not repeated.
+
+The owned documents are the OpenAPI description, product spec, admin boundary, frontend design, performance budget, and this record. The existing HTTP fields and required call arguments are preserved, and project diagnostics were extended for `version=null`. There are no changes to the DB structure, migrations, dependencies, CI, or hygiene settings. The full root suite was replaced by scoped checks, and the general source lint command was skipped because no command exists. Because the SDK source was unchanged, the size check was not repeated. Real production load, maximum heap usage, and remote D1 are unverified, and there was no push, deployment, production DB application, or publication.
+
+## Sequential Page Aggregation of Integrated Overview Rejection Records (2026-10-23)
+
+The integrated overview separates rejection records from the analytics batch and aggregates them immediately in pages of 4,096 rows per service. It processes one page at a time and does not accumulate the raw arrays. The raw JSON limit is 8MiB per page and is not a measured JS heap limit. A test simulating a maximum 7-day range for 5 services observed 17 batches, 42 SQL statements, and a maximum of 4,096 returned rows. The number of calls increases compared with the existing 17 SQL statements, but the full raw records are not gathered into one batch. Permission is rechecked on every page, and revocation clears all rows, including existing analytics. A storage error, corruption, or overflow discards the partial totals, retains the cancellation reason, and prevents the next page from being read. Because each page is a snapshot, changes to historical per-minute records during the query are not re-read.
+
+The real local D1 test compared 4,097 rows with the existing detailed totals, and the focused tests 15/15 for maximum-size JSON, exact page boundaries, mid-page corruption and overflow, cursor regression, cancellation, and permission revocation passed. Existing rejection regression 7/7, the root and admin type checks, OpenAPI contracts 64/64, and lint also passed. The first test run failed because of a test class parameter property unsupported by Node strip-types; it passed after the property was changed to a general field. This is not interpreted as a product runtime failure. The owned documents are the OpenAPI description, admin boundary, frontend design, performance budget, and this record. There are no changes to HTTP fields, the DB structure, migrations, dependencies, CI, or hygiene settings. The full root suite and browser checks were skipped because this was an internal server change. Production load, maximum heap usage, remote D1, push, and deployment were not verified or run.
+
+## Batch Query for Service Integration Overview (2026-10-23)
+
+`GET /v1/overview` and the optional `AdminStore.overview` port and D1 implementation were added, and the admin integration overview was connected with 1 HTTP request. Up to 5 IDs are returned in input order, and the server selects the latest active version and the project-local current and previous 7 days. The two periods for events and workflows are read together; with 5 services on local D1, the test counted 2 batches and 17 SQL statements. When there is no active schema, it uses 1 metadata SQL statement. Remote latency and rows-read cost improvements were not measured.
+
+In the second batch, permissions and the selected schema are read again, and a row is cleared if the version, definition, or time zone differs. Unregistered and no-permission cases both produce `accessDenied`. A validation failure for workflow or rejection records isolates only that panel. A common SQL execution failure returns an overall 503. The cancellation reason, existing query deadline, and concurrent GET limit are preserved, and no next DB batch is started after cancellation. Cancellation of the D1 execution itself is not guaranteed. The shared rejection-response decoder is reused, and the latest active version in the editor snapshot is updated after a publication completes.
+
+The full admin tests and build, the full type check including Collector and Admin bindings and runtime, OpenAPI contracts 64/64, and lint passed. The final related admin, D1, HTTP, bundle, and Sites regression 74/74 and focused tests 19/19, including the earlier rejection regression, also passed. The test scopes overlap. Chromium 156.0.8078.4 with real local signed login and D1 verified 1 integrated overview request, the blocked detailed analytics and CSV for a permission-revoked row, and recovery of existing goals queries. pageErrors and routeError were both 0, and the report is `.tmp/admin-goal-access-pEpkjb/report.json`. After completing the final checks for the input snapshot copy and the active-version update after publication, related tests 41/41, root and admin type checks, and contracts 64/64 were rechecked. The unchanged full checks and browser test were not repeated. The initial browser test failed when it attempted to revoke the last owner of a synthetic auxiliary project; it was rechecked after a backup owner was registered. The time-zone direct-change race test was removed because the existing DB immutability trigger rejected it, and permission revocation and active-schema discard races were verified on real D1.
+
+The owned documents are OpenAPI, the product spec, the admin boundary, frontend design, the performance budget, and this record. The HTTP API and core storage port were added, and there are no changes to the DB structure, migrations, dependencies, CI, or hygiene settings. The full root suite was replaced by scoped verification, and there is no general source lint command. Because the browser SDK source was unchanged, the SDK size check was not repeated. Real production OIDC, remote D1, and production load are unverified, and there was no push, deployment, production DB application, or publication.
+
+## Latest Active Schema Metadata (2026-10-23)
+
+Latest-active-version calculation was added to the existing D1 batch for the schema list. It is independent of the page cursor, a discarded latest version, and a paused state, while the permission condition is preserved. The field was added to the OpenAPI and core response, and the admin preserves page navigation for responses from an older server. There are no changes to the DB structure, migrations, dependencies, or CI. Production D1, load, push, and deployment were not verified.
+
+Real local D1 publication and list tests and admin contract and automatic-selection tests 45/45, the root and admin type checks, and OpenAPI contracts 63/63 passed. The full tests and browser check were skipped because the UI did not change.
+
+## Final Local Application Check for 5 External Review Items (2026-10-23)
+
+The OIDC slot, admin body cleanup, server SDK cancellation reason and type output directory, and funnel dimension parsing were each fixed from the current source without a remote revision. A full root test of the changed product source used concurrency 2 and a 30-second per-test limit and completed 513 of 515 tests, with 1 failure and 1 timeout cancellation, in about 447 seconds with exit code 1. This is not reported as a full pass.
+
+- The local collector test in `runtime.test.ts` exceeded 30 seconds. A sequential recheck under the same 30-second limit passed in about 6.2 seconds and also verified listener cleanup. The cause of the delay under parallel execution was not confirmed.
+- In the existing native HTTP deadline test, when the request was cancelled before it reached the actual server, the server saw 1 body instead of the expected 2. The test retained real HTTP while using an injected clock to control elapsed time, removing its dependence on network speed and CPU busy-waiting. The changed file passed 4/4, and the subsequent sequential run of the two failing files passed 6/6. No product source outside those tests changed, and the full suite was not repeated.
+
+The full admin suite 291/291, bundle and Sites 13/13, authentication and Collector focused tests 27/27, funnel and D1 22/22 and the last new file 3/3, and server cancellation and deadline focused tests 8/8 passed. The scopes overlap, so they are not added together. `npm run typecheck` passed in a separate source copy on Windows without `.tmp`, and the root TypeScript check passed after the final funnel fix. The admin and server SDK builds and `git diff --check` were checked. The changed documents are the OIDC and server SDK guidance, frontend design, `DEVELOPMENT`, and this record.
+
+There are no changes to HTTP APIs, the DB, migrations, dependencies, CI, or hygiene settings. The public SDK's required inputs and outputs are preserved. There is no general lint command, and real browser navigation was skipped because there were no visual changes. Because the browser SDK source was unchanged, the size check was not repeated. The separate SDK distribution package consumer test was skipped, and source and minified regression plus the server build were used for verification. Real providers, production load, and remote D1 are unverified. There was no push, deployment, production DB application, or publication.
+
+## Removing Execution-Load Dependence from the Native HTTP Deadline Test (2026-10-23)
+
+The existing native HTTP test failed in a full run. It required the real network to finish within 50ms for the subsequent success and also used a 100ms CPU busy-wait. The test still uses real loopback HTTP and verifies retransmission with the same body, while processing time is advanced by an injected monotonic clock and timer callbacks are held so the test directly controls the condition in which the header and body deadline recheck rejects a late success. The changed file passed 4/4. There are no changes to product behavior, public APIs, the DB, dependencies, CI, or hygiene settings.
+
+## Reusing Funnel Dimension Parsing Within a Request (2026-10-23)
+
+`funnelBreakdown` reuses a dimension JSON's parsing, registered-property validation, and normalized combination and bucket keys up to 256 times within a request. Raw representation variants beyond 256 are not cached and are validated and normalized as before, so a valid input with the same normalized combination is not newly rejected. The cache is not shared across requests, schemas, or `groupBy` values. Date, step, per-row count, duplicate, order, and total-overflow checks are preserved. At a maximum of 79,360 rows, the test verified 256 `JSON.parse` calls, preservation of frozen input, a numeric 0 for a different `groupBy`, schema changes, invalid counts, normalization duplicates, and more than 256 representation variants. The real D1 and Collector funnel queries, DST, and existing classification tests passed 22/22, and after the final overflow and schema check fix, the new file 3/3 and the root TypeScript check passed. Production latency or an improvement factor was not measured. There are no changes to HTTP APIs, the DB, SQL, indexes, dependencies, CI, or hygiene settings, and no remote reflection.
+
+## Type Output Directories for a Fresh Source Copy (2026-10-23)
+
+`collector:types` and `admin:types` use Node `mkdirSync` with the recursive option to prepare `.tmp` first. Existing generation paths, check order, and dependencies are preserved. On Windows, Git-tracked source and the current `package.json` were copied to a separate directory, the absence of `.tmp` was confirmed, and the existing `node_modules` was linked through a junction so `npm run typecheck` passed. Collector and Admin bindings, common and runtime types, and admin types were all checked, and no new dependency was installed and no production call was made. The development guidance and this record were updated. There are no changes to HTTP APIs, the DB, dependencies, CI, or hygiene settings, and because product behavior was unchanged, the full tests were not repeated at this stage. The separate copy reused existing installed dependencies; this was not a new `npm ci` test.
+
+## Preserving the Server SDK Cancellation Reason (2026-10-23)
+
+The caller's `parent.reason` is passed to the inner `AbortController` in `limited`. The public `DeliveryResult` and retransmission policy are preserved. Source and minified tests verified object identity across the token, transport, body, and wait stages; that the public result is not exposed; the attempt count; body cleanup; and 0 remaining timers. The focused tests 8/8, including the deadline regression, and `build:server` passed (10,148 bytes, 4,074 bytes gzip, 0 runtime dependencies). The server SDK guidance and validation record were updated. There are no changes to HTTP APIs, the DB, dependencies, CI, or hygiene settings, and no push, deployment, or publication; actual production transmission was not verified.
+
+## Cleaning Up Admin Responses After Cancellation or Deadline (2026-10-23)
+
+The basic `fetch` body is preserved and discarded only once, on late response arrival and in the request `finally` block. A body cleanup failure or an unresolved cancel Promise does not prevent the request from ending. The json-only injected transport, the original cancellation reason, HTTP errors, and GET slot lifetime are preserved. Focused tests 40/40, including next queries after a late header and slot return for the basic and injected transports, no JSON execution and body disposal at the exact deadline, and cleanup exceptions and stalls, and the full admin suite 291/291, the admin type check, and the build passed. The frontend design and validation record were updated. There are no changes to HTTP APIs, the DB, dependencies, CI, or hygiene settings. Real browser navigation was skipped because there were no visual changes, and the actual production connection was not verified.
+
+## Keeping the Execution Slot for a Real OIDC Transmission (2026-10-23)
+
+The deadline wait for key lookup was moved outside the gate so that the execution slot remains held until the actual `fetch` finishes, even after the caller has returned due to a timeout. A failure is recorded before the slot is returned, and cooldown is refreshed only once per task. A late failure does not extend the cooldown from the deadline or overwrite a newer success. Execution 2, waiting 32, a 5-second deadline, a 30-second cooldown, and the existing `null`, 401, and 503 behavior are preserved. Authentication and Collector tests 27/27, including the third request waiting behind two sends that ignore cancellation, late-response disposal, success after slot return, 0 actual active transmissions, and the failure queue under Workers conditions, and the root TypeScript check and `git diff --check` passed. The OIDC guidance and this record were updated. There are no changes to HTTP APIs, the DB, dependencies, CI, or hygiene settings, and no remote reflection. Real provider load is unverified.
+
+## Final Cross-Component Verification of Performance Improvements (2026-10-23)
+
+The root package test path was run once with concurrency 2 and a 30-second per-file limit, and all 508/508 tests passed (about 182 seconds). All local D1 tests, including the new 0011, and the integration of existing ingestion, authentication, admin, and operations tools were checked. During the Windows access and cancellation tests, workerd printed a WSARecv #64 connection-close diagnostic; that test and the full process exited with code 0. The final full admin suite 287/287, bundle and Sites 13/13, root, Collector runtime, and admin type checks, the admin build, and `git diff --check` also passed. There are no changes to CI runners or dependencies. UI navigation, production load, and large-scale index construction measurements were not run. There were no new visual changes and no production installation configuration. Local synthetic verification is not interpreted as a production performance number. There was no remote DB migration, push, deployment, publication, or production connection.
+
+## Page and Time Budgets for Cleanup Work (2026-10-23)
+
+The existing required arguments to `runCleanup` are preserved, and optional `clock`, `signal`, and `maxPages` arguments were added. After 20 seconds, no new project or page is started, and only the attempted prefix is saved through cursor CAS. Failure-project isolation and the existing report shape are preserved, and the cancellation reason is propagated upward. The run stops on a cursor conflict, an empty page, or a project already processed. The host `cleanupMaxPages` accepts 1 through 4 and is also passed through the OIDC factory. The default of one page, 5 projects, and at most 50 SQL statements preserves the D1 Free budget. Only a host that has confirmed a sufficient query budget may choose up to 4 pages, 20 projects, and 200 SQL statements. The 500-row limit per project table and sequential deletion are preserved.
+
+The real scheduled Worker's default 5-project limit, real D1 multi-page processing and cursor, 20 seconds immediately before, exactly at, and immediately after, cancellation and CAS conflict, and log and CLI validation were combined into 39/39 passing tests. The expanded report limits were also reflected in the log analyzer and admin report validator. The full admin suite 287/287, bundle 2/2 and Sites 11/11, root, Collector runtime, and admin TypeScript checks, and the admin build passed. The owned documents are the collector, `retention-cleanup`, `LOG-SUMMARY`, and the validation record. There are no changes to HTTP APIs, the DB structure, dependencies, CI runners, or hygiene settings. Because there were no browser screen changes, additional UI navigation tests were skipped. Remote load and a large expired backlog are unverified, and bulk cleanup shares the DB with ingestion and queries. There was no push, deployment, or remote DB application.
+
+## Aggregation Query Index 0011 (2026-10-23)
+
+Event and funnel query indexes were added to DBML and the new 0011 migration. In the real Miniflare D1 query plan for the existing `queryStatements`, the temporary sort for daily event queries disappeared, funnel queries seek by `funnel_id` and date range, and the temporary sort for daily step aggregation also disappeared. Dimension and step sorting within a date for funnel property classification remains. Workflow showed no benefit, so no index was added. Event and funnel response equivalence, atomic failure rollback, rejection of partial and invalid indexes, prevention of duplicate application, and upgrade from the existing 0006 through 0010 plus verification of the actual Wrangler local schema passed 21/21. The root TypeScript check also passed. The owned documents are DBML, the migration README, and the validation record. There are no API, CI, or dependency changes. Large index construction time, storage cost, and production load were not measured, and an additional index increases ingestion write cost. There was no push, deployment, or remote DB application.
+
+## Concurrent Admin Read Limit (2026-10-23)
+
+GET requests per `ApiClient` are limited to 4 until the body has been read, and the FIFO queue is limited to 64. The optional `maxConcurrentReads` accepts 1 through 16. A free slot is assigned immediately, and writes and shared login refresh run outside the queue. Wait time is included in the existing request deadline. A cancelled waiting request is removed, but if the actual send ignores cancellation, its slot remains held until it finishes. No write retry was added. The full admin suite 286/286 and the admin type check and build passed. There are no changes to external HTTP APIs, the DB, dependencies, or CI, and browser UI and remote load tests were skipped. The limit is per client instance and does not guarantee server-wide execution capacity. There was no push, deployment, or production connection.
+
+## Indexing for Repeated Collection and Aggregation Traversal (2026-10-23)
+
+Event and workflow definitions are indexed once per batch, and the existing first-match rule for `find` is preserved. Property aggregation uses a per-date typed `Map` to preserve the distinction among `null`, strings, numbers, and booleans and the overflow check in `addCounts`. Date checks use a `Set`, and funnel deltas use groups by step. Output sorting and the funnel 0→9 step execution order remain the same. Core and real D1 aggregation, funnel, and ingestion tests 77/77 and the root TypeScript check passed. There are no changes to APIs, the DB structure, dependencies, or CI, and no remote reflection.
+
+## Final Cross-Component Verification of Dependency Failure Isolation (2026-10-23)
+
+All 503 tests were run with concurrency 2, and 502 passed. The remaining test was an existing test that still expected an intentionally failed admin history write to return `apply_conflict`. After it was changed to expect `database_unavailable` and preservation of a private cause, that file passed 6/6. No product code changed, and the full test suite was not repeated. The full admin suite 280/280 also passed. The existing no-cause expectation in the admin native redirect test was updated to verify cause preservation and JSON non-exposure. The full type check, including Collector and Admin generated bindings and runtime, the admin build, 63 contracts, SDK 102/102, the offline SDK consumer test, and the browser 3KiB test passed.
+
+The public contract document changes are the OIDC failure 503 classification and request-deadline description in OpenAPI. There are no changes to the DB structure, dependencies, CI, or repository hygiene settings. Real remote failure, production installation, distributed-load verification, remote DB application, push, deployment, and publication were not performed. A D1 write may complete after a waiting cancellation, and execution capacity is limited per Worker instance. Deployments must preserve the write-result confirmation contract. There were no UI flow changes, so additional browser navigation tests were not run.
+
+## Jitter for Idempotent Collection Retransmission (2026-10-23)
+
+Positive jitter of up to 1 second is added to the existing exponential backoff and Retry-After lower bound in the browser and server SDKs. The default transport uses `Math.random`, an injected platform can control it through an optional `random`, and existing injected platforms that omit it behave on the previous schedule. The ID, body, count, and total-time limits and the no-retry behavior for authentication, validation, and conflict rejection are preserved. Because Fetch supplies the default Content-Type for a browser string body, the duplicate specification was removed and verified through the actual Request headers. SDK tests 102/102, the root TypeScript check, the offline SDK pack, external consumer installation, declaration compilation, and execution of the three entry points passed (0 network or credential requests). Browser gzip sizes were 3050 bytes for Sembom, 3023 bytes for funnel, and 3046 bytes for generated funnel, all within 3072. There are no changes to public HTTP APIs, the DB, dependencies, or CI, and no push, deployment, or publication.
+
+## Distinguishing OIDC Provider Failures from Authentication Rejection (2026-10-23)
+
+OIDC validation now has an optional `throwDependencyErrors` call option that propagates the cause of key lookup, capacity, and deadline errors and caller cancellation. The default direct call still returns `null`. The Collector uses this option to return provider failures as `storage_unavailable` 503 and invalid tokens as the existing `unauthorized` 401. OpenAPI documents the failure classification and the indeterminate result of a write timeout. Authentication tests 25/25, including the actual Worker admin and publisher paths, 63 contract tests, and the root TypeScript check passed. There are no changes to response formats, the DB, dependencies, or CI, and no remote reflection.
+
+## Collector Request and DB Execution Isolation (2026-10-23)
+
+A Worker request uses a common 15-second deadline from authentication through DB processing and preserves the original cancellation reason. A DB batch does not start after the deadline, and the execution slot is returned only after the actual I/O finishes even if the wait was cancelled. Each Worker instance allows at most 16 executions and returns 503 without waiting when the limit is exceeded. The cleanup Cron uses the same capacity boundary and a 30-second deadline. The background rejection-aggregation deadline remains in effect after the response is returned. The D1 batch itself is not cancelled and distributed global capacity is not guaranteed. A timeout after a write leaves the result unknown and the request is not retransmitted. Lifetime, real Worker, authentication-order, readiness, and Cron tests 17/17 and the root TypeScript check passed. There are no changes to HTTP formats, the DB, dependencies, or CI, and no remote reflection.
+
+## DB Error Classification and Retention of Production Cleanup Failures (2026-10-23)
+
+An optional `cause` was added to `CollectionError` and `ProvisionError`. The operations tools classify only a confirmed CAS conflict as `apply_conflict` and retain transport and invalid DB responses as `database_unavailable`. A cleanup failure on a remote query does not overwrite the original error, and a cleanup failure after the query completes is reported separately as `cleanup_failed`. No automatic write retry was added. Operations tools 23/23, including real local D1 and Wrangler, and the root TypeScript check passed. There are no changes to public APIs, the DB structure, dependencies, or CI, and no remote calls or reflection.
+
+## Login Failure Wait and Cause Preservation (2026-10-23)
+
+Login `fetch` and body waits end on the cancellation signal and discard late responses. An unresolved cancel Promise does not block the failure return. `LoginError` and `ApiError` preserve a private `cause`, and API cancellation preserves the caller's reason. Admin authentication and client tests 49/49 and the admin TypeScript check passed. There are no changes to public APIs, the DB, dependencies, or CI, and no remote reflection.
