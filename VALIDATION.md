@@ -1,5 +1,49 @@
 # Validation
 
+## Paid distributed fixed-rate ingestion — 2026-10-25
+
+The first distributed fixed-rate attempt on unchanged Collector version
+`b6498981-83b7-4fd9-b736-404cf91e8f0c` used four separate disposable projects
+that shared one analytics D1 database; it did not shard the database. The r4
+phase passed 240/240 HTTP 200. The r8 phase stopped after 118 attempts: 117 HTTP
+200 and one status 0 over a 15.363-second response window. No raw exception was
+retained, so the network cause is UNKNOWN. Its failed batch stored zero events,
+and this stop is not a server capacity boundary.
+
+The manual fresh-project recheck's network-error capture adds only sanitized
+name, code, causeName, and causeCode fields, with no message. The rerun used a
+2000 ms scheduler-lag ceiling and a 64-request HTTP concurrency cap, with no
+client retries. Its r8, r12, and r16 phases returned HTTP 200 for every request:
+
+| Phase | Offered load | Responses | Client p95 / max | Response window | Scheduler max lag |
+| --- | --- | --- | --- | --- | --- |
+| r8 | 8 requests/s for 60 s (480 planned) | 480 / 480 HTTP 200 | 1794.447 / 2511.330 ms | 60.681 s | 1791.37 ms |
+| r12 | 12 requests/s for 60 s (720 planned) | 720 / 720 HTTP 200 | 1489.835 / 2580.781 ms | 60.424 s | 100.36 ms |
+| r16 | 16 requests/s for 60 s (960 planned) | 960 / 960 HTTP 200 | 1813.028 / 4050.729 ms | 61.271 s | 516.36 ms |
+
+The r8 maximum lag stayed below the 2000 ms ceiling, but a short catch-up burst
+is possible. The r12 and r16 maximum lags were 100.36 ms and 516.36 ms.
+
+At 24 requests/s, the recheck stopped after 240 HTTP 200 and one HTTP 503 among
+241 requests, over an 11.9078994-second response window. Tail correlation
+attributes the 503 to a `commit`/`revision_conflict` failure exhausted at attempt
+8. Its failed batch stored zero event IDs. The 32 requests/s phase was not run.
+
+Each request used a 20-event batch with six complete three-step funnels and two
+page views; every fifth request (20%) replayed the preceding body. Per-project
+database assertions and all before/after probes passed, with no in-load sentinel
+checks. Both reports set `allProjectsPaused: true`.
+
+Tail coverage was partial. The first fixed-run tail retained 274 of 362 expected
+invocations (75.7%); one additional soak-phase row was excluded from that count.
+The recheck tail retained 1448 of 2409 (60.1%). Neither is a full census, and the
+missing rows cannot establish the absence of other platform failures.
+
+These runs did not change source or deployment. Temporary drivers passed
+`node --check`. Application tests were skipped because application code was
+unchanged. A new five-minute distributed soak at 16 requests/s is still running;
+this record does not claim its completion or result.
+
 ## Paid single-project sustained ingestion — 2026-10-25
 
 A five-minute, single-project target at 4 requests/s first stopped with
