@@ -1,10 +1,37 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { Miniflare, Log, LogLevel } from 'miniflare';
 import { hashPassword } from 'better-auth/crypto';
 import { bootstrapSql } from '../src/bootstrap.ts';
+
+test('Workers body overflow returns while transport cancellation is still pending', async () => {
+  const bundle = await build({ stdin: { resolveDir: fileURLToPath(new URL('../', import.meta.url)), contents: `
+    import { readAuthBody } from './src/bounded-body.ts';
+    export default { async fetch() {
+      let finishCancel, cancellations = 0, watchdog;
+      const held = new Promise(resolve => { finishCancel = resolve; });
+      const body = new ReadableStream({
+        start(controller) { controller.enqueue(new Uint8Array(16385)); },
+        cancel() { cancellations++; return held; }
+      });
+      const pending = readAuthBody(body, new AbortController().signal).then(() => 'accepted', error => error.name);
+      try {
+        const outcome = await Promise.race([pending, new Promise(resolve => {
+          watchdog = setTimeout(() => resolve('still_pending'), 100);
+        })]);
+        return Response.json({ outcome, cancellations, locked: body.locked });
+      } finally { clearTimeout(watchdog); finishCancel(); await pending; }
+    } };` }, bundle: true, write: false, format: 'esm', target: 'es2023' });
+  const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text,
+    compatibilityDate: '2026-07-30', log: new Log(LogLevel.NONE) });
+  try {
+    const response = await mf.dispatchFetch('https://auth.example.invalid');
+    assert.deepEqual(await response.json(), { outcome: 'RangeError', cancellations: 1, locked: false });
+  } finally { await mf.dispose(); }
+});
 
 test('Workers/D1 runtime signs in with native scrypt, closes signup and management routes, bounds bodies and preserves private metadata', async () => {
   const origin = 'https://auth.example.invalid', adminOrigin = 'https://admin.example.invalid';

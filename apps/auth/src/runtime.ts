@@ -1,12 +1,12 @@
 import { createAuth } from './auth.ts';
 import { loginPage, passwordPage, loginScript, loginStyle } from './pages.ts';
+import { readAuthBody } from './bounded-body.ts';
 export { MaintenanceClock } from './maintenance.ts';
 
 const cache = new WeakMap<object, ReturnType<typeof createAuth>>();
 const reads = new Set(['/api/auth/.well-known/openid-configuration', '/api/auth/.well-known/oauth-authorization-server',
   '/api/auth/jwks', '/api/auth/oauth2/authorize', '/api/auth/get-session']);
 const writes = new Set(['/api/auth/sign-in/email', '/api/auth/sign-out', '/api/auth/change-password', '/api/auth/oauth2/token']);
-const BODY_LIMIT = 16384;
 
 async function boundedRequest(request: Request, secret: string) {
   const headers = new Headers(request.headers);
@@ -17,21 +17,8 @@ async function boundedRequest(request: Request, secret: string) {
   headers.set('cf-connecting-ip', pseudoIp);
   headers.delete('x-forwarded-for'); headers.delete('x-real-ip');
   if (!request.body) return new Request(request, { headers });
-  const reader = request.body.getReader(); const chunks: Uint8Array[] = []; let size = 0;
   const deadline = AbortSignal.any([request.signal, AbortSignal.timeout(10000)]);
-  const abort = () => { void reader.cancel().catch(() => {}); };
-  deadline.addEventListener('abort', abort, { once: true });
-  try {
-    while (true) {
-      deadline.throwIfAborted();
-      const next = await reader.read(); deadline.throwIfAborted(); if (next.done) break;
-      size += next.value.byteLength;
-      if (size > BODY_LIMIT) { await reader.cancel(); throw new RangeError('Request too large'); }
-      chunks.push(next.value);
-    }
-  } finally { deadline.removeEventListener('abort', abort); reader.releaseLock(); }
-  const bytes = new Uint8Array(size); let offset = 0;
-  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  const bytes = await readAuthBody(request.body, deadline);
   return new Request(request.url, { method: request.method, headers, body: bytes, redirect: 'manual', signal: request.signal });
 }
 

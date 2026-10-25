@@ -1,5 +1,36 @@
 # Validation
 
+## Authentication request body cleanup — 2026-10-26
+
+- Reproduced the original `boundedRequest` behavior in Node and the installed
+  workerd: a 16,385-byte stream with a held underlying cancellation promise
+  remained pending after caller abort and a 50 ms observation window. The
+  reproduction resolved that promise afterwards and disposed its runtime.
+  This is a controlled local failure case, not an observed production incident.
+- Extracted the body reader into `apps/auth/src/bounded-body.ts`. Cleanup no
+  longer awaits transport cancellation. Abnormal exits request cancellation
+  once, remove the abort listener and release the reader lock in `finally`.
+  Successful EOF does not cancel. The original error or abort reason propagates;
+  rejected cleanup cannot replace the size-limit error. Completion of underlying
+  transport cleanup itself is not guaranteed by this change.
+- The 16 KiB cap, 10-second body deadline, request-header pseudonymization,
+  authentication/authorization order and public response contracts are unchanged.
+  `RangeError` still maps to HTTP 413; other body failures retain HTTP 503 handling.
+- `npm run test:auth`: 13/13 passed. Six focused reader cases cover empty input,
+  16,383/16,384/16,385-byte boundaries, stalled and rejected cancellation,
+  pre-aborted input, abort during a pending read, and stream errors. A seventh
+  new case verifies stalled cancellation in workerd; the existing real Worker/D1
+  test also confirms oversized public requests return 413 and login still succeeds.
+  The maintenance failure diagnostic in the suite is intentional failure coverage.
+- `npm run auth:types`: passed with generated Worker bindings. Extraction initially
+  widened the returned buffer type; declaring its actually allocated ArrayBuffer
+  backing fixed that compile error without another allocation or runtime change.
+  `git diff --check`: passed.
+- Only this validation record changed among the source-of-truth documents. API/DB
+  schemas, SDKs, dependencies, hygiene rules, CI/runners and Worker configuration
+  are unchanged. Unrelated suites and remote fault/load tests were not rerun for
+  this isolated auth-body change. No push, deployment or publication.
+
 ## Independent-site SDK delivery — 2026-10-26
 
 - `sdk:bundle` built clean source commit `231e2f38bcca03d1d1705b92c336dfe65a9b8a17`
