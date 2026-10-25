@@ -38,6 +38,7 @@
     "verify:restore": "node tools/runtime/restore-drill.ts",
     "verify:sdk-packages": "node tools/sdk/verify-packages.mjs",
     "sdk:bundle": "node tools/sdk/distribute.mjs",
+    "site:prepare": "node tools/runtime/prepare-site.ts",
     "logs:summary": "node tools/runtime/summarize-observations.ts",
     "collector:dev": "node tools/runtime/dev.ts",
     "collector:config": "node tools/runtime/prepare.ts",

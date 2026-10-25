@@ -1,0 +1,9 @@
+{
+  "project": { "id": "independent-example", "name": "Independent site example", "timeZone": "Asia/Seoul" },
+  "collectorOrigin": "https://tallyfin-admin.example.invalid",
+  "allowedOrigins": ["https://tools.example.invalid"],
+  "locales": ["en", "ko"],
+  "pages": ["home", "tool", "other"],
+  "tools": ["calculator", "converter"],
+  "limits": { "requestsPerMinute": 120, "newReceiptsPerUtcDay": 100000 }
+}
