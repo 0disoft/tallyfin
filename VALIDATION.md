@@ -1,5 +1,72 @@
 # Validation
 
+## Paid capacity closeout — 2026-10-25
+
+The final distributed soak offered an aggregate 8 requests/s for 300 seconds
+across four projects sharing one analytics D1. It completed 2400/2400 HTTP 200
+requests with 38400 accepted events and 9600 duplicates over a
+301.0166322-second response window. The client made no retries. Client p95/max
+was 1608.941/3114.736 ms; maximum active concurrency was 15 and maximum
+scheduler lag was 94.1995 ms. Observed completion and acceptance rates were
+7.97298 requests/s and 127.5677 events/s.
+
+Each project held 9600 receipts and 2880 funnel runs, with each of the three
+funnel counts at 2880; the four-project total was 11520 funnel runs. The tail
+retained 1825 of 2402 expected invocations (76.0%), with 299 conflicts, maximum
+attempt 3, no exhausted retries, and no observed failed invocations. It is
+partial and not a full census.
+
+The verified comparison is 4 requests/s for five minutes on one project:
+1200/1200 HTTP 200 with client p95 1401.805 ms. Distributed 12 and 16 requests/s
+five-minute targets failed on one 503 each. The earlier 60-second distributed 16
+requests/s pass (960/960, maximum active 42) does not establish sustainable 16
+requests/s. The latest 8 requests/s run is a verified workload, not an absolute
+maximum or SLO.
+
+Cleanup SQL confirmed all 83 `verify-load-20261025-*` projects paused, with tail
+process count 0; all nine program reports set `allProjectsPaused: true`. HEAD
+requests to https://8ailors.xyz/ko/ and https://account.8ailors.xyz/ko/login
+returned 200; this checks reachability, not real authentication.
+
+Collector version `b6498981-83b7-4fd9-b736-404cf91e8f0c` remained at 100% with
+`usage_model = 'standard'`; the Paid purchase was confirmed earlier.
+
+Test-data writes and the account plan were authorized remote changes. No
+application, API/DB/SDK contract, dependency, CI, CPU configuration, or new
+deployment changed. Temporary drivers passed `node --check`. Full application
+suites were skipped because application code was unchanged; 69 contract checks passed. Multi-region and
+whole-service failover were not tested. Local commits were not pushed.
+
+## Paid distributed sustained-load failures — 2026-10-25
+
+Two five-minute distributed targets stopped on their first 503.
+
+| Target | Attempts / planned | Responses | Accepted / duplicates | Response window | Observed completion rate |
+| --- | --- | --- | --- | --- | --- |
+| 16 requests/s for 300 s | 105 / 4800 | 104 HTTP 200 + one 503 | 1660 / 420 | 7.8114943 s | 13.442/s |
+| 12 requests/s for 300 s | 1471 / 3600 | 1470 HTTP 200 + one 503 | 23520 / 5880 | 124.0459233 s | 11.859/s |
+
+The rates use observed response windows, not the planned 300-second durations.
+Both 503s were `storage_unavailable`. Exact request-ID correlation in the tails
+matched each to a `commit`/`revision_conflict` failure exhausted at attempt 8.
+The drivers stopped offering work on the first failure, drained in-flight
+requests, paused all projects, and then read integrity.
+
+No failed or partial event writes were found. Stored receipts matched stored
+events, all three funnel aggregates matched, and both reports set
+`allProjectsPaused: true`. Before and after probes returned 200; no sentinel
+checks ran during load.
+
+Tail coverage was partial: 90 of 107 expected invocations for the 16 requests/s
+run and 747 of 1473 for the 12 requests/s run. Neither is a full census.
+
+The source and deployed Collector version
+`b6498981-83b7-4fd9-b736-404cf91e8f0c` were unchanged. Each run used four fresh
+project IDs on the same analytics D1 database. These results supersede treating
+the earlier 60-second 16 requests/s pass as sustainable capacity. An 8
+requests/s five-minute follow-up is still running; this record does not include
+its result.
+
 ## Paid distributed fixed-rate ingestion — 2026-10-25
 
 The first distributed fixed-rate attempt on unchanged Collector version
@@ -159,8 +226,6 @@ contracts, dependencies, and CI are unchanged.
 Exact account-wide usage and invoice totals are unmeasured. Shared Paid
 allowances do not isolate billing or resolve revision conflicts. Next
 measurements are ongoing; this record makes no claim about their results.
-
-Modified file: `VALIDATION.md`.
 
 ## Continuous-request contention boundary — 2026-10-25
 
