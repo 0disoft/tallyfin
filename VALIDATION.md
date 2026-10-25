@@ -1,5 +1,77 @@
 # Validation
 
+## Deployed site action funnels — 2026-10-25
+
+[Schema 2](examples/0disoft/registry-v2.json) adds six browser action events and
+two ordered funnels to `zerodi-site`. Schema 1 remains active and unchanged for
+older tabs. The trusted provisioner applied the reviewed schema before site
+rollout. Existing page-category/language enums are reused; seven event types
+each have at most 42 combinations and each funnel has six language groups.
+No new administrator grants, publisher identities or credentials were needed.
+
+- `story_sharing`: story opened → copy attempted → clipboard helper succeeded.
+  One run per consented story navigation; failure/retry preserves the first
+  attempt milestone and does not invent success. Native share-sheet success
+  and external social links are not treated as copied links.
+- `search_discovery`: 160 ms debounced search executed → result clicked in the
+  current tab → navigation completed to that exact path. New queries invalidate
+  previous selections; different destinations and new tabs do not complete it.
+- The browser keeps random task contexts only in tab memory, never cookies or
+  persistent browser storage. A path used to match navigation stays local.
+  Only finite `section`/`locale` properties are transmitted, along with the
+  existing SDK task envelope. Search text, URLs, titles, slugs, clipboard
+  contents and visitor identities are excluded. Language is fixed at run start.
+  Withdrawal destroys delivery and contexts and invalidates late completions.
+
+Site commit `7869f3f15d194e52fea4903e119fa875d31b3ce6` implements the hooks,
+privacy wording in six locales, tests and a reusable browser action journey.
+[Pages run 40180453609](https://github.com/0disoft/0disoft.github.io/actions/runs/40180453609)
+succeeded. No extra CI job, schedule or deployment workflow was added.
+
+- All 153 site tests across 26 files passed, including copy failure/retry,
+  once-only completion, navigation/withdrawal/reconsent races, rejected starts,
+  search invalidation, unique run IDs and mismatched destinations. Svelte check
+  reported 0 errors and warnings; lint, formatting, six-locale validation and
+  production build/index passed (828 indexed pages). The existing CI checks
+  also passed against the pushed commit.
+- The isolated Chromium action journey passed using real Pagefind navigation
+  and native clipboard success, followed by forced failure of both clipboard
+  paths on a new story. It observed 11 events, two complete runs and one copy
+  run without success. It intercepted collection and made no remote writes.
+- The same journey passed on the deployed site in Chromium 156.0.8078.4. All
+  11 tested event IDs were present in remote D1 receipts. The three stored run
+  states had reached flags `[1,1,1]` (search), `[1,1,1]` (copy success) and
+  `[1,1,0]` (copy failure). Aggregate deltas were search `[1,1,1]` and copy
+  `[2,2,1]`. Before consent and after withdrawal, requests were zero; page
+  errors were zero. Unrelated Google/advertising requests were blocked.
+- Replaying the seven-event action batch returned HTTP 200 with
+  `{accepted:0,duplicates:7}` and left aggregate rows unchanged.
+- The first live journey reached the same milestones, but its harness waited
+  for one browser response notification per request and timed out. The SDK
+  cancels response bodies; Chromium can report `net::ERR_ABORTED` and omit a
+  response notification even after D1 has accepted the batch. The corrected
+  harness requires observed statuses to be 200 and verifies every event ID,
+  stored ordered run state and aggregate delta directly. The additional live
+  journey left cumulative counts search `[2,2,2]`, copy `[4,4,2]`. These include
+  intentional test failures and are not organic traffic conversion rates.
+- The existing signed-in administrator selected schema 2 after refresh. In
+  Goals, both funnel definitions were visible. Authenticated reads displayed
+  cumulative copy as 2/4 completed (50%) and search as 2/2 (100%), matching
+  the remote state. No credential was read from the tab.
+
+The 69 contract checks passed, including changed documentation links; these
+checks do not execute Collector or auth runtime behavior.
+
+Ignored evidence is `.tmp/0disoft-actions-live-report.json`, its input snapshot,
+and `.tmp/0disoft-actions-live.png`. Source-of-truth updates are the example
+registry/README, product spec, roadmap, workspace boundaries and this record.
+No analytics API or logical DB contract, runtime Worker, migration, dependency,
+repository hygiene or runner count changed. No npm publication or Tallyfin
+redeployment was necessary. The unchanged full Tallyfin runtime suites were
+not repeated; actual deployed ingestion, D1 state and authenticated analysis
+were tested. This does not establish server-side business completion, actual
+social posting, unique people, production load/SLOs or remote backup/recovery.
+
 ## First deployed service pilot: 0disoft.github.io — 2026-10-25
 
 Registered project `zerodi-site` with the reviewed schema 1 in

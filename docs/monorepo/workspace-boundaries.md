@@ -1,6 +1,6 @@
 # Workspace Boundaries
 
-Status: The packages below are implemented locally. The initial Better Auth/Collector/administrator installation and the 0disoft.github.io page-view pilot were deployed and verified on 2026-10-25; broader workflow integration and remote recovery remain follow-ups. See [validation evidence](../../VALIDATION.md).
+Status: The packages below are implemented locally. The initial Better Auth/Collector/administrator installation and the 0disoft.github.io page-view/search/link-copy pilot were deployed and verified on 2026-10-25; server business-event integration and remote recovery remain follow-ups. See [validation evidence](../../VALIDATION.md).
 
 ## Created packages
 - packages/core — Per-project event and property definitions, validation, normalization, hashing, and goal and aggregation rules (no private ZDP or Cloudflare dependency). Local implementation and verification are complete.

@@ -2,7 +2,7 @@
 
 Tallyfin is a lightweight product event analytics platform shared across Rodisoft services. Per-project configuration counts different actions such as sign-ups, file conversions, purchases, and calculations while minimizing personal data collection. Sembom is a reference integration; [0disoft.github.io](examples/0disoft/README.md) is the first deployed service pilot.
 
-This document guides local development and self-hosting. The initial Rodisoft installation was deployed to Cloudflare on 2026-10-25 with Better Auth, separate auth/analytics D1 databases, and a private Collector service binding. Real browser sign-in, administrator reads, recurring maintenance and the consented 0disoft.github.io page-view pilot were verified. Remote backup/recovery remains a follow-up. See [Better Auth setup](docs/backend/better-auth.md) and [validation evidence](VALIDATION.md).
+This document guides local development and self-hosting. The initial Rodisoft installation was deployed to Cloudflare on 2026-10-25 with Better Auth, separate auth/analytics D1 databases, and a private Collector service binding. Real browser sign-in, administrator reads, recurring maintenance and the consented 0disoft.github.io page-view, search and link-copy funnels were verified. Remote backup/recovery remains a follow-up. See [Better Auth setup](docs/backend/better-auth.md) and [validation evidence](VALIDATION.md).
 
 ## What works locally now
 
