@@ -4,21 +4,25 @@ import type { IngestPlan, PreparedBatch, PreparedServerBatch, ServerPrincipal } 
 import { bulk } from './sql.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase, SqlStatement } from './sql.ts';
 import { funnelStatements } from './funnels.ts';
+import { ingestStateGuard } from './ingest-state-guard.ts';
+import type { readIngestSnapshot } from './ingest-snapshot.ts';
 
 /** Statement construction only; the caller executes the entire guarded batch atomically. */
 export function ingestStatements(db: SqlDatabase, batch: PreparedBatch | PreparedServerBatch, project: ProjectRow,
-  schema: SchemaRow, plan: IngestPlan, publisher?: ServerPrincipal): SqlStatement[] {
+  schema: SchemaRow, plan: IngestPlan, snapshot: Awaited<ReturnType<typeof readIngestSnapshot>>, publisher?: ServerPrincipal): SqlStatement[] {
   const utcDate = new Date(batch.receivedAt).toISOString().slice(0, 10);
+  const guard = ingestStateGuard(batch, snapshot, plan.receipts.length);
   const statements: SqlStatement[] = [db.prepare(`UPDATE projects SET
-    ingest_revision = CASE WHEN ingest_revision = ? AND status = 'active' AND time_zone = ?
+    ingest_revision = CASE WHEN status = 'active' AND time_zone = ?
       AND allowed_origins_json = ? AND new_receipts_per_utc_day = ? AND requests_per_minute = ?
       AND EXISTS (SELECT 1 FROM project_schemas WHERE project_id = ? AND version = ? AND status = 'active' AND definitions_json = ?)
       ${publisher ? 'AND EXISTS (SELECT 1 FROM project_publishers WHERE project_id = ? AND issuer = ? AND subject = ?)' : ''}
+      AND ${guard.sql}
       THEN ingest_revision + 1 ELSE -1 END,
-    latest_received_at = max(coalesce(latest_received_at, 0), ?) WHERE id = ?`).bind(project.ingest_revision, project.time_zone,
+    latest_received_at = max(coalesce(latest_received_at, 0), ?) WHERE id = ?`).bind(project.time_zone,
       project.allowed_origins_json, project.new_receipts_per_utc_day, project.requests_per_minute,
       batch.projectId, batch.schemaVersion, schema.definitions_json,
-      ...(publisher ? [batch.projectId, publisher.issuer, publisher.subject] : []), batch.receivedAt, batch.projectId)];
+      ...(publisher ? [batch.projectId, publisher.issuer, publisher.subject] : []), ...guard.bindings, batch.receivedAt, batch.projectId)];
   statements.push(...bulk(db, 'event_receipts', ['project_id', 'source', 'event_id', 'schema_version', 'payload_hash', 'received_at', 'expires_at'],
     plan.receipts.map(r => [batch.projectId, batch.source, r.event_id, r.schema_version, r.payload_hash, r.received_at, r.expires_at]),
     `ON CONFLICT(project_id, source, event_id) DO UPDATE SET schema_version=excluded.schema_version, payload_hash=excluded.payload_hash, received_at=excluded.received_at, expires_at=excluded.expires_at`));

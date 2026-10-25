@@ -108,8 +108,8 @@ export class D1Store implements ServerCollectionStore {
   }
   private async commitIngest(batch: PreparedBatch | PreparedServerBatch, registry: Registry, publisher?: ServerPrincipal): Promise<{ accepted: number; duplicates: number }> {
     const expectedRegistry = canonicalJson(registry);
-    // All mutations of ingest state increment projects.ingest_revision. Reads form one consistent snapshot.
-    // A CHECK guard inside the write batch rolls back a raced snapshot; bounded retries re-read receipts.
+    // Reads form one consistent snapshot. The write guard compares only touched state,
+    // current configuration/permissions and available quota; unrelated writes may commit.
     for (let retry = 0; retry < D1_POLICY.snapshotAttempts; retry++) {
       this.retryOptions.signal?.throwIfAborted();
       const snapshot = await readIngestSnapshot(this.db, batch, publisher);
@@ -122,7 +122,7 @@ export class D1Store implements ServerCollectionStore {
         funnelRuns: snapshot.runRows.map(readFunnelRun), newReceiptsToday: snapshot.newReceiptsToday }, project.new_receipts_per_utc_day);
       // Pure retransmission needs no write; it is linearized at the consistent read snapshot.
       if (!plan.receipts.length) return { accepted: plan.accepted, duplicates: plan.duplicates };
-      const statements = ingestStatements(this.db, batch, project, schema, plan, publisher);
+      const statements = ingestStatements(this.db, batch, project, schema, plan, snapshot, publisher);
       try {
         const committed = await this.db.batch(statements);
         if (committed[0]?.meta.changes !== 1 || committed.some(r => !r.success)) throw new CollectionError('storage_unavailable', 503);

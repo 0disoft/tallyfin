@@ -29,7 +29,7 @@ export function readFunnelRun(row: FunnelRunRow): FunnelRunState {
   } catch { throw new CollectionError('storage_unavailable', 503); }
 }
 
-/** Join browser/server runs in the same project revision guard; never write raw observations. */
+/** Join browser/server runs in the same guarded transaction; never write raw observations. */
 export function funnelStatements(db: SqlDatabase, projectId: string, version: number, now: number, plan: IngestPlan): SqlStatement[] {
   const statements = bulk(db, 'funnel_runs', ['project_id', 'run_id', 'schema_version', 'funnel_id', 'started_at',
     'cohort_date', 'dimension_key', 'step_times_json', 'expires_at'], plan.funnelRuns.map(run => [projectId, run.runId,

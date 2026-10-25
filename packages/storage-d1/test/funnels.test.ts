@@ -73,7 +73,7 @@ test('run, receipt, version and chronological conflicts roll back the entire bat
   assert.equal((before[0]![0] as any).run_id, id);
 });
 
-test('simultaneous browser/server writes and retries use the shared revision guard; publisher revocation remains atomic', async () => {
+test('simultaneous browser/server writes and retries use state guards; publisher revocation remains atomic', async () => {
   const id = crypto.randomUUID(), start = payload([0], id), end = payload([3], id);
   const results = await Promise.all([deliver(start), deliver(end), deliver(end)]);
   assert.equal(results.reduce((sum, result) => sum + result.accepted, 0), 2); assert.deepEqual(await counts(), [1]);
@@ -87,6 +87,29 @@ test('simultaneous browser/server writes and retries use the shared revision gua
   await assert.rejects(deliver(end), { code: 'forbidden' });
   const other = { ...r, project: { ...r.project, id: 'other' } }; await register(other);
   await deliver(payload([0], id, other), other); assert.deepEqual(await counts('other'), [1]); assert.deepEqual(await counts(), [1, 1]);
+});
+
+test('aligned browser/server updates merge an existing run instead of overwriting its step times', async () => {
+  const id = crypto.randomUUID();
+  await deliver(payload([0], id));
+  let arrived = 0, conflicts = 0, release!: () => void;
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  const stores = [1, 2].map(() => {
+    let first = true;
+    return new D1Store({ prepare: query => f.db.prepare(query), async batch<T>(statements: SqlStatement[]) {
+      const initial = first; first = false;
+      const result = await f.db.batch<T>(statements as Parameters<typeof f.db.batch>[0]);
+      if (initial) { if (++arrived === 2) release(); await ready; }
+      return result;
+    } }, { random: () => 0, onIngestConflict: () => { conflicts++; } });
+  });
+  const results = await Promise.all(stores.map((store, index) => deliver(payload([index + 1], id), r, store)));
+  assert.ok(results.every(result => result.accepted === 1));
+  assert.equal(conflicts, 1);
+  assert.deepEqual(await counts(), [1, 1, 1]);
+  const row = await f.db.prepare('SELECT step_times_json FROM funnel_runs').first<{ step_times_json: string }>();
+  assert.deepEqual(JSON.parse(row!.step_times_json), [started, started + 1000, started + 2000, null]);
+  assert.equal(await f.db.prepare('SELECT count(*) AS n FROM event_receipts').first('n'), 3);
 });
 
 test('counter overflow and SQL timestamp/order guards cannot leave receipts, quota or run state partially written', async () => {

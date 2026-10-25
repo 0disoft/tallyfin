@@ -141,11 +141,12 @@ test('expiry cleanup is project-scoped and bounded; old receipt does not bypass 
   await assert.rejects(prepare(batch(), now + 4 * DAY), errorCode('invalid_event'));
   assert.equal((await rows('projects')).length, 2);
 });
-test('a forced stale snapshot retries the named SQL guard and increments aggregates once', async () => {
-  let raced = false;
+test('an unrelated revision increment does not force a stale-state retry', async () => {
+  let raced = false, calls = 0, conflicts = 0;
   const db: SqlDatabase = {
     prepare: query => fixture.db.prepare(query),
     async batch<T>(statements: SqlStatement[]) {
+      calls++;
       if (!raced && statements.length > 5) {
         raced = true;
         await fixture.db.prepare('UPDATE projects SET ingest_revision = ingest_revision + 1').run();
@@ -153,9 +154,10 @@ test('a forced stale snapshot retries the named SQL guard and increments aggrega
       return fixture.db.batch<T>(statements as Parameters<typeof fixture.db.batch>[0]);
     },
   };
-  const store = new D1Store(db);
+  const store = new D1Store(db, { onIngestConflict: () => { conflicts++; } });
   assert.deepEqual(await store.commit(await prepare(), registry), { accepted: 2, duplicates: 0 });
   assert.equal(raced, true);
+  assert.equal(calls, 2); assert.equal(conflicts, 0);
   assert.equal(await scalar('SELECT sum(count) AS value FROM event_daily_counts'), 2);
   assert.equal(await scalar('SELECT ingest_revision AS value FROM projects'), 2);
 });
