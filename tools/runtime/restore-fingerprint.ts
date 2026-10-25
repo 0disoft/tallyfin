@@ -8,12 +8,12 @@ export function normalizeSql(sql: string) {
   return sql.trim().replace(/'(?:''|[^'])*'|"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|\s+/g, token => token.trim() ? token : ' ');
 }
 
-/** Quiesced synthetic databases only. Fingerprints include every application table, index and trigger. */
+/** Quiesced databases only. Fingerprints include every application table, index and trigger. */
 export async function restoreFingerprint(db: SqlDatabase): Promise<RestoreFingerprint> {
   const schema = await db.batch<SchemaRow>([db.prepare("SELECT name,type,tbl_name,sql FROM sqlite_master WHERE substr(name,1,7)!='sqlite_' AND substr(name,1,4)!='_cf_' ORDER BY type,name")]);
   if (schema.length !== 1 || !schema[0]?.success) throw Error('schema_read_failed');
   const entries = schema[0].results;
-  if (!entries.length || entries.some(row => !/^[a-z][a-z0-9_]*$/.test(row.name))) throw Error('unexpected_schema');
+  if (!entries.length || entries.some(row => !/^[a-z][a-z0-9_]*$/i.test(row.name))) throw Error('unexpected_schema');
   const tables = [];
   for (const table of entries.filter(row => row.type === 'table')) {
     const result = await db.batch([db.prepare(`SELECT * FROM "${table.name}"`)]);

@@ -38,3 +38,18 @@ test('incomplete integrity responses or foreign key violations never pass recove
     await assert.rejects(restoreIntegrity(db));
   }
 });
+
+test('recovery includes mixed-case authentication tables and detects changes without returning their contents', async () => {
+  const f = await setup();
+  try {
+    await f.db.prepare('CREATE TABLE "oauthClient" (id TEXT PRIMARY KEY, clientSecret TEXT)').run();
+    await f.db.prepare('INSERT INTO "oauthClient" VALUES (?,?)').bind('synthetic-client', 'synthetic-secret').run();
+    const before = await restoreFingerprint(f.db);
+    assert.equal(before.tables.find(table => table.name === 'oauthClient')?.rows, 1);
+    assert.equal(JSON.stringify(before).includes('synthetic-secret'), false);
+    await f.db.prepare('UPDATE "oauthClient" SET clientSecret=?').bind('changed-secret').run();
+    const after = await restoreFingerprint(f.db);
+    assert.notEqual(before.fingerprint, after.fingerprint);
+    assert.equal(before.schemaHash, after.schemaHash);
+  } finally { await f.mf.dispose(); }
+});
