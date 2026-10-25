@@ -1,5 +1,17 @@
 # Validation
 
+## SDK lifecycle, portable builds and ingestion state guards — 2026-10-25
+
+- Local implementation: [design and verification](docs/validation/2026-10-25-ingest-state-guards.md).
+- Browser delivery diagnostics: 4 passed. Generated browser/server setup: 10 passed. Browser SDK and integration gzip budgets passed unchanged.
+- Ordinary administrator build passed from a tracked-source copy excluding `.openai` metadata, using the existing installed dependencies. Explicit Sites packaging and its combined Sites/bundle checks passed: 11 Sites tests and 2 bundle tests.
+- Storage adapter suite: 88 passed; one subsequently added aligned existing-funnel race test passed separately (89 distinct cases). Collector/browser/server SDK integration: 21 passed. Root `tsc --noEmit` passed. Contract checks: 69 passed; `git diff --check` passed.
+- Independent writers aligned at their initial read: both 4 and 16 requests committed on their first attempt, with respectively 4/16 snapshots, 4/16 write batches, and zero guard conflicts. This is a deterministic local concurrency test, not a throughput benchmark.
+- Same-ID retransmission, an existing attempt's terminal transition, existing browser/server funnel linkage, live quota exhaustion, rollback, cancellation and publisher revocation remained protected. No API/DB schema, SDK signature, dependency or CI workflow changed.
+- A file-based before/after comparison against `1e41884` used the same four-writer alignment harness: 10 snapshots + 10 writes and 6 conflicts before; 4 snapshots + 4 writes and 0 conflicts after. Both accepted 8 events. Database batch calls fell 60% (20 to 8) in this deterministic case, not a throughput benchmark. Query-plan inspection confirmed primary-key index lookups for receipts, attempts and live quota.
+- Initial stdin-based auxiliary launches stalled and were stopped before successful file-based checks. Their processes were stopped; automatic approval review blocked removal of the ignored `.tmp/ingest-before-kr51DW` source copy without a detailed reason.
+- No push, npm publication, infrastructure change, deployment or remote load rerun. The previous Paid capacity records describe the earlier deployment; 12/16 requests/s must be rechecked after deployment.
+
 ## Paid capacity closeout — 2026-10-25
 
 The final distributed soak offered an aggregate 8 requests/s for 300 seconds

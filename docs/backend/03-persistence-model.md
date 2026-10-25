@@ -1,7 +1,8 @@
 # Persistence Model
 
 Status: [DBML](../../db/schema.dbml) and the SQL migrations were verified locally in Miniflare D1.
-They have not been applied to a remote database.
+The initial deployment applied the catalog to remote D1; migration-specific verification scope remains
+in the [migration guide](../../db/migrations/README.md).
 
 Projects, immutable schemas, administrator grants, and daily event, goal, and funnel aggregates are stored.
 `event_receipts` keeps an eventId and normalized payload hash instead of the raw event for 48 hours;
@@ -12,7 +13,10 @@ There are no visitor or raw event tables. Administrator issuer and subject belon
 not used for visitor analytics.
 
 Receipts, attempts, the UTC daily new-receipt quota, aggregates, funnel linkage state, and step deltas are
-written in the same D1 batch that increments `projects.ingest_revision`. If a concurrent write or a revocation of publishing
+written in the same D1 batch. Its guard compares only touched receipt, workflow-attempt, and funnel-run
+snapshot fields, plus current configuration, active schema, publisher authorization, and live daily quota.
+`projects.ingest_revision` still increments on success but is not the equality guard, so unrelated writers
+can advance their state while this batch still fits. If a touched-state conflict or a revocation of publishing
 authorization rolls back the batch, receipts, quota, linkage, and aggregates cannot be left partially written. Daily aggregates cover the 90 days including the
 project-local current day, while funnel step aggregates cover 90 days measured from the start date. The project and
 version are included in every aggregate key and foreign key. Along with expiration, range, integer, and flow constraints, SQL triggers enforce

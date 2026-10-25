@@ -25,7 +25,9 @@ The endpoint must use the `/v1/projects/<id>/batches` path and HTTPS and must re
 - `AttemptHandle.succeed/fail(properties?)`: Adds a completion only once within 24 hours. Properties must be an object; arrays, null, primitives, and functions return `false`. Omitting properties or passing an empty object uses the dimensions from start. An invalid call does not consume the handle, so it can be retried with valid properties. Changed dimension values are rejected, and `fail` returns `false` for a workflow without a failure step.
 - `AttemptHandle.cancel()`: Prevents later completion events. A start event already in the buffer remains.
 - `flush()`: Schedules transmission at the next opportunity. It does not make the caller wait for network completion.
-- `destroy()`: Clears listeners and timers, stops in-flight I/O, and releases memory. Late responses are ignored, and calling it twice is safe.
+- `destroy()`: Clears listeners and timers, stops in-flight I/O, and releases memory. It discards queued
+  and in-flight events, and late responses are ignored. Calling it twice is safe. Keep one client for
+  the application lifetime; use `destroy()` only to withdraw analytics consent, not on route changes.
 - `pending`: The sum of buffered, in-flight, and retrying events; it is not a count of completed deliveries.
 
 A `true` result from `track`, `succeed`, or `fail` means the in-memory buffer accepted the event. It does not mean the server stored it.

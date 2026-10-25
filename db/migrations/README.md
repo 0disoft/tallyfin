@@ -28,7 +28,11 @@ Only local checks were performed; remote D1 migrations were not run.
 
 Status: The [DBML](../schema.dbml) logical contract, SQL for the initial empty database in `0001_initial.sql`, and expansion migrations
 `0002` through `0014` are present. The current head is `0014_saved_schema_drafts.sql`, with
-14 migrations in total and 17 application tables. All were applied only in local Miniflare storage tests; none has been applied to remote D1.
+14 migrations in total and 17 application tables. The initial deployment applied the catalog to
+remote D1; migration fixtures and replay checks remain local, and new migration SQL still requires
+local verification and explicit approval before remote application.
+Individual migration sections retain their original verification scope; notes that remote D1 was
+unchanged describe the state when that section was written, not the current environment.
 
 Storage structure follows [schema.dbml](../schema.dbml), semantics follow the
 [Event Contract](../../docs/backend/event-contract.md), and implementation state and expiration cleanup follow
@@ -70,9 +74,12 @@ This migration creates tables for projects, administrator grants, immutable sche
 admission, and event and goal daily aggregates. It includes value CHECKs,
 composite keys containing the project, the `(project_id, schema_version)` foreign key, and expiration and retention indexes.
 
-- `projects.ingest_revision` is the ingestion adapter's CAS guard. The CHECK constraint
-  `tallyfin_ingest_revision` requires an integer type and a safe integer of 0 or greater, and writing `-1` in the guard
-  rolls back the whole batch.
+- `projects.ingest_revision` remains a monotonic ingestion counter, and the 0001 SQL and
+  `tallyfin_ingest_revision` CHECK constraint stay unchanged. Ingestion still increments it, and
+  writing `-1` still rolls back the whole batch, but current CAS compares only touched receipt,
+  workflow-attempt, and funnel-run snapshot fields plus current configuration, active schema,
+  publisher authorization, and live daily quota. It does not require the revision counter to equal
+  the snapshot value.
 - The `immutable_schema` and `immutable_project_zone` triggers prevent changes to schema definitions and project
   ID or time zone. A time-zone change is handled as a new project.
 - CHECK constraints require receipt `expires_at = received_at + 48h` and attempt `expires_at = started_at + 72h`.
@@ -82,9 +89,10 @@ composite keys containing the project, the `(project_id, schema_version)` foreig
 - A goal aggregate CHECK maintains `succeeded + failed <= started`.
 - Aggregate `count` and `started/succeeded/failed` values have integer-type and safe-integer upper-bound CHECKs.
 
-This file is for a newly created empty database. Migration of existing data, remote application, and rollback were
-not run in this scope. Expiration cleanup is handled by the adapter's `cleanup` and the locally implemented Worker
-scheduler. Remote activation is separate work.
+This file is for a newly created empty database. Its SQL is unchanged by the guard work. The initial
+deployment later applied the catalog to remote D1; replay and rollback of this historical migration
+were not exercised in this scope. Expiration cleanup is handled by the adapter's `cleanup` and the
+Worker scheduler. Remote activation is separate work.
 
 Verification loads 14 migrations from 0001 through 0014 in order into Miniflare D1 through the storage adapter and collector tests,
 checking constraints, triggers, CAS, quota, and cleanup.

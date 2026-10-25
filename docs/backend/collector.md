@@ -4,8 +4,10 @@ Status: A minimal browser collector and server publishing endpoint have been imp
 checked with local Miniflare HTTP tests. The Worker is a native fetch boundary and calls `packages/core` (validation, normalization, and hashing)
 and `packages/storage-d1` (atomic D1 storage). The browser SDK (`packages/browser`) was
 implemented and verified separately and is documented in the [Browser SDK](./browser-sdk.md). Administrator routes and
-the publisher verifier port have been implemented and verified locally. A real identity provider configuration, remote database application, and production
-deployment do not exist yet. This document records only how the contract is applied at the ingestion boundary and the implementation and deployment state.
+the publisher verifier port have been implemented. The initial deployment uses Better Auth, separate D1 databases, and
+the deployed Collector Worker; new installations still require their own provider and resource configuration. Publisher
+authentication remains disabled until a real machine identity is configured. This document records how the contract is
+applied at the ingestion boundary and the implementation and deployment state.
 
 Behavioral semantics follow the [Event and Aggregation Contract](./event-contract.md), request and response shapes follow
 [OpenAPI](../../api/openapi.yaml), body policy follows [HTTP API Policy](./04-http-api-policy.md), and
@@ -125,18 +127,22 @@ UTC daily quota) at once for every attempt. If an existing receipt has the same 
 duplicate and nothing is written. Different content or a different version rejects the whole batch with
 `event_conflict` (409). A batch containing only retransmissions finishes after a read.
 
-A batch that requires writes is applied in one batch that includes `projects.ingest_revision`.
-The compare-and-swap (CAS) guard increments the revision by 1 only when the `ingest_revision`, active status,
-time zone, allowed origins, daily limit, per-minute limit, and active schema `definitions_json` read at transaction start are unchanged.
-If any value differs, it writes `-1` to fail the CHECK constraint `tallyfin_ingest_revision`. A CHECK failure rolls back the whole batch.
+A batch that requires writes is applied in one atomic batch. Its guard compares only the state the
+plan touches: receipt rows, workflow-attempt rows, and funnel-run rows. NULL-safe SQL compares those
+snapshot fields in the same batch as the writes. The guard also rechecks active status, time zone,
+allowed origins, daily and per-minute limits, active schema `definitions_json`, and publisher
+authorization for server batches. The daily quota condition compares current usage with the limit,
+so unrelated writers may advance usage while the batch still fits. A mismatch writes `-1` to fail
+the CHECK constraint `tallyfin_ingest_revision`, which rolls back the batch. `projects.ingest_revision`
+still increments on success but is not compared for equality.
 
 - If provisioning changes project settings or the active schema definition, the CAS fails closed.
   The adapter compares the registry read immediately before commit with the registry supplied by the caller and returns
   `storage_unavailable` (503) if they differ.
 - A CAS failure is treated as a retryable condition only when its name is `tallyfin_ingest_revision`. Any other database
   error immediately returns `storage_unavailable` (503).
-- Retries include the initial attempt and run at most 3 times, rereading the snapshot on every attempt. If no attempt succeeds within
-  3 tries, it returns `storage_unavailable` (503).
+- Retries include the initial attempt and run at most 8 times, rereading the snapshot on every attempt. If no attempt succeeds within
+  8 tries, it returns `storage_unavailable` (503).
 - If an aggregate `count` exceeds the safe-integer range, the CHECK rolls back the whole batch. Partial
   accepted results are never produced.
 

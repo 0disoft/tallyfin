@@ -13,8 +13,8 @@ use virtual data and do not query real services. The default address and `/auth/
 **API connection** mode (same-origin `/v1` administrator API reads and setting saves). Only
 `/demo` or `/demo/` offers the **Sample** and **API connection** mode switch. A query on the
 normal address does not enable the demo. API mode provides OIDC sign-in and direct administrator
-bearer connection. Real authentication-provider configuration and production deployment are not
-connected yet.
+bearer connection. The deployed installation uses its production OIDC configuration; a new
+installation still needs its own provider and deployment settings.
 
 Administrator API requests have a default 15-second limit from waiting for token refresh through
 reading the response body. When the limit is reached, loading ends and the UI shows a retryable
@@ -39,8 +39,9 @@ On success, it shows the time of this check, which is not a metric-refresh time.
 only an error message and leaves no success indicator. Closing, replacing the connection, or
 disconnecting cancels the request and discards late responses. Requests are cancelled after 5
 seconds and can be retried manually. Collection storage and cleanup work must be checked separately.
-The screen was verified with Chrome, ephemeral signed OIDC, and local D1, and results are in the
-[validation record](../../VALIDATION.md). A real OIDC provider is not connected yet.
+The screen was verified with Chrome, ephemeral signed OIDC, and local D1; the deployed installation
+uses its configured production OIDC provider. Results are in the
+[validation record](../../VALIDATION.md).
 
 Under **Operational Log Report** in settings, select a `logs:summary` v2 JSON file to read observation
 counts, weighted request estimates, error and review items, HTTP responses and latency buckets, and
@@ -91,6 +92,13 @@ This standalone run also proxies `/v1` to the default collector at
 another loopback HTTP port. The administrator UI handles `/auth/callback`. Without a collector, API
 connection fails, but sample mode remains usable.
 
+## Builds
+
+`npm run build` runs the portable Vite build. `npm run build:sites` runs that build and
+`scripts/prepare-sites-build.mjs`, adding `dist/.openai/hosting.json` for a Sites handoff. From the
+repository root, use `npm run build:admin` or `npm run build:admin:sites`; `npm run check:admin`
+uses the Sites build before the bundle and Sites checks.
+
 ## Implementation Scope
 
 - Per-project overview, event analysis, goals, settings, and 7/14/30-day filters.
@@ -119,8 +127,9 @@ Browser verification and visual comparison records are in
 [initial design QA](../../prototypes/admin/design-qa.md). The production performance budget must be
 verified separately for the collection SDK and administrator UI. The administrator bundle now
 code-splits by screen and checks a 100 KiB gzip budget for the first static graph and a 500 kB budget
-for each JavaScript file. Verification with a real authentication provider, production deployment,
-and a service pilot remains.
+for each JavaScript file. Real-provider sign-in, production deployment, and the 0disoft.github.io
+service pilot were verified. Maximum capacity, multi-region behavior, whole-service failover, and an
+operational SLO remain open.
 
 ## API Connection Mode
 
@@ -143,8 +152,9 @@ code exchange. Refreshing requires signing in again, and disconnecting clears th
 The required build environment variables are `VITE_OIDC_ISSUER`, `VITE_OIDC_CLIENT_ID`, and
 `VITE_OIDC_SCOPE` (including `openid`). Optional values and the CORS, rotating-refresh, and
 same-origin `/v1` routing requirements follow the
-[OIDC connection guide](../../docs/backend/oidc.md#browser-administrator-sign-in). The real provider and API
-audience are UNDECIDED, and real-provider sign-in has not been verified.
+[OIDC connection guide](../../docs/backend/oidc.md#browser-administrator-sign-in). The deployed
+installation uses its configured provider and audience; a new installation still chooses its own.
+Real-provider sign-in was verified in the deployed installation.
 
 The optional `npm run verify:admin-login -- --channel chrome` verifies the path from the sign-in
 button through callback, API query, token refresh, and sign-in again with a synthetic provider, the
@@ -409,7 +419,7 @@ below. There are no additional package, database, API, SDK, or CI changes.
 
 API mode, the settings workspace, goals, and project creation load their code when opened. Parent
 connection state remains across menu changes. If loading fails, the UI asks for a refresh and notes
-that refresh resets input and directly connected tokens. After a build,
+that refresh resets input and directly connected tokens. After `npm run build:sites`,
 `npm run test:bundle` checks the actual manifest graph's 100 KiB initial gzip and 500 kB per-JS
 budgets and the lazy-loading boundaries. This build-dependent check is not included in `npm test`.
 
