@@ -1,5 +1,46 @@
 # Validation
 
+## Deployed verification after CPU reduction — 2026-10-25
+
+Collector version `b6498981-83b7-4fd9-b736-404cf91e8f0c` was deployed and
+verified active at 100%. All 1456 post-fix load requests returned HTTP 200 with
+no client retries: 256 requests at concurrency eight, followed by a separate
+600.01-second, 1200-request trial with four-request bursts every two seconds.
+These are bounded experiments, not a maximum-capacity or production SLO claim.
+
+| Post-fix workload | Responses | New receipts | Duplicates | Client p95 / max |
+| --- | ---: | ---: | ---: | ---: |
+| Concurrency eight | 256/256 HTTP 200 | 4480 | 640 | 2068 / 2577 ms |
+| Ten-minute main project | 1180/1180 HTTP 200 | 18880 | 4720 | 1502 / 2486 ms |
+| Ten-minute independent sentinel | 20/20 HTTP 200 | 20 | 0 | 791 / 794 ms |
+
+Independent D1 assertions matched receipts to event aggregates. The concurrency-
+eight project's three funnel totals were `[1344,1344,1344]`; the sustained main
+project's totals were `[5664,5664,5664]`. Its ten one-minute windows all passed,
+with a maximum schedule lag of 490 ms. Maintenance revision advanced from 808
+to 818. No large expiration backlog was injected. The sustained tail captured
+1201 test-prefix invocations including its 404 canary, 550 revision conflicts,
+maximum failed attempt three, no exhausted retries and no failed invocation
+outcomes. The concurrency-eight tail captured 247 invocations, 471 conflicts,
+maximum failed attempt six and no exhaustion or failed outcomes; that capture
+is incomplete and is not a full census of conflicts.
+
+The exact failed synthetic batch from the CPU reproduction was manually
+resubmitted after deployment: accepted 20/duplicates 0, then accepted
+0/duplicates 20 on the identical replay. Main-project receipts and event totals
+rose from 11000 to 11020 exactly once, and all three funnel totals rose from
+3300 to 3306. The earlier sentinel retained 12 receipts. All six disposable
+projects from this investigation were paused; no requests targeted `zerodi-site`.
+Tail process trees were stopped by their owners.
+
+Repository type checking, 69 contract checks, 57 core tests, 32 focused
+storage/calendar tests, eight diagnostic tests and four benchmark helper/pool
+tests passed. Counts overlap and are not additive. Full unrelated frontend and
+backend regression suites and maximum-capacity/multi-region tests were not
+repeated. There is no generic lint command. HTTP/DB/SDK contracts, dependencies,
+CI runners, CPU limits and subscription settings are unchanged. Updated source
+and operational records are committed; no SDK version or npm release is needed.
+
 ## Reproduced platform CPU termination and ingestion CPU reduction — 2026-10-25
 
 The instrumented four-request trial reproduced a failure after 349.22 seconds:
@@ -34,7 +75,7 @@ request UUIDs, bounded Retry-After seconds and timing for received failures,
 including malformed-JSON status evidence. Four benchmark helper/pool tests and
 eight diagnostic/observation tests passed. Classifications distinguish CPU or
 memory limits and storage timeouts from generic database resets. Deployed
-verification of the CPU reduction remains pending. API/DB contracts, SDK,
+verification of the CPU reduction is recorded above. API/DB contracts, SDK,
 dependencies, runner and deployment limits are unchanged.
 
 ## Bounded collection failure diagnostics — 2026-10-25

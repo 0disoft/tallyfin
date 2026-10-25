@@ -6,7 +6,7 @@ project identifiers. A `retention_cleanup_failed` entry with the same `runId` is
 Log compatibility and timing limitations follow [Operational Observability](../ops/observability.md#cleanup-execution-latency-and-interruption-reasons).
 
 Status: RequestId and fixed-code logs, per-project rejection diagnostic aggregates, and the completion observation log (`http_request`) have been
-implemented and verified locally. Remote log collection, dashboards, alert recipients, and production deployment do not exist yet.
+implemented and deployed with application log persistence. Dashboards, alert recipients and a production probe schedule are not configured.
 Operational observability settings have not been decided and remain UNDECIDED in [Operational Observability](../ops/observability.md).
 
 Request bodies, tokens, IP addresses, Origins, full URLs, and property values are not stored in logs or the analytics database.
@@ -40,9 +40,28 @@ the 256 selected by the first two UUID characters—that is, 1/64—and record 6
 are recorded regardless of status and use 1. The log level is `console.error` for 5xx, `console.warn` for 4xx, and
 `console.log` for everything else.
 
-An app log contributes at most one line for a selected response. The native Worker (`index.ts`) passes only this observation port instead of
-an error-only `log` port, so lines cannot overlap for the same response. The `log` port remains available; if a host passes it,
+The completion observation contributes at most one line for a selected response. The native Worker (`index.ts`) passes this observation port instead of
+the legacy error-only `log` port, so completion counts cannot overlap for the same response. A separate bounded failure diagnostic is described below. The `log` port remains available; if a host passes it,
 it records only `{requestId, code}`. The observation callback is synchronous. Asynchronous observation that returns a promise is not supported.
+
+## Collection Failure Diagnostic
+
+On a caught server failure, the native Worker also emits exactly four fields:
+`event: collection_failure`, the same `requestId`, and the fixed enums `stage`
+and `kind`. Stages identify routing, administrator/publisher handling, admission,
+project/registry reads, preparation or commit. Categories distinguish capacity,
+deadline/cancellation, revision conflicts, database busy/reset/overload/timeout
+or other D1 errors, platform limits, constraints, transport and unknown failures.
+Only category strings are exported; exception text, SQL, causes and request
+material are excluded. Classification traverses at most six errors and detects
+cycles. Sink failures do not alter responses. The offline aggregate summary
+ignores these diagnostics rather than counting a second response.
+
+Platform termination can bypass this diagnostic and the final HTTP observation.
+Use sanitized invocation outcomes when the administrator proxy returns
+`admin_api_unavailable`; absence of an app diagnostic is not evidence of success.
+
+## Observation Timing
 
 The measured interval begins when the handler starts and ends when the response object is ready. It excludes background
 work passed to `waitUntil` (such as rejection recording), network transmission, and client receipt. The clock uses an optional

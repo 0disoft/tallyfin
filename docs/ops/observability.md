@@ -1,8 +1,8 @@
 # Operational Observability
 
-Status: collector completion observability has been implemented and verified locally. Production log
-collection, dashboards, alert recipients, and traces have not been deployed. The administrator
-storage read probe exists only in code and has no remote execution or schedule. Actual operational
+Status: Collector application logs, including bounded failure diagnostics, are deployed with
+log persistence. Dashboards, alert recipients, automatic traces and a production probe
+schedule are not configured. Actual operational
 settings such as thresholds, owners, and log retention periods have not been established
 (UNDECIDED).
 
