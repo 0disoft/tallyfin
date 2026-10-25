@@ -1,5 +1,83 @@
 # Validation
 
+## Bounded ingestion contention recovery — 2026-10-25
+
+The earlier concurrency-4 HTTP 503 was investigated with an unchanged retry
+policy plus narrowly projected diagnostics. Four real local D1 writers were
+aligned after each consistent snapshot: exactly three committed and one
+exhausted all three attempts. The named SQL revision guard rolled back the
+losing write batches; the store immediately retried without backoff and stopped
+before the fourth writer could obtain a fresh successful turn.
+
+A diagnostic-only Collector version (`ee55d133-dda6-4f7a-be81-720b7510d833`)
+then reproduced the same failure on the deployed service-binding path. Of
+16 new 20-event batches at concurrency 4, 14 returned 200 and two returned 503.
+Tail captured all 16 invocations, 12 named revision conflicts and two exhausted
+third attempts. Each 503 invocation contained its own exhausted-third-attempt
+log. The invocations themselves finished normally: these were handled storage
+errors, not Worker crashes. The historical single 503 lacked this diagnostic;
+its original log is not being retrospectively claimed as proof.
+
+The fix retains cross-instance DB CAS and atomic batches. Only the named
+`tallyfin_ingest_revision` guard failure is retried, after a fresh consistent
+snapshot and recomputation. D1's documented [batch rollback semantics](https://developers.cloudflare.com/d1/worker-api/d1-database/#batch)
+make these specific failed writes safe to retry. Other database failures are
+not retried, and the original error remains the cause on exhaustion.
+
+- Maximum attempts: 3 → 8, including the initial attempt. Full jitter uses
+  exponential ceilings of 20, 40, 80, 160, 250, 250 and 250 ms. Configured waits
+  sum to at most 1050 ms; this excludes DB latency and timer scheduling delays.
+- Uncontended requests add no sleep or DB call. Worst-case contended work is
+  bounded at eight snapshot/write pairs (16 DB batches instead of six), so the
+  change trades bounded additional work for recovery rather than hiding an
+  unlimited queue or retry loop. It does not serialize through process memory.
+- The existing request AbortSignal is supplied to the store. Abort before or
+  during waiting removes the timer/listener and prevents another snapshot or
+  write. The existing 15-second total request deadline is preserved.
+- Optional signal/randomness and diagnostic callbacks preserve existing
+  constructor arguments and required collection signatures. Conflict logs
+  contain only a fixed event name, attempt number and exhaustion flag, without
+  SQL, event content, project IDs or credentials. Diagnostic sink failure is
+  ignored without altering the request result.
+
+The fixed Collector version is `7fd27677-928c-4120-a3c0-f82e86f1bb63`.
+The deployment preserved the verified account/DB binding, vars, compatibility
+flags, private ingress and empty Cron configuration. Auth/admin were not
+redeployed and no DB migration, API shape, SDK, dependency, hygiene or CI change
+was required.
+
+| Remote phase, concurrency 4 | Requests | HTTP 200 | Accepted | Duplicates |
+| --- | ---: | ---: | ---: | ---: |
+| Four rounds of new batches | 64 | 64 | 1280 | 0 |
+| Replay of an accepted batch | 16 | 16 | 0 | 320 |
+| Identical new-batch race | 8 | 8 | 20 | 140 |
+
+All 88 requests passed without client retries. D1 independently confirmed 1300
+receipts, 1300 event increments and funnel reached counts `[390,390,390]`.
+New-write phase p95 ranged from 1128 to 2064 ms (16 samples per phase); this
+change does not claim faster tail latency. The post-fix tail captured 54 of the
+88 requests, with 21 observed conflicts, no observed exhaustion and a maximum
+observed failed attempt of three; those log counts are not a complete conflict
+census. The HTTP results and DB assertions cover all 88 requests.
+
+Both disposable trial projects were verified paused. Their receipt/event counts
+were 280 (baseline) and 1300 (fixed). `zerodi-site` was not the load target and
+its definitions/permissions were not changed. No persistent tail process was
+left running. This bounded trial establishes recovery at the tested concurrency;
+sustained capacity, higher concurrency and an operational SLO remain unverified.
+
+Validation: 34/34 focused storage/retry/dependency tests and 29/29 runtime,
+admission and funnel tests passed; typecheck, 69/69 contract checks and selected
+production-config dry-run passed. Tests cover four aligned actual D1 writers,
+exhaustion/cause preservation, zero retries for unrelated DB errors, cancellation
+without later I/O, jitter bounds, timer/listener cleanup, daily quotas and
+publisher access. The unchanged broad full suite and browser UI journeys were
+not repeated. `git diff --check` passed.
+
+Local evidence: `.tmp/contention-baseline-failure.json`,
+`.tmp/contention-baseline-tail.json`, `.tmp/contention-fixed-report.json`,
+`.tmp/contention-fixed-tail.json` and `.tmp/contention-project-cleanup.json`.
+
 ## Production load and database recovery — 2026-10-25
 
 The manual remote trial used the deployed administrator-to-Collector service
