@@ -4,6 +4,23 @@ import { createTallyfin } from '../src/index.ts';
 import { FakeBrowser, schema, endpoint } from './helpers.ts';
 import type { DeliveryState } from '../src/types.ts';
 
+test('flush schedules delivery; explicit destruction discards instead of draining', async () => {
+  for (const destroyImmediately of [true, false]) {
+    const host = new FakeBrowser(), records: [DeliveryState, number][] = [];
+    const client = createTallyfin({ schema, endpoint, onDelivery: (state, count) => records.push([state, count]) }, host);
+    assert.equal(client.track('view', { tool: 'loan' }), true);
+    assert.equal(client.flush(), undefined);
+    if (destroyImmediately) client.destroy();
+    await host.tick(0);
+    assert.equal(host.calls.length, destroyImmediately ? 0 : 1);
+    assert.deepEqual(records, [[destroyImmediately ? 'destroyed' : 'accepted', 1]]);
+    assert.equal(client.pending, 0);
+    client.destroy();
+    assert.equal(host.timers.size, 0);
+    assert.equal(host.listeners.size, 0);
+  }
+});
+
 test('delivery diagnostics distinguish HTTP acceptance, retry exhaustion, overflow and explicit destruction', async () => {
   const host = new FakeBrowser(), records: [DeliveryState, number][] = [];
   const client = createTallyfin({ schema, endpoint, onDelivery: (state, count) => records.push([state, count]) }, host);
