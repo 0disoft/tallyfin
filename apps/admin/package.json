@@ -7,7 +7,8 @@
   "engines": { "node": ">=24" },
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node scripts/prepare-sites-build.mjs",
+    "build": "vite build",
+    "build:sites": "npm run build && node scripts/prepare-sites-build.mjs",
     "preview": "vite preview",
     "test:sites": "node --test tests/sites-worker.test.mjs",
     "test:bundle": "node --test tests/bundle-split.test.mjs",
