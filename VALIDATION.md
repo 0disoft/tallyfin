@@ -1,5 +1,81 @@
 # Validation
 
+## Extended deployed ingestion trial — 2026-10-25
+
+**Result: failed the zero-error experiment guard.** A planned 600-second run
+stopped after 518.57 seconds (about 8 minutes 39 seconds) when one request
+returned HTTP 503. There were 1039 HTTP 200 responses among 1040 requests, with
+no client retries. Neither this partial run nor the separate concurrency-8
+failure establishes a passing sustained-capacity or operational SLO claim.
+
+The load generator offered four-request bursts every two seconds, capped at
+four actual in-flight requests and 1200 total planned requests. Every 60th
+request was a single page-view event to a second disposable project. Of the
+remaining main-project requests, every fifth replayed the preceding new
+20-event batch. No requests were sent to `zerodi-site`. The main project alone
+used a 25000-receipt test allowance; existing production project limits,
+authorization and definitions were not modified.
+
+The generator awaited each burst, recorded schedule lag and stopped rather
+than accumulating an unbounded backlog. Experiment guards were any non-200,
+transport error or invalid receipt, per-minute p95 >= 5000 ms, and start lag
+>= 2000 ms. Each request retained a 15-second timeout and the whole run had a
+660-second watchdog. The recorded maximum start lag was 628 ms. These guards
+are test controls, not newly adopted production SLOs.
+
+| Measured result before the stop | Value |
+| --- | ---: |
+| Requests / successful responses / HTTP 503 | 1040 / 1039 / 1 |
+| Overall client p50 / p95 / maximum | 656 / 1462 / 2606 ms |
+| Main-project requests / successful requests | 1022 / 1021 |
+| Independent-project sentinel requests / successful requests | 18 / 18 |
+| Main-project acknowledged and stored new events | 16340 |
+| Acknowledged duplicates | 4080 |
+| Main-project completed funnel runs | 4902 |
+| Independent-project acknowledged and stored events | 18 |
+
+The eight complete 120-request reporting windows all returned HTTP 200. Their
+p95 values were 1278, 1402, 1833, 1239, 1304, 1508, 1580 and 1376 ms. There was
+no steadily increasing latency trend in these samples. This is not a direct
+measurement of server memory, CPU or leaks. The final partial window contained
+the failure; its absence from those eight complete windows must not be hidden.
+
+Independent D1 queries verified that the main project's receipts and event
+aggregate both equalled 16340, its funnel-run count equalled 4902 and its three
+funnel reached totals were `[4902,4902,4902]`. Sentinel receipts and event
+aggregate both equalled 18. The one failed fresh 20-event batch was not stored;
+there is no claim of successful delivery or recovery for it. Successful writes
+and replays therefore matched the stored totals without a partial aggregate
+or duplicate inflation. Client retries were intentionally disabled, so SDK
+recovery of this specific failure was not tested.
+
+A tail observer attached after the run began. Its incomplete capture contained
+872 test-prefix invocations (including a deliberate unknown-project 404 canary),
+911 reported revision conflicts, no observed retry exhaustion, and a maximum
+observed failed attempt of three. Eight observed maintenance invocations fell
+within the trial interval; all completed four project cleanup operations with
+zero reported failures and advanced their cursor. No large expired-data cleanup
+was injected. These observations do not attribute this 503: it must not be
+assumed to have the earlier three-attempt exhaustion cause. Future diagnosis
+needs the failure's precise request/phase and bounded cause category.
+
+All three new trial projects (the sweep, soak and sentinel) were confirmed
+paused. The sweep had 620 receipts; soak/sentinel counts are above. The tail
+process tree was explicitly stopped after load completion and its sanitized
+summary preserved. The Collector active version was verified unchanged at
+`7fd27677-928c-4120-a3c0-f82e86f1bb63` before and after the experiment. No code,
+API/DB contract, permissions, deployment configuration, dependency, CI/runner
+or repository hygiene policy was changed for this work.
+
+Local evidence: `.tmp/contention-sweep-failure.json`,
+`.tmp/contention-soak-failure.json`, `.tmp/contention-soak-progress.json`,
+`.tmp/contention-soak-projects.json`, `.tmp/contention-soak-final-check.json`,
+`.tmp/contention-soak-partial-integrity.json` and
+`.tmp/contention-soak-observer.json` and `.tmp/extended-load-cleanup.json`.
+Syntax checks, `git diff --check` and 69/69 contract/link checks passed. The
+application's unchanged typecheck/unit/browser/build suites were
+not repeated for this experiment-only and documentation-only work.
+
 ## Higher-concurrency capacity boundary — 2026-10-25
 
 A bounded sweep against deployed Collector version
@@ -12,10 +88,10 @@ not run. This is a failed higher-concurrency sample, not a passing capacity
 claim. Tail did not establish a connection within its startup guard, so this
 particular 503 has no captured internal-cause attribution.
 
-A separate 10-minute trial is next, using the previously passing concurrency
-4, a maximum of 1200 requests including a separate-project sentinel, and
-explicit checks for errors, latency, timing and final DB counts. Its result
-will be recorded independently; it cannot erase the concurrency-8 failure.
+A separate 10-minute trial used the previously passing concurrency 4 and a
+1200-request ceiling, including a separate-project sentinel. It stopped on a
+503 after 518.57 seconds and 1040 requests. The full ten-minute window was not
+completed; details below do not erase either failing sample.
 
 Local sweep evidence: `.tmp/contention-sweep-failure.json` and
 `.tmp/contention-sweep-project.json`. No code, configuration, schema or
