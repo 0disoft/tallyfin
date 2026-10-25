@@ -1,5 +1,31 @@
 # Validation
 
+## Development dependency security updates — 2026-10-25
+
+Updated only two vulnerable transitive packages, preserving their existing major
+versions and future compatible updates:
+
+- `undici` 7.30.0 → 7.30.1 in the root lockfile; raised the existing override
+  minimum to `^7.30.1`. This fixes the development-only Miniflare/Wrangler path
+  reported in [GHSA-xjj6-f33q-929c](https://github.com/advisories/GHSA-xjj6-f33q-929c).
+- `fast-uri` 3.1.8 → 3.1.9 in the independent contracts-tool lockfile, within
+  AJV's existing range. This fixes Dependabot alerts 4–7, covering scheme
+  injection, host confusion, relative-path equivalence and encoded schemes.
+  See [the upstream advisory](https://github.com/advisories/GHSA-w74x-v6f9-j3xg).
+
+Root, contracts and browser-bench `npm audit` each reported 0 vulnerabilities.
+`npm ls` confirmed the fixed installed versions and expected dependency paths.
+Auth/Workers runtime tests passed 6/6, including real local D1, native Worker
+password changes and Durable Object maintenance. Contracts passed 69/69, Redocly
+OpenAPI lint passed, and `git diff --check` passed. No package was force-upgraded
+and no unrelated dependency changed.
+
+Typecheck and the full analytics/UI suites were not repeated because the only
+code-package changes are these two development-tool patches; their affected
+runtime and schema tools were exercised directly. No production application,
+API, DB, CI runner or repository hygiene setting changed, so no production
+redeployment was performed. This validation record is the only document updated.
+
 ## Administrator password-change navigation and 12-character minimum — 2026-10-25
 
 Moved password changes out of the login screen into the session-protected
