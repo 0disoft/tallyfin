@@ -5,6 +5,8 @@ import type { PreparedBatch, PreparedServerBatch, Registry, RejectionReason, Ser
 import { ingestStatements } from './ingest-statements.ts';
 import { readIngestSnapshot } from './ingest-snapshot.ts';
 import { D1_POLICY } from './policy.ts';
+import { waitForIngestRetry } from './ingest-retry.ts';
+import type { IngestRetryOptions } from './ingest-retry.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase } from './sql.ts';
 import { readFunnelRun } from './funnels.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
@@ -16,11 +18,13 @@ export type { CleanupPage } from './maintenance.ts';
 export class D1Store implements ServerCollectionStore {
   readonly db: SqlDatabase;
   readonly allowLocalHttp: boolean;
+  private readonly retryOptions: IngestRetryOptions;
   readonly onIngestConflict: ((entry: { attempt: number; exhausted: boolean }) => void) | undefined;
-  constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean;
+  constructor(db: SqlDatabase, options: IngestRetryOptions & { allowLocalHttp?: boolean;
     onIngestConflict?: (entry: { attempt: number; exhausted: boolean }) => void } = {}) {
     this.db = db; this.allowLocalHttp = options.allowLocalHttp ?? false;
     this.onIngestConflict = options.onIngestConflict;
+    this.retryOptions = { ...options };
   }
   async loadProject(projectId: string) {
     const results = await this.db.batch<ProjectRow>([this.db.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId)]);
@@ -107,6 +111,7 @@ export class D1Store implements ServerCollectionStore {
     // All mutations of ingest state increment projects.ingest_revision. Reads form one consistent snapshot.
     // A CHECK guard inside the write batch rolls back a raced snapshot; bounded retries re-read receipts.
     for (let retry = 0; retry < D1_POLICY.snapshotAttempts; retry++) {
+      this.retryOptions.signal?.throwIfAborted();
       const snapshot = await readIngestSnapshot(this.db, batch, publisher);
       if (!snapshot.publisherAuthorized) throw new CollectionError('forbidden', 403);
       const { project, schema } = snapshot;
@@ -129,6 +134,8 @@ export class D1Store implements ServerCollectionStore {
         if (!message.includes('tallyfin_ingest_revision')) throw new CollectionError('storage_unavailable', 503, { cause: error });
         try { this.onIngestConflict?.({ attempt: retry + 1, exhausted: retry + 1 === D1_POLICY.snapshotAttempts }); }
         catch { /* Diagnostics cannot change a committed or rejected request. */ }
+        if (retry + 1 === D1_POLICY.snapshotAttempts) throw new CollectionError('storage_unavailable', 503, { cause: error });
+        await waitForIngestRetry(retry, this.retryOptions);
       }
     }
     throw new CollectionError('storage_unavailable', 503);

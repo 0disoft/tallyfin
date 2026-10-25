@@ -29,7 +29,7 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
   async fetch(request: Request, bindings: CollectorBindings, context?: { waitUntil(task: Promise<void>): void }): Promise<Response> {
     const lifetime = requestDatabase(bindings.DB, request.signal, capacity, requestTimeoutMs);
     const db = lifetime.db;
-    const store = new D1Store(db, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true',
+    const store = new D1Store(db, { allowLocalHttp: bindings.ALLOW_LOCAL_HTTP === 'true', signal: lifetime.signal,
       onIngestConflict: entry => console.warn(JSON.stringify({ event: 'ingest_revision_conflict',
         attempt: entry.attempt, exhausted: entry.exhausted })) });
     try {
