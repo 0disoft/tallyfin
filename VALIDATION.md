@@ -1,5 +1,93 @@
 # Validation
 
+## Production load and database recovery — 2026-10-25
+
+The manual remote trial used the deployed administrator-to-Collector service
+binding and production analytics D1, with fresh disposable projects and a
+reserved `.invalid` allowed origin. It did not send load events to `zerodi-site`.
+Both trial projects were confirmed paused after execution. No production schema,
+authorization grant, Worker binding, dependency or CI configuration changed.
+
+| Closed-loop phase | Concurrent requests | Requests | HTTP 200 | Accepted | Duplicates | Client p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| New batches | 1 | 16 | 16 | 320 | 0 | 1430 ms |
+| New batches | 2 | 16 | 16 | 320 | 0 | 1212 ms |
+| Identical replay | 2 | 16 | 16 | 0 | 320 | 1322 ms |
+| Identical new-batch race | 2 | 8 | 8 | 20 | 140 | 455 ms |
+
+All 56 requests used 20-event batches without client retries. D1 independently
+confirmed 660 receipts, 660 event-count increments and funnel reached counts
+`[198,198,198]`. Thus 460 duplicate submissions added no receipts or aggregates.
+These are small closed-loop samples measured from one Windows client, including
+network latency; they are not a sustained-throughput limit or production SLO.
+The 5-second p95 stop threshold was an experiment guard, not an adopted SLO.
+
+**Observed failure:** the preceding sweep succeeded for 16 requests each at
+concurrency 1 and 2, then returned 15 HTTP 200 and one HTTP 503 at concurrency 4.
+The trial stopped before its replay phase; its paused project has 940 receipts
+and 940 event-count increments. This is a failed capacity sample. It must not be
+replaced by the later passing concurrency-2 result. The store retries a named
+`ingest_revision` conflict at most three times and then returns 503, but the
+response alone does not establish whether this caused the observed failure.
+Internal cause attribution, higher concurrency and sustained load remain open.
+
+Production analytics and Better Auth databases were exported separately, saved
+as AES-256-GCM archives, read back and decrypted, and imported into two newly
+created remote D1 databases. Full schema/table fingerprints matched their
+respective exported snapshots; `quick_check` and foreign-key checks passed.
+
+| Database | Application/migration tables | SQL export bytes | Export | Import | Total drill |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Analytics | 18 | 451454 | 3.37 s | 7.59 s | 21.78 s |
+| Better Auth | 14 | 22154 | 2.67 s | 10.00 s | 17.33 s |
+
+The restored analytics snapshot contained 965 receipts. Replaying seven existing
+events returned `{accepted:0,duplicates:7}` and preserved its fingerprint;
+an immutable-schema update was rejected. The backup preceded the final load
+trial, so its receipt count differs from the later live DB. Both temporary
+restore databases were deleted, with a subsequent account inventory confirming
+none remained. Production databases were not overwritten or rebound.
+
+Encrypted backups and their report remain under
+`%LOCALAPPDATA%/Tallyfin/Backups/recovery-20261025-*/`; the key is protected by
+Windows DPAPI CurrentUser and the directory ACL is restricted to that account.
+The successful backup directory contains no plaintext SQL or private import log.
+This proves recovery on this Windows account, not recovery on another device.
+It does not establish automatic backup cadence, an RPO, whole-service failover,
+restored application login or a guaranteed RTO. Whole-service recovery must also
+restore configuration, signing secrets and bindings, and exercise sign-in.
+
+The local `bench:collector` and `verify:restore` drills also passed: 1090 receipts,
+480 completed workflows and 24 completed funnels in the former, and all 17
+fixture tables, deduplication, protected writes and integrity in the latter.
+Two verifier defects were fixed: native `cloudflare:workers` imports must remain
+external in esbuild test/local bundles, and recovery fingerprints must include
+mixed-case Better Auth table names. No runtime API or DB contract changed.
+
+Additional regression verification and tool changes:
+
+- `npm run typecheck`: passed. `npm run check --prefix tools/contracts`: 69/69
+  passed. Focused benchmark tests passed 2/2; recovery-fingerprint tests passed 3/3.
+- The initial broad `npm test` run had 568 passes, 17 failures and six timeout
+  cancellations. Native Worker bundling and stale pre-0014 migration/table
+  expectations were corrected; migration behavior itself was not changed.
+- The bounded run used the now-default `--test-concurrency=2` with the existing
+  30-second per-test limit: 590 passed, zero failed and one timed out. That native
+  publisher Worker test still initialized its new database through 68 separate
+  calls. Changing this fixture to one transactional batch made its focused rerun
+  pass in 10.73 seconds without increasing the timeout. The full 591-test suite
+  was not repeated after that final fixture fix; these results are not a claim
+  of a single completely passing final full-suite run.
+- Default test file concurrency is now capped at two, and local/test esbuild
+  bundles preserve the native Workers import. No new CI job or schedule was
+  added. No SDK release, application redeployment or disruptive live failover
+  was performed for these validation-tool changes. `git diff --check`: passed.
+
+Local reports: `.tmp/remote-load-report.json`,
+`.tmp/remote-recovery-report.json`, `.tmp/remote-recovery-cleanup.json`.
+The encrypted backup directory also contains `archive-format.json`, documenting
+nonce/tag layout and DPAPI protection without including a plaintext key.
+
 ## Deployed site action funnels — 2026-10-25
 
 [Schema 2](examples/0disoft/registry-v2.json) adds six browser action events and
