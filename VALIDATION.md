@@ -22,14 +22,50 @@
   condition is recorded as **stored initial credential rejected**; it is not
   classified as a service authentication regression. No password reset or change
   was performed.
+- The actual administrator entry asset `/assets/index-CEJ0UHFT.js` returned
+  HTTP 200 and its SHA-256 matched the prepared build. A cleanup revision advanced
+  from 1175 to 1180 during observation; that is progress evidence, not proof that
+  every cleanup operation succeeded.
+- Both five-minute runs used four disposable projects sharing one D1, 20 events
+  per batch (six complete three-step funnels and two page views), a replay on
+  every fifth request, zero automatic retries, a 64-request client concurrency
+  cap, and stop-on-failure behavior. Together they completed 8,400/8,400 HTTP
+  200 responses, accepted 134,400 events and recorded 33,600 duplicates with no
+  HTTP 503 or request failures.
+
+| Target | HTTP | Accepted / duplicate | Client p95 / max | Max active | Response window | Requests/s | Accepted events/s |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: |
+| 12 requests/s, 300 s | 3,600/3,600 | 57,600 / 14,400 | 1,127.2165 / 2,223.9432 ms | 25 | 300,900.091 ms | 11.9641 | 191.4257 |
+| 16 requests/s, 300 s | 4,800/4,800 | 76,800 / 19,200 | 1,216.4103 / 1,870.1588 ms | 29 | 300,378.1123 ms | 15.9798594 | 255.6777503 |
+
+- Each 12 requests/s project retained 14,400 receipts and 14,400 events with
+  4,320 funnel runs and all three step totals at 4,320. Each 16 requests/s project
+  retained 19,200 receipts and 19,200 events with 5,760 funnel runs and all three
+  step totals at 5,760. The eight load projects, four per phase, were paused
+  before their integrity reads.
+- The retained tails covered 2,387/3,602 (66.3%) and 2,664/4,802 (55.4769%).
+  They observed 254 and 307 conflicts, zero exhaustions, maximum attempt 1, and no
+  failed invocations. These are partial observations, not full censuses.
+- Closeout confirmed all 10 projects paused, including the two probe projects,
+  and no matching guard or Wrangler-tail process remained. The site, 8ailors and
+  account-login surfaces returned HTTP 200, and the post-load version check
+  retained both Workers at 100%.
+- The load runs wrote synthetic test data only to those ten paused projects.
+  Schema, migrations and resource bindings were unchanged. The load generator
+  did not target `zerodi-site` or other existing production projects, and
+  before/after row counts for those datasets were not compared. The record
+  includes one authentication attempt with the stored initial credential, which
+  returned 401; no password reset or change was performed.
+- The completed pair extends the earlier verified 8 requests/s five-minute
+  workload to 16 requests/s for the same single-client, four-project, one-D1
+  conditions. It does not establish maximum capacity, an SLO, multi-region
+  behavior or long-duration stability.
 - Prior source results were reused because this documentation change includes no
-  application-code change: Collector 202, focused Collector 32, contracts 69 and
-  type checks passed. The remote 12 requests/s phase across four projects sharing
-  one D1 had approximately 3000 of 3600 responses, all HTTP 200, when this record
-  was updated. No completed result for either target is recorded or claimed.
+  application-code change: Collector 202, installation/runtime checks 32,
+  and type checks passed. The 69 contract checks passed again on 2026-10-26.
 - Rollback is available through Collector
   `b6498981-83b7-4fd9-b736-404cf91e8f0c` and administrator
-  `470beb08-390c-437a-aed4-7b9feb7ff411` without a database change. No API,
+  `470beb08-390c-437a-aed4-7b9feb7ff411` without a schema or binding change. No API,
   DB schema, SDK, dependency, CI or authentication-Worker change is included.
 
 ## Optional pre-D1 browser request limiter — 2026-10-25
