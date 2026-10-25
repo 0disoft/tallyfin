@@ -1,8 +1,8 @@
 # Tallyfin
 
-Tallyfin is a lightweight product event analytics platform shared across Rodisoft services. Per-project configuration counts different actions such as sign-ups, file conversions, purchases, and calculations while minimizing personal data collection. Sembom is the first integration example.
+Tallyfin is a lightweight product event analytics platform shared across Rodisoft services. Per-project configuration counts different actions such as sign-ups, file conversions, purchases, and calculations while minimizing personal data collection. Sembom is a reference integration; [0disoft.github.io](examples/0disoft/README.md) is the first deployed service pilot.
 
-This document guides local development and self-hosting. The initial Rodisoft installation was deployed to Cloudflare on 2026-10-25 with Better Auth, separate auth/analytics D1 databases, and a private Collector service binding. Real browser sign-in, administrator reads and recurring maintenance were verified; an actual service-event pilot and remote backup/recovery remain follow-ups. See [Better Auth setup](docs/backend/better-auth.md) and [validation evidence](VALIDATION.md).
+This document guides local development and self-hosting. The initial Rodisoft installation was deployed to Cloudflare on 2026-10-25 with Better Auth, separate auth/analytics D1 databases, and a private Collector service binding. Real browser sign-in, administrator reads, recurring maintenance and the consented 0disoft.github.io page-view pilot were verified. Remote backup/recovery remains a follow-up. See [Better Auth setup](docs/backend/better-auth.md) and [validation evidence](VALIDATION.md).
 
 ## What works locally now
 
@@ -22,7 +22,7 @@ The owner-only `LivePublishers` settings screen provides a 25-item list with pag
 
 ## What has not been verified yet
 
-- The initial deployment uses Better Auth and workers.dev. Custom domains and an actual service-event pilot remain follow-ups; each independent installation needs its own resource and identity settings.
+- The initial deployment uses Better Auth and workers.dev. Custom domains and broader service/workflow pilots remain follow-ups; the 0disoft.github.io page-view pilot is live. Each independent installation needs its own resource and identity settings.
 - Publisher OIDC is disabled until an actual machine identity is configured. Administrator login through the deployed provider has been verified.
 - Remote migrations and recurring cleanup through a SQLite Durable Object alarm were verified. Remote load, backup/recovery, alert delivery and production SLOs remain unverified; the production SLO is UNDECIDED.
 - The API 401 shown under the administrator's default settings is a real response returned while authentication is disabled. Real sign-in requires separate OIDC configuration.

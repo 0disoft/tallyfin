@@ -1,5 +1,59 @@
 # Validation
 
+## First deployed service pilot: 0disoft.github.io — 2026-10-25
+
+Registered project `zerodi-site` with the reviewed schema 1 in
+[the pilot registry](examples/0disoft/registry.json), `Asia/Seoul`, the single
+allowed site origin and bounded ingest limits. The trusted offline provisioner
+applied the registry and the existing administrator's owner grant; no password,
+token, cookie or signing secret was copied into the site. The existing public
+batch route works through the administrator Worker and private Collector binding.
+Allowed-origin OPTIONS returned 204 and a foreign origin was rejected.
+
+Site commit `633696daddb47755df67f280c4b4c17413371d0b` installed the licensed local
+browser-SDK archive and connected consented navigation tracking. Only `page_view`
+with fixed `section`/`locale` enums is sent, at most 42 combinations. No URL,
+query, title, article slug, search text or visitor identifier is included in event
+properties. The SDK omits credentials/referrers; withdrawal destroys pending work.
+Privacy wording was updated in all six locales. The existing Pages workflow
+received one public environment variable, without adding jobs or scheduled runs.
+
+- Site checks passed: 147 tests across 26 files, Svelte check with 0 errors and
+  0 warnings, lint, formatting, six-locale validation, production build and
+  Pagefind index (828 pages). A first simultaneous check/build collided on the
+  type-generator lock; sequential checking after build passed.
+- The isolated Chromium check passed Tallyfin-only consent, exactly one initial
+  page view, credential/referrer omission and no delivery after withdrawal.
+- [GitHub Pages run 40179440744](https://github.com/0disoft/0disoft.github.io/actions/runs/40179440744)
+  succeeded, including its existing checks, build and deployment. The deployed
+  public env endpoint contains the reviewed collector URL. The Apache LICENSE
+  and NOTICE are also served successfully under `/licenses/tallyfin/`.
+- Chromium 156.0.8078.4 then visited the real site with a fresh context. Before
+  consent, collection requests were 0. After consent, home and investors sent
+  two one-event batches, each returning HTTP 200. Both receipts were read back
+  from remote D1. Aggregates increased from home=1 to home=2/investors=1.
+- Replaying the first batch returned `{accepted:0,duplicates:1}`. Aggregates
+  remained home=2/investors=1 and the two tested receipts remained exactly two.
+  After withdrawing consent and navigating to creators, additional collection
+  requests were 0. Page errors were 0. Unrelated Google/advertising requests were
+  blocked in the test browser so synthetic pilot visits were not sent to them.
+
+The pre-existing home=1 came from the first live harness attempt: collection
+returned 200, but reading a response body already cancelled by the SDK failed.
+The corrected harness checks HTTP status and stored receipts rather than trying
+to consume SDK-owned bodies; its retry and remote aggregate checks passed.
+The ignored report and screenshot are `.tmp/0disoft-pilot-live-report.json` and
+`.tmp/0disoft-pilot-live.png`. These are real accepted page views, including the
+initial harness visit; they are not claimed to be unique human visitors.
+
+No analytics API/DB contract, runtime Worker code, migration or runner count
+changed. No npm publication or Tallyfin redeployment was needed. The unchanged
+full Tallyfin analytics suites were not repeated; the real ingest/aggregate path
+and site checks were verified directly. This pilot does not establish server
+publisher authentication, task/funnel completion, mobile runtime cost, production
+load/SLOs, remote backup/recovery or another product's integration. README,
+product spec, roadmap, workspace boundaries and this record reflect that scope.
+
 ## Development dependency security updates — 2026-10-25
 
 Updated only two vulnerable transitive packages, preserving their existing major
