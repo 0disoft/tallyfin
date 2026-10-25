@@ -1,0 +1,302 @@
+{
+  "project": {
+    "id": "zerodi-site",
+    "name": "0disoft.github.io",
+    "status": "active",
+    "timeZone": "Asia/Seoul"
+  },
+  "schemaVersion": 2,
+  "schemaStatus": "active",
+  "allowedOrigins": [
+    "https://0disoft.github.io"
+  ],
+  "limits": {
+    "requestsPerMinute": 120,
+    "newReceiptsPerUtcDay": 100000
+  },
+  "events": [
+    {
+      "name": "page_view",
+      "label": "Page view",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    },
+    {
+      "name": "story_opened",
+      "label": "Story opened",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    },
+    {
+      "name": "share_copy_started",
+      "label": "Link copy attempted",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    },
+    {
+      "name": "share_link_copied",
+      "label": "Link copied successfully",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    },
+    {
+      "name": "search_started",
+      "label": "Search executed",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    },
+    {
+      "name": "search_result_clicked",
+      "label": "Search result clicked",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    },
+    {
+      "name": "search_destination_opened",
+      "label": "Search destination opened",
+      "source": "browser",
+      "properties": {
+        "section": {
+          "type": "enum",
+          "purpose": "Public page category without a URL or article identity",
+          "required": true,
+          "values": [
+            "home",
+            "indiehackers",
+            "story",
+            "investors",
+            "creators",
+            "privacy",
+            "other"
+          ]
+        },
+        "locale": {
+          "type": "enum",
+          "purpose": "Public interface language",
+          "required": true,
+          "values": [
+            "en",
+            "zh",
+            "es",
+            "fr",
+            "hi",
+            "ko"
+          ]
+        }
+      }
+    }
+  ],
+  "workflows": [],
+  "funnels": [
+    {
+      "id": "story_sharing",
+      "label": "Story to successful link copy",
+      "steps": [
+        {
+          "eventName": "story_opened",
+          "source": "browser"
+        },
+        {
+          "eventName": "share_copy_started",
+          "source": "browser"
+        },
+        {
+          "eventName": "share_link_copied",
+          "source": "browser"
+        }
+      ],
+      "dimensions": [
+        "locale"
+      ]
+    },
+    {
+      "id": "search_discovery",
+      "label": "Search to destination opened",
+      "steps": [
+        {
+          "eventName": "search_started",
+          "source": "browser"
+        },
+        {
+          "eventName": "search_result_clicked",
+          "source": "browser"
+        },
+        {
+          "eventName": "search_destination_opened",
+          "source": "browser"
+        }
+      ],
+      "dimensions": [
+        "locale"
+      ]
+    }
+  ]
+}
