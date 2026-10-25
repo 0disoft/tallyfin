@@ -16,8 +16,11 @@ export type { CleanupPage } from './maintenance.ts';
 export class D1Store implements ServerCollectionStore {
   readonly db: SqlDatabase;
   readonly allowLocalHttp: boolean;
-  constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean } = {}) {
+  readonly onIngestConflict: ((entry: { attempt: number; exhausted: boolean }) => void) | undefined;
+  constructor(db: SqlDatabase, options: { allowLocalHttp?: boolean;
+    onIngestConflict?: (entry: { attempt: number; exhausted: boolean }) => void } = {}) {
     this.db = db; this.allowLocalHttp = options.allowLocalHttp ?? false;
+    this.onIngestConflict = options.onIngestConflict;
   }
   async loadProject(projectId: string) {
     const results = await this.db.batch<ProjectRow>([this.db.prepare('SELECT * FROM projects WHERE id = ?').bind(projectId)]);
@@ -124,6 +127,8 @@ export class D1Store implements ServerCollectionStore {
         // Only this named constraint denotes a stale revision. Every other database failure is fatal.
         const message = error instanceof Error ? `${error.message} ${error.cause instanceof Error ? error.cause.message : ''}` : '';
         if (!message.includes('tallyfin_ingest_revision')) throw new CollectionError('storage_unavailable', 503, { cause: error });
+        try { this.onIngestConflict?.({ attempt: retry + 1, exhausted: retry + 1 === D1_POLICY.snapshotAttempts }); }
+        catch { /* Diagnostics cannot change a committed or rejected request. */ }
       }
     }
     throw new CollectionError('storage_unavailable', 503);
