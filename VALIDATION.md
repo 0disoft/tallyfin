@@ -1,5 +1,57 @@
 # Validation
 
+## Paid capacity sweep and fixed-rate boundary — 2026-10-25
+
+A fixed-rate sweep used one disposable project per phase on unchanged Collector
+version `b6498981-83b7-4fd9-b736-404cf91e8f0c`. The 2 and 4 requests/s phases
+completed their 60-second plans. The 6 requests/s phase halted on its first
+failure and drained responses over a 9.773-second window. The reported 0.93
+requests/s divides 56 requests by the full 60-second plan and is not observed
+throughput. Observed throughput was 5.73 requests/s over the response window;
+the short failed run is not sustainable capacity.
+
+| Phase | Requested load | Successes / attempts | Client p95 / max | Response window |
+| --- | --- | --- | --- | --- |
+| r2 | 2 requests/s for 60 s (120 planned) | 120 / 120 HTTP 200 | 1643 / 2383 ms | 59.817 s |
+| r4 | 4 requests/s for 60 s (240 planned) | 240 / 240 HTTP 200 | 1563 / 2929 ms | 60.197 s |
+| r6 | 6 requests/s for 60 s (360 planned) | 55 / 56 HTTP 200 (one 503) | 3451 / 5578 ms | 9.773 s, halted |
+
+A distributed sweep used four independent disposable projects per phase on the
+same version; concurrency is aggregate across those projects. Concurrency 8, 12,
+and 16 completed 128 / 128 HTTP 200. Concurrency 24 returned 127 / 128 and
+halted, so concurrency 32 was not run.
+
+| Phase | Requested load | Successes / attempts | Client p95 / max | Response window |
+| --- | --- | --- | --- | --- |
+| c8 | 4 projects, aggregate concurrency 8 (128 planned) | 128 / 128 HTTP 200 | 1243 / 1673 ms | 10.280 s |
+| c12 | 4 projects, aggregate concurrency 12 (128 planned) | 128 / 128 HTTP 200 | 1762 / 7259 ms | 9.275 s |
+| c16 | 4 projects, aggregate concurrency 16 (128 planned) | 128 / 128 HTTP 200 | 2631 / 6702 ms | 10.472 s |
+| c24 | 4 projects, aggregate concurrency 24 (128 planned) | 127 / 128 HTTP 200 (one 503) | 2197 / 6116 ms | 6.361 s, halted |
+
+Both reports set `allProjectsPaused: true`, and every integrity record was read
+after pausing. Stored receipts matched stored events, aggregate and funnel
+checks passed, and the failed batches stored zero event IDs. Both 503s were
+`storage_unavailable`. Tail correlation matched each failure to the `commit`
+stage with kind `revision_conflict`; one conflict sequence in each experiment
+exhausted at attempt 8. The single-project
+tail retained 272 of 422 expected invocations (416 load responses plus six
+probes), or 64.5% coverage. It is incomplete and is not a full census, so it does
+not establish that every uncaptured invocation passed. The distributed tail
+retained 371 rows, also below the 520 expected invocations.
+
+The drivers made no automatic retries and wrote to no production project, and no
+requests targeted `zerodi-site`. A HEAD smoke of https://8ailors.xyz/ko/ and
+https://account.8ailors.xyz/ko/login returned 200 for both. This checks public
+reachability only and does not verify a real login. All measurements ran from a
+single Windows client, not multiple regions.
+
+These measurements did not change application code or deployment. Paid
+allowances do not change compare-and-swap semantics, so revision conflicts remain
+possible under contention. These bounded runs identify first failing points in
+this sequence, not a general capacity or SLO guarantee. A five-minute
+single-project soak and distributed fixed-rate tests are ongoing; their results
+are not included here.
+
 ## Shared Cloudflare account and Workers Paid activation — 2026-10-25
 
 An authenticated Cloudflare API listing placed `tallyfin-admin`, `tallyfin-auth`,
