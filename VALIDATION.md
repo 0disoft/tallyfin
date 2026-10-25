@@ -1,5 +1,38 @@
 # Validation
 
+## Paid single-project sustained ingestion — 2026-10-25
+
+A five-minute, single-project target at 4 requests/s first stopped with
+`scheduler_lag` after 849/849 HTTP 200 responses, with a 213.642-second response
+window. The driver exceeded its 500 ms scheduler-lag ceiling, reaching 817.7 ms,
+and stopped offering work. This was a client-generator interruption, not a
+server failure.
+
+The driver rerun raised the scheduler-lag ceiling to 2000 ms. The 32-request HTTP
+concurrency cap and 15,000 ms timeout were unchanged, and no application code was
+edited. Maximum scheduler lag was 126.06 ms. The rerun completed 1200/1200 HTTP
+200 requests over a 300-second offered window (300.893-second response window),
+with 19200 accepted events, 4800 duplicates, and 5760 funnel runs whose three
+aggregate totals matched. Client p95/max was 1401.805/2642.787 ms, and maximum
+active concurrency was 9.
+
+Both reports set `allProjectsPaused: true`. Before and after probes returned 200;
+there were no within-load sentinel checks. The tails were partial: the
+interrupted run retained 679 of 851 expected invocations, and the completed
+rerun retained 907 of 1202. Neither is a full census. The rerun tail recorded 246
+conflicts, maximum attempt 6, no exhaustions, and no observed failed invocations.
+
+Both runs used one Windows client in a single region. Each request carried a
+20-event batch with six complete three-step funnels and two page views; every
+fifth request replayed the preceding body. The client made no automatic retries.
+The sampled client p95 is not an SLO. Four requests per second for five minutes
+is a verified workload, not an absolute maximum. Distributed fixed-rate tests
+are still running; their results are not included here.
+
+Temporary driver scripts passed `node --check`. Application test suites were
+skipped because application code was unchanged. The first slice passed 69
+documentation contract checks.
+
 ## Paid capacity sweep and fixed-rate boundary — 2026-10-25
 
 A fixed-rate sweep used one disposable project per phase on unchanged Collector
