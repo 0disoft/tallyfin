@@ -64,7 +64,15 @@ issuer and subject for `provision:remote-creators` to grant an explicit project
 limit. Do not substitute the email or client ID for the subject. The first
 project can then be created from the administrator screen.
 
-Open `/sign-in` on the auth origin to change a password after signing in there.
+Set optional installation `login.passwordChangeUrl` to the auth origin followed
+by `/account/password`. The administrator toolbar then shows **비밀번호 변경**
+(Change password), opening the session-protected account page in a new tab so
+the dashboard retains its in-memory tokens and unsaved work. Other providers
+can omit this setting or supply their own HTTPS URL on the configured issuer's
+origin. Login and password change are separate screens. An expired auth session
+redirects to sign-in and returns to password change after successful login.
+New passwords must contain 12–128 characters, enforced by both the UI and Better
+Auth; the current password and matching confirmation are required by the form.
 Forgotten passwords require a private operator recovery; email reset is closed.
 Do not overwrite a credential blindly. Recovery must revoke existing sessions
 and refresh tokens, and existing access tokens can remain valid for five minutes.

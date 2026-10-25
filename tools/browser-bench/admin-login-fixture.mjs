@@ -36,7 +36,7 @@ export async function adminLoginFixture(directory, { profile = 'login', allowCre
     contents: `import worker from './apps/collector/src/runtime.ts';
       console.log = console.info = console.warn = () => {}; // Keep test-only sampled observations out of the CLI report stream.
       globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023', external: ['cloudflare:workers'] });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0].text, compatibilityDate: '2026-08-06',
     host: '127.0.0.1', port: 0, d1Databases: { DB: crypto.randomUUID() }, d1Persist: join(directory, 'state'),
     bindings: { ...DEFAULT_SETTINGS, ALLOW_LOCAL_HTTP: profile === 'onboarding' ? 'true' : 'false', ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: issuer, OIDC_AUDIENCE: audience,

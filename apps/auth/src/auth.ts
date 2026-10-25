@@ -1,6 +1,7 @@
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { jwt } from 'better-auth/plugins';
 import { oauthProvider } from '@better-auth/oauth-provider';
+import { MIN_PASSWORD_LENGTH, MAX_PASSWORD_LENGTH } from './password-policy.ts';
 
 export const ADMIN_CLIENT_ID = 'tallyfin-admin';
 export const SCOPES = ['openid', 'profile', 'offline_access'];
@@ -26,7 +27,7 @@ export function authOptions(settings: AuthSettings) {
     secret: settings.secret, database: settings.database,
     trustedOrigins: [settings.origin, settings.adminOrigin],
     logger: { disabled: true }, telemetry: { enabled: false },
-    emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: 14, maxPasswordLength: 128 },
+    emailAndPassword: { enabled: true, disableSignUp: true, minPasswordLength: MIN_PASSWORD_LENGTH, maxPasswordLength: MAX_PASSWORD_LENGTH },
     session: { expiresIn: 86400, updateAge: 3600, cookieCache: { enabled: false } },
     advanced: { useSecureCookies: true, ipAddress: { ipAddressHeaders: ['cf-connecting-ip'], ipv6Subnet: 128 } },
     rateLimit: { enabled: true, storage: 'database', window: 60, max: 60,

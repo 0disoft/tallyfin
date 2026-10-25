@@ -39,6 +39,7 @@ export class BrowserLogin {
     this.#fetch = fetchImpl;
   }
   get destroyed(): boolean { return this.#destroyed; }
+  get passwordChangeUrl(): string | undefined { return this.#config.passwordChangeUrl; }
   toJSON(): string { return '[BrowserLogin]'; }
   toString(): string { return '[BrowserLogin]'; }
 

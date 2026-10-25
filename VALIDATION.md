@@ -1,5 +1,48 @@
 # Validation
 
+## Administrator password-change navigation and 12-character minimum — 2026-10-25
+
+Moved password changes out of the login screen into the session-protected
+`/account/password` page. An explicitly configured administrator toolbar link
+opens it in a new tab, preserving dashboard memory and unsaved edits. Expired
+sessions sign in and return to this fixed account page. The optional installation
+`login.passwordChangeUrl` must be HTTPS on the configured issuer's origin; external
+providers can omit it. UI and Better Auth share a 12–128-character policy.
+
+- Auth/Workers tests: 6/6 passed, including 11/129-character rejection, exactly
+  12-character acceptance, current-password and session requirements, revoking
+  other sessions, signing in with the changed credential, protected page access
+  and absence of the change form from login.
+- Installation and browser OIDC client tests: 19/19 passed, including optional
+  public settings and rejection of foreign origins, credentials and URL queries.
+- Root typecheck, production-configured admin build, both Worker deployment dry
+  runs, 69/69 contract/documentation checks and `git diff --check` passed.
+- Chromium 156.0.8078.4: the administrator login verification passed toolbar-link
+  destination/new-tab assertions, PKCE, protected reads, rotating refresh,
+  disconnect and callback cleanup, with 0 writes and 0 page errors. Its first
+  attempt stopped before browser setup because the maintenance RPC import was
+  absent from the fixture bundler's externals; adding `cloudflare:workers` fixed it.
+- A separate isolated real Better Auth/Workers/D1 Chromium check passed return
+  after login, confirmation mismatch, successful 12-character password change,
+  form clearing and the administrator return link. Desktop and 390px screenshots
+  were inspected; there was no horizontal overflow or page error. An initial
+  route-interception test failed to follow a synthetic redirect, so runtime
+  redirect assertions and explicit sign-in navigation were verified separately.
+  Screenshots and the one-off harness are ignored in `.tmp/`.
+
+The setup guide and administrator instructions were updated. No analytics API,
+DB schema, dependency, CI runner or repository hygiene settings changed. The
+unchanged full analytics suites were not repeated. No production password was
+changed by verification; password mutation checks use disposable local accounts.
+
+Deployed auth version `c28718cb-2605-4fbd-b879-7078cec7fc51` and administrator
+version `470beb08-390c-437a-aed4-7b9feb7ff411`. Live read-only checks passed:
+the login screen no longer includes a password-change form, unauthenticated
+account-page access redirects to the fixed sign-in/return flow, the served script
+contains that return route, the production administrator bundle includes the
+reviewed password-page URL, and the administrator responds with 200. No database
+migration, secret replacement or Collector redeployment was needed.
+
 ## Initial Better Auth production deployment — 2026-10-25
 
 Deployed the administrator at `https://tallyfin-admin.rodisoft1.workers.dev`

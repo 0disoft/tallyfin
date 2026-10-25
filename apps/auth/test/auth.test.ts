@@ -91,3 +91,26 @@ test('even a privately inserted second account cannot open an administrator sess
     assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get()!.n, 0);
   } finally { f.database.close(); }
 });
+
+test('password changes require a session and current password, accept 12 characters and reject 11/129', async () => {
+  const f = await fixture();
+  const headers = { 'Content-Type': 'application/json', Origin: origin };
+  try {
+    const body = (currentPassword: string, newPassword: string) => JSON.stringify({ currentPassword, newPassword, revokeOtherSessions: true });
+    assert.equal((await f.call('/change-password', { method: 'POST', headers, body: body(f.password, 'x'.repeat(12)) })).status, 401);
+    const signIn = () => f.call('/sign-in/email', { method: 'POST', headers,
+      body: JSON.stringify({ email: 'operator@example.invalid', password: f.password }) });
+    const login = await signIn();
+    const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    await signIn();
+    assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get()!.n, 2);
+    const change = (current: string, next: string) => f.call('/change-password', { method: 'POST', headers: { ...headers, Cookie: cookie }, body: body(current, next) });
+    for (const size of [11, 129]) assert.equal((await change(f.password, 'x'.repeat(size))).status, 400);
+    assert.equal((await change(crypto.randomUUID(), 'x'.repeat(12))).status, 400);
+    assert.equal((await change(f.password, 'x'.repeat(12))).status, 200);
+    assert.equal(f.database.prepare('SELECT count(*) AS n FROM session').get()!.n, 1);
+    const relogin = await f.call('/sign-in/email', { method: 'POST', headers,
+      body: JSON.stringify({ email: 'operator@example.invalid', password: 'x'.repeat(12) }) });
+    assert.equal(relogin.status, 200);
+  } finally { f.database.close(); }
+});

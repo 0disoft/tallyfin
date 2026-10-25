@@ -19,7 +19,7 @@ export function installation(input: unknown, root: string, outputDirectory?: str
   try {
     if (!closed(input, ['adminOrigin', 'admin', 'collector', 'login'])) throw Error();
     field = 'adminOrigin'; if (typeof input.adminOrigin !== 'string') throw Error();
-    field = 'login'; if (!closed(input.login, ['issuer', 'clientId', 'scope'], ['resource', 'idTokenAlgorithm'])) throw Error();
+    field = 'login'; if (!closed(input.login, ['issuer', 'clientId', 'scope'], ['resource', 'idTokenAlgorithm', 'passwordChangeUrl'])) throw Error();
     field = 'admin';
     const admin = adminDeploymentTarget(input.admin, root);
     field = 'collector';
@@ -38,6 +38,7 @@ export function installation(input: unknown, root: string, outputDirectory?: str
       VITE_OIDC_SCOPE: input.login.scope,
       VITE_OIDC_ID_TOKEN_ALG: input.login.idTokenAlgorithm ?? 'RS256',
       ...(input.login.resource === undefined ? {} : { VITE_OIDC_RESOURCE: input.login.resource }),
+      ...(input.login.passwordChangeUrl === undefined ? {} : { VITE_OIDC_PASSWORD_CHANGE_URL: input.login.passwordChangeUrl }),
     };
     const login = loginConfig(env, input.adminOrigin);
     if (!login) throw Error();
@@ -49,6 +50,7 @@ export function installation(input: unknown, root: string, outputDirectory?: str
       VITE_OIDC_ISSUER: login.issuer, VITE_OIDC_CLIENT_ID: login.clientId, VITE_OIDC_SCOPE: login.scope,
       VITE_OIDC_ID_TOKEN_ALG: login.idTokenAlgorithm,
       ...(login.resource === undefined ? {} : { VITE_OIDC_RESOURCE: login.resource }),
+      ...(login.passwordChangeUrl === undefined ? {} : { VITE_OIDC_PASSWORD_CHANGE_URL: login.passwordChangeUrl }),
     } };
     return { admin, collector, loginSettings, manifest: { schemaVersion: 'tallyfin.installation/v1', input }, registration: {
       schemaVersion: 'tallyfin.oidc-registration/v1', issuer: login.issuer, clientId: login.clientId,

@@ -32,7 +32,8 @@ try {
     try { server = await createServer({ root: resolve(root, 'apps/admin'), configFile: resolve(root, 'apps/admin/vite.config.mjs'),
       envDir: false, envPrefix: [],
       define: Object.fromEntries(Object.entries({ VITE_OIDC_ISSUER: local.issuer, VITE_OIDC_CLIENT_ID: local.clientId,
-        VITE_OIDC_SCOPE: 'openid offline_access', VITE_OIDC_RESOURCE: local.resource, VITE_OIDC_ID_TOKEN_ALG: 'RS256' }).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])),
+        VITE_OIDC_SCOPE: 'openid offline_access', VITE_OIDC_RESOURCE: local.resource, VITE_OIDC_ID_TOKEN_ALG: 'RS256',
+        VITE_OIDC_PASSWORD_CHANGE_URL: local.issuer + '/account/password' }).map(([key, value]) => [`import.meta.env.${key}`, JSON.stringify(value)])),
       server: { host: '127.0.0.1', port: 0, proxy: { '^/v1(?:/|\\?|$)': { target: new URL(await local.mf.ready).origin, changeOrigin: false } } }, logLevel: 'error' });
     } finally { if (previousCollector === undefined) delete process.env.TALLYFIN_COLLECTOR_ORIGIN; else process.env.TALLYFIN_COLLECTOR_ORIGIN = previousCollector; }
     assert.equal(cancelled, false);
@@ -52,6 +53,10 @@ try {
     };
     stage = 'login'; await page.goto(origin);
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
+    const passwordMenu = page.getByRole('link', { name: '비밀번호 변경 (새 탭)', exact: true });
+    await passwordMenu.waitFor();
+    assert.equal(await passwordMenu.getAttribute('href'), local.issuer + '/account/password');
+    assert.equal(await passwordMenu.getAttribute('target'), '_blank');
     await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
     assert.equal(new URL(page.url()).pathname, '/auth/callback');
     assert.equal(new URL(page.url()).search, ''); await emptyStorage();

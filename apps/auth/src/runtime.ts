@@ -1,5 +1,5 @@
 import { createAuth } from './auth.ts';
-import { loginPage, loginScript, loginStyle } from './pages.ts';
+import { loginPage, passwordPage, loginScript, loginStyle } from './pages.ts';
 export { MaintenanceClock } from './maintenance.ts';
 
 const cache = new WeakMap<object, ReturnType<typeof createAuth>>();
@@ -71,13 +71,22 @@ export default {
       if (url.pathname === '/login.css') return wrap(new Response(loginStyle, { headers: { 'Content-Type': 'text/css; charset=utf-8' } }));
     }
     const maintenance = url.pathname === '/maintenance' && ['GET', 'POST'].includes(request.method);
-    if (!maintenance && !(request.method === 'GET' && reads.has(url.pathname)) && !(request.method === 'POST' && writes.has(url.pathname)))
+    const passwordScreen = url.pathname === '/account/password' && request.method === 'GET';
+    if (!maintenance && !passwordScreen && !(request.method === 'GET' && reads.has(url.pathname)) && !(request.method === 'POST' && writes.has(url.pathname)))
       return wrap(new Response(null, { status: 404 }));
     try {
       let auth = cache.get(env);
       if (!auth) {
         auth = createAuth({ database: env.AUTH_DB, origin: env.AUTH_ORIGIN, adminOrigin: env.ADMIN_ORIGIN, secret: env.BETTER_AUTH_SECRET, adminEmail: env.ADMIN_EMAIL });
         cache.set(env, auth);
+      }
+      if (passwordScreen) {
+        const session = await auth.api.getSession({ headers: request.headers });
+        if (session?.user.email.toLowerCase() !== env.ADMIN_EMAIL.toLowerCase())
+          return wrap(new Response(null, { status: 302, headers: { Location: '/sign-in?returnTo=password' } }));
+        const adminOrigin = new URL(env.ADMIN_ORIGIN);
+        return wrap(new Response(passwordPage.replace('<html lang="ko">', `<html lang="ko" data-admin-origin="${adminOrigin.origin}">`),
+          { headers: { 'Content-Type': 'text/html; charset=utf-8' } }));
       }
       if (maintenance) {
         if (request.method === 'POST' && origin !== env.AUTH_ORIGIN) return wrap(new Response(null, { status: 403 }));

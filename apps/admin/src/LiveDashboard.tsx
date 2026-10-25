@@ -317,6 +317,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
       {view !== 'settings' && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
+      {session?.login?.passwordChangeUrl && <a className="secondary-button" href={session.login.passwordChangeUrl} target="_blank" rel="noopener noreferrer">비밀번호 변경<span className="sr-only"> (새 탭)</span></a>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
     </div>
     {view !== 'settings' && customPeriod && currentRange && projectToday && <DateRangePicker

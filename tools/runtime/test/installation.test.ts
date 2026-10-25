@@ -79,6 +79,17 @@ test('installation produces consistent Worker configs, public-only build setting
   assert.equal(custom.registration.browserOrigin, 'https://admin.unit-testing.com');
 });
 
+test('password management URL is optional, public and restricted to the configured HTTPS identity provider', () => {
+  const config = input();
+  const url = config.login.issuer + '/account/password';
+  const plan = installation({ ...config, login: { ...config.login, passwordChangeUrl: url } }, process.cwd());
+  assert.equal(plan.loginSettings.env.VITE_OIDC_PASSWORD_CHANGE_URL, url);
+  assert.equal(installation(config, process.cwd()).loginSettings.env.VITE_OIDC_PASSWORD_CHANGE_URL, undefined);
+  for (const passwordChangeUrl of ['', 'http://identity.example.invalid/account/password', 'https://other.example.invalid/account/password',
+    url + '?token=secret', url + '#secret', 'https://user:pass@identity.example.invalid/account/password'])
+    assert.throws(() => installation({ ...config, login: { ...config.login, passwordChangeUrl } }, process.cwd()), /Invalid installation configuration/);
+});
+
 test('installation rejects cross-account/service/issuer/origin mismatches and private or malformed login settings', () => {
   for (const edit of [
     (c: any) => { c.admin.accountId = crypto.randomUUID().replaceAll('-', ''); },

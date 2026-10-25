@@ -23,7 +23,12 @@ test('Workers/D1 runtime signs in with native scrypt, closes signup and manageme
     await db.batch(sql.split(';').filter(part => part.trim()).map(part => db.prepare(part)));
     const call = (path: string, init?: RequestInit) => mf.dispatchFetch(origin + path, init);
     assert.equal((await call('/health')).status, 200);
-    assert.match(await (await call('/sign-in')).text(), /관리자 로그인/);
+    const loginHtml = await (await call('/sign-in')).text();
+    assert.match(loginHtml, /관리자 로그인/);
+    assert.doesNotMatch(loginHtml, /id="password"|비밀번호 변경/);
+    const lockedPasswordPage = await call('/account/password', { redirect: 'manual' });
+    assert.equal(lockedPasswordPage.status, 302);
+    assert.equal(lockedPasswordPage.headers.get('Location'), '/sign-in?returnTo=password');
     assert.equal((await call('/api/auth/sign-up/email', { method: 'POST' })).status, 404);
     assert.equal((await call('/api/auth/oauth2/register', { method: 'POST' })).status, 404);
     assert.equal((await call('/api/auth/admin/list-users')).status, 404);
@@ -43,6 +48,14 @@ test('Workers/D1 runtime signs in with native scrypt, closes signup and manageme
     assert.match(login.headers.get('set-cookie')!, /HttpOnly/);
     assert.match(login.headers.get('set-cookie')!, /Secure/);
     assert.match(login.headers.get('set-cookie')!, /SameSite=Lax/);
+    const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+    const accountPage = await call('/account/password', { headers: { Cookie: cookie } });
+    assert.equal(accountPage.status, 200);
+    const passwordHtml = await accountPage.text();
+    assert.match(passwordHtml, /minlength="12"/);
+    assert.match(passwordHtml, /name="confirmPassword"/);
+    assert.match(passwordHtml, /data-admin-origin="https:\/\/admin.example.invalid"/);
+    assert.equal(accountPage.headers.get('Cache-Control'), 'no-store');
     const session = await db.prepare('SELECT ipAddress,userAgent FROM session').first();
     assert.equal(session!.ipAddress, null); assert.equal(session!.userAgent, null);
     const keys = await db.prepare('SELECT key FROM rateLimit').all();

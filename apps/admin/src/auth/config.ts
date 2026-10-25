@@ -5,6 +5,7 @@ export interface LoginConfig {
   scope: string;
   redirectUri: string;
   resource?: string;
+  passwordChangeUrl?: string;
   idTokenAlgorithm: 'RS256' | 'ES256';
 }
 
@@ -28,8 +29,13 @@ export function loginConfig(env: Record<string, unknown>, origin: string): Login
   if (resource) { const url = new URL(resource); if (url.hash || url.username || url.password) throw new Error('로그인 resource 설정을 확인해 주세요.'); }
   const idTokenAlgorithm = env.VITE_OIDC_ID_TOKEN_ALG || 'RS256';
   if (idTokenAlgorithm !== 'RS256' && idTokenAlgorithm !== 'ES256') throw new Error('지원하지 않는 ID token 서명 알고리즘이에요.');
+  const passwordChangeUrl = env.VITE_OIDC_PASSWORD_CHANGE_URL === undefined ? undefined : text('VITE_OIDC_PASSWORD_CHANGE_URL');
+  if (passwordChangeUrl) {
+    secureEndpoint(passwordChangeUrl);
+    if (new URL(passwordChangeUrl).origin !== new URL(issuer).origin) throw new Error('비밀번호 변경 주소의 로그인 제공자를 확인해 주세요.');
+  }
   return { issuer, clientId: text(names[1]!), scope, redirectUri: `${base.origin}${CALLBACK_PATH}`,
-    ...(resource ? { resource } : {}), idTokenAlgorithm };
+    ...(resource ? { resource } : {}), ...(passwordChangeUrl ? { passwordChangeUrl } : {}), idTokenAlgorithm };
 }
 
 export function secureEndpoint(value: string): void {
