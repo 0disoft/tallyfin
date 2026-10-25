@@ -9,6 +9,7 @@ import { collectorHarness } from './collector-harness.ts';
 import { initialize } from '../provision/local.ts';
 import { Provisioner } from '../provision/store.ts';
 import { PublisherProvisioner } from '../provision/publishers.ts';
+import { benchmarkFailure } from './benchmark-failure.ts';
 
 type Job = { kind: 'write' | 'read'; path: string; body?: string; origin?: string; publisher?: boolean };
 type Sample = { kind: Job['kind']; status: number; ms: number; accepted: number; duplicates: number; total?: number };
@@ -53,6 +54,7 @@ export async function runCollectorBench(signal: AbortSignal = new AbortControlle
   // Frozen Worker clock for deterministic quota windows; HTTP timing remains monotonic/real.
   const { mf, principal, adminToken, publisherToken } = await collectorHarness(output, now);
   let phase = 'initialize'; const phases: ReturnType<typeof stats>[] = [];
+  const failures: ({ phase: string; kind: Job['kind']; status: number; startedAt: number; elapsedMs: number } & ReturnType<typeof benchmarkFailure>)[] = [];
   const observations: { phase: string; samples: Sample[] }[] = [];
   try {
     signal.throwIfAborted(); const db = await mf.getD1Database('DB'); await initialize(db, true);
@@ -66,13 +68,20 @@ export async function runCollectorBench(signal: AbortSignal = new AbortControlle
     }
     const url = await mf.ready; assert.equal(url.hostname, '127.0.0.1');
     const request = async (job: Job): Promise<Sample> => {
-      signal.throwIfAborted(); const start = performance.now();
+      signal.throwIfAborted(); const start = performance.now(), startedAt = Date.now();
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (job.origin) headers.Origin = job.origin;
       if (job.kind === 'read' || job.publisher) headers.Authorization = `Bearer ${job.publisher ? publisherToken : adminToken}`;
       const response = await fetch(new URL(job.path, url), { method: job.kind === 'write' ? 'POST' : 'GET', headers,
         ...(job.body === undefined ? {} : { body: job.body }), signal: AbortSignal.any([signal, AbortSignal.timeout(15000)]) });
-      const body = await response.json() as { accepted?: number; duplicates?: number; totalEvents?: number; error?: { code?: string } };
+      let body: { accepted?: number; duplicates?: number; totalEvents?: number; error?: { code?: string } };
+      try { body = await response.json() as typeof body; }
+      catch {
+        failures.push({ phase, kind: job.kind, status: response.status, startedAt, elapsedMs: performance.now() - start });
+        throw new Error('Invalid benchmark response');
+      }
+      if (response.status >= 400) failures.push({ phase, kind: job.kind, status: response.status, startedAt,
+        elapsedMs: performance.now() - start, ...benchmarkFailure(body, response.headers.get('Retry-After')) });
       assert.equal(response.headers.get('Cache-Control'), 'no-store');
       if (response.status === 200 && job.kind === 'write') {
         assert.ok(Number.isSafeInteger(body.accepted) && Number.isSafeInteger(body.duplicates));
@@ -161,7 +170,7 @@ export async function runCollectorBench(signal: AbortSignal = new AbortControlle
     await writeFile(join(output, 'report.json'), JSON.stringify(report, null, 2), { flag: 'wx' });
     return { ...report, output };
   } catch {
-    await writeFile(join(output, 'failure.json'), JSON.stringify({ local: true, phase, verified: false, phases }, null, 2), { flag: 'wx' });
+    await writeFile(join(output, 'failure.json'), JSON.stringify({ local: true, phase, verified: false, phases, failures }, null, 2), { flag: 'wx' });
     throw new Error(`Local collector benchmark failed during ${phase}. Inspect ${output}/failure.json.`);
   } finally { await mf.dispose(); }
 }

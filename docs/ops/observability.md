@@ -24,6 +24,28 @@ The Wrangler observability settings are unchanged. `observability.logs` has
 `send_metrics` is false. Automatic traces and invocation logs contain request URLs, which conflict
 with the product privacy contract, so they are not enabled.
 
+## Diagnosing intermittent ingestion 503 responses
+
+Retain the response status, error code, request UUID when present, Retry-After
+and start/end times. Never include event bodies, credentials or arbitrary
+exception text in incident reports. A Collector `storage_unavailable` response
+can be correlated by UUID with its `collection_failure` log: exactly
+`event`, `requestId`, `stage` and `kind`. The last two fields are fixed enums.
+The offline aggregate summary ignores this additional diagnostic; inspect the
+sanitized record when investigating an individual failure.
+
+An `admin_api_unavailable` response can mean the Collector service binding threw.
+Inspect the Collector invocation outcome as well as application logs. Platform
+CPU termination can bypass JavaScript catch/finally and leave no final app
+observation or request UUID in the response. Cloudflare identifies this as
+[`exceededCpu`](https://developers.cloudflare.com/workers/runtime-apis/handlers/tail/).
+Keep only sanitized outcome, timestamp and optional numeric CPU/wall times from
+tail metadata; do not persist request envelopes. A missing app error log does
+not establish that the DB rejected the request. Confirm receipt/aggregate
+integrity before recovery; do not add a generic proxy retry for writes.
+
+See the [reproduction record](../../VALIDATION.md#reproduced-platform-cpu-termination-and-ingestion-cpu-reduction--2026-10-25).
+
 ## Administrator Storage Read Probe
 
 The collector has an administrator-only `GET /v1/health` contract. It is not a public health check

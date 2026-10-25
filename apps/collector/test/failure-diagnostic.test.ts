@@ -11,10 +11,15 @@ test('failure classifiers project only fixed categories and terminate cyclic cau
   for (const [message, kind] of [['Database capacity exceeded','capacity'], ['D1_ERROR: database reset, private SQL','database_reset'],
     ['SQLITE_BUSY private SQL','database_busy'], ['D1 overloaded: private SQL','database_overloaded'],
     ['too many API requests by single invocation','platform_limit'], ['SQLITE_CONSTRAINT private SQL','constraint'],
+    ['D1 DB exceeded its CPU time limit and was reset.','platform_limit'],
+    ["D1 DB's isolate exceeded its memory limit and was reset.",'platform_limit'],
+    ['D1 DB storage operation exceeded timeout which caused object to be reset.','database_timeout'],
+    ['D1_ERROR: private unexpected SQL failure','database_error'],
     ['network connection lost private data','transport'], ['tallyfin_ingest_revision private SQL','revision_conflict']] as const)
     assert.equal(failureKind(new CollectionError('storage_unavailable',503,{cause:new Error(message)})),kind);
   assert.equal(failureKind(new DOMException('private deadline','TimeoutError')),'deadline');
   assert.equal(failureKind(new DOMException('private cancellation','AbortError')),'cancelled');
+  assert.equal(failureKind(new Error('D1_ERROR', {cause:new DOMException('private','TimeoutError')})),'deadline');
   const cyclic = new Error('private unknown');cyclic.cause=cyclic;
   assert.equal(failureKind(cyclic),'unknown');
 });

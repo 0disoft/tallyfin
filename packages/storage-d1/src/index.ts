@@ -1,6 +1,6 @@
 import { cleanupRows, type CleanupMetrics } from './retention.ts';
 export type { CleanupMetrics } from './retention.ts';
-import { COLLECTION_POLICY, canonicalJson, closed, CollectionError, integer, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity, validateRegistry } from '@tallyfin/core';
+import { COLLECTION_POLICY, canonicalJson, CollectionError, integer, planIngest, PROJECT_ID, REJECTION_REASONS, validGrantIdentity } from '@tallyfin/core';
 import type { PreparedBatch, PreparedServerBatch, Registry, RejectionReason, ServerCollectionStore, ServerPrincipal } from '@tallyfin/core';
 import { ingestStatements } from './ingest-statements.ts';
 import { readIngestSnapshot } from './ingest-snapshot.ts';
@@ -9,6 +9,7 @@ import { waitForIngestRetry } from './ingest-retry.ts';
 import type { IngestRetryOptions } from './ingest-retry.ts';
 import type { ProjectRow, SchemaRow, SqlDatabase } from './sql.ts';
 import { readFunnelRun } from './funnels.ts';
+import { RegistrySnapshot } from './registry-snapshot.ts';
 export type { SqlDatabase, SqlStatement, SqlResult } from './sql.ts';
 export { D1Queries } from './query.ts';
 export { D1Maintenance } from './maintenance.ts';
@@ -19,10 +20,12 @@ export class D1Store implements ServerCollectionStore {
   readonly db: SqlDatabase;
   readonly allowLocalHttp: boolean;
   private readonly retryOptions: IngestRetryOptions;
+  private readonly registrySnapshot: RegistrySnapshot;
   readonly onIngestConflict: ((entry: { attempt: number; exhausted: boolean }) => void) | undefined;
   constructor(db: SqlDatabase, options: IngestRetryOptions & { allowLocalHttp?: boolean;
     onIngestConflict?: (entry: { attempt: number; exhausted: boolean }) => void } = {}) {
     this.db = db; this.allowLocalHttp = options.allowLocalHttp ?? false;
+    this.registrySnapshot = new RegistrySnapshot(this.allowLocalHttp);
     this.onIngestConflict = options.onIngestConflict;
     this.retryOptions = { ...options };
   }
@@ -74,11 +77,7 @@ export class D1Store implements ServerCollectionStore {
     return this.registry(snapshot.project, snapshot.schema);
   }
   private registry(project: ProjectRow, schema: SchemaRow): Registry {
-    const definitions: unknown = JSON.parse(schema.definitions_json);
-    if (!closed(definitions, ['events', 'workflows'], ['funnels', 'representativeWorkflowId'])) throw Error('invalid registry');
-    return validateRegistry({ ...definitions, project: { id: project.id, name: project.name, status: project.status, timeZone: project.time_zone },
-      allowedOrigins: JSON.parse(project.allowed_origins_json), schemaVersion: schema.version, schemaStatus: schema.status,
-      limits: { requestsPerMinute: project.requests_per_minute, newReceiptsPerUtcDay: project.new_receipts_per_utc_day } }, { allowLocalHttp: this.allowLocalHttp });
+    return this.registrySnapshot.read(project, schema);
   }
   private async configuration(projectId: string, version: number) {
     const result = await this.db.batch<ProjectRow | SchemaRow>([
@@ -108,6 +107,7 @@ export class D1Store implements ServerCollectionStore {
     return this.commitIngest(batch, registry, { issuer: principal.issuer, subject: principal.subject });
   }
   private async commitIngest(batch: PreparedBatch | PreparedServerBatch, registry: Registry, publisher?: ServerPrincipal): Promise<{ accepted: number; duplicates: number }> {
+    const expectedRegistry = canonicalJson(registry);
     // All mutations of ingest state increment projects.ingest_revision. Reads form one consistent snapshot.
     // A CHECK guard inside the write batch rolls back a raced snapshot; bounded retries re-read receipts.
     for (let retry = 0; retry < D1_POLICY.snapshotAttempts; retry++) {
@@ -117,8 +117,7 @@ export class D1Store implements ServerCollectionStore {
       const { project, schema } = snapshot;
       if (!project || project.status !== 'active') throw new CollectionError('project_unavailable', 403);
       if (!schema || schema.status !== 'active') throw new CollectionError('unknown_schema', 422);
-      const currentRegistry = this.registry(project, schema);
-      if (canonicalJson(currentRegistry) !== canonicalJson(registry)) throw new CollectionError('storage_unavailable', 503);
+      if (!this.registrySnapshot.matches(project, schema, expectedRegistry)) throw new CollectionError('storage_unavailable', 503);
       const plan = planIngest(batch, { receipts: snapshot.receipts, attempts: snapshot.attempts,
         funnelRuns: snapshot.runRows.map(readFunnelRun), newReceiptsToday: snapshot.newReceiptsToday }, project.new_receipts_per_utc_day);
       // Pure retransmission needs no write; it is linearized at the consistent read snapshot.

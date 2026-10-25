@@ -3,6 +3,7 @@ import type { Registry } from './types.ts';
 import { validateMutableSettings } from './settings.ts';
 import { schemaDefinitions, validateSchemaDefinitions } from './schema.ts';
 import { closed, integer, matches, PROJECT_ID, text } from './value.ts';
+import { calendarDateReader } from './calendar-date.ts';
 
 export function validateRegistry(value: unknown, options: { allowLocalHttp?: boolean } = {}): Registry {
   if (!closed(value, ['project', 'schemaVersion', 'schemaStatus', 'allowedOrigins', 'limits', 'events', 'workflows'], ['funnels', 'representativeWorkflowId']) ||
@@ -12,7 +13,7 @@ export function validateRegistry(value: unknown, options: { allowLocalHttp?: boo
     !closed(value.limits, ['requestsPerMinute', 'newReceiptsPerUtcDay']) || !integer(value.limits.requestsPerMinute, 1, COLLECTION_POLICY.maxRequestsPerMinute) ||
     !integer(value.limits.newReceiptsPerUtcDay, 1, COLLECTION_POLICY.maxNewReceiptsPerUtcDay)) throw Error('invalid registry');
   if (!/^[A-Za-z][A-Za-z0-9_+./-]*$/.test(value.project.timeZone)) throw Error('invalid registry');
-  new Intl.DateTimeFormat('en', { timeZone: value.project.timeZone });
+  calendarDateReader(value.project.timeZone);
   validateMutableSettings({ name: value.project.name, status: value.project.status,
     allowedOrigins: value.allowedOrigins, limits: value.limits }, options);
   validateSchemaDefinitions(schemaDefinitions(value as unknown as Registry));

@@ -39,7 +39,11 @@ disposing the runtime.
 `report.json` includes host/runtime versions, statuses, accepted/duplicate counts,
 per-stage HTTP requests/second, nearest-rank p50/p95/max and raw per-request observations.
 It never includes event bodies, tokens or identity values. `failure.json` records the last
-phase and completed stage summaries; a failed run is not performance evidence of success.
+phase, completed stage summaries and received error-response evidence: status, request
+kind, start time, elapsed time, allowlisted error code, valid request UUID and bounded
+Retry-After seconds. Malformed JSON retains status/timing only. Evidence excludes
+exception messages, response bodies and arbitrary headers. A failed run is not
+performance evidence of success.
 
 This is a short, bounded local experiment. The database grows between concurrency stages,
 and one stage follows another; stages are not randomized or equal-data comparisons.

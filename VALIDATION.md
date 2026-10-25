@@ -1,5 +1,42 @@
 # Validation
 
+## Reproduced platform CPU termination and ingestion CPU reduction — 2026-10-25
+
+The instrumented four-request trial reproduced a failure after 349.22 seconds:
+699 HTTP 200 responses and one HTTP 503 among 700 requests. The failed response
+was `admin_api_unavailable` with `Retry-After: 5`, not a Collector
+`storage_unavailable` response. The sanitized Collector tail captured one
+`exceededCpu` invocation, whose only app log was a non-exhausted revision
+conflict at attempt one. It captured no exhausted retries. All 20 event IDs
+from the failed synthetic batch were absent from D1. Both trial projects were
+paused in cleanup. This identifies the reproduced failure path as platform
+CPU termination propagating through the service binding; historical failures
+without retained response evidence are not individually attributed.
+
+Ingestion now retains one validated configuration fingerprint per store. Each
+fresh DB snapshot still checks every configuration field and uses the original
+transactional revision guard. Identical configuration skips repeated parsing,
+schema validation, cloning and canonicalization. The expected fingerprint is
+computed once per commit, and caller mutations cannot alter the retained
+fingerprint. Any changed configuration is validated again. Time-zone validation
+reuses the existing bounded formatter cache. No I/O promises, permissions or DB
+snapshots are cached; retries, CPU limits and subscriptions are unchanged.
+
+A local synthetic comparison of 250 rounds with four commit attempts each
+reduced full configuration validations from five to one per round. Measured
+process CPU was 953 ms before and 157 ms after; elapsed time was 933.45 ms and
+149.54 ms. This isolates local validation/comparison work and is not a remote
+per-request CPU or throughput measurement. Focused storage/calendar tests passed
+32/32; all 57 core tests passed (overlapping scopes, not additive).
+
+The local collector benchmark now retains allowlisted error codes, valid
+request UUIDs, bounded Retry-After seconds and timing for received failures,
+including malformed-JSON status evidence. Four benchmark helper/pool tests and
+eight diagnostic/observation tests passed. Classifications distinguish CPU or
+memory limits and storage timeouts from generic database resets. Deployed
+verification of the CPU reduction remains pending. API/DB contracts, SDK,
+dependencies, runner and deployment limits are unchanged.
+
 ## Bounded collection failure diagnostics — 2026-10-25
 
 The previous deployed failures cannot be attributed from retained evidence:
