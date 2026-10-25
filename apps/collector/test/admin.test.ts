@@ -270,7 +270,7 @@ test('configured administrator factory runs in the real Worker runtime with D1 g
     contents: `import { createWorker } from './apps/collector/src/index.ts';
       export default createWorker(async () => (${JSON.stringify(principal)}));`,
     resolveDir: root, loader: 'ts',
-  }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+  }, bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const runtime = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     d1Databases: { DB: 'tallyfin-admin-runtime-test' }, log: new Log(LogLevel.NONE) });
   try {

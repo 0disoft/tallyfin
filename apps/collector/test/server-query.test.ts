@@ -178,7 +178,7 @@ test('native Worker reads source-filtered counts from real D1 and rechecks the a
   const bundle = await build({ stdin: { resolveDir: fileURLToPath(new URL('../../../', import.meta.url)), loader: 'ts',
     contents: `import { createWorker } from './apps/collector/src/index.ts';
       export default createWorker(async () => (${JSON.stringify(reader)}));` },
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const runtime = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     d1Databases: { DB: 'server-query-worker' }, log: new Log(LogLevel.NONE) });
   try {

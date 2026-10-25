@@ -98,7 +98,7 @@ test('background recording never delays or changes the rejection response, and s
 test('native Worker forwards its execution context to record rejected requests in actual D1', async () => {
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../../', import.meta.url)), contents:
     `import {createWorker} from './apps/collector/src/index.ts'; export default createWorker(async () => (${JSON.stringify(principal)}));` },
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06', d1Databases: { DB: 'rejections-runtime' }, log: new Log(LogLevel.NONE) });
   try {
     const db = await mf.getD1Database('DB'); for (const statement of migrationStatements()) await db.prepare(statement).run();

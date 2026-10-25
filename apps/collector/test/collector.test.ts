@@ -10,7 +10,7 @@ import { createSembomAnalytics } from '../../../examples/sembom/browser.ts';
 let mf: Miniflare;
 let db: Awaited<ReturnType<Miniflare['getD1Database']>>;
 before(async () => {
-  const bundle = await build({ entryPoints: [new URL('../src/index.ts', import.meta.url).pathname.replace(/^\/(?:([A-Z]):)/i, '$1:')], bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+  const bundle = await build({ entryPoints: [new URL('../src/index.ts', import.meta.url).pathname.replace(/^\/(?:([A-Z]):)/i, '$1:')], bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     d1Databases: { DB: 'tallyfin-http-tests' }, log: new Log(LogLevel.NONE) });
   db = await mf.getD1Database('DB');

@@ -26,7 +26,7 @@ test('admin edge routes through a real collector Worker and D1 without bypassing
     const jwks = { keys: [{ ...await exportJWK(publicKey), kid: 'ephemeral', alg: 'RS256' }] };
     const collector = await build({ stdin: { loader: 'ts', resolveDir: root, contents:
       `import worker from './apps/collector/src/runtime.ts'; globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
-      bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2023' });
+      bundle: true, external: ['cloudflare:workers'], write: false, platform: 'browser', format: 'esm', target: 'es2023' });
     mf = new Miniflare({ log: new Log(LogLevel.NONE), workers: [
       { name: 'test-admin', modules: true, script: await readFile(join(root, 'apps/admin/worker/index.js'), 'utf8'), compatibilityDate: '2026-08-06',
         serviceBindings: { COLLECTOR: 'test-collector' },

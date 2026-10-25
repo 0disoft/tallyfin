@@ -167,7 +167,7 @@ test('default query budget is one page; elapsed budget and invalid options never
 
 test('real scheduled Worker cleans bounded expired rows and preserves live data', async () => {
   const bundle = await build({ entryPoints: [fileURLToPath(new URL('../src/index.ts', import.meta.url))],
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text,
     compatibilityDate: '2026-08-06', d1Databases: { DB: 'tallyfin-cleanup-tests' }, log: new Log(LogLevel.NONE) });
   try {

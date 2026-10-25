@@ -20,7 +20,7 @@ test('native Worker joins public browser milestones and authenticated server mil
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../../', import.meta.url)),
     contents: `import worker from './apps/collector/src/runtime.ts';
       globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
-    bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, platform: 'browser', format: 'esm', target: 'es2023' });
   const token = await new SignJWT({}).setProtectedHeader({ alg: 'RS256', kid: 'ephemeral', typ: 'at+jwt' })
     .setIssuer(issuer).setAudience('server-events').setSubject(subject).setIssuedAt().setExpirationTime('5m').sign(privateKey);
   const producer = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../../', import.meta.url)),
@@ -31,7 +31,7 @@ test('native Worker joins public browser milestones and authenticated server mil
           schema: ${JSON.stringify(projectServerSchema(registry))}, getToken: () => env.SIGNED_TEST_TOKEN});
         const event = client.createEvent(raw.name, raw.properties, {eventId: raw.eventId, occurredAt: raw.occurredAt, funnel: raw.funnel});
         return Response.json(await client.send([event]));
-      }};` }, bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2023', metafile: true });
+      }};` }, bundle: true, external: ['cloudflare:workers'], write: false, platform: 'browser', format: 'esm', target: 'es2023', metafile: true });
   assert.ok(Object.keys(producer.metafile!.inputs).every(path => !/node_modules|packages\/(?:core|storage-d1|browser)/.test(path.replaceAll('\\', '/'))));
   const mf = new Miniflare({ workers: [
     { name: 'collector', modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',

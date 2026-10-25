@@ -40,7 +40,7 @@ test('Node SDK and native Worker SDK publish signed events through real D1; resp
       if (path === '/token-sink') { redirectedRequests++; return Response.json({accepted: 1, duplicates: 0}); }
       if (path === '/redirect-probe') return Response.json({redirectedRequests});
       return worker.fetch(request, env, ctx);
-    }};` }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    }};` }, bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const producer = await build({ stdin: { resolveDir: root, loader: 'ts', contents: `
     import { createJobAnalytics } from './examples/server/job-analytics.ts';
     export default { async fetch(request, env) {
@@ -49,7 +49,7 @@ test('Node SDK and native Worker SDK publish signed events through real D1; resp
       const event = client.createEvent('job_finished', {outcome: 'success', retried: false});
       const result = await client.send([event], {signal: request.signal});
       return Response.json({result, eventId: event.eventId});
-    }};` }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023', metafile: true });
+    }};` }, bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023', metafile: true });
   assert.ok(Object.keys(producer.metafile!.inputs).every(path => !/node_modules|packages\/(?:core|storage-d1|browser)/.test(path.replaceAll('\\', '/'))));
   const mf = new Miniflare({ workers: [
     { name: 'collector', modules: true, script: collector.outputFiles[0]!.text, compatibilityDate: '2026-08-06',

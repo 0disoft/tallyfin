@@ -9,7 +9,7 @@ import { initialize } from '../provision/local.ts';
 export async function startLocal(stateDir: string, settings: Settings = DEFAULT_SETTINGS, port = 5188) {
   configureCollector(settings); // Validate before creating files or opening a listener; no key fetch.
   const bundle = await build({ entryPoints: [fileURLToPath(new URL('../../apps/collector/src/runtime.ts', import.meta.url))],
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text,
     compatibilityDate: '2026-08-06', host: '127.0.0.1', port,
     d1Databases: { DB: 'tallyfin-local' }, d1Persist: resolve(stateDir), bindings: settings,

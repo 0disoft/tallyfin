@@ -20,7 +20,7 @@ test('configured runtime verifies OIDC bindings and runs scheduled cleanup again
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../../', import.meta.url)),
     contents: `import worker from './apps/collector/src/runtime.ts';
       globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
-    bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, platform: 'browser', format: 'esm', target: 'es2023' });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     bindings: { ...DEFAULT_SETTINGS, ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: issuer, OIDC_AUDIENCE: 'runtime-test', OIDC_JWKS_URI: `${issuer}/jwks` },
     d1Databases: { DB: 'runtime-test' }, log: new Log(LogLevel.NONE) });

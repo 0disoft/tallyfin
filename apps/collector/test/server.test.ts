@@ -152,14 +152,14 @@ test('configured native Worker verifies machine JWTs, isolates audiences and rec
   const bundle = await build({ stdin: { loader: 'ts', resolveDir: fileURLToPath(new URL('../../../', import.meta.url)),
     contents: `import worker from './apps/collector/src/runtime.ts';
       globalThis.fetch = async () => Response.json(${JSON.stringify(jwks)}); export default worker;` },
-    bundle: true, write: false, platform: 'browser', format: 'esm', target: 'es2023' });
+    bundle: true, external: ['cloudflare:workers'], write: false, platform: 'browser', format: 'esm', target: 'es2023' });
   const mf = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     bindings: { ...DEFAULT_SETTINGS, ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: issuer, OIDC_AUDIENCE: 'admin-api', OIDC_JWKS_URI: issuer + '/jwks',
       PUBLISHER_AUTH_MODE: 'oidc', PUBLISHER_OIDC_ISSUER: issuer, PUBLISHER_OIDC_AUDIENCE: 'server-events', PUBLISHER_OIDC_JWKS_URI: issuer + '/jwks' },
     d1Databases: { DB: 'server-http-runtime' }, log: new Log(LogLevel.NONE) });
   try {
     const db = await mf.getD1Database('DB');
-    for (const sql of migrationStatements()) await db.prepare(sql).run();
+    await db.batch(migrationStatements().map(sql => db.prepare(sql)));
     await seed(db);
     await db.prepare('DELETE FROM project_schemas').run();
     await db.prepare("INSERT INTO project_schemas VALUES ('sembom',1,'active',?,?,NULL)")

@@ -18,7 +18,7 @@ test('real Worker distinguishes provider outages from invalid tokens before data
       jwksUri: ${JSON.stringify(issuer + '/jwks')}, fetchImpl: async () => { throw new Error('private provider detail'); } },
       { issuer: ${JSON.stringify(issuer)}, audience: 'publisher-api', jwksUri: ${JSON.stringify(issuer + '/jwks')},
         fetchImpl: async () => { throw new Error('private provider detail'); } });
-  ` }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+  ` }, bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const runtime = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     log: new Log(LogLevel.NONE) }); // Deliberately no DB: authentication must finish first.
   try {
@@ -52,7 +52,7 @@ test('OIDC Worker verifies real signatures before applying and rechecking D1 gra
       if (new URL(request.url).pathname === '/test/key-fetches') return Response.json({ calls, active, maximum });
       return worker.fetch(request, env, ctx);
     } };
-  ` }, bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+  ` }, bundle: true, external: ['cloudflare:workers'], write: false, format: 'esm', platform: 'browser', target: 'es2023' });
   const runtime = new Miniflare({ modules: true, script: bundle.outputFiles[0]!.text, compatibilityDate: '2026-08-06',
     d1Databases: { DB: 'tallyfin-oidc-runtime-test' }, log: new Log(LogLevel.NONE) });
   try {
