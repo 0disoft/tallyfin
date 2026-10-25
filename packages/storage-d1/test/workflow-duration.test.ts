@@ -62,8 +62,8 @@ test('duration migration preserves existing completions as unmeasured, rolls bac
     assert.ok(boundary > 0); await db.batch(statements.slice(0, boundary).map(sql => db.prepare(sql))); await seed(db);
     await db.prepare("INSERT INTO workflow_daily_counts VALUES ('sembom',1,'browser','2026-10-08','calculation','[]',3,2,1,0)").run();
     await assert.rejects(db.batch([...statements.slice(boundary).map(sql => db.prepare(sql)), db.prepare('SELECT * FROM missing_duration_table')]));
-    assert.deepEqual(await initialize(db, false), { migrations: ['0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql'], applied: true });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql', '0014_saved_schema_drafts.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0012_workflow_duration.sql', '0013_workflow_failure_reasons.sql', '0014_saved_schema_drafts.sql'], applied: true });
     const row: any = await db.prepare('SELECT * FROM workflow_daily_counts').first();
     assert.equal(row.succeeded_count, 2); assert.equal(row.failed_count, 1); assert.deepEqual(JSON.parse(row.duration_counts_json), Array(12).fill(0));
     assert.deepEqual(await initialize(db, true), { migrations: [], applied: false });

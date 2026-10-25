@@ -57,8 +57,8 @@ test('failure reason migration preserves history, rolls back atomically, constra
     assert.ok(boundary > 0); await db.batch(statements.slice(0, boundary).map(sql => db.prepare(sql))); await seed(db);
     await db.prepare("INSERT INTO workflow_daily_counts(project_id,schema_version,source,cohort_date,workflow_id,dimension_key,started_count,succeeded_count,failed_count,updated_at) VALUES ('sembom',1,'browser','2026-10-08','calculation','[]',3,1,2,0)").run();
     await assert.rejects(db.batch([...statements.slice(boundary).map(sql => db.prepare(sql)), db.prepare('SELECT * FROM missing_reason_table')]));
-    assert.deepEqual(await initialize(db, false), { migrations: ['0013_workflow_failure_reasons.sql'], applied: false });
-    assert.deepEqual(await initialize(db, true), { migrations: ['0013_workflow_failure_reasons.sql'], applied: true });
+    assert.deepEqual(await initialize(db, false), { migrations: ['0013_workflow_failure_reasons.sql', '0014_saved_schema_drafts.sql'], applied: false });
+    assert.deepEqual(await initialize(db, true), { migrations: ['0013_workflow_failure_reasons.sql', '0014_saved_schema_drafts.sql'], applied: true });
     const row: any = await db.prepare('SELECT * FROM workflow_daily_counts').first();
     assert.equal(row.failed_count, 2); assert.deepEqual(JSON.parse(row.failure_reason_counts_json), Array(33).fill(0));
     for (const value of ['[]', '{}', JSON.stringify(Array(33).fill(-1)), JSON.stringify(Array(33).fill(0.5)), JSON.stringify(Array(33).fill(1))])

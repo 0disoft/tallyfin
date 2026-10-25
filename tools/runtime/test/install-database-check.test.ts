@@ -19,7 +19,7 @@ const response = (rows: unknown[]) => [{ success: true, results: rows }];
 test('current migrations match all metadata and missing/changed/extra objects fail without exposing SQL', async () => {
   const expected = await expectedDatabaseSchema();
   assert.deepEqual(expected.migrations, [...MIGRATION_NAMES]);
-  assert.equal(expected.rows.filter(row => row.type === 'table').length, 16);
+  assert.equal(expected.rows.filter(row => row.type === 'table').length, 17);
   const good = await compareDatabaseSchema(expected.rows, response([...expected.rows].reverse()));
   assert.equal(good.databaseSchemaMatches, true); assert.equal(good.expectedSchemaHash, good.observedSchemaHash);
   const index = expected.rows.find(row => row.type === 'index')!;
