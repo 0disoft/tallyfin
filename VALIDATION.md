@@ -1,5 +1,27 @@
 # Validation
 
+## Higher-concurrency capacity boundary — 2026-10-25
+
+A bounded sweep against deployed Collector version
+`7fd27677-928c-4120-a3c0-f82e86f1bb63` started at concurrency 8, with
+32 new 20-event batches and no client retries. It returned 31 HTTP 200 and
+one HTTP 503; p50 was 1101 ms, p95 3217 ms and maximum 3489 ms.
+The disposable project accepted 620 events and was paused in finally.
+The sweep stopped at this first failing phase; concurrency 12 and 16 were
+not run. This is a failed higher-concurrency sample, not a passing capacity
+claim. Tail did not establish a connection within its startup guard, so this
+particular 503 has no captured internal-cause attribution.
+
+A separate 10-minute trial is next, using the previously passing concurrency
+4, a maximum of 1200 requests including a separate-project sentinel, and
+explicit checks for errors, latency, timing and final DB counts. Its result
+will be recorded independently; it cannot erase the concurrency-8 failure.
+
+Local sweep evidence: `.tmp/contention-sweep-failure.json` and
+`.tmp/contention-sweep-project.json`. No code, configuration, schema or
+permission policy changed; the only remote data written belongs to the
+new disposable verification project.
+
 ## Bounded ingestion contention recovery — 2026-10-25
 
 The earlier concurrency-4 HTTP 503 was investigated with an unchanged retry
