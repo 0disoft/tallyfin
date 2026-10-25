@@ -1,5 +1,11 @@
 # Roadmap — Tallyfin
 
+Authentication follow-up on 2026-10-26: source `9d9d6b8` deployed the body cleanup
+fix as auth version `dcf73e41-bd30-4efd-86dc-fa428c6077fa` at 100%. All nine
+post-deployment smoke checks passed; Collector and administrator versions,
+bindings, runtime settings and database schemas were unchanged. Successful login
+and authenticated project reads were not revalidated. See [validation](../../VALIDATION.md).
+
 Status labels: Planned / Not Started / Sample Implementation Complete / Local Implementation and Verification Complete / Initial Deployment Verified. Core analytics and administrator features have been implemented locally. Better Auth, two isolated D1s and the administrator/Collector Workers were initially deployed and verified on 2026-10-25. The 2026-10-26 revalidation deployed Collector version `abecfc07-3648-4f4d-9159-abf351d00298` and administrator version `098a20ae-046f-4947-95cd-56037c1d8744` from commit `9f92c62` at 100% each, with unchanged production variables, D1s, service bindings and compatibility dates. The touched-row ingestion guard is deployed, and the optional pre-D1 limiter code is deployed but inactive with no binding, required flag, production namespace or threshold selected. The shared Cloudflare account remains on Workers Paid with the Standard usage model. Earlier 4 and 8 requests/s results and old 12/16 failures remain historical context; both new five-minute runs completed as shown below.
 
 | Target | HTTP | Accepted / duplicate | Client p95 / max | Max active | Response window | Requests/s | Accepted events/s |

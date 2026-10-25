@@ -1,5 +1,41 @@
 # Validation
 
+## Authentication body cleanup deployment — 2026-10-26
+
+- Deployed source `9d9d6b8` to `tallyfin-auth` version
+  `dcf73e41-bd30-4efd-86dc-fa428c6077fa`; deployment readback confirms 100%.
+  The prepared production authentication config was compared with live variables,
+  D1 identity and service/object bindings before deployment. Version readback
+  confirms all bindings and runtime settings match the previous version exactly.
+- Collector remains `abecfc07-3648-4f4d-9159-abf351d00298` and administrator
+  remains `098a20ae-046f-4947-95cd-56037c1d8744`, both at 100%. Their source
+  had not changed since the already deployed `9f92c62` baseline; only the auth
+  Worker required a new deployment. SDK distribution and site preparation are
+  repository tools, not an npm publication or a remote site registration.
+- Fresh `npm run typecheck`, 69 contract checks, and the production auth
+  `wrangler deploy --dry-run` passed. Reused the unchanged source's passing
+  auth tests (13), site integration tests (4), SDK identity test (1) and offline
+  SDK consumer verification. No unrelated full-suite or remote load rerun.
+- All nine post-deployment smoke checks passed: auth health, sign-in HTML,
+  public JWKS, OIDC metadata and administrator HTML returned 200; the locked
+  password page returned 302, closed signup 404, a 16,385-byte authentication
+  body 413, and unauthenticated administrator identity 401. Public JWKS contained
+  keys without private material and metadata retained the configured issuer.
+  These checks do not establish successful login or authenticated project reads;
+  no password, session, credential or data reset was performed.
+- The inherited API token could read deployments but its upload was denied.
+  Reused the existing, same-account Wrangler OAuth session without exposing its
+  token. Local DNS lookups subsequently timed out; process-local alternate DNS
+  restored access while preserving HTTPS hostname/certificate verification.
+  Readback confirmed no release version existed before retrying the upload.
+  Global environment, DNS settings and credentials were not changed.
+- Rollback remains available through auth version
+  `c28718cb-2605-4fbd-b879-7078cec7fc51`. No migration, new resource, secret
+  replacement, API/DB/SDK contract, dependency, hygiene or CI/runner change.
+  The optional ingress limiter remains inactive and no production quota or
+  threshold was changed. Detailed local receipts are in
+  `.tmp/auth-body-release-deployment.json` and `.tmp/auth-body-release-smoke.json`.
+
 ## Authentication request body cleanup — 2026-10-26
 
 - Reproduced the original `boundedRequest` behavior in Node and the installed
