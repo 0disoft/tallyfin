@@ -89,7 +89,7 @@ test('administrator, server and unknown endpoints use only fixed categories even
   }
   assert.equal(observations.length, 4); assert.ok(!JSON.stringify(observations).includes('private'));
 });
-test('native Worker emits a single structured failure with bound D1 and never logs SQL errors, request material or duplicate error entries', async () => {
+test('native Worker emits one response observation and one bounded diagnostic without private request or SQL data', async () => {
   const local = await setup();
   const previous = { log: console.log, warn: console.warn, error: console.error };
   const lines: { level: string; entry: Record<string, unknown> }[] = [];
@@ -101,8 +101,11 @@ test('native Worker emits a single structured failure with bound D1 and never lo
     assert.equal(lines[0]!.entry.operation, 'administrator'); assert.equal(lines[0]!.entry.samplingDenominator, 1);
     await local.db.prepare('DROP TABLE project_schemas').run();
     const broken = await worker.fetch(request(), { DB: local.db });
-    assert.equal(broken.status, 503); assert.equal(lines.length, 2); assert.equal(lines[1]!.level, 'error');
-    assert.equal(lines[1]!.entry.code, 'storage_unavailable'); assert.equal(lines[1]!.entry.event, 'http_request');
+    assert.equal(broken.status, 503); assert.equal(lines.length, 3); assert.equal(lines[1]!.level, 'error');
+    assert.equal(lines[1]!.entry.event, 'collection_failure');
+    assert.deepEqual(Object.keys(lines[1]!.entry).sort(), ['event', 'kind', 'requestId', 'stage']);
+    assert.equal(lines[2]!.entry.code, 'storage_unavailable'); assert.equal(lines[2]!.entry.event, 'http_request');
+    assert.equal(lines[1]!.entry.requestId, lines[2]!.entry.requestId);
     for (const value of ['sembom', 'projects', 'private-query', 'never-log-header', registry.allowedOrigins[0]!])
       assert.ok(!JSON.stringify(lines).includes(value));
   } finally { Object.assign(console, previous); await local.mf.dispose(); }

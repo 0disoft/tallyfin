@@ -34,6 +34,8 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
         attempt: entry.attempt, exhausted: entry.exhausted })) });
     try {
     return await createCollector(store, { observe: logRequestObservation,
+      observeFailure: entry => console.error(JSON.stringify({ event: 'collection_failure',
+        requestId: entry.requestId, stage: entry.stage, kind: entry.kind })),
       ...(bindings.BROWSER_INGEST_LIMITER ? { publicAdmission: async (projectId: string) => {
         const result = await publicCapacity(() => bindings.BROWSER_INGEST_LIMITER!.limit({ key: `tallyfin-browser:${projectId}` }));
         if (typeof result.success !== 'boolean') throw new TypeError('Invalid admission response');

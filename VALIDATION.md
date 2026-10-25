@@ -1,5 +1,21 @@
 # Validation
 
+## Bounded collection failure diagnostics — 2026-10-25
+
+The previous deployed failures cannot be attributed from retained evidence:
+the soak observer kept conflict totals but not individual invocations, and the
+client omitted failed response codes and request IDs. The Collector now emits
+one additional diagnostic on a server failure, containing only the request ID,
+a fixed execution stage and a fixed cause category. Exception text, SQL, event
+data, project IDs and credentials are excluded. Cause traversal stops after six
+errors and handles cycles. This adds no retries or changes to HTTP responses.
+
+Eight focused diagnostic/observation tests, repository type checking and all
+69 contract checks passed. Tests include nested causes, cyclic causes, failing
+observers, phase attribution, request-ID correlation and private-data exclusion.
+API/DB contracts, dependencies, SDK and CI are unchanged. Root-cause reproduction
+and deployed verification remain pending; diagnostics alone do not fix the 503.
+
 ## Extended deployed ingestion trial — 2026-10-25
 
 **Result: failed the zero-error experiment guard.** A planned 600-second run

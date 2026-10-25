@@ -9,12 +9,15 @@ import { authenticatePublisher } from './publisher.ts';
 import type { PublisherAccess } from './publisher.ts';
 import { observationClock, latencyBucket } from './request-observation.ts';
 import type { RequestObservation, RequestOperation } from './request-observation.ts';
+import { failureKind } from './failure-diagnostic.ts';
+import type { FailureDiagnostic, FailureStage } from './failure-diagnostic.ts';
 
 export interface CollectorOptions {
   now?: () => number;
   uuid?: () => string;
   log?: (entry: { requestId: string; code: ErrorCode }) => void;
   observe?: (entry: RequestObservation) => void;
+  observeFailure?: (entry: FailureDiagnostic) => void;
   monotonicNow?: () => number;
   admin?: AdministratorAccess;
   publisher?: PublisherAccess;
@@ -48,6 +51,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
     let rejectionProjectId: string | null = null;
     let admitted = false;
     let activeStore = store;
+    let stage: FailureStage = 'routing';
     try {
       const path = new URL(request.url).pathname;
       const route = /^\/v1\/projects\/([^/]+)\/(batches|server-batches)$/.exec(path);
@@ -55,6 +59,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         if (path === '/v1/overview' || path === '/v1/health' || path === '/v1/identity' || path === '/v1/projects' || path.startsWith('/v1/projects/')) {
           operation = 'administrator';
           if (path === '/v1/overview' || path === '/v1/health' || path === '/v1/identity') headers.set('Vary', 'Authorization');
+          stage = 'administrator';
           const result = await administrator(request, options.admin, receivedAt);
           return finish(Response.json(result, { headers }));
         }
@@ -64,15 +69,18 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       operation = isServer ? 'server_collection' : 'browser_collection';
       if (isServer) headers.set('Vary', 'Authorization');
       // Authenticate before reading any project, granting CORS, admission or consuming the body.
+      stage = 'publisher';
       const principal = isServer ? await authenticatePublisher(request, options.publisher) : null;
       if (isServer) activeStore = options.publisher!.store;
       const projectId = route[1]!;
       if (!PROJECT_ID.test(projectId)) throw new CollectionError('invalid_request', 400);
+      stage = 'admission';
       if (!isServer && options.publicAdmission && !await awaitDependency(request.signal, () => options.publicAdmission!(projectId, request.signal))) {
         retryAfter = 60;
         throw new CollectionError('quota_exceeded', 429);
       }
       if (principal) await options.publisher!.store.publisherAccess(projectId, principal);
+      stage = 'project';
       const project = await activeStore.loadProject(projectId);
       if (!project) throw new CollectionError(isServer ? 'forbidden' : 'not_found', isServer ? 403 : 404);
       rejectionProjectId = projectId;
@@ -82,6 +90,7 @@ export function createCollector(store: CollectionStore, options: CollectorOption
       // Untrusted origins cannot consume the quota used by permitted origins.
       if (!permitted) throw new CollectionError('origin_denied', 403);
       // Permitted-origin malformed requests and preflights still consume admission.
+      stage = 'admission';
       if (!await activeStore.admit(projectId, receivedAt, project.limits.requestsPerMinute)) {
         retryAfter = Math.max(1, Math.ceil((60_000 - receivedAt % 60_000) / 1000));
         throw new CollectionError('quota_exceeded', 429);
@@ -103,17 +112,24 @@ export function createCollector(store: CollectionStore, options: CollectorOption
         throw new CollectionError('invalid_request', 415);
       const body = await readBody(request);
       const batch = isServer ? parseServerBatch(body) : parseBatch(body);
+      stage = 'registry';
       const registry = await activeStore.loadRegistry(projectId, batch.schemaVersion);
       if (!registry) throw new CollectionError('unknown_schema', 422);
       // Recheck the configuration loaded for this version before hashing or writing.
       if (!isServer && !allowedOrigin(origin, registry.allowedOrigins)) { headers.delete('Access-Control-Allow-Origin'); throw new CollectionError('origin_denied', 403); }
-      const result = batch.source === 'server'
-        ? await options.publisher!.store.commitServer(await prepareServerBatch(batch, registry, receivedAt), registry, principal!)
-        : await activeStore.commit(await prepareBatch(batch, registry, receivedAt), registry);
+      stage = 'preparation';
+      const prepared = batch.source === 'server' ? await prepareServerBatch(batch, registry, receivedAt)
+        : await prepareBatch(batch, registry, receivedAt);
+      stage = 'commit';
+      const result = prepared.source === 'server' ? await options.publisher!.store.commitServer(prepared, registry, principal!)
+        : await activeStore.commit(prepared, registry);
       if (result.accepted + result.duplicates !== batch.events.length) throw new CollectionError('storage_unavailable', 503);
       return finish(Response.json(result, { status: 200, headers }));
     } catch (error) {
       const failure = error instanceof CollectionError ? error : new CollectionError('storage_unavailable', 503, { cause: error });
+      if (failure.status >= 500) {
+        try { options.observeFailure?.({ requestId, stage, kind: failureKind(failure) }); } catch { /* Best effort, no raw errors. */ }
+      }
       const responseHeaders = failureHeaders(failure, request.url, receivedAt, retryAfter, headers);
       // A diagnostic sink failure must not change the outcome or disclose its exception.
       try { options.log?.({ requestId, code: failure.code }); } catch { /* best effort */ }
