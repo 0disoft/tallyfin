@@ -1,11 +1,12 @@
 import { closed, matches, record } from '@tallyfin/core';
 import { resolve } from 'node:path';
 import { DEFAULT_SETTINGS, configureCollector } from '../../apps/collector/src/config.ts';
+import { browserIngestLimit } from './browser-ingest-limit.ts';
 
 /** Validates supplied identifiers only; never contacts Cloudflare or provisions resources. */
 export function deploymentTarget(input: unknown, root: string) {
   try {
-    if (!closed(input, ['workerName', 'accountId', 'databaseName', 'databaseId', 'workersDev', 'settings'], ['scheduler']) ||
+    if (!closed(input, ['workerName', 'accountId', 'databaseName', 'databaseId', 'workersDev', 'settings'], ['scheduler', 'browserIngestLimit']) ||
       (input.scheduler !== undefined && !['cron', 'auth-alarm'].includes(String(input.scheduler))) ||
       !matches(input.workerName, /^[a-z][a-z0-9-]{0,62}$/) ||
       !matches(input.accountId, /^[0-9a-f]{32}$/) || /^0+$/.test(input.accountId) ||
@@ -16,6 +17,7 @@ export function deploymentTarget(input: unknown, root: string) {
     const settings = { ...DEFAULT_SETTINGS, ...input.settings };
     if (settings.ADMIN_AUTH_MODE !== 'oidc' || settings.ALLOW_LOCAL_HTTP !== 'false') throw Error();
     configureCollector(settings);
+    const limiter = input.browserIngestLimit === undefined ? undefined : browserIngestLimit(input.browserIngestLimit);
     return {
       $schema: resolve(root, 'node_modules/wrangler/config-schema.json'),
       name: input.workerName, account_id: input.accountId, main: resolve(root, 'apps/collector/src/runtime.ts'),
@@ -23,7 +25,9 @@ export function deploymentTarget(input: unknown, root: string) {
       compatibility_flags: ['global_fetch_strictly_public'],
       d1_databases: [{ binding: 'DB', database_name: input.databaseName, database_id: input.databaseId,
         migrations_dir: resolve(root, 'db/migrations') }],
-      vars: settings, triggers: { crons: input.scheduler === 'auth-alarm' ? [] : ['* * * * *'] },
+      vars: { ...settings, ...(limiter ? { BROWSER_INGEST_LIMITER_REQUIRED: 'true' } : {}) },
+      ...(limiter ? { ratelimits: [limiter] } : {}),
+      triggers: { crons: input.scheduler === 'auth-alarm' ? [] : ['* * * * *'] },
       observability: { enabled: true, redact_query_string: true,
         logs: { enabled: true, invocation_logs: false, head_sampling_rate: 1 }, traces: { enabled: false } },
     };

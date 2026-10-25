@@ -21,10 +21,13 @@ token type to match the actual resources and provider values. For scope, algorit
 implementation defaults as candidates, and you must confirm that they match the provider configuration. If publisher authentication is enabled,
 the setup asks separately for the issuer, JWKS, audience, algorithm, and token type. The publisher audience must differ from the administrator API
 audience; the issuer and JWKS may use the same provider.
+An opt-in question, defaulting to no, can add the pre-D1 browser request limiter described below. If enabled, it asks for
+the Rate Limiting namespace ID, per-window request limit, and a 10- or 60-second window. It does not choose or create a namespace
+or contact Cloudflare, and the final preview shows the resulting binding or `null`.
 
 - Questions, guidance, and the preview go to `stderr`; the result JSON goes to `stdout`. A value with the wrong format triggers the same
   question up to three times; after three failures, the command exits without creating files. Format-error messages do not include the entered value.
-  The final preview shows the administrator origin, callback, Worker names, issuer, audience, and output path.
+  The final preview shows the administrator origin, callback, Worker names, issuer, audience, optional browser limiter, and output path.
 - Tokens, passwords, and client secrets are not requested. Account, domain, D1, and provider values are checked only for syntax;
   actual ownership and existence are not verified.
 - An existing output directory is rejected before the first question. Writes use the same writer as `install:prepare`,
@@ -49,13 +52,45 @@ Create `.tmp/installation-input.json` filled with real values. Its top-level JSO
 | --- | --- |
 | `adminOrigin` | The final administrator HTTPS origin. Enter it without a path, query, fragment, port, or trailing `/`. |
 | `admin` | The `workerName`, `accountId`, `collectorWorkerName`, `workersDev`, and optional `domain` for the [administrator target](./runtime.md#administrator-worker-deployment-preparation). |
-| `collector` | The `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev`, and `settings` for the [collector target](./runtime.md#deployment-preparation). |
+| `collector` | The `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev`, and `settings`, plus optional `browserIngestLimit`, for the [collector target](./runtime.md#deployment-preparation). |
 | `login` | The public OIDC client's `issuer`, `clientId`, `scope`, optional `resource`, and `idTokenAlgorithm`. |
 
 `collector.scheduler` optionally selects `cron` (default) or `auth-alarm` when
 using the bundled [Better Auth scheduler](better-auth.md#scheduling-without-additional-cron-slots).
 The latter requires deploying and activating the auth clock; selecting it alone
 does not start cleanup.
+
+### Optional Browser Ingress Limiter
+
+`collector.browserIngestLimit` optionally adds an approximate Cloudflare Rate Limiting check before browser
+ingest reaches D1. This partial collector fragment uses EXAMPLE values; they are not production defaults:
+
+```json
+{
+  "collector": {
+    "settings": { "ADMIN_AUTH_MODE": "oidc" },
+    "browserIngestLimit": {
+      "namespaceId": "1001",
+      "limit": 120,
+      "period": 60
+    }
+  }
+}
+```
+
+The limiter object is closed and requires all three keys. `namespaceId` must be a canonical positive decimal
+string for a safe integer no greater than `Number.MAX_SAFE_INTEGER`; `limit` must be a positive safe integer;
+and `period` must be `10` or `60`. The operator selects the namespace for the installation. Neither the
+configuration commands nor `install:setup` choose a namespace or contact Cloudflare.
+
+When the option is omitted, the generated target keeps its existing output with no `ratelimits` entry and no
+`BROWSER_INGEST_LIMITER_REQUIRED` variable. When present, the target contains the named
+`BROWSER_INGEST_LIMITER` binding with `namespace_id` and `simple: { limit, period }`, and sets
+`vars.BROWSER_INGEST_LIMITER_REQUIRED` to `"true"`. Regenerating a prepared installation and comparing it with
+the recorded bundle rejects a removed or altered binding or required flag. A required binding that is missing,
+an invalid flag, or a malformed, failed, timed-out, or cancelled limiter check fails closed before D1; specify a
+real namespace only when the installation is ready to enforce that behavior. Runtime and capacity scope are in
+[Collector Runtime](./runtime.md#optional-browser-ingress-limiter).
 
 `admin.accountId` and `collector.accountId` must be the same, and `admin.collectorWorkerName` must equal
 `collector.workerName`. The administrator origin must be the configured custom domain or the actual workers.dev address of that
@@ -81,7 +116,7 @@ After all validation succeeds, it creates the directory and writes the following
 
 | File | Purpose |
 | --- | --- |
-| `collector.wrangler.json` | The real account, D1, and server OIDC verification configuration. |
+| `collector.wrangler.json` | The real account, D1, server OIDC verification configuration, and optional browser limiter binding. |
 | `admin.wrangler.json` | The collector binding in the same account and the administrator route. Asset paths use `admin-assets` in this bundle. |
 | `admin-login.json` | Administrator build input containing only public `VITE_OIDC_` settings. |
 | `oidc-registration.json` | The exact callback, CORS origins, PKCE, and access-token requirements to register with the provider. |

@@ -16,7 +16,8 @@ function fixture(customDomain = false, publisher = true) {
     ['Administrator HTTPS origin', customDomain ? 'https://admin.unit-testing.com' : 'https://test-admin.fixture.workers.dev'],
     ['Administrator Worker name', 'test-admin'], ['Collector Worker name', 'test-collector'],
     ['D1 database name', 'test-db'], ['D1 database ID', crypto.randomUUID()],
-    ['Expose collector', 'n'], ['Administrator OIDC issuer', 'https://identity.example.invalid'],
+    ['Expose collector', 'n'], ['Enable pre-D1 browser request limiting', 'n'],
+    ['Administrator OIDC issuer', 'https://identity.example.invalid'],
     ['Administrator access-token JWKS', 'https://identity.example.invalid/jwks'],
     ['Administrator API access-token audience', 'admin-api'], ['Public browser OIDC client ID', 'public-client'],
     ['Browser login scopes', 'openid profile'], ['Browser resource parameter', ''],
@@ -58,6 +59,22 @@ test('guided public setup produces the existing five-file bundle with separate p
     const browser = JSON.stringify(plan.loginSettings);
     assert.ok(!browser.includes('publisher-api')); assert.ok(!browser.includes('machine.example.invalid'));
     assert.ok(!browser.includes(plan.collector.account_id));
+  });
+});
+
+test('guided admission configuration is reviewed and survives prepared-bundle revalidation', async () => {
+  await withDirectory(async directory => {
+    const f = fixture(false, false), output = join(directory, 'limited');
+    f.entries.find(([key]) => key === 'Enable pre-D1 browser request limiting')![1] = 'y';
+    f.entries.push(['Browser limiter namespace ID', '1001'],
+      ['Browser limiter requests', '120'], ['Browser limiter window', '10']);
+    await runInstallationSetup(['--out', output], f.host, root);
+    const plan = await preparedInstallation(output, root);
+    assert.deepEqual(plan.collector.ratelimits, [{ name: 'BROWSER_INGEST_LIMITER', namespace_id: '1001',
+      simple: { limit: 120, period: 10 } }]);
+    assert.equal(plan.collector.vars.BROWSER_INGEST_LIMITER_REQUIRED, 'true');
+    assert.match(f.notices.join('\n'), /approximate per-location/);
+    assert.ok(f.notices.some(notice => notice.includes('"namespace_id": "1001"')));
   });
 });
 

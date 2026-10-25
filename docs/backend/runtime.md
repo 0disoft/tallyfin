@@ -98,7 +98,7 @@ To prepare administrator, collector, and login configuration together, use
 npm run collector:config -- --file .tmp/collector-target.json --out .tmp/collector-deploy/wrangler.json
 ```
 
-- The input fields are `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev` (an explicit boolean), and `settings` (an object).
+- The input fields are `workerName`, `accountId`, `databaseName`, `databaseId`, `workersDev` (an explicit boolean), `settings` (an object), and optional `browserIngestLimit`.
 - The operator supplies the real IDs. Syntax validation does not prove ownership or existence.
 - The settings must have `ADMIN_AUTH_MODE` set to `oidc` and `ALLOW_LOCAL_HTTP` set to false. To enable publisher authentication, set `PUBLISHER_AUTH_MODE` to `oidc` and include the publisher OIDC values; the two audiences must differ. Without publisher keys, the server route is deployed closed.
 - Secrets and tokens are not accepted, and only known keys are allowed. Input is 8 KiB or less; only a new output path is allowed, and overwriting an existing file is rejected.
@@ -108,6 +108,43 @@ npm run collector:config -- --file .tmp/collector-target.json --out .tmp/collect
 - `npm run collector:dry-run` checks the default bundle and does not upload.
 - Check prepared files with `npm run collector:dry-run -- --config .tmp/collector-deploy/wrangler.json`. The operator must supply the real configuration; it was not run in this session.
 - Actual deployment, remote migration, project registration, grant authorization, identity provider connection, domain connection, and production verification are approved follow-up work. The registration CLI supports local operation only.
+
+### Optional Browser Ingress Limiter
+
+`browserIngestLimit` adds a Cloudflare Rate Limiting binding for browser ingestion. These EXAMPLE values are not production defaults:
+
+```json
+{
+  "browserIngestLimit": {
+    "namespaceId": "1001",
+    "limit": 120,
+    "period": 60
+  }
+}
+```
+
+The object is closed and requires `namespaceId`, `limit`, and `period`. `namespaceId` is a canonical positive
+decimal string for a safe integer no greater than `Number.MAX_SAFE_INTEGER`; `limit` is a positive safe integer;
+and `period` is `10` or `60`. Use a namespace identifier from the installation's own Cloudflare account. Namespace
+identifiers are unique within an account, so independent installations need distinct choices. The preparatory
+commands do not allocate namespaces, contact Cloudflare, or infer a production value.
+
+If omitted, the generated target is unchanged: it has no `ratelimits` entry and no
+`BROWSER_INGEST_LIMITER_REQUIRED` variable. When selected, `ratelimits` contains
+`{name:'BROWSER_INGEST_LIMITER', namespace_id, simple:{limit, period}}` and
+`vars.BROWSER_INGEST_LIMITER_REQUIRED` is `'true'`. Prepared-installation regeneration and equality checks reject a
+removed or changed binding or flag.
+
+For each browser HTTP request, including `POST`, preflight, and retries, the Worker checks the key
+`tallyfin-browser:${projectId}` before D1. This counts requests rather than events. A permitted request continues
+through the existing project limits and quotas. A denied request returns 429 before D1 with the existing conservative
+`Retry-After: 60`, including for a 10-second window. A required but missing binding, invalid required flag, or
+malformed response, throw, timeout, or cancellation returns 503 before D1. Server authentication and publishing
+authorization, administrator routes, and scheduling keep their existing order.
+
+Cloudflare documents this limiter as approximate and eventually consistent per Cloudflare location; it is not a
+strict global cap. See [Rate Limiting binding](https://developers.cloudflare.com/workers/runtime-apis/bindings/rate-limit/).
+No production namespace or remote limiter deployment is selected in this scope, and no remote capacity result is claimed.
 
 ## Administrator Worker Deployment Preparation
 

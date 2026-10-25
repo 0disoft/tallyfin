@@ -46,6 +46,16 @@ export async function installationAnswers(host: Pick<SetupHost, 'ask' | 'inform'
   const databaseName = await answer('D1 database name', value => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value));
   const databaseId = await answer('D1 database ID (lowercase UUID)', value => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value) && !/^0+-0+-0+-0+-0+$/.test(value));
   const collectorWorkersDev = await yes('Expose collector on workers.dev');
+  let browserIngestLimit: { namespaceId: string; limit: number; period: number } | undefined;
+  if (await yes('Enable pre-D1 browser request limiting')) {
+    const namespaceId = await answer('Browser limiter namespace ID (unique positive safe integer for this account)',
+      value => /^[1-9]\d{0,15}$/.test(value) && Number.isSafeInteger(Number(value)));
+    const limit = Number(await answer('Browser limiter requests per project per location and window',
+      value => /^[1-9]\d{0,15}$/.test(value) && Number.isSafeInteger(Number(value))));
+    const period = Number(await answer('Browser limiter window in seconds (10 or 60)', value => ['10', '60'].includes(value), '60'));
+    browserIngestLimit = { namespaceId, limit, period };
+    host.inform('This approximate per-location limit counts all browser requests, including preflights and retries. Existing D1 quotas remain in effect.');
+  }
   const issuer = await answer('Administrator OIDC issuer (exact HTTPS address)', endpoint);
   const jwksUri = await answer('Administrator access-token JWKS HTTPS address', endpoint);
   const audience = await answer('Administrator API access-token audience', value => !!value);
@@ -72,7 +82,8 @@ export async function installationAnswers(host: Pick<SetupHost, 'ask' | 'inform'
     adminOrigin,
     admin: { workerName: adminWorker, accountId, collectorWorkerName: collectorWorker, workersDev,
       ...(!workersDev ? { domain: origin.hostname } : {}) },
-    collector: { workerName: collectorWorker, accountId, databaseName, databaseId, workersDev: collectorWorkersDev, settings },
+    collector: { workerName: collectorWorker, accountId, databaseName, databaseId, workersDev: collectorWorkersDev, settings,
+      ...(browserIngestLimit ? { browserIngestLimit } : {}) },
     login: { issuer, clientId, scope, idTokenAlgorithm, ...(resource ? { resource } : {}) },
   };
 }
@@ -92,7 +103,8 @@ export async function runInstallationSetup(argv: string[], host: SetupHost, root
   host.inform(JSON.stringify({ administrator: input.adminOrigin, callback: plan.registration.redirectUri,
     administratorWorker: plan.admin.name, collectorWorker: plan.collector.name,
     issuer: plan.registration.issuer, accessTokenAudience: plan.registration.accessToken.audience,
-    publisherEnabled: plan.collector.vars.PUBLISHER_AUTH_MODE === 'oidc', output }, null, 2));
+    publisherEnabled: plan.collector.vars.PUBLISHER_AUTH_MODE === 'oidc',
+    browserIngestLimit: plan.collector.ratelimits?.[0] ?? null, output }, null, 2));
   const confirmation = await host.ask('Write these five local configuration files? (y/N): ');
   if (confirmation !== 'y') { host.result(JSON.stringify({ prepared: false, cancelled: true, remoteChanges: false })); return; }
   host.result(JSON.stringify(await writeInstallation(input, root, output, host.signal)));

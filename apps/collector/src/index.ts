@@ -16,6 +16,7 @@ import { databaseCapacity, requestDatabase } from './dependency-lifetime.ts';
 
 // Host supplies the D1 binding. No deployed resource ID or credential is committed.
 export interface CollectorBindings { DB: SqlDatabase; ALLOW_LOCAL_HTTP?: string;
+  BROWSER_INGEST_LIMITER_REQUIRED?: string;
   BROWSER_INGEST_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> } }
 export interface WorkerOptions { requestTimeoutMs?: number; maxDatabaseOperations?: number; maxPublicOperations?: number; cleanupMaxPages?: number }
 export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'], verifyPublisher?: PublisherAccess['verifyBearer'],
@@ -36,7 +37,11 @@ export function createWorker(verifyBearer?: AdministratorAccess['verifyBearer'],
     return await createCollector(store, { observe: logRequestObservation,
       observeFailure: entry => console.error(JSON.stringify({ event: 'collection_failure',
         requestId: entry.requestId, stage: entry.stage, kind: entry.kind })),
-      ...(bindings.BROWSER_INGEST_LIMITER ? { publicAdmission: async (projectId: string) => {
+      ...(bindings.BROWSER_INGEST_LIMITER || (bindings.BROWSER_INGEST_LIMITER_REQUIRED !== undefined &&
+        bindings.BROWSER_INGEST_LIMITER_REQUIRED !== 'false') ? { publicAdmission: async (projectId: string) => {
+        if ((bindings.BROWSER_INGEST_LIMITER_REQUIRED !== undefined &&
+          !['true', 'false'].includes(bindings.BROWSER_INGEST_LIMITER_REQUIRED)) || !bindings.BROWSER_INGEST_LIMITER)
+          throw new TypeError('Missing or invalid required browser limiter');
         const result = await publicCapacity(() => bindings.BROWSER_INGEST_LIMITER!.limit({ key: `tallyfin-browser:${projectId}` }));
         if (typeof result.success !== 'boolean') throw new TypeError('Invalid admission response');
         return result.success;

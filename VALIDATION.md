@@ -1,5 +1,14 @@
 # Validation
 
+## Optional pre-D1 browser request limiter — 2026-10-25
+
+- Installation preparation and guided setup accept optional `collector.browserIngestLimit` with an explicit namespace ID, positive safe-integer request limit and a 10- or 60-second window. Omission preserves legacy target output. Selection generates `BROWSER_INGEST_LIMITER` and `BROWSER_INGEST_LIMITER_REQUIRED=true`; prepared-bundle revalidation rejects removed or altered protection.
+- Required but missing bindings, invalid flags, malformed replies, failures, deadlines and cancellation return 503 before D1. Denied admission returns 429 with `Retry-After: 60` and no D1 operation. Server authentication ordering and administrator/maintenance paths remain unchanged.
+- Browser preflight, a 20-event delivery and its replay each consume one limiter request; stored event counts and daily receipt usage remain 20, with three D1 minute admissions. A fourth, denied request performs no additional D1 batch. Limits count requests, including preflights and retries, rather than events.
+- Focused runtime/configuration/installation tests: 32 passed. Entire Collector suite: 202 passed. Root `npm run typecheck`: passed. `npm run check --prefix tools/contracts`: 69 passed. `git diff --check`: passed. The generated definition was also accepted by the installed native Worker runtime in the focused tests.
+- Updated installation/runtime guidance and roadmap. No API, DB schema, SDK signature, dependency, repository hygiene or CI/runner change. Full unrelated SDK/admin suites and remote load tests were not rerun for this bounded Collector/installation change.
+- Cloudflare Rate Limiting is approximate and eventually consistent per location; this is not a strict global quota. Existing D1 project quotas remain authoritative. No production namespace or capacity value selected, infrastructure provisioned, push, publication or deployment performed; production activation and remote verification remain pending.
+
 ## SDK lifecycle, portable builds and ingestion state guards — 2026-10-25
 
 - Local implementation: [design and verification](docs/validation/2026-10-25-ingest-state-guards.md).

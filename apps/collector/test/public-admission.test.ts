@@ -1,11 +1,69 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import { createWorker } from '../src/index.ts';
 import { createCollector } from '../src/handler.ts';
-import { setup, now, registry } from '../../../packages/storage-d1/test/helpers.ts';
+import { setup, batch, now, registry } from '../../../packages/storage-d1/test/helpers.ts';
 import type { SqlDatabase } from '@tallyfin/storage-d1';
 const url = 'https://collector.example.invalid/v1/projects/sembom/batches';
-const unusedDb: SqlDatabase = { prepare() { throw Error('DB must not be touched'); }, batch() { throw Error('DB must not be touched'); } };
+let databaseCalls = 0;
+const unusedDb: SqlDatabase = { prepare() { databaseCalls++; throw Error('DB must not be touched'); },
+  batch() { databaseCalls++; throw Error('DB must not be touched'); } };
+afterEach(() => { assert.equal(databaseCalls, 0, 'rejected admission must not touch D1'); });
+
+test('required or invalid limiter configuration and malformed replies fail closed without DB access', async () => {
+  const worker = createWorker();
+  for (const flag of ['true', '', 'yes', ' true']) {
+    const response = await worker.fetch(new Request(url, { method: 'POST' }),
+      { DB: unusedDb, BROWSER_INGEST_LIMITER_REQUIRED: flag });
+    assert.equal(response.status, 503);
+    assert.equal((await response.json()).error.code, 'storage_unavailable');
+  }
+  for (const success of [undefined, null, 0, 'true']) {
+    const response = await worker.fetch(new Request(url, { method: 'POST' }), { DB: unusedDb,
+      BROWSER_INGEST_LIMITER_REQUIRED: 'true', BROWSER_INGEST_LIMITER: {
+        async limit() { return JSON.parse(JSON.stringify({ success })); },
+      } });
+    assert.equal(response.status, 503);
+  }
+  const server = await worker.fetch(new Request(url.replace('/batches', '/server-batches'), { method: 'POST' }),
+    { DB: unusedDb, BROWSER_INGEST_LIMITER_REQUIRED: 'true' });
+  assert.equal(server.status, 401);
+});
+
+test('allowed preflight, a full delivery and its replay retain quotas and exact counts; denied burst skips D1', async () => {
+  const f = await setup();
+  try {
+    let calls = 0, admissions = 0;
+    const db: SqlDatabase = { prepare: query => f.db.prepare(query), async batch<T>(statements) {
+      calls++; return f.db.batch<T>(statements as Parameters<typeof f.db.batch>[0]);
+    } };
+    const worker = createWorker();
+    const bindings = { DB: db, BROWSER_INGEST_LIMITER_REQUIRED: 'true', BROWSER_INGEST_LIMITER: {
+      async limit({ key }: { key: string }) { assert.equal(key, 'tallyfin-browser:sembom'); return { success: ++admissions <= 3 }; },
+    } };
+    const origin = registry.allowedOrigins[0]!;
+    assert.equal((await worker.fetch(new Request(url, { method: 'OPTIONS', headers: { Origin: origin,
+      'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } }), bindings)).status, 204);
+    const input = batch(), shift = Date.now() - now;
+    input.events = Array.from({ length: 20 }, () => {
+      const event = { ...input.events[0], eventId: crypto.randomUUID(), name: 'tool_view' };
+      delete event.attempt; return event;
+    });
+    for (const event of input.events) {
+      event.occurredAt = new Date(Date.parse(event.occurredAt) + shift).toISOString();
+      if (event.attempt) event.attempt.startedAt = new Date(Date.parse(event.attempt.startedAt) + shift).toISOString();
+    }
+    const send = () => worker.fetch(new Request(url, { method: 'POST', headers: { Origin: origin }, body: JSON.stringify(input) }), bindings);
+    assert.deepEqual(await (await send()).json(), { accepted: 20, duplicates: 0 });
+    assert.deepEqual(await (await send()).json(), { accepted: 0, duplicates: 20 });
+    const before = calls;
+    assert.equal((await send()).status, 429);
+    assert.equal(calls, before);
+    assert.equal(await f.db.prepare('SELECT sum(count) AS n FROM event_daily_counts').first('n'), 20);
+    assert.equal(await f.db.prepare('SELECT new_receipts AS n FROM ingest_daily_usage').first('n'), 20);
+    assert.equal(await f.db.prepare('SELECT sum(request_count) AS n FROM ingest_minute_usage').first('n'), 3);
+  } finally { await f.mf.dispose(); }
+});
 test('public limiter blocks before any database access and leaves server authentication first', async () => {
   const keys: string[] = [];
   const bindings = { DB: unusedDb, BROWSER_INGEST_LIMITER: { async limit({ key }: { key: string }) { keys.push(key); return { success: false }; } } };
