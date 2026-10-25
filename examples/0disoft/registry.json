@@ -1,0 +1,19 @@
+{
+  "project": { "id": "zerodi-site", "name": "0disoft.github.io", "status": "active", "timeZone": "Asia/Seoul" },
+  "schemaVersion": 1,
+  "schemaStatus": "active",
+  "allowedOrigins": ["https://0disoft.github.io"],
+  "limits": { "requestsPerMinute": 120, "newReceiptsPerUtcDay": 100000 },
+  "events": [{
+    "name": "page_view",
+    "label": "페이지 조회",
+    "source": "browser",
+    "properties": {
+      "section": { "type": "enum", "purpose": "Public page category without a URL or article identity", "required": true,
+        "values": ["home", "indiehackers", "story", "investors", "creators", "privacy", "other"] },
+      "locale": { "type": "enum", "purpose": "Public interface language", "required": true,
+        "values": ["en", "zh", "es", "fr", "hi", "ko"] }
+    }
+  }],
+  "workflows": []
+}
