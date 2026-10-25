@@ -29,7 +29,7 @@ export async function collectorHarness(directory: string, frozenNow?: number, wo
           return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
         }, scheduled(controller, env, ctx) { return worker.scheduled(controller, env, ctx); }
       };`}` },
-    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023' });
+    bundle: true, write: false, format: 'esm', platform: 'browser', target: 'es2023', external: ['cloudflare:workers'] });
   const databaseId = crypto.randomUUID();
   const bindings = { ...DEFAULT_SETTINGS, ADMIN_AUTH_MODE: 'oidc', OIDC_ISSUER: principal.issuer,
       OIDC_AUDIENCE: 'benchmark-admin', OIDC_JWKS_URI: `${principal.issuer}/jwks`,
