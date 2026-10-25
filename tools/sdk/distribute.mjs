@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
@@ -17,6 +17,8 @@ export async function sourceIdentity(directory) {
 }
 
 export async function distribute(directory) {
+  const existing = await lstat(directory).catch(error => { if (error.code !== 'ENOENT') throw error; });
+  assert.equal(existing, undefined, 'Output directory already exists');
   const source = await sourceIdentity(root);
   const verified = await execute(process.execPath, [join(root, 'tools/sdk/verify-packages.mjs')],
     { cwd: root, windowsHide: true, timeout: 135000, maxBuffer: 2 * 1024 * 1024 });
@@ -38,18 +40,22 @@ export async function distribute(directory) {
   }
   assert.deepEqual(artifacts.map(item => item.name).sort(), ['@tallyfin/browser', '@tallyfin/server']);
   const guides = [];
-  for (const file of ['docs/integrations/independent-sites.md', 'examples/independent-site/site.example.json']) {
-    try {
-      const bytes = await readFile(join(root, file)), filename = file.split('/').at(-1);
-      await writeFile(join(directory, filename), bytes, { flag: 'wx' });
-      guides.push({ filename, sha256: digest(bytes) });
-    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  for (const [file, filename] of [
+    ['tools/sdk/README.md', 'sdk-README.md'],
+    ['docs/integrations/independent-sites.md', 'independent-sites.md'],
+    ['examples/independent-site/README.md', 'site-README.md'],
+    ['examples/independent-site/site.example.json', 'site.example.json'],
+  ]) {
+    const bytes = await readFile(join(root, file));
+    await writeFile(join(directory, filename), bytes, { flag: 'wx' });
+    guides.push({ filename, sha256: digest(bytes) });
   }
   const manifest = { schemaVersion: 'tallyfin.sdk-distribution/v1', source, artifacts, guides,
     verification: { offlineInstall: true, consumerOutsideWorkspace: true, declarationsCompiled: true,
       entrypoints: ['@tallyfin/browser', '@tallyfin/browser/funnels', '@tallyfin/server'], noticesVerified: true },
     published: false, versionsChanged: false };
   await writeFile(join(directory, 'SHA256SUMS'), [...artifacts, ...guides].map(item => `${item.sha256}  ${item.filename}\n`).join(''), { flag: 'wx' });
+  assert.deepEqual(await sourceIdentity(root), source, 'Source changed while writing the distribution');
   // The manifest is the completion marker; incomplete runs retain their files for inspection.
   await writeFile(join(directory, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });
   return { ...manifest, output: directory };

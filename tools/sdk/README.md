@@ -42,3 +42,22 @@ and SDKs use Apache-2.0; third-party code and fonts retain their original licens
 including the Inter and Noto Sans KR OFL notices. The operator must still establish public scope
 and release method; actual npm publication is separate work. Follow [VALIDATION.md](../../VALIDATION.md) for verification records and
 [workspace-boundaries.md](../../docs/monorepo/workspace-boundaries.md) for package boundaries.
+
+## Commit-labelled distribution
+
+```powershell
+npm run sdk:bundle -- --out .tmp/sdk-distribution
+```
+
+This requires a clean committed checkout: tracked edits or untracked files abort before packaging, and an
+existing output directory is rejected before the build. The command runs the existing
+`verify:sdk-packages` flow unchanged and writes commit-suffixed browser and server tarballs,
+`SHA256SUMS`, and `manifest.json` into a new directory. The manifest records `source.commit`,
+`source.tree`, `source.dirty: false`, artifact `sha256` and `bytes`, plus `published: false`.
+It copies four required files with fixed names: `tools/sdk/README.md` as `sdk-README.md`,
+`docs/integrations/independent-sites.md` as `independent-sites.md`, `examples/independent-site/README.md`
+as `site-README.md`, and `examples/independent-site/site.example.json` unchanged. Their hashes are listed
+in the manifest. The source identity is checked again after those copies and immediately before
+`manifest.json`, which is written last and marks completion; a failed run keeps partial files for
+inspection. The command does not publish, change versions, or accept credentials. Use `--help` for the
+usage summary.
