@@ -1,5 +1,43 @@
 # Validation
 
+## Independent-site SDK delivery — 2026-10-26
+
+- `sdk:bundle` built clean source commit `231e2f38bcca03d1d1705b92c336dfe65a9b8a17`
+  (tree `62b682b9da2730f4cb515254d832bbb91ab50c07`). Both tarballs installed
+  offline outside this checkout. Browser, funnel and server ESM entry points,
+  consumer declaration compilation, exact package contents and LICENSE/NOTICE
+  verification passed. Packages remain private at `0.0.0`; no npm publication.
+- Browser tarball: 10,900 bytes, SHA-256
+  `afbdbb16e1c009e213372e900711d53667332102ee8b37179b3f720f9150a386`.
+  Server tarball: 9,671 bytes, SHA-256
+  `a6750d11682b014ed1758e5dbacf0eef3eed27d8e3b3530720a0f4007deabbfc`.
+- Source-identity/output protection: 1 test passed, covering committed identity,
+  rejection of tracked edits and untracked input, and existing-output rejection.
+  Site integration: 4 tests passed, covering strict inputs/cardinality, new-directory
+  preparation, generated consent lifecycle, cancellation, locale preservation, and
+  protected project/schema APIs with synthetic authentication and real local D1.
+  Six events were accepted; exact replay reported zero new events and six duplicates.
+  Receipts remained six; workflow totals were two starts, one success and one failure.
+- Root `node node_modules/typescript/bin/tsc --noEmit` passed. Contract checks:
+  69 passed. `git diff --check` passed. The example CLI generated all eight expected
+  files without remote calls, with collection disabled, registration unverified
+  and privacy review false. Existing valid check results were reused for unchanged code.
+- Delivery ZIP `tallyfin-sdk-231e2f38bcca.zip`: 37,553 bytes, SHA-256
+  `7ee1281a9a15bfa08f08121b68f3afa273d8e039a440c3d299e2772be8e6db6b`.
+  It contains 18 files: both tarballs, four source guides/input, SDK manifest,
+  checksum list, eight generated example files, public connection settings and
+  a start guide. Extraction verified all 17 listed file hashes, all SDK manifest
+  hashes and the three disabled/unreviewed/unregistered fixture flags.
+- A HEAD request to the public administrator origin returned 200. This establishes
+  reachability only, not protected access, project registration or event delivery.
+  No actual site ID/origin/language set was supplied, so no real site was registered.
+  Publication still requires the existing operator authority and explicit privacy review.
+- Updated the [roadmap](docs/product/01-roadmap.md) and added
+  [independent-site guidance](docs/integrations/independent-sites.md). Existing API/DB
+  and SDK signatures, dependencies, hygiene rules and CI/runner configuration are
+  unchanged. No push, deployment, remote provisioning or npm publication. Full
+  unrelated suites and remote registration/load tests were not rerun for this slice.
+
 ## Deployment revalidation — 2026-10-26
 
 - Source commit `9f92c62` deployed Collector version
