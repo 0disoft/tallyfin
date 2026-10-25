@@ -1,5 +1,37 @@
 # Validation
 
+## Deployment revalidation — 2026-10-26
+
+- Source commit `9f92c62` deployed Collector version
+  `abecfc07-3648-4f4d-9159-abf351d00298` and administrator version
+  `098a20ae-046f-4947-95cd-56037c1d8744` at 100% each. The authentication
+  Worker was unchanged. Full evidence is in the
+  [deployment revalidation record](docs/validation/2026-10-26-deployment-revalidation.md).
+- The prepared bundle reused the existing production variables, D1 databases,
+  service bindings and compatibility dates. The Cloudflare account remained on
+  Workers Paid with the Standard usage model. The configured administrator build
+  and both Worker deployment dry runs passed.
+- The touched-row ingestion guard is deployed. The optional pre-D1 limiter code
+  is deployed but inactive: no rate-limiting binding or required flag was
+  configured, and no production namespace or threshold was selected.
+- Administrative, authentication-health, JWKS, site and 8ailors surfaces returned
+  HTTP 200. Unauthenticated identity access returned 401. These checks establish
+  reachability and boundary behavior, not a successful login or protected read.
+- A single login attempt with the stored initial credential returned 401. Login
+  and protected-read revalidation were therefore incomplete. This observed
+  condition is recorded as **stored initial credential rejected**; it is not
+  classified as a service authentication regression. No password reset or change
+  was performed.
+- Prior source results were reused because this documentation change includes no
+  application-code change: Collector 202, focused Collector 32, contracts 69 and
+  type checks passed. The remote 12 requests/s phase across four projects sharing
+  one D1 had approximately 3000 of 3600 responses, all HTTP 200, when this record
+  was updated. No completed result for either target is recorded or claimed.
+- Rollback is available through Collector
+  `b6498981-83b7-4fd9-b736-404cf91e8f0c` and administrator
+  `470beb08-390c-437a-aed4-7b9feb7ff411` without a database change. No API,
+  DB schema, SDK, dependency, CI or authentication-Worker change is included.
+
 ## Optional pre-D1 browser request limiter — 2026-10-25
 
 - Installation preparation and guided setup accept optional `collector.browserIngestLimit` with an explicit namespace ID, positive safe-integer request limit and a 10- or 60-second window. Omission preserves legacy target output. Selection generates `BROWSER_INGEST_LIMITER` and `BROWSER_INGEST_LIMITER_REQUIRED=true`; prepared-bundle revalidation rejects removed or altered protection.
