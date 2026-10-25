@@ -1,5 +1,37 @@
 # Validation
 
+## Continuous-request contention boundary — 2026-10-25
+
+A closed-loop generator kept eight requests in flight, immediately replacing
+each completion, against one disposable project on unchanged Collector version
+`b6498981-83b7-4fd9-b736-404cf91e8f0c`. It stopped offering new work on the first
+failure and drained outstanding requests: 40 HTTP 200 responses and one 503
+among 41 requests in a 5.808-second response window. Observed total completion
+rate was 7.06 requests/s; this short failed run is not sustainable capacity.
+Client p50/p95/max was 820/1875/3460 ms, with no client retries.
+
+The 503 was `storage_unavailable`, correlated by request UUID with a `commit`
+failure of kind `revision_conflict`. Tail captured an exhausted attempt eight,
+57 total conflicts, no failed platform outcomes and all 43 load/sentinel
+invocations. This differs from the prior platform CPU termination. A loop that
+continuously replaces completed requests offers more load than synchronized
+eight-request waves which wait for their slowest response.
+
+Before integrity reads, the main project was paused through the control plane,
+preventing later guarded writes. D1 held exactly 640 receipts/events and 192
+complete funnels with reached totals `[192,192,192]`; per-event aggregates
+matched stored synthetic IDs, and the failed batch's 20 IDs were absent.
+Independent-project probes before and after load returned 200. Both disposable
+projects were paused and the tail process was stopped. No requests targeted
+`zerodi-site`. Higher single-project concurrency was not attempted after the
+failure. Next measurements separate fixed-rate single-project capacity from
+higher concurrency distributed across independent projects.
+
+Only verification records changed. No application, API/DB/SDK contract,
+dependency, CPU limit, retry budget, CI runner or deployment changed. Temporary
+drivers passed Node syntax checks; application tests are not repeated for an
+unchanged deployment.
+
 ## Deployed verification after CPU reduction — 2026-10-25
 
 Collector version `b6498981-83b7-4fd9-b736-404cf91e8f0c` was deployed and
