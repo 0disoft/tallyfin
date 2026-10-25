@@ -1,5 +1,38 @@
 # Validation
 
+## Shared Cloudflare account and Workers Paid activation — 2026-10-25
+
+An authenticated Cloudflare API listing placed `tallyfin-admin`, `tallyfin-auth`,
+and `tallyfin-collector` alongside `zdp-web-apps-account-production`,
+`zdp-web-apps-account-staging`,
+`zdp-edge-workers-registration-production`,
+`zdp-edge-workers-registration-staging`,
+`zdp-comm-email-verification-production`, and
+`zdp-comm-email-verification-staging` under exactly one account. Worker settings
+confirm that the account UI uses a service binding to production email
+verification, whose D1 database is distinct from the Tallyfin analytics and
+Tallyfin auth databases.
+
+The user authorized the upgrade and explicitly confirmed both the legal and
+recurring-overage consent checkboxes. The official Cloudflare dashboard then
+showed the purchase completed and a Workers Paid subscription active at $5 per
+month, with usage overages.
+
+After the change, Collector settings reported `usage_model = 'standard'`.
+Active version `b6498981-83b7-4fd9-b736-404cf91e8f0c` remained at 100%, with
+unchanged code and deployment. A remote `SELECT 1` succeeded after the earlier
+D1 Free daily row-write exhaustion.
+
+The scope is the account-level plan. It does not migrate Core or Money
+PostgreSQL. Worker configuration, CPU limits, authentication, API/DB/SDK
+contracts, dependencies, and CI are unchanged.
+
+Exact account-wide usage and invoice totals are unmeasured. Shared Paid
+allowances do not isolate billing or resolve revision conflicts. Next
+measurements are ongoing; this record makes no claim about their results.
+
+Modified file: `VALIDATION.md`.
+
 ## Continuous-request contention boundary — 2026-10-25
 
 A closed-loop generator kept eight requests in flight, immediately replacing
