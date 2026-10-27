@@ -6,6 +6,7 @@ import { createReadScheduler, type ReadLease } from './read-scheduler.ts';
 export const API_BASE_PATH = '/v1';
 
 export type AdminTransportOptions = { token?: string; getBearer?: () => Promise<string>; onDestroy?: () => void; basePath?: string; fetchImpl?: FetchLike; requestTimeoutMs?: number; maxConcurrentReads?: number;
+    onUnauthorized?: (error: ApiError) => void;
     onAnalyticsAccessDenied?: (projectId: string, error: ApiError) => void };
 export type FetchOption = {
   method?: string;
@@ -47,6 +48,7 @@ export class AdminTransport {
   #requestTimeoutMs: number;
   #readSlot: ReturnType<typeof createReadScheduler>;
   #onAnalyticsAccessDenied: ((projectId: string, error: ApiError) => void) | undefined;
+  #onUnauthorized: ((error: ApiError) => void) | undefined;
 
   constructor(options: AdminTransportOptions = {}) {
     const basePath = options.basePath ?? API_BASE_PATH;
@@ -60,6 +62,7 @@ export class AdminTransport {
     this.#requestTimeoutMs = requestTimeoutMs;
     this.#readSlot = createReadScheduler(options.maxConcurrentReads);
     this.#onAnalyticsAccessDenied = options.onAnalyticsAccessDenied;
+    this.#onUnauthorized = options.onUnauthorized;
     this.#token = options.token ?? '';
     this.#getBearer = options.getBearer;
     this.#onDestroy = options.onDestroy;
@@ -89,6 +92,7 @@ export class AdminTransport {
     const onDestroy = this.#onDestroy;
     this.#onDestroy = undefined;
     this.#onAnalyticsAccessDenied = undefined;
+    this.#onUnauthorized = undefined;
     onDestroy?.();
   }
 
@@ -137,8 +141,14 @@ export class AdminTransport {
     };
     let lease: ReadLease | undefined;
     const track = <T>(operation: () => Promise<T>) => lease ? lease.track(operation) : operation();
-    let notified = false;
+    let notified = false, authenticationNotified = false;
     const notifyDenial = (error: ApiError) => {
+      if (signal?.aborted || this.#destroyed) return;
+      if (error.status === 401 && !authenticationNotified) {
+        authenticationNotified = true;
+        try { this.#onUnauthorized?.(error); }
+        catch { /* An observer cannot replace a confirmed authentication failure. */ }
+      }
       // Owner-only settings/grant failures do not revoke reader access to analytics.
       const match = body === undefined && !method && path.match(/^\/projects\/([a-z][a-z0-9-]{0,47})\/(?:schemas\/[0-9]+|summary|(?:events|workflows|funnels)\/[^/]+\/(?:daily|breakdown))$/);
       const targets = path === '/overview' && typeof params.projectIds === 'string' ? params.projectIds.split(',') : match ? [match[1]!] : [];

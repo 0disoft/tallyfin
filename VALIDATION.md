@@ -1,5 +1,30 @@
 # Validation
 
+## Direct administrator login recovery — 2026-10-28
+
+- HTTP 401 from any administrator API route, including identity checks and
+  mutations, or a failed token refresh now exposes the existing administrator
+  login panel above the connected workspace. Disconnecting first is unnecessary.
+  HTTP 403 and ordinary server failures do not trigger login recovery.
+- Authentication failure is observed at response headers, before a potentially
+  stalled error body. Observer failures cannot replace the API error, and
+  cancelled/disposed requests cannot trigger recovery for another connection.
+- Editors stay mounted when authentication fails. Starting login uses the
+  existing connection-wide draft exit guard, then disposes the old API client
+  and its credentials before starting a fresh OIDC transaction. Cancelling the
+  exit confirmation preserves the draft and connection.
+- Passed: `npm run typecheck:admin`, `npm run test:admin` (378 tests),
+  `npm run build:admin`, `npm run verify:admin-login`, and `git diff --check`.
+  The local Chromium/real local D1 fixture verified refresh-failure and identity
+  401 recovery without disconnect, 403 separation, draft retention, declined and
+  accepted exit confirmation, successful relogin, manual disconnect and reload.
+  Browser page errors and administrator API writes were both zero.
+- Only this validation record changed among source-of-truth documents. No
+  API/DB contract, Worker configuration, dependency, hygiene or CI/runner change.
+  Backend/full-repository suites and production login were not rerun for this
+  administrator-only change. This record establishes local verification only;
+  no push, deployment or publication was performed.
+
 ## Authentication body cleanup deployment — 2026-10-26
 
 - Deployed source `9d9d6b8` to `tallyfin-auth` version

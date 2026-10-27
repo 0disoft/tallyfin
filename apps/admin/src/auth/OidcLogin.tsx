@@ -3,7 +3,7 @@ import { BrowserLogin, LoginError } from './client';
 import { loginConfig } from './config';
 import { initialCallback, clearCallback } from './bootstrap';
 
-export default function OidcLogin({ onConnected }: { onConnected: (login: BrowserLogin) => void }) {
+export default function OidcLogin({ onConnected, onBeforeLogin }: { onConnected: (login: BrowserLogin) => void; onBeforeLogin?: () => boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -49,6 +49,7 @@ export default function OidcLogin({ onConnected }: { onConnected: (login: Browse
   }, [onConnected]);
 
   async function start() {
+    if (onBeforeLogin && !onBeforeLogin()) return;
     setBusy(true); setError(null);
     try {
       const login = loginRef.current;

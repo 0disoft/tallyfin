@@ -43,7 +43,7 @@ const MAX_SCHEMA_VERSION = 2147483647;
 function describeError(error: ApiError): { title: string; detail: string } {
   switch (error.kind) {
     case 'unauthorized':
-      return { title: '인증이 필요해요', detail: '연결을 끊고 다시 로그인해 주세요. 관리자 토큰으로 직접 연결할 수도 있어요.' };
+      return { title: '인증이 필요해요', detail: '화면 위쪽의 관리자 로그인 버튼으로 다시 로그인해 주세요.' };
     case 'forbidden':
       return { title: '이 프로젝트를 볼 권한이 없어요', detail: '서버에서 이 프로젝트에 대한 관리자 grant를 확인해 주세요.' };
     case 'not_found':
@@ -71,6 +71,7 @@ function ErrorPanel({ error, onRetry }: { error: ApiError; onRetry: () => void }
 export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate, registerExitCheck }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void; registerExitCheck?: (check: () => boolean) => () => void }) {
   const currentOrigin = useMemo(() => window.location.origin, []);
   const [session, setSession] = useState<Session | null>(null);
+  const [unauthorizedClient, setUnauthorizedClient] = useState<ApiClient | null>(null);
   const [token, setToken] = useState('');
   const [endpoint, setEndpoint] = useState('');
   const [endpointError, setEndpointError] = useState<string | null>(null);
@@ -105,6 +106,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     if (!session) return null;
     const next = new ApiClient({ basePath: session.basePath,
       ...(session.login ? { getBearer: () => session.login!.getAccessToken(), onDestroy: () => session.login!.destroy() } : { token: session.token ?? '' }),
+      onUnauthorized: () => { if (clientRef.current === next) setUnauthorizedClient(next); },
       onAnalyticsAccessDenied: (projectId, error) => readDenialHandler.current(next, projectId, error),
     });
     return next;
@@ -188,6 +190,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [onNavigate, addProject, activeProjectId, confirmDraftExit]);
   const schemaVersionChanged = useCallback((version: number) => { setVersionInput(String(version)); setSetupRefreshTick(tick => tick + 1); }, [setVersionInput]);
   const connected = useCallback((login: BrowserLogin) => {
+    clientRef.current?.destroy();
+    setUnauthorizedClient(null);
     resetProjects();
     setToken(''); setProjectId(null); setSelectedEvent(null); setGrouping(null);
     setMain({ status: 'idle' }); setSeries({ status: 'idle' });
@@ -222,6 +226,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     if (!confirmDraftExit(true)) return;
     resetProjects(true);
     client?.destroy();
+    setUnauthorizedClient(null);
     setSession(null);
     setCustomRange(null);
     setCompare(false); setComparison({ status: 'idle' });
@@ -304,6 +309,14 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     propertyComparison: propertyComparison.state, workflowDetails: currentWorkflowDetails });
 
   return <>
+    {unauthorizedClient === client && <>
+      <p className="notice" role="alert">관리자 인증이 만료되었거나 유효하지 않아요. 다시 로그인해 주세요.</p>
+      <DeferredPanel label="관리자 로그인"><OidcLogin onConnected={connected} onBeforeLogin={() => {
+        if (!confirmDraftExit(true)) return false;
+        client.destroy();
+        return true;
+      }} /></DeferredPanel>
+    </>}
     <div className="toolbar api-toolbar">
       <ProjectPicker client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
         hasMore={!!nextCursor} loadingMore={more} onLoadMore={loadMore} onSelect={project => switchProject(project.id, project)} />

@@ -91,8 +91,7 @@ try {
     await page.getByRole('heading', { name: '인증이 필요해요', exact: true }).waitFor();
     assert.equal(local.counts.refreshes, 2); assert.ok(!(await page.locator('body').innerText()).includes('private-provider-detail'));
     await emptyStorage();
-    stage = 'disconnect'; await page.evaluate(() => window.__restoreLoginClock());
-    await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
+    stage = 'direct-login-recovery'; await page.evaluate(() => window.__restoreLoginClock());
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor(); await emptyStorage();
     stage = 'bad-state'; local.setMode('bad-state'); const before = local.counts.exchanges;
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
@@ -102,6 +101,35 @@ try {
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
     await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
     assert.equal(local.counts.exchanges, before + 1); await emptyStorage();
+    stage = 'identity-login-recovery';
+    await page.getByRole('button', { name: '설정', exact: true }).click();
+    await page.locator('#settings-name').waitFor();
+    await page.locator('#settings-name').fill('Unsaved recovery draft');
+    let identityStatus = 403;
+    await context.route('**/v1/identity', route => route.fulfill({ status: identityStatus,
+      contentType: 'application/json', body: JSON.stringify({ error: { code: identityStatus === 401 ? 'unauthorized' : 'forbidden' } }) }));
+    await page.getByText('로그인 계정 확인', { exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'HTTP 403' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
+    identityStatus = 401;
+    await page.getByRole('button', { name: '다시 확인', exact: true }).click();
+    await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
+    assert.equal(await page.locator('#settings-name').inputValue(), 'Unsaved recovery draft');
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
+    assert.equal(await page.locator('#settings-name').inputValue(), 'Unsaved recovery draft');
+    await emptyStorage();
+    await context.unroute('**/v1/identity');
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
+    await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
+    await emptyStorage();
+    stage = 'disconnect';
+    await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
+    await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
+    await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
+    await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
     stage = 'reload'; await page.reload();
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: '연결 끊기', exact: true }).count(), 0);
@@ -111,6 +139,7 @@ try {
     assert.equal(cancelled, false);
     report = { verified: true, browser: browser.version(), pkceRedirect: true, signedApiAccess: true,
       callbackScrubbed: true, sharedRotatingRefresh: true, refreshFailureClears: true, invalidStateRejected: true,
+      directLoginRecovery: true, identityLoginRecovery: true, forbiddenKeepsSession: true, recoveryDraftGuard: true,
       disconnectClears: true, relogin: true, reloadClears: true, storageEmpty: true, noAdminWrites: true, pageErrors, ...local.counts };
   }
 } catch { console.error(JSON.stringify({ verified: false, stage })); process.exitCode = 1; }

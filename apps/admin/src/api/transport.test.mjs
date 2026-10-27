@@ -4,6 +4,57 @@ import { ApiClient, ApiError } from './client.ts';
 import { ApiError as TransportError } from './api-error.ts';
 import { AdminTransport } from './transport.ts';
 
+test('authentication failures notify across read and write routes; 403 and 503 do not', async () => {
+  for (const status of [401, 403, 503]) {
+    for (const [path, body, method] of [['/identity'], ['/projects'], ['/projects/sample/schemas/draft', '{}', 'PUT']]) {
+      let notifications = 0;
+      const transport = new AdminTransport({ onUnauthorized(error) {
+        assert.equal(error.status, 401); notifications++; throw Error('private observer failure');
+      }, fetchImpl: async () => ({ ok: false, status, json: async () => ({}) }) });
+      try {
+        await assert.rejects(transport.request(path, {}, undefined, body, method), error => error instanceof ApiError && error.status === status);
+        assert.equal(notifications, status === 401 ? 1 : 0);
+      } finally { transport.destroy(); }
+    }
+  }
+});
+
+test('authentication is reported before a stalled error body and only once on timeout', async () => {
+  let notifications = 0, notified;
+  const observed = new Promise(resolve => { notified = resolve; });
+  const transport = new AdminTransport({ requestTimeoutMs: 50, onUnauthorized() { notifications++; notified(); },
+    fetchImpl: async () => ({ ok: false, status: 401, json: () => new Promise(() => {}) }) });
+  try {
+    const pending = assert.rejects(transport.request('/identity'), { status: 401 });
+    await observed;
+    assert.equal(notifications, 1);
+    await pending;
+    assert.equal(notifications, 1);
+  } finally { transport.destroy(); }
+});
+
+test('refresh failures notify; cancelled or disposed requests cannot trigger login recovery', async () => {
+  let notifications = 0;
+  const refresh = new AdminTransport({ getBearer: async () => { throw Error('private refresh failure'); },
+    onUnauthorized() { notifications++; }, fetchImpl: async () => { assert.fail('refresh failure must not fetch'); } });
+  try {
+    await assert.rejects(refresh.request('/identity'), { status: 401 });
+    assert.equal(notifications, 1);
+  } finally { refresh.destroy(); }
+  for (const dispose of [false, true]) {
+    let respond;
+    const controller = new AbortController();
+    const transport = new AdminTransport({ onUnauthorized() { notifications++; },
+      fetchImpl: () => new Promise(resolve => { respond = resolve; }) });
+    const pending = assert.rejects(transport.request('/identity', {}, controller.signal), { name: 'AbortError' });
+    if (dispose) transport.destroy(); else controller.abort();
+    respond({ ok: false, status: 401, json: async () => ({}) });
+    await pending;
+    assert.equal(notifications, 1);
+    transport.destroy();
+  }
+});
+
 test('access observers cannot replace a confirmed denial with a private callback exception', async () => {
   assert.equal(ApiError, TransportError);
   for (const status of [401, 403]) {
