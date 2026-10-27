@@ -9,3 +9,5 @@ Before making substantial visual changes, use the Product Design plugin's `get-c
 When implementing from a selected generated mock, treat that image as the source of truth for layout, component anatomy, density, spacing, color, typography, visible content, and hierarchy.
 
 Build app UI in `src/`. Keep `.openai/hosting.json`, `worker/index.js`, `scripts/prepare-sites-build.mjs`, and `tests/sites-worker.test.mjs` intact so the same local prototype can be handed to Sites. Before a Sites handoff, run `npm run build:sites` and `npm run test:sites`; the Sites build must leave `dist/client/index.html`, `dist/server/index.js`, and `dist/.openai/hosting.json`. Use `npm run build` for the portable app build without Sites metadata.
+
+The selected event-analysis direction is an event explorer with a selected-event detail panel. Enabling previous-period comparison uses a broad event comparison table. Preserve event labels beside their keys, separate browser/server sources, and keep advanced connection settings available without dominating the analysis view.

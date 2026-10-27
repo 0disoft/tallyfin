@@ -5,6 +5,7 @@ import { countChange } from './api/period-comparison';
 import { rangeLabel } from './api/dates';
 import type { EventRow } from './api/dashboard-model';
 import type { EventSource, SummaryResponse } from './api/types';
+import './event-shell.css';
 import './event-workspace.css';
 
 type Props = {

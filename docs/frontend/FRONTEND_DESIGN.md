@@ -1,5 +1,27 @@
 # Tallyfin Frontend Design
 
+## Event explorer and period comparison — 2026-10-28
+
+The API-connected event analysis view uses `EventWorkspace` for a searchable
+event list and a selected-event inspector. `LiveDashboard` still owns API reads,
+project/version/source selection, cancellation, access denial, comparison state,
+and CSV readiness. `EventWorkspace` renders these projections and emits selection
+callbacks; it introduces no API or browser-storage state. Initial event selection
+is scoped to both the API client and the project/version/source key.
+
+The inspector keeps the existing trend and property-analysis components, with
+property and daily-data tabs. Connection and schema settings are collapsed in
+the header, while retaining account/password navigation and the existing draft
+exit guard. Comparing periods uses one event table with current/previous counts,
+absolute changes, percentage changes, and bars using a shared count scale. Zero
+and unknown values remain distinct. The underlying read contracts and permission
+checks are unchanged.
+
+The explorer and inspector stack on small screens, and the event list scrolls
+within a bounded height. Wide comparison/data tables keep keyboard-accessible
+horizontal scrolling. Event styles are scoped to `.event-page`, with shell rules
+loaded before analysis and responsive rules so other views retain their styles.
+
 ## Server draft saving — 2026-10-24
 
 `LiveSchemas` connects `ServerSchemaDraft` as an area independent of the file feature. It is a project-owner shared draft, and reading, saving, and loading are all explicit actions. Saving is locked before the first confirmation, and a server query does not change the current input. Controls are locked during reader, validation, publishing, list loading, and permission checks, and the previous server content is hidden. There is no version reservation or automatic publishing.

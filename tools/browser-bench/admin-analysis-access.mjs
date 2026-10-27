@@ -102,7 +102,8 @@ try {
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await page.getByRole('button', { name: '이벤트 분석', exact: true }).click();
   const csv = page.getByRole('button', { name: 'CSV 내려받기', exact: true });
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  // Initial selection can already be loading or rejecting its daily response.
+  await page.locator('.event-explorer-item[aria-pressed=true]').waitFor();
   trackingEventReads = true;
   stage = 'mismatched-event-time-zone';
   await page.getByRole('button', { name: 'tool_view', exact: true }).click();
@@ -113,7 +114,7 @@ try {
   stage = 'event-time-zone-recovery'; mismatchedEventZone = false;
   await detail.getByRole('button', { name: '다시 시도', exact: true }).click();
   await detail.locator('.recharts-wrapper').waitFor();
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.waitForFunction(() => (!document.querySelector('.event-page') || document.querySelector('.event-explorer-item[aria-pressed=true]')) && [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
   const recoveryDownloadPromise = page.waitForEvent('download'); await csv.click();
   const recoveryDownload = await recoveryDownloadPromise;
   const recoveredCsv = await readFile(await recoveryDownload.path(), 'utf8');
@@ -131,29 +132,36 @@ try {
   stage = 'denied-export'; assert.equal(await csv.isDisabled(), true);
   assert.equal(await page.locator('.event-table').count(), 0);
   stage = 'other-project'; await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.waitForFunction(() => (!document.querySelector('.event-page') || document.querySelector('.event-explorer-item[aria-pressed=true]')) && [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.locator('.events-advanced > summary').click();
   assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '2');
+  await page.locator('.events-advanced > summary').click();
   const downloadPromise = page.waitForEvent('download'); await csv.click();
   const download = await downloadPromise; assert.ok(download.suggestedFilename().startsWith('tallyfin-access-other-'));
   const exported = await readFile(await download.path(), 'utf8');
   assert.equal(exported.split('\r\n', 1)[0], '\uFEFF' + CSV_COLUMNS.map(column => `"${column}"`).join(','));
   assert.ok(exported.includes('"access-other"')); assert.equal(exported.includes('"sembom"'), false);
   stage = 'restore'; await local.setRole('owner');
+  await page.locator('.events-advanced > summary').click();
   await page.getByRole('button', { name: '새로고침', exact: true }).click();
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.waitForFunction(() => (!document.querySelector('.event-page') || document.querySelector('.event-explorer-item[aria-pressed=true]')) && [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
   assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '1');
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
   await page.getByRole('textbox', { name: '스키마 버전', exact: true }).fill('1');
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.waitForFunction(() => (!document.querySelector('.event-page') || document.querySelector('.event-explorer-item[aria-pressed=true]')) && [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
   assert.equal(await page.getByRole('textbox', { name: '스키마 버전', exact: true }).inputValue(), '1');
   await page.getByRole('checkbox', { name: '스키마 자동 선택', exact: true }).check();
   await page.waitForFunction(() => document.querySelector('[aria-label="스키마 버전"]')?.value === '2');
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.waitForFunction(() => (!document.querySelector('.event-page') || document.querySelector('.event-explorer-item[aria-pressed=true]')) && [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.locator('.events-advanced > summary').click();
   stage = 'late-denial';
+  // The explorer initially selects its first event. Close it so the next click
+  // starts a fresh read after revocation rather than reusing the loaded series.
+  await page.getByRole('button', { name: '상세 닫기', exact: true }).click();
   await provisioner.apply(await provisioner.plan('revoke', { projectId: 'sembom', issuer: local.issuer, subject: 'synthetic-login-operator' }));
   held = { used: false, received: deferred(), release: deferred(), finished: deferred() };
   await page.getByRole('button', { name: 'tool_view', exact: true }).click();
@@ -162,11 +170,12 @@ try {
     holdTimer = setTimeout(() => reject(Error('held_read_timeout')), 10000);
   })]); } finally { clearTimeout(holdTimer); }
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other');
-  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
+  await page.waitForFunction(() => (!document.querySelector('.event-page') || document.querySelector('.event-explorer-item[aria-pressed=true]')) && [...document.querySelectorAll('button')].some(button => button.textContent === 'CSV 내려받기' && !button.disabled));
   held.release.resolve(); await held.finished.promise;
   assert.equal(await csv.isEnabled(), true);
   assert.equal(await page.getByRole('heading', { name: '이 프로젝트를 볼 권한이 없어요', exact: true }).count(), 0);
-  stage = 'disconnect'; await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
+  stage = 'disconnect'; await page.locator('.events-advanced > summary').click();
+  await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   stage = 'disconnect-csv'; assert.equal(await csv.count(), 0);
   stage = 'disconnect-tables'; assert.equal(await page.locator('.event-table').count(), 0);

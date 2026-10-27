@@ -1,5 +1,33 @@
 # Validation
 
+## Event explorer and period comparison redesign — 2026-10-28
+
+- API event analysis now uses a searchable, source-scoped explorer beside the
+  selected event's total, daily trend, property breakdown and daily table.
+  Comparison mode replaces the explorer with current/previous counts, absolute
+  changes, percentage changes and bars with a shared scale. Unknown counts stay
+  distinct from zero; a zero previous count never renders an infinite percentage.
+- Project and period controls remain in the header. Advanced connection/schema
+  controls are collapsed, without removing login recovery, password navigation,
+  refresh, disconnect, draft guards or server-side permission checks.
+- Passed: `npm run typecheck:admin`, `npm run test:admin` (380 tests),
+  `npm run build:admin`, `npm run verify:admin-analysis-access`, and
+  `git diff --check`. The browser access suite verified oversized-response and
+  timezone-error recovery, permission revocation, cleared denied data, disabled
+  denied CSV export, project/version isolation, ignored late denials and
+  disconnect cleanup; page errors and administrator API writes were both zero.
+- The isolated example API preview was inspected in the in-app browser for
+  event selection, property/daily tabs, search-empty and source-empty states,
+  comparison, and responsive layout. It uses example data and makes no production
+  service calls. Visual comparison evidence and intentional mock differences
+  are recorded in `design-qa.md`. Shell and analysis styles are separate files,
+  each below 40 KB, preserving cascade order.
+- Source-of-truth changes: this record and `docs/frontend/FRONTEND_DESIGN.md`.
+  No API/DB contract, Worker, dependency, hygiene or CI/runner change. Backend and
+  full-repository suites were skipped for this administrator-only change.
+  Production authentication/data and deployment remain unverified; no push,
+  deployment or publication was performed.
+
 ## Direct administrator login recovery — 2026-10-28
 
 - HTTP 401 from any administrator API route, including identity checks and
