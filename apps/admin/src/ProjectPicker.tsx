@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { CaretDown } from '@phosphor-icons/react';
+import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import { MAX_PROJECT_SEARCH_CHARS, type ApiClient } from './api/client';
 import { ProjectSearch, type ProjectSearchState } from './api/project-search';
 import type { Project } from './api/types';
 
-export default function ProjectPicker({ client, projects, active, enabled, refreshTick, hasMore, loadingMore, onLoadMore, onSelect }: {
+export default function ProjectPicker({ client, projects, active, enabled, refreshTick, hasMore, loadingMore, onLoadMore, onSelect, compact = false }: {
   client: ApiClient; projects: Project[]; active: Project | null; enabled: boolean; refreshTick: number;
   hasMore: boolean; loadingMore: boolean; onLoadMore: () => void; onSelect: (project: Project) => void;
+  compact?: boolean;
 }) {
   const [search, setSearch] = useState<ProjectSearch | null>(null);
   const [state, setState] = useState<ProjectSearchState>({ query: '', phase: 'idle', items: [], nextCursor: null, more: false, message: null });
@@ -24,9 +25,10 @@ export default function ProjectPicker({ client, projects, active, enabled, refre
   const pinned = active && !matches.some(item => item.id === active.id) ? active : null;
   const options = pinned ? [pinned, ...matches] : matches;
   const change = (value: string) => { inputRef.current = value; setInput(value); search?.search(value); };
+  const searchField = <label className="api-field"><span>프로젝트 검색</span><input className="text-input" type="search" aria-label="프로젝트 검색" placeholder="이름 또는 ID" maxLength={MAX_PROJECT_SEARCH_CHARS}
+      value={input} disabled={!enabled} onChange={event => change(event.target.value)} aria-describedby="project-search-status" /></label>;
   return <>
-    <label className="api-field"><span>프로젝트 검색</span><input className="text-input" type="search" aria-label="프로젝트 검색" placeholder="이름 또는 ID" maxLength={MAX_PROJECT_SEARCH_CHARS}
-      value={input} disabled={!enabled} onChange={event => change(event.target.value)} aria-describedby="project-search-status" /></label>
+    {compact ? <details className="events-project-search"><summary><MagnifyingGlass size={16} /><span>프로젝트 검색</span></summary>{searchField}</details> : searchField}
     <label className="api-field"><span>프로젝트</span><div className="project-select-wrap"><select aria-label="프로젝트 선택" value={active?.id ?? ''}
       onChange={event => { const project = options.find(item => item.id === event.target.value); if (project) onSelect(project); }} disabled={!enabled || !options.length}>
       {!active && <option value="">프로젝트를 선택하세요</option>}

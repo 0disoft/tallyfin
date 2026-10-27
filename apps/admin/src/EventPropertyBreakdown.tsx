@@ -43,7 +43,7 @@ export default function EventPropertyBreakdown({ analysis, propertyName }: { ana
     {analysis.rows.length === 0
       ? <div className="property-analysis-empty" role="status"><h3>표시할 속성 값이 없어요</h3><p>선택한 기간에 이 이벤트의 {propertyName} 값이 없어 비중은 알 수 없음(—)이에요.</p></div>
       : <>
-        <p className="context-note">비중은 ‘값별 건수 ÷ 선택한 이벤트 전체 건수 × 100’이고 전환율이 아니에요. 표시 비중은 소수점 한 자리로 반올림해서 값별 합이 100.0%와 조금 다를 수 있어요. 값을 고르면 아래 추이에 그 값의 일별 건수를 보여줘요.</p>
+        <details className="property-analysis-help"><summary>비중 계산과 값별 추이 안내</summary><p className="context-note">비중은 ‘값별 건수 ÷ 선택한 이벤트 전체 건수 × 100’이고 전환율이 아니에요. 표시 비중은 소수점 한 자리로 반올림해서 값별 합이 100.0%와 조금 다를 수 있어요. 값을 고르면 아래 추이에 그 값의 일별 건수를 보여줘요.</p></details>
         <div className="table-scroll property-analysis-scroll" tabIndex={0} aria-label={`${propertyName} 값별 집계 표`}>
           <table className="event-table property-analysis-table">
             <caption className="sr-only">{propertyName} 값별 건수와 비중. 비중은 선택한 이벤트 전체 {formatCount(analysis.total)}건 대비 값별 건수이고 소수점 한 자리로 반올림해요.</caption>
@@ -51,15 +51,15 @@ export default function EventPropertyBreakdown({ analysis, propertyName }: { ana
             <tbody>{analysis.rows.map(row => <tr key={row.key}>
               <th scope="row"><button type="button" className="text-button property-analysis-value" aria-pressed={row.key === activeKey} onClick={() => setSelection({ signature, key: row.key })}>{valueLabel(row.value)}</button></th>
               <td className="number-cell">{formatCount(row.count)}</td>
-              <td className="number-cell">{formatShare(row.share)}</td>
+              <td className="number-cell"><span className="event-property-share">{formatShare(row.share)}{row.share !== null && <meter min={0} max={100} value={row.share} aria-label={`${valueLabel(row.value)} 비중`} />}</span></td>
             </tr>)}</tbody>
             <tfoot><tr><th scope="row">합계</th><td className="number-cell">{formatCount(analysis.total)}</td><td className="number-cell">{formatShare(analysis.total === 0 ? null : 100)}</td></tr></tfoot>
           </table>
         </div>
-        {selectedRow && <section className="property-analysis-trend" aria-labelledby={trendHeadingId}>
-          <h3 id={trendHeadingId}>{propertyName} · {valueLabel(selectedRow.value)} 일별 건수</h3>
+        {selectedRow && <details className="property-analysis-trend">
+          <summary><h3 id={trendHeadingId}>{propertyName} · {valueLabel(selectedRow.value)} 일별 건수</h3></summary>
           <Trend records={records} event="count" />
-        </section>}
+        </details>}
       </>}
   </section>;
 }
