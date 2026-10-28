@@ -63,6 +63,7 @@
     "verify:admin-analysis-access": "node tools/browser-bench/admin-analysis-access.mjs",
     "verify:admin-overview": "node tools/browser-bench/admin-overview.mjs",
     "verify:admin-locales": "node tools/browser-bench/admin-locales.mjs",
+    "verify:admin-language-matrix": "node tools/browser-bench/admin-language-matrix.mjs",
     "verify:admin-goal-access": "node tools/browser-bench/admin-goal-access.mjs",
     "verify:admin-project-search": "node tools/browser-bench/admin-project-search.mjs",
     "bench:collector": "node tools/runtime/collector-bench.ts",

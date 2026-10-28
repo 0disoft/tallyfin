@@ -2,13 +2,19 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createStore, parseCatalog } from '@0disoft/saylo-core';
-import { readLocale, saveLocale, supportedLocale, LOCALE_KEY } from '../i18n/preference.ts';
+import { readLocale, saveLocale, supportedLocale, LOCALE_KEY, ACTIVE_LOCALES, TARGET_LOCALES } from '../i18n/preference.ts';
 import { createMessageText } from '../i18n/message-text.ts';
 
 test('language preferences accept only the supported UI locales', () => {
   for (const value of [null, undefined, '', 'en-US', '{}']) assert.equal(supportedLocale(value), 'en');
   assert.equal(readLocale({ getItem: key => { assert.equal(key, LOCALE_KEY); return 'en'; } }), 'en');
   assert.equal(supportedLocale('ko'), 'ko');
+  assert.deepEqual(TARGET_LOCALES.map(item => item.code), ['en', 'zh', 'es', 'fr', 'hi', 'ko', 'ja', 'vi', 'ru', 'id', 'ms', 'th']);
+  for (const locale of ACTIVE_LOCALES) {
+    assert.equal(supportedLocale(locale), locale);
+    assert.equal(readLocale({ getItem: () => locale }), locale);
+  }
+  assert.equal(readLocale({ getItem: () => 'unsupported' }), 'en');
 });
 
 test('blocked browser storage does not prevent locale selection', () => {
@@ -36,24 +42,42 @@ test('shell catalogs have matching keys and preserve workflow labels as data', (
   } finally { store.dispose(); }
 });
 
-test('every detailed namespace has matching KO/EN keys and compatible message contracts', () => {
+test('all active locales have complete catalogs and format every message without fallback', () => {
   const catalogs = [];
-  const folders = ['ko', 'en'].map(locale => new URL(`../../locales/${locale}/`, import.meta.url));
+  const folders = ACTIVE_LOCALES.map(locale => new URL(`../../locales/${locale}/`, import.meta.url));
   const names = readdirSync(folders[0]).filter(name => name.endsWith('.json')).sort();
-  assert.deepEqual(names, readdirSync(folders[1]).filter(name => name.endsWith('.json')).sort());
+  for (const folder of folders) assert.deepEqual(names, readdirSync(folder).filter(name => name.endsWith('.json')).sort());
   for (const name of names) {
     const pair = folders.map((folder, i) => {
       const raw = readFileSync(new URL(name, folder), 'utf8');
       const values = JSON.parse(raw);
       assert.ok(Object.keys(values).length > 0, name);
-      return { values, catalog: parseCatalog(raw, { locale: i ? 'en' : 'ko', namespace: name.slice(0, -5) }) };
+      for (const value of Object.values(values)) assert.ok(typeof value === 'string' && value.trim().length > 0, name);
+      return { values, catalog: parseCatalog(raw, { locale: ACTIVE_LOCALES[i], namespace: name.slice(0, -5) }) };
     });
-    assert.deepEqual(Object.keys(pair[0].values).sort(), Object.keys(pair[1].values).sort(), name);
+    for (const item of pair) assert.deepEqual(Object.keys(pair[0].values).sort(), Object.keys(item.values).sort(), name);
     catalogs.push(...pair.map(item => item.catalog));
   }
-  // Store creation validates every translation's argument contract against KO.
-  const store = createStore({ baseLocale: 'ko', locale: 'en', catalogs });
+  const store = createStore({ baseLocale: 'en', locale: 'en', catalogs,
+    onMissingKey: event => { assert.fail(JSON.stringify(event)); },
+    onFormatError: event => { assert.fail(JSON.stringify(event)); },
+  });
   try {
+    for (const locale of ACTIVE_LOCALES) {
+      store.setLocale(locale);
+      for (const catalog of catalogs.filter(item => item.locale === locale)) {
+        for (const [id, message] of Object.entries(catalog.messages)) {
+          const args = Object.fromEntries(Object.entries(message.arguments).map(([key, schema]) =>
+            [key, schema.acceptedTypes.includes('number') ? 12 : schema.acceptedTypes.includes('date') ? new Date('2026-10-28T00:00:00Z') : 'raw_value']));
+          assert.ok(store.t(`${catalog.namespace}:${id}`, args).length > 0, `${locale}/${catalog.namespace}/${id}`);
+        }
+      }
+      const snapshot = store.getSnapshot();
+      const messageText = createMessageText(snapshot.t, locale);
+      assert.equal(messageText('custom_event · 원본 {value}'), 'custom_event · 원본 {value}');
+      assert.match(messageText('요청이 실패했어요. (HTTP 429)'), /429/);
+    }
+    store.setLocale('en');
     for (const namespace of ['workspace', 'analysis', 'settings', 'operations', 'messages'])
       assert.ok(store.getSnapshot().loadedNamespaces.includes(namespace), namespace);
     assert.equal(store.t('workspace:rangeApplied', { range: '2026.10.22 – 10.28' }), 'Applied range: 2026.10.22 – 10.28');

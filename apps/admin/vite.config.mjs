@@ -22,7 +22,7 @@ export default defineConfig(({ command }) => ({
     },
   },
   plugins: [fontAssets(), react(), saylo({
-    localesDir: "locales", baseLocale: "en", initialLocale: "ko", initialNamespaces: ["admin"], timeZone: "UTC",
+    localesDir: "locales", baseLocale: "en", initialLocale: "en", initialNamespaces: ["admin"], timeZone: "UTC",
     requireCompleteTranslations: true,
   })],
 }));

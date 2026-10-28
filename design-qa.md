@@ -1,3 +1,45 @@
+# Twelve-language admin - 2026-10-28
+
+## Source, layout and language boundaries
+
+- Language policy source: `zdp-architecture/docs/45-cross-cutting-product-standards.md`.
+  Layout source remains the approved event explorer, goal inspector and Settings
+  tabs/workbench recorded in `docs/frontend/FRONTEND_DESIGN.md`.
+- Final captures: `.tmp/admin-language-matrix-5870O4/`, named
+  `events-{locale}-390.png`, `goals-{locale}-390.png`, `settings-{locale}-390.png`
+  and `settings-{locale}-{project,diagnostics,sdk,access}-390.png`. The 84
+  full-page mobile captures use 390x1024 CSS pixels at DPR 1. Overflow is also
+  checked at 1440x1024 for all these states.
+- Japanese events, Hindi schema and Russian project captures were reviewed in
+  the earlier nine-language run `.tmp/admin-language-matrix-wt5PUh/`. Final Thai
+  events/diagnostics and Malay goals were reviewed from the twelve-language run.
+  Headings wrap, form help stays readable and local tab strips scroll without
+  document-wide horizontal overflow. Native selector labels remain identifiable.
+  Thai receipt/report dates retain Gregorian years. Self-hosted SC, JP,
+  Devanagari and Thai faces load successfully when their language is selected.
+- Configured Korean project/event/workflow labels, raw identifiers/enums, JSON
+  and generated SDK code intentionally retain their original language. No new
+  illustration, icon or design token was added. Additional fonts retain their
+  original OFL notices.
+
+## Interaction evidence and limits
+
+- `verify:admin-language-matrix` passes 36 view/language combinations plus all
+  five Settings tabs per locale. Selection and unsaved drafts survive switches;
+  existing project validation changes language in place. Downloaded CSV bytes
+  remain identical in all twelve languages. Locale and tab changes do not
+  repeat API reads/writes or authorization. A reload restores Japanese while
+  clearing in-memory authentication as designed.
+- Final report: one authorization, 32 fixture reads, zero writes, zero page
+  errors and zero route errors. All four additional script fonts are confirmed
+  loaded. No actionable layout finding remains in the reviewed views.
+- This is local synthetic-fixture evidence. Production delivery and independent
+  native-speaker proofreading were not performed.
+
+final result: passed
+
+---
+
 # Saylo detailed admin screens - 2026-10-28
 
 ## Sources and captures

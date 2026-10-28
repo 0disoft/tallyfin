@@ -15,7 +15,7 @@ export const TARGET_LOCALES = [
   { code: 'th', name: 'ไทย' },
 ] as const;
 export type AdminLocale = typeof TARGET_LOCALES[number]['code'];
-export const ACTIVE_LOCALES: readonly AdminLocale[] = ['ko', 'en'];
+export const ACTIVE_LOCALES: readonly AdminLocale[] = TARGET_LOCALES.map(item => item.code);
 export const FALLBACK_LOCALE = 'en';
 export const INITIAL_LOCALE = 'ko';
 

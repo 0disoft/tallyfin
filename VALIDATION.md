@@ -1,5 +1,45 @@
 # Validation
 
+## Twelve-language admin activation - 2026-10-28
+
+- Adopted the exact target set from `zdp-architecture`'s
+  `docs/45-cross-cutting-product-standards.md`: en, zh, es, fr, hi, ko, ja, vi,
+  ru, id, ms, th. Added ten languages across all seven namespaces: 1,695 keys
+  per locale, 20,340 localized entries in total. Translation used the configured
+  CommandCode DeepSeek 4.1 Flash route with high reasoning. Source variables
+  and ASCII numeric policies were checked during authoring; committed catalogs
+  are independent of the model/proxy and require no translation service.
+- All twelve languages are selectable and persist independently of auth.
+  English is the base/fallback; before React mounts, restoration selects the
+  saved language or Korean for a new session. The English-only boot shell
+  keeps other catalog payloads deferred. Unknown preferences select English.
+  Four additional scripts use self-hosted lazy fonts; all six font licenses
+  ship unchanged. Gregorian years and project timezones remain stable.
+- Passed `typecheck:admin`, `build:admin`, bundle tests (2), and the full admin
+  unit suite (391, concurrency 2). Locale tests check complete key sets, real
+  ICU parsing/contracts and format all 20,340 entries without missing-key or
+  formatting errors; opaque helper data and HTTP status captures are retained.
+  Initial static JS is 102,004 gzip bytes, below the unchanged 102,400-byte cap.
+- Passed `verify:admin-language-matrix`: twelve languages times event/goal/
+  settings views (36 combinations), all five Settings tabs, 1440/390px widths,
+  and actual Chinese/Japanese/Devanagari/Thai font loads. Event/goal selection,
+  project validation and JSON drafts survive switches; CSV bytes match across
+  all languages. Locale and tab changes cause no additional API reads, writes
+  or authorization. Japanese preference restores after reload with credentials
+  cleared. `.tmp/admin-language-matrix-5870O4/report.json` records one login,
+  32 fixture reads, zero writes, zero page errors and zero route errors.
+- Passed `verify:admin-overview` after twelve-language activation: live English
+  catalog edits retain an unsaved settings draft, locale survives reload,
+  selection/session are retained and existing overview recovery still works.
+  `.tmp/admin-overview-YZEvju/report.json`: zero page/route errors and writes.
+- Updated sources of truth: this record, `docs/frontend/FRONTEND_DESIGN.md` and
+  `apps/admin/AGENTS.md`; captures/review are in `design-qa.md`. The root package
+  adds only the opt-in local `verify:admin-language-matrix` command. No API/DB,
+  Worker, auth policy, repository hygiene or CI/runner changes. Architecture
+  documents were read, not edited. Backend/full-repository and Sites packaging
+  checks were skipped for this admin-only change. No push/deploy or production
+  verification; independent native-speaker proofreading was not performed.
+
 ## ZDP language expansion foundation - 2026-10-28
 
 - Added the twelve-language registry from architecture product standards,
