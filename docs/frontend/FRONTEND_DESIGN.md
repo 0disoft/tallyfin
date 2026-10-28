@@ -4,7 +4,9 @@
 
 The client admin uses published Saylo core/React/Vite alpha packages. Flat
 `locales/ko/admin.json` and `locales/en/admin.json` catalogs own pilot UI copy;
-Saylo generates the typed message schema during typecheck and Vite development.
+The explicit `i18n:types` command generates the typed schema and is also run by
+typecheck. Vite does not hold a typegen output lock, so parallel isolated
+previews and production builds can use the same checkout.
 A stable store and Provider are created once per client application, outside
 React renders. Locale changes are store updates, never React keys or navigation.
 

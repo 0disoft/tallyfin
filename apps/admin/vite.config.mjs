@@ -23,6 +23,5 @@ export default defineConfig(({ command }) => ({
   },
   plugins: [fontAssets(), react(), saylo({
     localesDir: "locales", baseLocale: "ko", initialLocale: "ko", timeZone: "UTC",
-    typegen: { outFile: "src/i18n/schema.generated.d.ts" },
   })],
 }));

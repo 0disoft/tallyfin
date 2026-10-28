@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
@@ -11,6 +11,8 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 let local, server, browser, page, directory, timer, stage = 'fixture';
 let overviewReads = 0, routeError = false, failWorkflow = false;
 const pageErrors = [];
+const englishFile = resolve(root, 'apps/admin/locales/en/admin.json');
+let originalEnglish;
 try {
   await mkdir(resolve(root, '.tmp'), { recursive: true });
   directory = await mkdtemp(resolve(root, '.tmp/admin-overview-'));
@@ -84,6 +86,45 @@ try {
   await expect(page.locator('.overview-outcomes')).toHaveCount(0);
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   await expect(page.locator('.metric-grid')).toContainText('86.4%');
+  stage = 'ui-locale';
+  const readsBeforeLocale = local.counts.apiReads;
+  const authorizationsBeforeLocale = local.counts.authorizations;
+  await page.locator('.locale-control select').selectOption('en');
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page).toHaveTitle('Tallyfin · Admin');
+  await expect(page.locator('.metric-grid')).toContainText('Browser events collected');
+  await expect(page.locator('.metric-grid')).toContainText('86.4%');
+  await expect(page.locator('.overview-outcomes')).toContainText('Undefined');
+  await expect(page.getByRole('combobox', { name: 'Select project', exact: true })).toHaveValue('sembom');
+  assert.equal(local.counts.apiReads, readsBeforeLocale);
+  assert.equal(local.counts.authorizations, authorizationsBeforeLocale);
+  await page.screenshot({ path: resolve(directory, 'overview-en-desktop.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 1024 });
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
+  await page.screenshot({ path: resolve(directory, 'overview-en-390.png'), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1024 });
+  await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Settings', exact: true }).click();
+  const nameInput = page.getByRole('textbox', { name: '프로젝트 이름', exact: true });
+  const savedName = await nameInput.inputValue();
+  await nameInput.fill('Saylo draft retained');
+  await page.locator('.locale-control select').selectOption('ko');
+  await expect(nameInput).toHaveValue('Saylo draft retained');
+  await page.locator('.locale-control select').selectOption('en');
+  stage = 'catalog-live-update';
+  originalEnglish = await readFile(englishFile, 'utf8');
+  const edited = JSON.parse(originalEnglish); edited.navSettings = 'Settings live copy';
+  await writeFile(englishFile, JSON.stringify(edited, null, 2) + '\n');
+  await expect(page.getByRole('heading', { name: 'Settings live copy', exact: true })).toBeVisible();
+  await expect(nameInput).toHaveValue('Saylo draft retained');
+  await expect(page.getByRole('combobox', { name: 'Select project', exact: true })).toHaveValue('sembom');
+  assert.equal(local.counts.authorizations, authorizationsBeforeLocale);
+  await writeFile(englishFile, originalEnglish); originalEnglish = undefined;
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await nameInput.fill(savedName);
+  await page.locator('.locale-control select').selectOption('ko');
+  await page.getByRole('navigation', { name: '주요 탐색', exact: true }).getByRole('button', { name: '개요', exact: true }).click();
+  await expect(page.locator('.metric-grid')).toContainText('86.4%');
   stage = 'responsive';
   for (const width of [390, 768, 1280]) {
     await page.setViewportSize({ width, height: 1024 });
@@ -96,10 +137,20 @@ try {
   await page.getByRole('navigation', { name: '주요 탐색', exact: true }).getByRole('button', { name: '개요', exact: true }).click();
   await page.getByRole('button', { name: '목표에서 자세히 보기', exact: true }).click();
   await expect(page.getByRole('heading', { name: '목표 탐색기', exact: true })).toBeVisible();
+  stage = 'locale-persistence';
+  await page.locator('.locale-control select').selectOption('en');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+  await expect(page.getByRole('heading', { name: 'Overview', exact: true })).toBeVisible();
+  await expect(page.locator('.locale-control select')).toHaveValue('en');
   assert.equal(routeError, false); assert.deepEqual(pageErrors, []); assert.equal(local.counts.apiWrites, 0);
-  const report = { verified: true, stage, overviewReads, pageErrors, routeError, ...local.counts };
+  const report = { verified: true, stage, localeRetainsSessionAndProject: true, liveCopyRetainsDraft: true,
+    localePreferenceSurvivesReload: true, overviewReads, pageErrors, routeError, ...local.counts };
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2)); console.log(JSON.stringify({ ...report, directory }));
 } catch (error) {
   process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, message: error.message, directory }));
   if (directory) { await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, message: error.message })); await page?.screenshot({ path: resolve(directory, 'failure.png'), fullPage: true }).catch(() => {}); }
-} finally { clearTimeout(timer); await browser?.close(); await server?.close(); await local?.mf.dispose(); }
+} finally {
+  if (originalEnglish !== undefined) await writeFile(englishFile, originalEnglish);
+  clearTimeout(timer); await browser?.close(); await server?.close(); await local?.mf.dispose();
+}

@@ -1,3 +1,4 @@
+import { useI18n } from './i18n';
 import { useEffect, useMemo, useState } from 'react';
 import type { ApiClient } from './api/client';
 import type { EventSource, Project } from './api/types';
@@ -13,6 +14,7 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
   hasMore: boolean; onLoadMore: () => void; loadingMore: boolean;
   activeProjectId?: string;
 }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false), [page, setPage] = useState(0), [refresh, setRefresh] = useState(0);
   const index = Math.min(page, Math.max(0, Math.ceil(projects.length / OVERVIEW_PAGE_SIZE) - 1));
   const visible = useMemo(() => projects.slice(index * OVERVIEW_PAGE_SIZE, (index + 1) * OVERVIEW_PAGE_SIZE), [projects, index]);
@@ -34,9 +36,9 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
   }, [open, rows]);
   const dateChanged = rows ? overviewDateChanged(rows, checkedAt) : false;
   return <section className="table-section overview-services" aria-labelledby="project-overview-heading">
-    <div className="settings-head"><h2 id="project-overview-heading">서비스 통합 현황</h2>
-      <button className="secondary-button" aria-expanded={open} aria-controls="overview-services-body" onClick={() => setOpen(value => !value)}>{open ? '통합 현황 닫기' : '통합 현황 불러오기'}</button></div>
-    {!open && <p className="context-note">프로젝트별 최근 7일 비교 · 펼칠 때 조회해요.</p>}
+    <div className="settings-head"><h2 id="project-overview-heading">{t('admin:serviceOverview')}</h2>
+      <button className="secondary-button" aria-expanded={open} aria-controls="overview-services-body" onClick={() => setOpen(value => !value)}>{t(open ? 'admin:closeServiceOverview' : 'admin:loadServiceOverview')}</button></div>
+    {!open && <p className="context-note">{t('admin:serviceOverviewHint')}</p>}
     {open && <div id="overview-services-body" className="overview-services-body">
       <p className="context-note overview-services-context">{source === 'browser' ? '브라우저' : '서버'} 이벤트 · 서비스별 시간대의 최근 7일 / 직전 7일 · 오늘 집계 중 · 거부 요청은 프로젝트 전체 최근 UTC 7일</p>
       {!!rows?.length && <p className="context-note">조회 기준(UTC): {new Date(rows[0]!.generatedAt).toLocaleString('ko-KR', { timeZone: 'UTC' })}</p>}

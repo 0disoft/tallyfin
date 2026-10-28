@@ -1,3 +1,5 @@
+import { useI18n } from './i18n';
+import { useLocaleFormat } from './i18n/format';
 import { useEffect, useState, type ComponentType } from 'react';
 import type { TrendChartProps } from './TrendChart';
 import { ArrowDown, ArrowRight, ArrowUp, ChartBar, Circle, MagnifyingGlass } from '@phosphor-icons/react';
@@ -5,6 +7,8 @@ import { formatCount, formatRate, getSeries, type DailyRecord, type ProjectDefin
 
 type Props = { project: ProjectDefinition; records: DailyRecord[]; summary: Summary };
 export function Trend({ records, event, kind }: { records: DailyRecord[]; event?: string; kind?: TrendChartProps['kind'] }) {
+  const { t } = useI18n();
+  const { count: formatCount } = useLocaleFormat();
   const series = getSeries(records, event);
   const [Chart, setChart] = useState<ComponentType<TrendChartProps> | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -18,11 +22,11 @@ export function Trend({ records, event, kind }: { records: DailyRecord[]; event?
     return () => { active = false; };
   }, []);
   return <figure className="trend-figure">
-    <figcaption className="sr-only">일별 {event ?? '수집 이벤트'} 건수. 아래 수치 보기에서 표로 확인할 수 있어요.</figcaption>
+    <figcaption className="sr-only">{t('admin:chartDescription', { event: event ?? t('admin:collectedEvents') })}</figcaption>
     {Chart ? <Chart series={series} kind={kind} /> : <div className="chart-wrap chart-placeholder" aria-busy={!loadFailed}>
-      {loadFailed ? <><p role="status">차트를 불러오지 못했어요. 아래 수치 보기에서 확인하거나 화면을 새로고침해 주세요.</p><button type="button" className="secondary-button" onClick={() => window.location.reload()}>화면 새로고침</button></> : <p role="status">차트를 불러오는 중이에요.</p>}
+      {loadFailed ? <><p role="status">{t('admin:chartLoadError')}</p><button type="button" className="secondary-button" onClick={() => window.location.reload()}>{t('admin:reloadPage')}</button></> : <p role="status">{t('admin:chartLoading')}</p>}
     </div>}
-    <details className="daily-values"><summary>수치 보기</summary><div className="table-scroll" tabIndex={0} aria-label="일별 수치 표"><table className="event-table"><caption className="sr-only">일별 수집 건수</caption><thead><tr><th scope="col">날짜</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{series.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td className="number-cell">{formatCount(day.count)}</td></tr>)}</tbody></table></div></details>
+    <details className="daily-values"><summary>{t('admin:showValues')}</summary><div className="table-scroll" tabIndex={0} aria-label={t('admin:dailyValuesTable')}><table className="event-table"><caption className="sr-only">{t('admin:dailyCounts')}</caption><thead><tr><th scope="col">{t('admin:date')}</th><th scope="col" className="number-cell">{t('admin:count')}</th></tr></thead><tbody>{series.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td className="number-cell">{formatCount(day.count)}</td></tr>)}</tbody></table></div></details>
   </figure>;
 }
 export function Overview({ project, records, summary, onAnalyze }: Props & { onAnalyze: () => void }) {

@@ -1,5 +1,36 @@
 # Validation
 
+## Saylo Korean/English admin pilot - 2026-10-28
+
+- Added published `@0disoft/saylo-core`/`saylo-react` runtime dependencies and
+  `saylo-vite`/`saylo-typegen` dev dependencies at compatible alpha.9 ranges.
+  Install audit reported zero vulnerabilities. Existing React 19/Vite 8 and
+  Apache-2.0 remain. The lockfile records the installed artifacts; no CI jobs,
+  Worker, API/DB contract, authentication policy or hygiene rules changed.
+- One stable client store/Provider, 119 matching KO/EN keys, typed message calls,
+  a header language selector and optional independent locale persistence cover
+  shell/common controls and Overview. User-defined labels, identifiers, report
+  dates and project timezones remain data. An English notice identifies the
+  detailed pages, dialogs and advanced sections still in Korean.
+- Passed `typecheck:admin`, `build:admin`, admin bundle tests (2), and admin unit
+  tests (385 with concurrency 2, including 3 locale/catalog tests). Initial
+  static JS graph: 99,984 gzip bytes against the unchanged 102,400-byte limit.
+- Passed `verify:admin-overview`: switching locale retains session/project with
+  no additional aggregate read or authorization; a live catalog edit retains
+  the unsaved project-name draft; language selection survives document reload.
+  Existing counts, lazy services, 503/recovery, navigation and responsive checks
+  still pass. Final `.tmp/admin-overview-Ln3ECF/report.json` records one login,
+  zero page/route errors and zero API writes. English 1440/390px screenshots and
+  visual review are recorded in `design-qa.md`; IAB preview was also inspected.
+- Initial integration exposed Saylo's exclusive typegen output lock when an
+  isolated preview and build ran together. Removed Vite-owned typegen; the
+  explicit `i18n:types` command (also run by typecheck) remains the sole generator.
+  Build and browser checks pass after this change.
+- Source-of-truth updates: this record, `docs/frontend/FRONTEND_DESIGN.md` and
+  the durable pilot scope in `apps/admin/AGENTS.md`. Backend/full-repository and
+  Sites packaging checks were skipped for this bounded admin-only change.
+  Production verification, push and deployment were not performed.
+
 ## Overview collection and completion redesign - 2026-10-28
 
 - Added the compact Overview header/toolbar, source-aware KPI strip, daily-start

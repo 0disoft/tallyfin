@@ -1,3 +1,47 @@
+# Saylo Korean/English pilot - 2026-10-28
+
+## Sources, state and comparison
+
+- Layout source remains the approved Overview composite:
+  `C:/Users/cherr/.codex/generated_images/01a15ad4-6aab-7240-8474-7038a2c27c48/exec-7a023c39-d90f-431d-b440-fac5f1aca05d.png`.
+  This pass changes language, not the selected screen design.
+- Final captures: `.tmp/admin-overview-Ln3ECF/overview-desktop.png`,
+  `overview-en-desktop.png`, `overview-en-390.png` and `overview-768.png`.
+  Desktop is 1440x1024 CSS pixels at DPR 1; mobile is a 390x1024 viewport with
+  full-page capture. The source is 1487x1058 raster pixels, normalized to 1440px
+  width when reviewing the overall hierarchy. Both language states use the
+  authenticated local fixture, Sembom, browser source, recent seven days.
+- Full-view English desktop/mobile captures were opened and reviewed: header
+  selector and date controls fit; translated KPI labels wrap without clipping;
+  chart/event hierarchy, configured keys and pending/undefined semantics remain.
+  The narrow IAB preview was also switched to English and inspected directly.
+  No new raster assets, icons, fonts or design tokens were introduced.
+
+## Interaction evidence and findings
+
+- Browser verification proves locale changes keep the same session/project,
+  without another aggregate read or authorization. Editing the English catalog
+  updates the selected heading while retaining the unsaved project-name draft.
+  Restoring the catalog also retains the draft. Selection persists after reload.
+- Existing source/comparison/count/chart/error/retry/navigation assertions pass;
+  document-wide overflow checks pass at 390/768/1280px, including the English
+  390px state. Fixture and mobile screenshots contain synthetic data only.
+- `.tmp/admin-overview-Ln3ECF/report.json`: verified, locale/session/project
+  retention, live-copy draft retention and reload preference retention all true;
+  `pageErrors: []`, `routeError: false`, `apiWrites: 0`.
+- Integration issue fixed: long-lived Vite typegen ownership blocked a concurrent
+  build. Explicit type generation replaces that watcher; the final build passes.
+- Intentional scope: configured project/event/workflow labels retain their
+  original language. Event analysis, Goals, detailed Settings, login dialogs,
+  advanced service rows and operational messages are not fully translated yet;
+  the English footer states this clearly. API codes/CSV contents are unchanged.
+- No actionable P0/P1/P2 layout findings remain. Production delivery was not
+  verified. Further page translation is a separate increment.
+
+final result: passed
+
+---
+
 # Overview collection and completion - 2026-10-28
 
 ## Visual truth and captures

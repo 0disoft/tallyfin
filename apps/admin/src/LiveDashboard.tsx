@@ -1,3 +1,4 @@
+import { useI18n } from './i18n';
 import useSchemaVersion from './useSchemaVersion';
 import useProjectPages from './useProjectPages';
 import ProjectPicker from './ProjectPicker';
@@ -70,6 +71,7 @@ function ErrorPanel({ error, onRetry }: { error: ApiError; onRetry: () => void }
 
 export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate, registerExitCheck, headerHost }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void; registerExitCheck?: (check: () => boolean) => () => void; headerHost?: HTMLElement | null }) {
   const currentOrigin = useMemo(() => window.location.origin, []);
+  const { t } = useI18n();
   const [session, setSession] = useState<Session | null>(null);
   const [unauthorizedClient, setUnauthorizedClient] = useState<ApiClient | null>(null);
   const [token, setToken] = useState('');
@@ -322,19 +324,19 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     propertyComparison: propertyComparison.state, workflowDetails: currentWorkflowDetails });
 
   const connectionControls = <>
-      <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
+      <label className="api-field"><span>{t('admin:schemaVersion')}</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label={t('admin:schemaVersion')} value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       <label className="comparison-toggle"><input type="checkbox" checked={automaticVersion} disabled={!projectId || versionLoading}
-        onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} />스키마 자동 선택</label>
-      <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
-      <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
-      {session?.login?.passwordChangeUrl && <a className="secondary-button" href={session.login.passwordChangeUrl} target="_blank" rel="noopener noreferrer">비밀번호 변경<span className="sr-only"> (새 탭)</span></a>}
-      <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
+        onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} />{t('admin:autoSchema')}</label>
+      <button className="secondary-button" type="button" onClick={retry}>{t('admin:refresh')}</button>
+      <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>{t('admin:addProject')}</button>
+      {session?.login?.passwordChangeUrl && <a className="secondary-button" href={session.login.passwordChangeUrl} target="_blank" rel="noopener noreferrer">{t('admin:changePassword')}<span className="sr-only"> {t('admin:newTab')}</span></a>}
+      <button className="secondary-button" type="button" onClick={disconnect}>{t('admin:disconnect')}</button>
       </>;
 
   const projectControls = <div className={`toolbar api-toolbar${compactWorkspace ? ' events-connection-bar' : ''}`}>
       <ProjectPicker compact={compactWorkspace} client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
         hasMore={!!nextCursor} loadingMore={more} onLoadMore={loadMore} onSelect={project => switchProject(project.id, project)} />
-      {compactWorkspace ? <details className="events-advanced"><summary>연결 설정<CaretDown size={14} /></summary><div className="toolbar">{connectionControls}</div>{view !== 'settings' && <LiveIdentity client={client} />}</details> : connectionControls}
+      {compactWorkspace ? <details className="events-advanced"><summary>{t('admin:connectionSettings')}<CaretDown size={14} /></summary><div className="toolbar">{connectionControls}</div>{view !== 'settings' && <LiveIdentity client={client} />}</details> : connectionControls}
     </div>;
   return <>
     {unauthorizedClient === client && <>
@@ -353,9 +355,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {!compactWorkspace && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
 
     <div className={view === 'overview' ? 'overview-toolbar events-actions' : analysisWorkspace ? 'events-actions' : undefined}>
-    {view === 'overview' && <div className="event-source-switch" role="group" aria-label="발행 출처">{(['browser', 'server'] as const).map(value => <button type="button" key={value} aria-pressed={source === value} onClick={() => { setSelectedSource(value); setSelectedEvent(null); setGrouping(null); }}>{value === 'browser' ? <Desktop size={17} /> : <Database size={17} />}{value === 'browser' ? '브라우저 이벤트' : '서버 이벤트'}</button>)}</div>}
-    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
-    {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
+    {view === 'overview' && <div className="event-source-switch" role="group" aria-label={t('admin:sourceGroup')}>{(['browser', 'server'] as const).map(value => <button type="button" key={value} aria-pressed={source === value} onClick={() => { setSelectedSource(value); setSelectedEvent(null); setGrouping(null); }}>{value === 'browser' ? <Desktop size={17} /> : <Database size={17} />}{t(value === 'browser' ? 'admin:browserEvents' : 'admin:serverEvents')}</button>)}</div>}
+    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : t('admin:comparePrevious')}</label>}
+    {view !== 'settings' && range?.to === projectToday && <p className="context-note">{t('admin:todayAggregating')}{compare && ` ${t('admin:todayComparedNotice')}`}</p>}
     {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace || view === 'overview'} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
     </div>
     {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
