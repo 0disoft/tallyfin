@@ -1,5 +1,30 @@
 # Validation
 
+## Overview collection and completion redesign - 2026-10-28
+
+- Added the compact Overview header/toolbar, source-aware KPI strip, daily-start
+  bar chart, ranked event list, outcome strip and collapsed service comparison.
+  Missing failure definitions remain undefined and pending attempts stay distinct
+  from confirmed failures. Existing overview error/retry behavior is preserved.
+- Passed `typecheck:admin`, `build:admin`, admin bundle checks (2 tests), admin
+  unit tests (382 tests with concurrency 2), `verify:admin-analysis-access`,
+  `verify:admin-overview`, and `git diff --check`.
+- The new isolated browser check covers fixture totals (24,860 events, 5,000
+  starts, 4,320 successes, 86.4% completion, 680 pending), undefined failures,
+  seven rendered bars with nonzero chart width, lazy service reads (zero before
+  expanding; one after), readable service columns, server source, comparison
+  against zero, workflow 503/retry, absent representative workflow, navigation,
+  and 390/768/1280px layouts without document-wide horizontal overflow.
+  Final report: `.tmp/admin-overview-7ajArc/report.json`; zero page errors,
+  route errors and API writes. Screenshots and visual review: `design-qa.md`.
+- Updated sources of truth: `docs/frontend/FRONTEND_DESIGN.md` and this record;
+  recorded the selected design in `apps/admin/AGENTS.md`. No API/DB contract,
+  Worker, dependency, repository hygiene or CI/runner changes. The root package
+  adds only the local `verify:admin-overview` command.
+- Backend/full-repository suites and Sites packaging were skipped because this
+  change affects the existing admin presentation only. No production verification,
+  push or deployment. Rollback: revert the Overview redesign commit.
+
 ## Settings tabs and schema workbench redesign — 2026-10-28
 
 - Settings uses five horizontal tabs: project, collection diagnostics, event

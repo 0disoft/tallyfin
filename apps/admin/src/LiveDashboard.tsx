@@ -4,13 +4,13 @@ import ProjectPicker from './ProjectPicker';
 import { useMainAnalysis, usePeriodComparison, useEventSeries } from './useAnalysis';
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserLogin } from './auth/client';
-import { CaretDown, ChartBar, Circle, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
+import { CaretDown, Desktop, Database, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import EventWorkspace from './EventWorkspace';
 import { createPortal } from 'react-dom';
 import { Trend } from './Dashboard';
 import DeferredPanel from './DeferredPanel';
-import SourceEventTable, { sourceLabel } from './SourceEventTable';
-import SourceMetrics from './SourceMetrics';
+import { sourceLabel } from './SourceEventTable';
+import OverviewWorkspace from './OverviewWorkspace';
 import DateRangePicker from './DateRangePicker';
 import LiveIdentity from './LiveIdentity';
 import { formatCount, type DailyRecord, type Period, type View } from './data';
@@ -19,7 +19,7 @@ import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
 import { previousRange, recoverWorkflow } from './api/period-comparison';
-import { dashboardEvents, workflowRecords } from './api/dashboard-model';
+import { dashboardEvents } from './api/dashboard-model';
 import { dashboardExport } from './api/dashboard-export';
 import EventPropertyBreakdown from './EventPropertyBreakdown';
 import EventPropertyComparison from './EventPropertyComparison';
@@ -84,7 +84,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const [selectedSource, setSelectedSource] = useState<EventSource>('browser');
   const source = view === 'goals' ? 'browser' : selectedSource;
   const analysisWorkspace = view === 'events' || view === 'goals';
-  const compactWorkspace = analysisWorkspace || view === 'settings';
+  const compactWorkspace = analysisWorkspace || view === 'overview' || view === 'settings';
   const [refreshTick, setRefreshTick] = useState(0);
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
@@ -312,7 +312,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const primary = data?.workflows[0] ?? null;
   const startDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.startEvent) ?? null : null;
   const successDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.successEvent) ?? null : null;
-  const { rows: eventRows, filtered: filteredEvents, browserCount, serverCount } = dashboardEvents(registry, data?.summary ?? null, source, query);
+  const { rows: eventRows, filtered: filteredEvents } = dashboardEvents(registry, data?.summary ?? null, source, query);
   const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
   const startLabel = startDefinition?.label ?? '시작 시도';
   const successLabel = successDefinition?.label ?? '성공 시도';
@@ -325,12 +325,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       <label className="api-field"><span>스키마 버전</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label="스키마 버전" value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       <label className="comparison-toggle"><input type="checkbox" checked={automaticVersion} disabled={!projectId || versionLoading}
         onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} />스키마 자동 선택</label>
-      {view === 'overview' && <label className="api-field"><span>발행 출처</span>
-        <select className="text-input" aria-label="발행 출처" value={source} onChange={event => {
-          setSelectedSource(event.target.value === 'server' ? 'server' : 'browser'); setSelectedEvent(null); setGrouping(null);
-        }}><option value="browser">브라우저</option><option value="server">서버</option></select></label>}
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
-      {view !== 'settings' && !analysisWorkspace && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />직전 기간과 비교</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {session?.login?.passwordChangeUrl && <a className="secondary-button" href={session.login.passwordChangeUrl} target="_blank" rel="noopener noreferrer">비밀번호 변경<span className="sr-only"> (새 탭)</span></a>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
@@ -356,12 +351,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       onApply={range => setCustomRange({ scope: dateScope, range })} />}
     {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
     {!compactWorkspace && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
-    {view === 'overview' && projects.status === 'ready' && !!projects.data?.length && <DeferredPanel label="서비스 통합 현황"><ProjectOverview client={client} projects={projects.data} source={source} onSelectProject={switchProject} hasMore={!!nextCursor} onLoadMore={loadMore} loadingMore={more} /></DeferredPanel>}
-    {view !== 'settings' && !analysisWorkspace && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.</p>}
-    <div className={analysisWorkspace ? 'events-actions' : undefined}>
-    {analysisWorkspace && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
+
+    <div className={view === 'overview' ? 'overview-toolbar events-actions' : analysisWorkspace ? 'events-actions' : undefined}>
+    {view === 'overview' && <div className="event-source-switch" role="group" aria-label="발행 출처">{(['browser', 'server'] as const).map(value => <button type="button" key={value} aria-pressed={source === value} onClick={() => { setSelectedSource(value); setSelectedEvent(null); setGrouping(null); }}>{value === 'browser' ? <Desktop size={17} /> : <Database size={17} />}{value === 'browser' ? '브라우저 이벤트' : '서버 이벤트'}</button>)}</div>}
+    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
-    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
+    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace || view === 'overview'} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
     </div>
     {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
@@ -387,13 +382,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
         {view === 'overview' && currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
       </>}
-      {view === 'overview' && <>
-        <SourceMetrics source={source} totalEvents={data.summary.totalEvents} primary={primary} startLabel={startLabel} successLabel={successLabel} />
-        {data.summary.totalEvents === 0 && <p className="notice" role="status">선택한 기간에 수신된 {sourceLabel(source)} 이벤트가 없어요.{source === 'browser' && ' 완료율을 계산할 수 없어요.'}</p>}
-        {primary ? <section className="trend-section"><div className="section-header"><h2>{primary.definition.label} 일별 시작 시도</h2>{onNavigate && <button type="button" className="primary-button" onClick={() => onNavigate('events')}><ChartBar size={22} weight="fill" />이벤트 분석으로 이동</button>}</div><div className="legend"><Circle size={12} weight="fill" color="#155EEF" />시작 시도</div><Trend records={workflowRecords(primary)} event={primary.definition.startEvent} /></section>
-          : <section className="table-section"><h2>{source === 'server' ? '서버 이벤트 분석' : '대표 흐름 미지정'}</h2><p className="context-note">{source === 'server' ? '서버 이벤트의 일별 추이와 속성별 건수는 이벤트 분석에서 확인할 수 있어요.' : '이 스키마 버전의 대표 작업 흐름이 지정되지 않았어요. 설정에서 대표 흐름을 선택하고 새 버전을 발행하세요.'}</p>{source === 'server' && onNavigate && <button className="primary-button" type="button" onClick={() => onNavigate('events')}>이벤트 분석으로 이동</button>}</section>}
-        <section className="table-section"><h2>등록 이벤트 집계</h2><p className="context-note">브라우저 이벤트 {browserCount}개 · 서버 이벤트 {serverCount}개. {sourceLabel(source)} 출처의 건수를 표시해요.</p><SourceEventTable rows={eventRows} source={source} /></section>
-      </>}
+      {view === 'overview' && <OverviewWorkspace source={source} totalEvents={data.summary.totalEvents} rows={eventRows} primary={primary}
+        startLabel={startLabel} successLabel={successLabel} onNavigate={onNavigate}
+        previousTotal={compare && !comparisonError && currentComparison?.status === 'ready' ? currentComparison.data?.summary.totalEvents : undefined} />}
       {view === 'events' && <EventWorkspace rows={eventRows} filtered={filteredEvents} source={source} query={query} selectedEvent={selectedEvent} compare={compare}
         previous={compare && !comparisonError && currentComparison?.status === 'ready' ? currentComparison.data?.summary ?? null : null}
         onQuery={setQuery} onSource={next => { setSelectedSource(next); setSelectedEvent(null); setGrouping(null); }}
@@ -437,5 +428,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         previous={compare && !comparisonError ? previousRange(data.range) : null} compare={compare} comparisonError={comparisonError} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
 
     </>}
+    {view === 'overview' && projects.status === 'ready' && !!projects.data?.length && <DeferredPanel label="서비스 통합 현황"><ProjectOverview client={client} projects={projects.data} source={source} onSelectProject={switchProject} activeProjectId={activeProject?.id} hasMore={!!nextCursor} onLoadMore={loadMore} loadingMore={more} /></DeferredPanel>}
   </>;
 }

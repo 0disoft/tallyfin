@@ -1,3 +1,67 @@
+# Overview collection and completion - 2026-10-28
+
+## Visual truth and captures
+
+- Approved source: `C:/Users/cherr/.codex/generated_images/01a15ad4-6aab-7240-8474-7038a2c27c48/exec-7a023c39-d90f-431d-b440-fac5f1aca05d.png`
+  (option 1 with option 3's service-table direction).
+- Implementation: `.tmp/admin-overview-7ajArc/overview-desktop.png`,
+  `services-desktop.png`, `services-detail.png`, and `overview-390.png` in the
+  same directory. Earlier iteration: `.tmp/admin-overview-q1h7cs/`.
+- Desktop viewport: 1440x1024 CSS pixels, DPR 1; source: 1487x1058 raster pixels.
+  Full-view comparison normalizes source width to 1440 (height approximately
+  1025) without stretching. Mobile evidence: 390x1024 CSS viewport and full-page
+  capture; 768px and 1280px evidence is also saved.
+- State: authenticated isolated local fixture, Sembom, browser source, recent
+  seven days, comparison off; separate expanded service-table state. Captures
+  contain synthetic local counts, not production measurements. The final source
+  and rendered desktop/mobile captures were opened together for comparison.
+  Focused `services-detail.png` verifies both rows and all five columns beyond
+  the scrollable main viewport. IAB preview was also inspected directly.
+
+## Findings and comparison history
+
+- Fixed P1: forcing the Recharts wrapper width through overview CSS collapsed
+  the chart to zero width. Removed the conflicting override. Final evidence has
+  seven visible bars; browser checks require a surface wider than 200px.
+- Fixed P1: the inherited event-table first-column width (72%) squeezed service
+  counts and completion details. Scoped fixed layout/column widths restore all
+  five columns; browser checks require every header cell to exceed 70px.
+- Fixed P2: the initial KPI labels mixed workflow and start-event names; both
+  attempt metrics now name the representative workflow. Added the explanatory
+  subtitle and sized the icon-bearing segmented source selector to match the
+  chosen hierarchy. Final desktop/mobile evidence confirms no clipping.
+- Full view retains the intended hierarchy: compact header, source controls,
+  unboxed metrics, bars beside ranked labeled events, outcome strip, then service
+  disclosure. Typography uses existing Inter/Noto Sans KR, slate/white surfaces,
+  blue actions, existing raster brand and Phosphor icons. No decorative assets
+  were substituted. Mobile uses a two-column KPI grid and stacked content.
+- Intentional adaptations: live API controls and CSV stay available, event keys
+  and accessible daily-value tables remain, the timezone is read-only, comparison
+  requires its real reads, and fixture bars reflect actual seeded counts. The
+  undefined failure event shows `미정의` and 680 pending, rather than copying the
+  illustrative failure/pending values in the mock. Compact spacing accommodates
+  the real controls; service criteria remain inspectable without dominating.
+- No actionable P0/P1/P2 findings remain. Production data/authentication and
+  deployed asset delivery were not part of this local review.
+
+## Interaction and console evidence
+
+- `verify:admin-overview` passes source switching, lazy service reads, current
+  versus previous-zero comparison, workflow 503/retry, no representative workflow,
+  event/goal navigation, chart dimensions and responsive overflow checks.
+- Final report: `.tmp/admin-overview-7ajArc/report.json`: `verified: true`,
+  `overviewReads: 1`, `pageErrors: []`, `routeError: false`, `apiWrites: 0`.
+- IAB retained one earlier development hot-reload AbortError during effect
+  cleanup; the final fresh isolated browser run has no page errors.
+- Typecheck/build, 382 admin unit tests, 2 bundle checks and analysis-access
+  verification pass. Existing server state, auth and API/DB contracts are intact.
+- Follow-up P3: individual daily bar-value labels could be added for short ranges;
+  values are already available through tooltip and the accessible table.
+
+final result: passed
+
+---
+
 # Settings design QA — 2026-10-28
 
 ## Target and rendered evidence

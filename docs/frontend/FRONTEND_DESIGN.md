@@ -1,5 +1,33 @@
 # Tallyfin Frontend Design
 
+## Overview collection and completion workspace - 2026-10-28
+
+The API Overview uses the compact shared header with a project picker, report
+range and expandable connection/account controls. Browser/server selection,
+previous-period comparison and CSV export sit above an unboxed KPI strip.
+`OverviewWorkspace` renders representative-workflow daily-start bars beside
+registered events ranked by count, then started/succeeded/confirmed-failed/pending
+attempts. Event keys remain visible beside labels. `SourceMetrics` names the
+representative workflow consistently; absent counts/rates stay missing and an
+undefined failure event remains undefined rather than becoming zero.
+
+`LiveDashboard` retains ownership of session/project/schema/range, aggregate
+reads, errors, cancellation, comparison and export readiness. The existing
+whole-snapshot error and retry contract is preserved on Overview. The workspace
+only derives display order and owns no server state or persistent browser state.
+`Trend` accepts an optional bar presentation; existing charts default to area.
+The accessible daily-values table remains available alongside the lazy chart.
+
+The service comparison table is below project analytics, collapsed initially.
+Its existing abortable, paged read runs only when expanded, with at most five
+services per page and no polling. The active project row is highlighted. Each
+service's local recent-seven-day window and the UTC rejection window remain
+explicit and distinct from the selected report range. Missing reception history
+never implies a service outage. Detailed criteria are available in a disclosure.
+Scoped styles stack panels at mobile sizes and constrain table scrolling locally.
+No API/DB contract, server aggregation, authentication or sample-data semantics
+changed.
+
 ## Settings tabs and schema workbench — 2026-10-28
 
 The API Settings page uses the existing compact 220px navigation shell, a project
