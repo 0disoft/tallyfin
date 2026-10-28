@@ -8,6 +8,7 @@ import type { FunnelResponse } from './api/funnel-contract';
 import { funnelCsv, funnelCsvFilename } from './api/funnel-csv';
 import type { FunnelDefinition, Registry } from './api/types';
 import { formatCount, formatRate } from './data';
+import FunnelJourney from './FunnelJourney';
 import { sourceLabel } from './SourceEventTable';
 import './funnels.css';
 import FunnelComparison from './FunnelComparison';
@@ -21,9 +22,10 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
-export default function LiveFunnels({ client, registry, range, context, previous = null, compare = false, comparisonError = null }: {
+export default function LiveFunnels({ client, registry, range, context, previous = null, compare = false, comparisonError = null, selectedFunnelId }: {
   client: ApiClient; registry: Registry; range: DateRange; context: string;
   previous?: DateRange | null; compare?: boolean; comparisonError?: string | null;
+  selectedFunnelId?: string;
 }) {
   const id = useId();
   const funnels = registry.funnels ?? [];
@@ -57,7 +59,8 @@ export default function LiveFunnels({ client, registry, range, context, previous
 
   // A selection only counts in the context it was made and only for a registered
   // id; a new context renders blank before any fetch runs.
-  const selectedId = selection.context === context && funnelIds.includes(selection.id) ? selection.id : '';
+  const requestedId = selectedFunnelId ?? (selection.context === context ? selection.id : '');
+  const selectedId = funnelIds.includes(requestedId) ? requestedId : '';
 
   // Only a selected funnel is fetched; the report validates the requested
   // registry/range and discards stale responses. Deselecting cancels the read.
@@ -177,15 +180,15 @@ export default function LiveFunnels({ client, registry, range, context, previous
 
   if (!funnels.length) return null;
   return <section className="funnel-section" aria-labelledby={`${id}-heading`}>
-    <div className="section-header"><h2 id={`${id}-heading`}>퍼널 분석</h2></div>
-    <p className="context-note">시작 이벤트가 발생한 실행만 시작일 기준 코호트로 세요. 각 단계 이벤트는 등록된 정의의 출처를 그대로 사용하고 한 출처로 거르지 않아요.</p>
-    <label className="api-field property-grouping" htmlFor={`${id}-select`}>
+    <p className="goal-eyebrow">퍼널 / <code>{selectedId || '등록된 목표'}</code></p>
+    <div className="section-header"><h2 id={`${id}-heading`}>{funnels.find(funnel => funnel.id === selectedId)?.label ?? '퍼널 분석'}</h2></div>
+    {selectedFunnelId === undefined && <label className="api-field property-grouping" htmlFor={`${id}-select`}>
       <span>퍼널 선택</span>
       <select id={`${id}-select`} className="text-input settings-select" value={selectedId} onChange={event => choose(event.target.value)}>
         <option value="">퍼널을 선택하세요</option>
         {funnels.map(funnel => <option key={funnel.id} value={funnel.id}>{funnel.label}</option>)}
       </select>
-    </label>
+    </label>}
     {!selectedId && <p className="context-note" role="status">퍼널을 선택하면 단계별 도달·전환과 일별 내역을 조회해요. 선택하기 전에는 조회하지 않아요.</p>}
     {loading && <section className="state-panel" role="status" aria-busy="true"><h2>퍼널 집계를 조회하는 중이에요</h2><p>등록된 퍼널 정의와 시작일 코호트를 서버에서 가져와요.</p></section>}
     {selectedId && view?.phase === 'error' && <section className="state-panel" role="alert">
@@ -197,18 +200,17 @@ export default function LiveFunnels({ client, registry, range, context, previous
     {data && <>
       <div className="funnel-summary">
         <div>
-          <h3>{data.definition.label}</h3>
-          <p className="context-note">시작일 기준 코호트({data.cohortBasis}) · {data.meta.timeZone} · 스키마 v{data.meta.schemaVersion} · {data.meta.from} ~ {data.meta.to}</p>
+          <p className="context-note">시작일 기준 코호트 · {data.meta.timeZone} · 정의 v{data.meta.schemaVersion}</p>
         </div>
         <div className="funnel-ratio">
           <strong>{formatRate(data.summary.completionRate)}</strong>
           <span>완료 {formatCount(data.summary.completedRuns)} / 시작 {formatCount(data.summary.startedRuns)}</span>
         </div>
       </div>
-      <dl className="funnel-facts">
-        <div><dt>시작한 실행</dt><dd>{formatCount(data.summary.startedRuns)}건</dd></div>
-        <div><dt>완료한 실행</dt><dd>{formatCount(data.summary.completedRuns)}건</dd></div>
-        <div><dt>완료율</dt><dd>{formatRate(data.summary.completionRate)}<span className="funnel-fraction">{formatCount(data.summary.completedRuns)} / {formatCount(data.summary.startedRuns)}</span></dd></div>
+      <dl className="goal-outcomes funnel-facts">
+        <div><dt>시작</dt><dd>{formatCount(data.summary.startedRuns)}</dd><span>시작한 실행</span></div>
+        <div className="success"><dt>완료</dt><dd>{formatCount(data.summary.completedRuns)}</dd><span>마지막 단계에 도달한 실행</span></div>
+        <div className="pending"><dt>완료 전</dt><dd>{formatCount(data.summary.startedRuns - data.summary.completedRuns)}</dd><span>확정 실패와는 달라요</span></div>
       </dl>
       {compare && <>
         {comparisonError ? <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 퍼널 CSV를 내려받을 수 있어요.</p>
@@ -220,6 +222,8 @@ export default function LiveFunnels({ client, registry, range, context, previous
       {data.days.some(day => day.provisional) && <p className="notice" role="status">집계 중인 시작일이 포함돼 있어 결과가 달라질 수 있어요.</p>}
       {data.summary.startedRuns === 0 && <p className="notice" role="status">선택한 기간에 관찰된 시작 실행이 없어요. 도달 수는 0으로, 비율은 알 수 없음(—)으로 표시해요. 등록된 퍼널이 없는 것과는 달라요.</p>}
       <p className="context-note">다음 단계 미도달 수에는 아직 진행 중이거나 아직 전달되지 않은 실행이 포함돼요. 실패로 확정된 실행이 아니에요.</p>
+      <FunnelJourney data={data} registry={registry} />
+      <details className="goal-definition"><summary>단계별 수치 보기</summary>
       <div className="table-scroll" tabIndex={0} role="region" aria-label={`${data.definition.label} 단계별 도달 표`}>
         <table className="event-table funnel-table">
           <caption className="sr-only">{data.definition.label} 단계별 도달 수, 첫 단계 대비 도달률, 직전 단계 대비 전환율, 다음 단계 미도달 수</caption>
@@ -228,6 +232,7 @@ export default function LiveFunnels({ client, registry, range, context, previous
         </table>
       </div>
       <p className="context-note">첫 단계 도달률은 시작 실행 대비예요. 첫 단계의 직전 단계 전환율과 마지막 단계의 다음 미도달은 비교 대상이 없어 —로 표시해요.</p>
+      </details>
       <details className="funnel-daily">
         <summary>일별 시작일 코호트 ({data.days.length}일)</summary>
         <div className="table-scroll" tabIndex={0} role="region" aria-label={`${data.definition.label} 일별 코호트 표`}>

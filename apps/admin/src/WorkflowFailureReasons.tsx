@@ -3,8 +3,9 @@ import type { FailureReasons } from './api/workflow-failure-reasons';
 import type { WorkflowDefinition } from './api/types';
 import { formatCount, formatRate } from './data';
 
-export default function WorkflowFailureReasons({ definition, reasons, failed, provisional }: {
+export default function WorkflowFailureReasons({ definition, reasons, failed, provisional, visual = false }: {
   definition: WorkflowDefinition; reasons: FailureReasons | null | undefined; failed: number | null; provisional: boolean;
+  visual?: boolean;
 }) {
   const heading = useId();
   const empty = definition.failureEvent === null ? '실패 이벤트가 없는 작업 흐름이에요.'
@@ -21,7 +22,8 @@ export default function WorkflowFailureReasons({ definition, reasons, failed, pr
       <thead><tr><th scope="col">원인</th><th scope="col">실패</th><th scope="col">전체 확정 실패 중 비중</th></tr></thead>
       <tbody>{[...reasons.buckets, { value: '원인 누락', failedAttempts: reasons.missingReasonFailures }].map((bucket, index) =>
         <tr key={index}><th scope="row">{bucket.value}</th><td>{formatCount(bucket.failedAttempts)}</td>
-          <td>{failed ? formatRate(bucket.failedAttempts / failed * 100) : '—'}</td></tr>)}</tbody>
+          <td><div className={visual ? 'goal-reason-share' : undefined}>{visual && !!failed && <progress max={100} value={bucket.failedAttempts / failed * 100} aria-hidden="true" />}
+            <span>{failed ? formatRate(bucket.failedAttempts / failed * 100) : '—'}</span></div></td></tr>)}</tbody>
     </table></div>}
   </section>;
 }

@@ -85,6 +85,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const initialEventScope = useRef<{ client: ApiClient | null; key: string } | null>(null);
   const [selectedSource, setSelectedSource] = useState<EventSource>('browser');
   const source = view === 'goals' ? 'browser' : selectedSource;
+  const analysisWorkspace = view === 'events' || view === 'goals';
   const [refreshTick, setRefreshTick] = useState(0);
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
@@ -330,16 +331,16 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           setSelectedSource(event.target.value === 'server' ? 'server' : 'browser'); setSelectedEvent(null); setGrouping(null);
         }}><option value="browser">브라우저</option><option value="server">서버</option></select></label>}
       <button className="secondary-button" type="button" onClick={retry}>새로고침</button>
-      {view !== 'settings' && view !== 'events' && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
+      {view !== 'settings' && !analysisWorkspace && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />직전 기간과 비교</label>}
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>프로젝트 추가</button>
       {session?.login?.passwordChangeUrl && <a className="secondary-button" href={session.login.passwordChangeUrl} target="_blank" rel="noopener noreferrer">비밀번호 변경<span className="sr-only"> (새 탭)</span></a>}
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
       </>;
 
-  const projectControls = <div className={`toolbar api-toolbar${view === 'events' ? ' events-connection-bar' : ''}`}>
-      <ProjectPicker compact={view === 'events'} client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
+  const projectControls = <div className={`toolbar api-toolbar${analysisWorkspace ? ' events-connection-bar' : ''}`}>
+      <ProjectPicker compact={analysisWorkspace} client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
         hasMore={!!nextCursor} loadingMore={more} onLoadMore={loadMore} onSelect={project => switchProject(project.id, project)} />
-      {view === 'events' ? <details className="events-advanced"><summary>연결 설정<CaretDown size={14} /></summary><div className="toolbar">{connectionControls}</div><LiveIdentity client={client} /></details> : connectionControls}
+      {analysisWorkspace ? <details className="events-advanced"><summary>연결 설정<CaretDown size={14} /></summary><div className="toolbar">{connectionControls}</div><LiveIdentity client={client} /></details> : connectionControls}
     </div>;
   return <>
     {unauthorizedClient === client && <>
@@ -350,20 +351,20 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         return true;
       }} /></DeferredPanel>
     </>}
-    {view === 'events' && headerHost ? createPortal(projectControls, headerHost) : projectControls}
+    {analysisWorkspace && headerHost ? createPortal(projectControls, headerHost) : projectControls}
     {view !== 'settings' && customPeriod && currentRange && projectToday && <DateRangePicker
       key={JSON.stringify([dateScope, currentRange.from, currentRange.to])} range={currentRange} today={projectToday} timeZone={activeTimeZone!}
       onApply={range => setCustomRange({ scope: dateScope, range })} />}
     {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
-    {view !== 'events' && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
+    {!analysisWorkspace && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
     {view === 'settings' && <LiveHealth client={client} />}
     {view === 'settings' && <DeferredPanel label="운영 로그 보고서"><ObservationReportPanel client={client} /></DeferredPanel>}
     {view === 'overview' && projects.status === 'ready' && !!projects.data?.length && <DeferredPanel label="서비스 통합 현황"><ProjectOverview client={client} projects={projects.data} source={source} onSelectProject={switchProject} hasMore={!!nextCursor} onLoadMore={loadMore} loadingMore={more} /></DeferredPanel>}
-    {view !== 'settings' && view !== 'events' && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.{view === 'goals' && ' 작업 흐름은 브라우저 기준이며, 퍼널은 등록된 단계의 출처를 함께 조회해요.'}</p>}
-    <div className={view === 'events' ? 'events-actions' : undefined}>
-    {view === 'events' && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />직전 기간과 비교</label>}
+    {view !== 'settings' && !analysisWorkspace && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.</p>}
+    <div className={analysisWorkspace ? 'events-actions' : undefined}>
+    {analysisWorkspace && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : '직전 기간과 비교'}</label>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">오늘은 집계 중이에요.{compare && ' 직전 같은 일수의 기간과 비교하므로 오늘의 남은 시간은 반영되지 않아요.'}</p>}
-    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={view === 'events'} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
+    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
     </div>
     {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
     {pageError && <p className="form-error" role="alert">{pageError}</p>}
@@ -387,7 +388,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       {compare && aggregateComparisonAvailable && !comparisonError && <>
         {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">직전 기간을 조회하는 중이에요.</p>}
         {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
-        {view !== 'events' && currentComparison?.status === 'ready' && currentComparison.data && (view !== 'goals' || !!data.workflows.length) && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
+        {view === 'overview' && currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
       </>}
       {view === 'overview' && <>
         <SourceMetrics source={source} totalEvents={data.summary.totalEvents} primary={primary} startLabel={startLabel} successLabel={successLabel} />

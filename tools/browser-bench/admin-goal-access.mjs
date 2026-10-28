@@ -171,7 +171,14 @@ try {
   const workflowCsv = page.getByRole('button', { name: '작업 흐름 CSV 내려받기', exact: true });
   const comparison = page.getByRole('checkbox', { name: '작업 흐름·퍼널 기간 비교', exact: true });
   const workflowGroup = page.getByRole('combobox', { name: '시작 시점 분류 기준', exact: true });
-  const funnelSelect = page.getByRole('combobox', { name: '퍼널 선택', exact: true });
+  const funnelSelect = { selectOption: async () => page.getByRole('button', { name: '계산 퍼널', exact: true }).click() };
+  const workflowSelect = async () => page.getByRole('button', { name: '계산 완료', exact: true }).click();
+  const tab = async name => page.getByRole('button', { name, exact: true }).click();
+  const refresh = async () => {
+    if (!await page.getByRole('button', { name: '새로고침', exact: true }).isVisible()) await page.getByText('연결 설정', { exact: true }).click();
+    await page.getByRole('button', { name: '새로고침', exact: true }).click();
+    await page.getByText('연결 설정', { exact: true }).click();
+  };
   const funnelGroup = page.getByRole('combobox', { name: '퍼널 분류 기준', exact: true });
   const funnelCsv = page.getByRole('button', { name: '퍼널 CSV 내려받기', exact: true });
   const ready = async () => { await page.getByRole('heading', { name: '계산 완료', exact: true }).waitFor(); await expect(workflowCsv).toBeEnabled(); };
@@ -179,7 +186,7 @@ try {
     stage = `restore:${stage}`;
     fault = null;
     await provisioner.apply(await provisioner.plan('grant', { projectId: 'sembom', issuer: local.issuer, subject, role: 'owner' }));
-    await page.getByRole('button', { name: '새로고침', exact: true }).click(); await ready();
+    await refresh(); await ready();
     if (await comparison.isChecked()) await comparison.uncheck();
   };
   const selectedFunnel = async () => { await funnelSelect.selectOption('calculation_funnel'); await expect(funnelCsv).toBeEnabled(); };
@@ -202,9 +209,31 @@ try {
   await expect(workflowCsv).toBeDisabled();
   await selectedFunnel(); await expect(funnelCsv).toBeEnabled();
   workflowDailyUnavailable = false;
-  await page.getByRole('button', { name: '계산 완료 다시 시도', exact: true }).click();
-  await ready(); await expect(funnelCsv).toBeEnabled(); scenarios.push('workflow-panel-failure-recovery');
+  await workflowSelect(); await page.getByRole('button', { name: '계산 완료 다시 시도', exact: true }).click();
+  await ready(); await selectedFunnel(); await expect(funnelCsv).toBeEnabled(); await workflowSelect(); scenarios.push('workflow-panel-failure-recovery');
+  stage = 'goal-explorer-overview';
+  await expect(page.getByRole('button', { name: '현황', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('heading', { name: '일별 완료율', exact: true })).toBeVisible();
+  const goalSearch = page.getByRole('searchbox', { name: '목표 이름 검색', exact: true });
+  await goalSearch.fill('no-such-goal');
+  await expect(page.getByRole('status').filter({ hasText: '검색 결과가 없어요' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '계산 완료', exact: true })).toBeVisible();
+  await goalSearch.fill('');
+  await page.screenshot({ path: resolve(directory, 'goals-overview-desktop.png'), fullPage: true });
+  for (const width of [390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const overflow = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth,
+      elements: [...document.querySelectorAll('body *')].filter(element => element.getBoundingClientRect().right > innerWidth + .1).slice(0, 8).map(element => ({ tag: element.tagName, class: element.getAttribute('class'), right: element.getBoundingClientRect().right })) }));
+    assert.ok(overflow.document <= overflow.viewport, JSON.stringify(overflow));
+    await page.screenshot({ path: resolve(directory, `goals-overview-${width}.png`), fullPage: true });
+  }
+  const goalButton = page.getByRole('button', { name: '계산 퍼널', exact: true });
+  await goalButton.focus(); await goalButton.press('Enter'); await expect(funnelCsv).toBeEnabled();
+  await expect(page.locator('.goal-journey-step')).toHaveCount(2);
+  await expect(page.locator('.goal-inspector')).toContainText('실패로 확정된 실행이 아니에요');
+  await workflowSelect(); scenarios.push(stage);
   stage = 'workflow-duration';
+  await tab('소요시간');
   const durationPanel = page.locator('.workflow-duration');
   await expect(durationPanel).toContainText('측정 1건 · 미측정 완료 0건');
   await expect(durationPanel.locator('tbody tr')).toHaveCount(6);
@@ -218,10 +247,11 @@ try {
   await page.setViewportSize({ width: 390, height: 844 }); await durationPanel.scrollIntoViewIfNeeded();
   await page.screenshot({ path: resolve(directory, 'workflow-duration-mobile.png') });
   await page.setViewportSize({ width: 1280, height: 900 }); scenarios.push(stage);
+  await tab('속성별 분석');
   arm('workflow-current-breakdown', 'workflows', 'breakdown', false);
   await workflowGroup.selectOption('tool'); await blocked(); scenarios.push(stage);
 
-  await restore(); await workflowGroup.selectOption('tool');
+  await restore(); await tab('속성별 분석'); await workflowGroup.selectOption('tool');
   await page.locator('.workflow-property-analysis .event-table tbody tr').waitFor();
   await page.screenshot({ path: resolve(directory, 'workflow-ready.png'), fullPage: true });
   arm('workflow-previous-breakdown', 'workflows', 'breakdown', true);
@@ -269,6 +299,7 @@ try {
   await funnelGroup.selectOption('tool');
   await expect.poll(() => observed.some(row => row.scenario === late.name)).toBe(true);
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('access-other'); await ready();
+  await tab('소요시간');
   await expect(durationPanel).toContainText('완료 기록은 있지만 소요시간은 미측정이에요.');
   await expect(durationPanel.locator('table')).toHaveCount(0);
   late.release.resolve(); await late.finished.promise;
@@ -293,8 +324,9 @@ try {
     await store.commit(await prepareBatch(batch, reasonRegistry, at), reasonRegistry);
   }
   await local.db.prepare("UPDATE workflow_daily_counts SET started_count=started_count+1, failed_count=failed_count+1 WHERE project_id='access-other' AND schema_version=2").run();
-  await page.getByRole('button', { name: '새로고침', exact: true }).click();
-  await expect(page.getByRole('textbox', { name: '스키마 버전', exact: true })).toHaveValue('2');
+  await refresh();
+  await expect(page.locator('input[aria-label="스키마 버전"]')).toHaveValue('2');
+  await tab('실패 원인');
   const reasonPanel = page.locator('.workflow-failure-reasons');
   await expect(reasonPanel).toContainText('측정 3건 · 원인 누락 1건 · 미측정 실패 1건');
   await expect(reasonPanel.locator('tbody tr')).toHaveCount(3);
@@ -346,7 +378,7 @@ try {
   // Test-only late measurement for the historical failure, preserving the failed/started totals.
   await local.db.prepare("UPDATE workflow_daily_counts SET failure_reason_counts_json=json_set(failure_reason_counts_json,'$[32]',2) WHERE project_id='access-other' AND schema_version=2 AND cohort_date=?")
     .bind(today).run();
-  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await refresh(); await tab('실패 원인');
   await expect(failureComparison).toContainText('원인 측정: 현재 측정 완료 · 직전 측정 완료');
   assert.deepEqual(await reasonComparisonTable.locator('tbody tr').evaluateAll(tableCells),
     [['range', '1', '1', '25.0%', '25.0%', '0.0%p'], ['required', '1', '2', '25.0%', '50.0%', '-25.0%p'],

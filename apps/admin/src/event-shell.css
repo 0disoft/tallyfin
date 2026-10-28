@@ -1,8 +1,8 @@
 /* ==========================================================================
    Tallyfin event analytics workspace
 
-   This file is imported only for the API event screen. Keep every selector
-   beneath .event-page or .event-workspace so the overview, goals, settings,
+   Shared shell for the API event and goal screens. Keep every selector
+   beneath .event-page or .event-workspace so the overview, settings,
    login and sample views retain the existing stylesheet.
    ========================================================================== */
 

@@ -1,5 +1,34 @@
 # Tallyfin Frontend Design
 
+## Goals explorer and inspector — 2026-10-28
+
+The API Goals screen keeps a searchable, grouped list of registered workflows
+and funnels beside one inspector. `LiveGoals` owns only scoped local selection
+and search; `LiveDashboard` owns session/project/schema, range, access state,
+aggregate reads, recovery and CSV readiness. Selection is keyed by project,
+schema and request context. Searching does not change the active goal or its
+metrics. No new URL or persisted state is introduced. Sample Goals stays separate.
+
+`GoalWorkflowDetail` renders the validated cohort summary and selected-workflow
+comparison. `GoalWorkflowAnalysis` owns the overview/failure/duration/property
+view and reuses the existing measurement components. The default chart plots
+API daily completion rates; no-start days remain unknown. Switching goals or
+leaving property analysis aborts its reads and clears that selection's export
+details. Missing previous workflows stay unknown; rate differences use %p.
+Workflow CSV covers all loaded workflows; funnel CSV covers the selected funnel.
+
+`LiveFunnels` accepts optional explorer selection while preserving its standalone
+selection path, report lifecycle, cancellation, comparison, daily drilldown,
+property reads and CSV gate. `FunnelJourney` projects validated stage counts with
+labels, event keys and sources. Non-reach includes pending/unreceived executions
+and is never a confirmed failure. Wide tables remain in accessible scroll regions.
+
+Events and goals share the compact analysis header; expandable connection/schema
+settings retain refresh, password navigation, disconnect and draft guards. Goal
+styles stay beneath `.goal-page`. Below 800px, explorer and inspector stack with
+bounded lists and local table scrolling. Labeled search, `aria-pressed` selection,
+focus indicators, status/error notices and disabled exports remain available.
+
 ## Event explorer and period comparison — 2026-10-28
 
 The API-connected event analysis view uses `EventWorkspace` for a searchable

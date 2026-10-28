@@ -1,16 +1,16 @@
-import WorkflowFailureReasonComparison from './WorkflowFailureReasonComparison';
-import type { Load } from './api/load-state';
-import type { PeriodSnapshot } from './api/period-comparison';
-import WorkflowFailureReasons from './WorkflowFailureReasons';
+import { useState } from 'react';
+import { Funnel, ListChecks, MagnifyingGlass } from '@phosphor-icons/react';
 import WorkflowFailurePanel from './WorkflowFailurePanel';
 import type { ApiClient } from './api/client';
+import type { Load } from './api/load-state';
 import type { Registry } from './api/types';
-import type { DateRange, WorkflowLoad, WorkflowFailure } from './api/period-comparison';
+import type { DateRange, PeriodSnapshot, WorkflowLoad, WorkflowFailure } from './api/period-comparison';
 import type { WorkflowGroupingState } from './api/workflow-analysis';
-import { formatCount, formatRate } from './data';
-import WorkflowPropertyBreakdown from './WorkflowPropertyBreakdown';
+import { formatRate } from './data';
 import LiveFunnels from './LiveFunnels';
-import WorkflowDuration from './WorkflowDuration';
+import GoalWorkflowDetail, { GoalWorkflowAnalysis } from './GoalWorkflowDetail';
+import './event-shell.css';
+import './goal-workspace.css';
 
 export default function LiveGoals({ client, registry, workflows, workflowErrors, onRecovered, range, previous, context, onState, compare, comparisonError, periodComparison }: {
   client: ApiClient; registry: Registry; workflows: WorkflowLoad[]; range: DateRange; previous: DateRange | null;
@@ -18,32 +18,50 @@ export default function LiveGoals({ client, registry, workflows, workflowErrors,
   context: string; onState: (id: string, state: WorkflowGroupingState) => void;
   compare: boolean; comparisonError: string | null; periodComparison?: Load<PeriodSnapshot>;
 }) {
-  const before = new Map(periodComparison?.status === 'ready' ? periodComparison.data?.workflows.map(load => [load.definition.id, load]) : []);
+  const [selection, setSelection] = useState<{ scope: string; key: string } | null>(null);
+  const [search, setSearch] = useState({ scope: '', value: '' });
+  const scope = JSON.stringify([registry.project.id, registry.schemaVersion, context]);
+  const query = search.scope === scope ? search.value : '';
+  const goals = [...registry.workflows.map(definition => ({ key: `workflow:${definition.id}`, kind: 'workflow', definition } as const)),
+    ...(registry.funnels ?? []).map(definition => ({ key: `funnel:${definition.id}`, kind: 'funnel', definition } as const))];
+  const active = goals.find(goal => selection?.scope === scope && goal.key === selection.key) ?? goals[0];
   const loaded = new Map(workflows.map(load => [load.definition.id, load]));
   const failed = new Map(workflowErrors.map(failure => [failure.definition.id, failure]));
-  return <>
-      {(registry.workflows.length === 0 && !(registry.funnels?.length)
-        ? <section className="state-panel" role="status"><h2>등록된 작업 흐름이 없어요</h2><p>이 스키마에는 완료율을 계산할 작업 흐름 정의가 없어요.</p></section>
-        : registry.workflows.map(definition => {
-          const failure = failed.get(definition.id), load = loaded.get(definition.id);
-          if (failure) return <WorkflowFailurePanel key={`${context}:${definition.id}`} client={client} registry={registry} range={range} failure={failure} onRecovered={onRecovered} />;
-          if (!load) return null;
-          return <section className="goal-section" key={load.definition.id}>
-          <div className="goal-header"><div><h2>{load.definition.label}</h2><p className="context-note">시작일 기준 코호트({load.response.cohortBasis}) · 정의 v{registry.schemaVersion}</p></div><div className="goal-ratio"><strong>{formatRate(load.response.summary.completionRate)}</strong><span>{formatCount(load.response.summary.succeededAttempts)} / {formatCount(load.response.summary.startedAttempts)}</span></div></div>
-          {load.response.summary.completionRate !== null && <progress className="goal-track" max={100} value={load.response.summary.completionRate} aria-label={`${load.definition.label} 완료율`} />}
-          <dl className="definition-list">
-            <div><dt>시작</dt><dd>{load.definition.startEvent}<span>{formatCount(load.response.summary.startedAttempts)}건</span></dd></div>
-            <div><dt>성공</dt><dd>{load.definition.successEvent}<span>{formatCount(load.response.summary.succeededAttempts)}건</span></dd></div>
-            <div><dt>실패</dt><dd>{load.definition.failureEvent ?? '등록 안 됨'}<span>{load.response.summary.failedAttempts === null ? '—' : `${formatCount(load.response.summary.failedAttempts)}건`}</span></dd></div>
-            <div><dt>대기</dt><dd>pending<span>{formatCount(load.response.summary.pendingAttempts)}건</span></dd></div>
-          </dl>
-          <p className="context-note">완료율과 시도 수는 작업 흐름 응답에서 그대로 가져와요. 이벤트 총수로 완료율을 추론하지 않아요.</p>
-          <WorkflowDuration duration={load.response.duration} provisional={load.response.days.some(day => day.provisional)} />
-          <WorkflowFailureReasons definition={definition} reasons={load.response.failureReasons} failed={load.response.summary.failedAttempts} provisional={load.response.days.some(day => day.provisional)} />
-          {compare && !comparisonError && <WorkflowFailureReasonComparison registry={registry} current={load} previous={before.get(definition.id)}
-            status={!periodComparison || periodComparison.status === 'idle' || periodComparison.status === 'loading' ? 'loading' : periodComparison.status} />}
-          <WorkflowPropertyBreakdown key={`${context}:${load.definition.id}`} client={client} registry={registry} definition={load.definition} range={range} previous={previous} context={context} onState={onState} />
-        </section>; }))}
-    <LiveFunnels client={client} registry={registry} range={range} context={context} previous={previous} compare={compare} comparisonError={comparisonError} />
-  </>;
+  const before = periodComparison?.status === 'ready' ? periodComparison.data?.workflows.find(load => load.definition.id === active?.definition.id) : undefined;
+  const matches = goals.filter(goal => `${goal.definition.label} ${goal.definition.id}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()));
+  const selectedLoad = active?.kind === 'workflow' ? loaded.get(active.definition.id) : undefined;
+  const failure = active?.kind === 'workflow' ? failed.get(active.definition.id) : undefined;
+  const choose = (key: string) => {
+    if (active?.key === key) return;
+    // The old property component unmounts on selection: discard its CSV detail too.
+    if (active?.kind === 'workflow') onState(active.definition.id, { context, groupBy: '', status: 'idle' });
+    setSelection({ scope, key });
+  };
+  if (!goals.length) return <section className="state-panel" role="status"><h2>등록된 목표가 없어요</h2><p>설정에서 작업 흐름이나 퍼널을 등록하면 완료율과 단계별 도달을 확인할 수 있어요.</p></section>;
+  return <div className="goal-workspace">
+    <aside className="goal-explorer" aria-label="목표 탐색기">
+      <h2>목표 탐색기</h2>
+      <label className="goal-search"><MagnifyingGlass size={18} aria-hidden="true" /><span className="sr-only">목표 이름 검색</span>
+        <input type="search" placeholder="목표 이름 또는 ID 검색" value={query} onChange={event => setSearch({ scope, value: event.target.value })} /></label>
+      {(['workflow', 'funnel'] as const).map(kind => <div key={kind}>
+        <h3 className="goal-group-heading">{kind === 'workflow' ? <ListChecks size={17} /> : <Funnel size={17} />}{kind === 'workflow' ? '작업 흐름' : '퍼널'} <span>{goals.filter(goal => goal.kind === kind).length}</span></h3>
+        <ul className="goal-list">{matches.filter(goal => goal.kind === kind).map(goal => <li key={goal.key}>
+          <button type="button" className="goal-option" aria-label={goal.definition.label} aria-pressed={active?.key === goal.key} onClick={() => choose(goal.key)}>
+            <span className="goal-option-label">{goal.definition.label}</span><span className="goal-option-key">{goal.definition.id}</span>
+            <strong className="goal-option-rate">{goal.kind === 'workflow' ? formatRate(loaded.get(goal.definition.id)?.response.summary.completionRate ?? null) : `${goal.definition.steps.length}단계`}</strong>
+            {goal.kind === 'workflow' && failed.has(goal.definition.id) && <span className="form-error">조회 실패</span>}
+          </button>
+        </li>)}</ul>
+      </div>)}
+      {!matches.length && <p className="context-note" role="status">검색 결과가 없어요. 다른 이름이나 ID를 입력해 주세요.</p>}
+      <p className="goal-explorer-footer">작업 흐름 {registry.workflows.length}개 · 퍼널 {registry.funnels?.length ?? 0}개</p>
+    </aside>
+    <div className="goal-inspector" key={`${scope}:${active?.key}`}>
+      {failure ? <WorkflowFailurePanel client={client} registry={registry} range={range} failure={failure} onRecovered={onRecovered} />
+        : selectedLoad ? <><GoalWorkflowDetail load={selectedLoad} previousLoad={before} compare={compare} comparisonError={comparisonError} comparisonStatus={periodComparison?.status ?? 'idle'} />
+          <GoalWorkflowAnalysis client={client} registry={registry} load={selectedLoad} previousLoad={before} range={range} previous={previous} context={context} onState={onState} compare={compare} comparisonError={comparisonError} comparisonStatus={periodComparison?.status ?? 'idle'} /></>
+        : active?.kind === 'workflow' ? <p role="status">작업 흐름을 조회하는 중이에요.</p> : null}
+      {active?.kind === 'funnel' && <LiveFunnels key={active.definition.id} client={client} registry={registry} range={range} context={context} previous={previous} compare={compare} comparisonError={comparisonError} selectedFunnelId={active.definition.id} />}
+    </div>
+  </div>;
 }

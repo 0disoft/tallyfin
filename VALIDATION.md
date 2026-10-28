@@ -1,5 +1,37 @@
 # Validation
 
+## Goals explorer and inspector redesign — 2026-10-28
+
+- Replaced the long sequence of workflow/funnel sections with a grouped goal
+  explorer and selected inspector. Workflow overview shows cohort completion,
+  started/succeeded/confirmed-failed/pending attempts and a daily completion
+  chart; detailed failure, duration and property views reuse validated reads.
+  Funnel stages show registered labels, keys, sources, reach and next-stage
+  non-reach. Workflow comparison shows current/previous/signed difference (%p
+  for completion rate), preserving unknown measurements and prior zero starts.
+- Property reads cancel on panel/goal/context changes, and unmounted selections
+  are cleared from workflow export details. The existing CSV permission and
+  readiness gates remain. Expanded connection controls preserve refresh,
+  schema selection, password navigation, disconnect and draft-exit guards.
+- Passed `npm run typecheck:admin`, `npm run test:admin` (382 tests),
+  `npm run build:admin`, admin `test:bundle` (2 tests), and
+  `npm run verify:admin-analysis-access` (event access/schema/export isolation).
+- Passed `npm run verify:admin-goal-access`: 17 scenario groups, 7 real local-D1
+  permission denials, workflow recovery, current/prior workflow and funnel
+  failures, exported CSV contents, partial/missing historical measurements,
+  project switches, late-denial isolation and disconnect cleanup. Added goal
+  search-without-selection-loss, keyboard funnel selection, default overview,
+  registered stage journey, and 390/768/1280px horizontal-overflow assertions.
+  A resized Recharts surface briefly kept its previous width; the chart viewport
+  now clips that transient width without clipping scrollable data tables.
+- Evidence: `.tmp/admin-goal-access-zVAAMY/report.json` and its desktop/mobile
+  captures; visual review and accepted mock adaptations are in `design-qa.md`.
+- No standalone admin lint script is configured; TypeScript, unit/render tests,
+  browser checks and `git diff --check` cover this change. Sites packaging was
+  not run because this is an existing Cloudflare app edit, not a Sites handoff.
+  Production deployment and real-traffic measurements are outside this local
+  UI change. No backend API, schema or production credentials were changed.
+
 ## Event explorer and period comparison redesign — 2026-10-28
 
 - API event analysis now uses a searchable, source-scoped explorer beside the
