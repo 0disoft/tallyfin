@@ -7,6 +7,7 @@ import ProjectPicker from './ProjectPicker';
 import { useMainAnalysis, usePeriodComparison, useEventSeries } from './useAnalysis';
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserLogin } from './auth/client';
+import './auth/login-workspace.css';
 import { CaretDown, Desktop, Database, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import EventWorkspace from './EventWorkspace';
 import { createPortal } from 'react-dom';
@@ -295,21 +296,23 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [view, client, activeProjectId, version, validVersion, settingsRefreshTick, setupRefreshTick]);
 
   if (!client) {
-    return <>
-    <DeferredPanel label={t('workspace:login')}><OidcLogin onConnected={connected} /></DeferredPanel>
-    <details className="manual-connection"><summary>{t('workspace:manualConnection')}</summary><section className="settings-section">
+    return <div className="login-workspace"><div className="login-frame">
+    <div className="login-brand"><img src="/assets/tallyfin-fin.png" alt="" width="40" height="30" /><span>Tallyfin</span></div>
+    <div className="login-card">
+    <DeferredPanel label={t('workspace:login')}><OidcLogin onConnected={connected} standalone /></DeferredPanel>
+    <details className="manual-connection login-manual"><summary>{t('workspace:manualConnection')}<CaretDown size={16} aria-hidden="true" /></summary><section className="login-manual-body">
       <h2>{t('workspace:apiConnection')}</h2>
       <p className="context-note">{t('workspace:connectionHelp', { path: API_BASE_PATH })}</p>
       <form className="settings-form" onSubmit={event => { event.preventDefault(); connect(); }}>
-        <label className="field-label" htmlFor="api-endpoint">{t('workspace:endpoint')}</label>
-        <input id="api-endpoint" className="text-input" value={endpoint} placeholder={`${currentOrigin}${API_BASE_PATH}`} onChange={event => { setEndpoint(event.target.value); setEndpointError(null); }} />
-        <label className="field-label" htmlFor="api-token">{t('workspace:bearerToken')}</label>
-        <input id="api-token" className="text-input" type="password" autoComplete="off" value={token} placeholder={t('workspace:tokenPlaceholder')} onChange={event => setToken(event.target.value)} />
+        <div className="login-field"><label className="field-label" htmlFor="api-endpoint">{t('workspace:endpoint')}</label>
+        <input id="api-endpoint" className="text-input" value={endpoint} placeholder={`${currentOrigin}${API_BASE_PATH}`} onChange={event => { setEndpoint(event.target.value); setEndpointError(null); }} /></div>
+        <div className="login-field"><label className="field-label" htmlFor="api-token">{t('workspace:bearerToken')}</label>
+        <input id="api-token" className="text-input" type="password" autoComplete="off" value={token} placeholder={t('workspace:tokenPlaceholder')} onChange={event => setToken(event.target.value)} /></div>
         <p className="context-note">{t('workspace:tokenHelp')}</p>
         {endpointError && <p className="form-error" role="alert">{messageText(endpointError)}</p>}
         <div className="form-actions"><button className="primary-button" type="submit"><PlugsConnected size={22} weight="fill" />{t('workspace:connect')}</button></div>
       </form>
-    </section></details></>;
+    </section></details></div></div></div>;
   }
 
   const data = dateError ? null : mainData ?? null;

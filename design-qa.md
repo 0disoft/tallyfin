@@ -1,3 +1,25 @@
+# Administrator login - 2026-10-28
+
+1. Disconnected entry: the captured old screen placed an unbounded login and
+   token form below analysis navigation and date filters. The new centered
+   branded card makes the entry task explicit; language selection stays visible.
+   Captures: `.tmp/login-design/01-before.jpg` and `02-after-desktop.jpg`.
+2. Provider not configured: the configuration notice is grouped separately
+   above the available sample-demo action. No unusable login button is shown.
+   Configured login, invalid callback and reauthentication are exercised by the
+   local signed-provider `verify:admin-login` smoke, which passes without writes.
+3. Advanced token connection: the native disclosure starts collapsed; expanded
+   fields have bounded widths and remain reachable on mobile. All twelve UI
+   locales at measured 390 CSS pixels retain the open state and endpoint value
+   without document horizontal overflow. Evidence: `.tmp/login-design/locale-checks.json`.
+
+The standalone title is h1 and form labels remain associated with inputs.
+Decorative icons are excluded from accessible names. Captures and DOM checks
+do not establish full accessibility compliance. Production provider styling
+and native-speaker proofreading are outside this local UI change.
+
+final result: passed
+
 # Twelve-language admin - 2026-10-28
 
 ## Source, layout and language boundaries

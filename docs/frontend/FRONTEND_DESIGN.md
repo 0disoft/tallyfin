@@ -1,5 +1,23 @@
 # Tallyfin Frontend Design
 
+## Administrator login entry - 2026-10-28
+
+The disconnected API workspace displays a centered branded login card. Its
+scoped shell hides analysis navigation, report dates and the analysis footer;
+the existing twelve-language selector remains available. The card separates
+authentication, provider-configuration guidance and a collapsed direct-token
+connection form. With a configured provider, administrator login is the main
+action; without one, the sample demo is the main available action. Existing
+catalog messages cover all twelve languages without adding translation keys.
+
+`LiveDashboard` owns the disconnected card and manual form. `OidcLogin` uses
+an optional standalone presentation while retaining its compact connected
+reauthentication variant and existing login/callback lifecycle. Disclosure,
+input values and authentication state remain independent of locale changes.
+Same-origin endpoint validation, memory-only tokens, PKCE and draft-exit
+checks are unchanged. Responsive layout must accommodate expanded token
+fields, error messages and long translations without horizontal overflow.
+
 ## ZDP locale expansion - 2026-10-28
 
 The target language registry follows `zdp-architecture`'s

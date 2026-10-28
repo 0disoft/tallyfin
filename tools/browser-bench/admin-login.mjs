@@ -52,7 +52,10 @@ try {
       assert.equal((await context.cookies()).length, 0);
     };
     stage = 'login'; await page.goto(origin);
+    await page.locator('.login-workspace h1').waitFor();
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();
+    stage = 'password-menu';
+    await page.locator('.events-advanced > summary').click();
     const passwordMenu = page.getByRole('link', { name: '비밀번호 변경 (새 탭)', exact: true });
     await passwordMenu.waitFor();
     assert.equal(await passwordMenu.getAttribute('href'), local.issuer + '/account/password');
@@ -80,6 +83,7 @@ try {
     });
     await page.getByRole('button', { name: '설정', exact: true }).click();
     await page.locator('#settings-name').waitFor();
+    await page.locator('#settings-tab-diagnostics').click();
     await page.getByText('저장소 읽기 확인', { exact: true }).click();
     await page.getByRole('button', { name: '읽기 확인', exact: true }).click();
     await page.getByText(/^저장소 읽기를 확인했어요\./).waitFor();
@@ -108,6 +112,7 @@ try {
     let identityStatus = 403;
     await context.route('**/v1/identity', route => route.fulfill({ status: identityStatus,
       contentType: 'application/json', body: JSON.stringify({ error: { code: identityStatus === 401 ? 'unauthorized' : 'forbidden' } }) }));
+    await page.locator('#settings-tab-access').click();
     await page.getByText('로그인 계정 확인', { exact: true }).click();
     await page.getByRole('alert').filter({ hasText: 'HTTP 403' }).waitFor();
     assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
@@ -126,6 +131,7 @@ try {
     assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
     await emptyStorage();
     stage = 'disconnect';
+    await page.locator('.events-advanced > summary').click();
     await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
     await page.getByRole('button', { name: '관리자 로그인', exact: true }).click();

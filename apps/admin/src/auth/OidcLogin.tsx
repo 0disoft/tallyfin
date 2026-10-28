@@ -1,11 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { ArrowRight, Info, LockKey, SignIn } from '@phosphor-icons/react';
 import { BrowserLogin, LoginError } from './client';
 import { loginConfig } from './config';
 import { initialCallback, clearCallback } from './bootstrap';
 import { useI18n } from '../i18n';
 
-export default function OidcLogin({ onConnected, onBeforeLogin }: { onConnected: (login: BrowserLogin) => void; onBeforeLogin?: () => boolean }) {
+export default function OidcLogin({ onConnected, onBeforeLogin, standalone = false }: { onConnected: (login: BrowserLogin) => void; onBeforeLogin?: () => boolean; standalone?: boolean }) {
   const { t } = useI18n();
+  const headingId = useId();
+  const Heading = standalone ? 'h1' : 'h2';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<'failed' | 'config' | null>(null);
   const [enabled, setEnabled] = useState(false);
@@ -61,14 +64,17 @@ export default function OidcLogin({ onConnected, onBeforeLogin }: { onConnected:
     } catch { if (mountedRef.current) { setError('failed'); setBusy(false); } }
   }
 
-  return <section className="settings-section" aria-labelledby="oidc-login-heading">
-    <h2 id="oidc-login-heading">{t('operations:loginHeading')}</h2>
-    <p className="context-note">{t('operations:loginIntro')}</p>
-    {!enabled && <>
-      <p className="context-note">{t('operations:loginNotConfigured')}</p>
-      <p><a className="secondary-button" href="/demo">{t('operations:loginSampleDemo')}</a></p>
-    </>}
-    <button className="primary-button" type="button" onClick={start} disabled={!enabled || busy}>{busy ? t('operations:loginChecking') : t('operations:loginButton')}</button>
+  return <section className={standalone ? 'oidc-login' : 'settings-section oidc-login'} aria-labelledby={headingId}>
+    {standalone && <span className="login-emblem"><LockKey size={28} aria-hidden="true" /></span>}
+    <Heading id={headingId}>{t('operations:loginHeading')}</Heading>
+    <p className="context-note login-intro">{t('operations:loginIntro')}</p>
+    {!enabled && <div className="login-setup-note">
+      <Info size={20} aria-hidden="true" /><p>{t('operations:loginNotConfigured')}</p>
+    </div>}
+    <div className="login-actions">
+      {enabled && <button className="primary-button" type="button" onClick={start} disabled={busy}><SignIn size={20} aria-hidden="true" />{busy ? t('operations:loginChecking') : t('operations:loginButton')}</button>}
+      {(!enabled || standalone) && <a className={enabled ? 'secondary-button login-demo' : 'primary-button login-demo'} href="/demo">{t('operations:loginSampleDemo')}<ArrowRight size={18} aria-hidden="true" /></a>}
+    </div>
     {error && <p className="form-error" role="alert">{t(error === 'config' ? 'operations:loginConfigError' : 'operations:loginFailed')}</p>}
     {busy && <p className="context-note" role="status" aria-live="polite">{t('operations:loginBusy')}</p>}
   </section>;

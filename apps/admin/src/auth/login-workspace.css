@@ -1,0 +1,528 @@
+/* ==========================================================================
+   Focused signed-out landing
+
+   The API workspace keeps the compact event shell. These rules only apply
+   while the signed-out login workspace is mounted, so an expired session can
+   reuse the same OIDC panel at its normal compact size.
+   ========================================================================== */
+
+.app-shell:has(.login-workspace) .sidebar,
+.app-shell:has(.login-workspace) .mobile-bar,
+.app-shell:has(.login-workspace) .prototype-footer,
+.app-shell:has(.login-workspace) .page-header .title-group,
+.app-shell:has(.login-workspace) .page-header .event-header-context,
+.app-shell:has(.login-workspace) .header-controls .period-control,
+.app-shell:has(.login-workspace) .header-controls .timezone,
+.app-shell:has(.login-workspace) .header-controls .mode-switch {
+  display: none !important;
+}
+
+.app-shell:has(.login-workspace) .workspace {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100vh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.app-shell:has(.login-workspace) .page-header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 0;
+  padding: 16px 24px 0;
+  border: 0;
+  background: transparent;
+}
+
+.app-shell:has(.login-workspace) .page-header .header-controls {
+  width: auto;
+  flex: 0 0 auto;
+  align-self: flex-end;
+  justify-content: flex-end;
+  margin: 0 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.app-shell:has(.login-workspace) .locale-control {
+  min-height: 34px;
+  margin-left: auto;
+  border-color: #d7e0ec;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.app-shell:has(.login-workspace) .locale-control select {
+  font-size: 12px;
+}
+
+.app-shell:has(.login-workspace) .view-content {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.login-workspace {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  min-height: 100%;
+  padding: 24px 24px 44px;
+  background:
+    radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.92) 0, rgba(248, 250, 252, 0.8) 34%, rgba(241, 245, 249, 0) 68%),
+    #f1f5f9;
+  color: #0f172a;
+}
+
+.login-frame {
+  width: min(100%, 500px);
+  min-width: 0;
+  margin-block: auto;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 0 22px;
+  color: #0f172a;
+  font-size: 25px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.login-brand img {
+  width: 40px;
+  height: 30px;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.login-card {
+  width: 100%;
+  min-width: 0;
+  padding: 38px 40px 30px;
+  overflow: visible;
+  background: #ffffff;
+  border: 1px solid #e4e9f0;
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 16px 42px rgba(15, 23, 42, 0.07);
+}
+
+.login-workspace .login-card .oidc-login {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.login-workspace .login-emblem {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin: 0 0 20px;
+  border: 1px solid #d9e6ff;
+  border-radius: 14px;
+  background: #eef4ff;
+  color: #155eef;
+}
+
+.login-workspace .login-emblem svg {
+  width: 26px;
+  height: 26px;
+}
+
+.login-workspace .oidc-login h1,
+.login-workspace .oidc-login h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.login-workspace .login-card .oidc-login .login-intro {
+  margin: 9px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.login-workspace .login-setup-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #e7e2d5;
+  border-radius: 9px;
+  background: #fbf9f3;
+  color: #5f5747;
+}
+
+.login-workspace .login-setup-note > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #8a744b;
+}
+
+.login-workspace .login-setup-note p {
+  min-width: 0;
+  margin: 0;
+  color: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.login-workspace .login-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.login-workspace .login-actions .primary-button,
+.login-workspace .login-actions .secondary-button,
+.login-workspace .login-actions .login-demo {
+  width: 100%;
+  max-width: 100%;
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+  text-decoration: none;
+}
+
+.login-workspace .login-actions .primary-button {
+  border-color: #155eef;
+  background: #155eef;
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgba(21, 94, 239, 0.18);
+}
+
+.login-workspace .login-actions .primary-button:hover:not(:disabled) {
+  border-color: #1049c4;
+  background: #1049c4;
+}
+
+.login-workspace .login-actions .secondary-button {
+  border-color: #d7e0ec;
+  background: #ffffff;
+  color: #344054;
+}
+
+.login-workspace .login-actions .secondary-button:hover:not(:disabled) {
+  border-color: #b9c6d8;
+  background: #f8fafc;
+  color: #1d2939;
+}
+
+.login-workspace .login-actions svg,
+.login-workspace .login-manual svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.login-workspace .login-card .oidc-login .context-note {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.login-workspace .login-card .oidc-login .form-error {
+  margin: 12px 0 0;
+  padding: 9px 11px;
+  border: 1px solid #f4cfcb;
+  border-radius: 8px;
+  background: #fef5f4;
+  color: #b42318;
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.5;
+}
+
+.login-workspace button:disabled,
+.login-workspace input:disabled,
+.login-workspace select:disabled,
+.login-workspace textarea:disabled,
+.login-workspace [aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.52;
+  box-shadow: none;
+}
+
+.login-workspace button:disabled,
+.login-workspace .primary-button:disabled {
+  border-color: #98a2b3;
+  background: #98a2b3;
+  color: #ffffff;
+}
+
+.login-workspace .secondary-button:disabled {
+  border-color: #e2e8f0;
+  background: #f8fafc;
+  color: #667085;
+}
+
+.login-workspace .login-manual {
+  width: 100%;
+  margin: 26px 0 0;
+  padding: 20px 0 0;
+  border-top: 1px solid #edf0f4;
+  font-size: 13px;
+}
+
+.login-workspace .login-manual > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 28px;
+  color: #536174;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  list-style: none;
+}
+
+.login-workspace .login-manual > summary::-webkit-details-marker {
+  display: none;
+}
+
+.login-workspace .login-manual > summary:hover {
+  color: #155eef;
+}
+
+.login-workspace .login-manual > summary svg {
+  color: #98a2b3;
+  transition: transform 160ms ease;
+}
+
+.login-workspace .login-manual[open] > summary {
+  color: #1d2939;
+}
+
+.login-workspace .login-manual[open] > summary svg {
+  color: #667085;
+  transform: rotate(180deg);
+}
+
+.login-workspace .login-manual-body {
+  min-width: 0;
+  margin: 0;
+  padding: 18px 0 2px;
+  border: 0;
+}
+
+.login-workspace .login-manual-body h2 {
+  margin: 0 0 7px;
+  color: #1d2939;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: -0.01em;
+}
+
+.login-workspace .login-manual-body .context-note {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.login-workspace .login-manual-body .settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 18px 0 0;
+}
+
+.login-workspace .login-field {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-workspace .login-field .field-label {
+  display: block;
+  margin: 0;
+  color: #344054;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.login-workspace .login-field .text-input {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid #d0d5dd;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #101828;
+  font-size: 13.5px;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.03);
+}
+
+.login-workspace .login-field .text-input::placeholder {
+  color: #98a2b3;
+}
+
+.login-workspace .login-field .text-input:hover {
+  border-color: #b8c2d0;
+}
+
+.login-workspace .login-field .text-input:focus {
+  border-color: #155eef;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.12);
+}
+
+.login-workspace .login-manual-body .form-actions {
+  display: flex;
+  gap: 10px;
+  margin: 0;
+  padding-top: 2px;
+}
+
+.login-workspace .login-manual-body .form-actions .primary-button {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.login-workspace .login-manual-body .form-actions svg {
+  width: 18px;
+  height: 18px;
+}
+
+.login-workspace .login-manual-body .form-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.5;
+}
+
+.login-workspace .login-card > .state-panel {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.login-workspace summary:focus-visible,
+.login-workspace button:focus-visible,
+.login-workspace a:focus-visible {
+  outline: 2px solid #155eef;
+  outline-offset: 2px;
+}
+
+@media (max-width: 600px) {
+  .app-shell:has(.login-workspace) .page-header {
+    padding: 12px 16px 0;
+  }
+
+  .login-workspace {
+    padding: 18px 16px 28px;
+  }
+
+  .login-brand {
+    margin-bottom: 18px;
+    font-size: 23px;
+  }
+
+  .login-card {
+    padding: 24px 20px 22px;
+    border-radius: 14px;
+  }
+
+  .login-workspace .login-emblem {
+    width: 46px;
+    height: 46px;
+    margin-bottom: 17px;
+    border-radius: 12px;
+  }
+
+  .login-workspace .login-emblem svg {
+    width: 23px;
+    height: 23px;
+  }
+
+  .login-workspace .oidc-login h1,
+  .login-workspace .oidc-login h2 {
+    font-size: 24px;
+  }
+
+  .login-workspace .login-card .oidc-login .login-intro {
+    font-size: 13.5px;
+    line-height: 1.6;
+  }
+
+  .login-workspace .login-manual {
+    margin-top: 22px;
+    padding-top: 17px;
+  }
+}
+
+@media (max-height: 680px) {
+  .login-workspace {
+    padding-top: 14px;
+    padding-bottom: 24px;
+  }
+
+  .login-frame {
+    margin-block: 0 auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-workspace .login-manual > summary svg {
+    transition: none;
+  }
+}

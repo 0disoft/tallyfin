@@ -1,5 +1,30 @@
 # Validation
 
+## Focused administrator login - 2026-10-28
+
+- Replaced the unbounded disconnected workspace with a branded 500px login
+  card. Analysis navigation, report dates and the analysis footer are hidden
+  while disconnected; language selection stays available. Direct-token fields
+  stay in a collapsed disclosure. Without a configured provider, the demo is
+  the available primary action. Connected reauthentication stays compact.
+- Passed `typecheck:admin`, `build:admin`, focused authentication and locale
+  tests (17) and emitted bundle tests (2), retaining the 100 KiB initial JS
+  budget. The existing `verify:admin-login` smoke now opens connection and
+  Settings tabs before checking their controls, matching the prior redesign.
+  It passes PKCE, signed reads, password-menu access, rotating refresh,
+  invalid-state rejection, expiry recovery, unsaved-draft protection, disconnect
+  and reload checks: zero page errors and zero API writes.
+- Inspected desktop and mobile captures in `.tmp/login-design/`. All twelve
+  languages render at a measured 390 CSS pixels without document horizontal
+  overflow; the expanded disclosure and endpoint value survive every switch.
+  Main title uses h1, controls retain labels, and decorative icons are hidden
+  from assistive technology. A full accessibility audit was not performed.
+- Updated `docs/frontend/FRONTEND_DESIGN.md`, `apps/admin/AGENTS.md` and
+  `design-qa.md`. No API/DB, auth-policy, dependency, Worker, repository-hygiene
+  or CI/runner changes. Backend/full-repository and Sites checks were skipped
+  for this UI-only change. Production authentication/deployment was not tested;
+  the local development server remains running. No push or deployment.
+
 ## Twelve-language admin activation - 2026-10-28
 
 - Adopted the exact target set from `zdp-architecture`'s
