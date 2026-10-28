@@ -4,6 +4,8 @@ Account password changes must be directly reachable from the signed-in administr
 
 The signed-out administrator entry is a focused, branded login card with the language selector available. Hide analysis navigation and date controls until connected. Keep direct bearer-token connection in a collapsed advanced section, with bounded fields. When no login provider is configured, make the sample demo the available primary action instead of showing a nonfunctional login button. Preserve compact inline reauthentication in connected workspaces.
 
+Keep login body text, notices, form labels, inputs, buttons and language selection at least 1rem on desktop and mobile. Titles are already large enough; do not compensate for small supporting text by enlarging headings. Use readable supporting-text contrast.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

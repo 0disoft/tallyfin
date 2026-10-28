@@ -10,6 +10,9 @@ connection form. With a configured provider, administrator login is the main
 action; without one, the sample demo is the main available action. Existing
 catalog messages cover all twelve languages without adding translation keys.
 
+Supporting text and controls use at least 1rem on desktop and mobile, including
+manual-connection help. Keep readable text contrast and preserve heading sizes.
+
 `LiveDashboard` owns the disconnected card and manual form. `OidcLogin` uses
 an optional standalone presentation while retaining its compact connected
 reauthentication variant and existing login/callback lifecycle. Disclosure,

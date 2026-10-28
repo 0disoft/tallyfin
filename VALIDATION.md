@@ -1,5 +1,19 @@
 # Validation
 
+## Login text readability - 2026-10-28
+
+- Increased login supporting text and controls from 12-14px to 1rem (16px
+  with the default root size), including manual-connection help and errors.
+  Darkened supporting text/placeholders and enlarged disclosure/language targets.
+  Heading sizes are retained. Scoped selectors override compact-shell help.
+- Passed `build:admin` and browser computed-style/visual checks on desktop and
+  measured 390px mobile: all four visible help paragraphs, labels and inputs
+  are 16px, with no document horizontal overflow after expanding the form.
+  Capture: `.tmp/login-design/05-readable-text.jpg`.
+- Updated frontend design and admin guidance. CSS-only change: auth/unit and
+  backend suites were not repeated. No API/DB, CI/runner, hygiene or dependency
+  changes, push or deployment; production and full accessibility checks skipped.
+
 ## Focused administrator login - 2026-10-28
 
 - Replaced the unbounded disconnected workspace with a branded 500px login
