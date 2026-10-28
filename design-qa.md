@@ -1,3 +1,75 @@
+# Goals design QA — 2026-10-28
+
+## Target and evidence
+
+- Approved combination: goal explorer/inspector (option 3), default overview
+  (option 1), funnel journey (option 2), and current/prior comparison (option 4).
+- Primary source: `C:/Users/cherr/.codex/generated_images/01a15ad4-6aab-7240-8474-7038a2c27c48/exec-2c280bfc-ba42-44f9-a61c-e539c0ae677c.png`
+  (1487 x 1058 pixels, workflow failure tab).
+- Final production-build IAB preview: `http://127.0.0.1:5190/`, isolated GET-only
+  example API. The project is labeled example data; no production writes,
+  credentials or traffic measurements are involved.
+- Same-state capture: `.tmp/goals-failure-desktop-final.png`, 1652 x 1176 pixels
+  including IAB capture padding. Measured DOM viewport: 1487 x 1058 CSS pixels,
+  browser zoom/pixel ratio 90%/0.9. `.tmp/goals-failure-desktop-cropped.png`
+  removes right/bottom capture padding without resampling app content.
+- Same-input comparison: `.tmp/goals-qa-comparison.png`, source left and current
+  failure view right. Both show the conversion workflow, 86.0% rate, 4800 starts,
+  4128 successes, 96 confirmed failures and 576 pending attempts. Failure splits
+  and taxonomy follow the validated example API rather than invented labels.
+- Other reviewed states: `.tmp/goals-overview-desktop-cropped.png`,
+  `.tmp/goals-comparison-desktop-cropped.png`,
+  `.tmp/goals-funnel-desktop-cropped.png`, `.tmp/goals-overview-mobile-final.png`.
+- Responsive/access evidence: `.tmp/admin-goal-access-zVAAMY/report.json`,
+  17 scenario groups and captures at 390/768/1280px. IAB mobile DOM/document
+  widths both measured 390px. Final production-build console: no errors/warnings.
+
+## Findings and fixes
+
+- P2, chart resize: the previous desktop SVG width briefly escaped on rotation.
+  Clip only the chart viewport; immediate resize assertions now pass and wide
+  numeric tables retain local keyboard-accessible scrolling.
+- P2, tabs: an underline extending outside its scroll box created a vertical
+  scrollbar. Moved it inside and suppressed vertical tab overflow. Rechecked.
+- P2, failure/funnel hierarchy: added failure-share bars and explicit blue native
+  progress styling, preserving numeric text, accessible values and denominators.
+- No remaining P0/P1/P2 findings. Source and implementation were opened together
+  and inspected at full size, including explorer labels/keys, selection styling,
+  outcome counts/strip, failure bars, tabs and comparison cells.
+
+## Required fidelity surfaces and accepted adaptations
+
+- Fonts/type: retained self-hosted Inter/Noto Sans KR; titles, completion rate
+  and outcome counts establish the hierarchy. Labels and registered keys remain
+  distinct. Compact sizing intentionally follows the approved event workspace.
+- Spacing/layout: existing 220px navigation, 280px explorer, flexible inspector;
+  mobile stacks explorer above detail. Operational comparison/CSV controls remain
+  in a compact action strip; connection/schema settings expand in the header.
+- Colors/tokens: existing blue/white/slate palette; blue completion/success,
+  red confirmed failure, muted pending, plus explicit text for each status.
+- Images/icons: retained Tallyfin raster branding and Phosphor icons; no new
+  decorative imagery or handmade icons. Bar/chart data remains programmatic.
+- Copy/content: validated cohort counts/rates, unknown no-start/historical
+  values, %p rate changes. Pending is not failure; funnel non-reach is not a
+  confirmed failure. Registered enum keys and measurement diagnostics replace
+  the mock's illustrative reason labels; missing values never become fake zeros.
+- The default inspector is overview as approved. Funnel list rows show stage
+  count instead of an unread completion rate; only a selected funnel is fetched.
+  Existing detailed tables, daily drilldown, property reads and CSV remain.
+
+## Checklist
+
+- [x] Desktop source/current comparison and detailed hierarchy review.
+- [x] Overview, failure bars, funnel stages and period comparison.
+- [x] Search empty state retains detail; native keyboard goal selection.
+- [x] Loading/error/recovery, denied access, disabled CSV and stale responses.
+- [x] Mobile/tablet/desktop overflow assertions and local table scrolling.
+- [x] Typecheck, 382 admin tests, build, 2 bundle tests, both access browser checks.
+
+final result: passed
+
+---
+
 # Event analytics design QA — 2026-10-28
 
 ## Comparison target and evidence
