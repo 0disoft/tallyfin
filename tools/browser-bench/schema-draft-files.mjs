@@ -6,6 +6,8 @@ import { Provisioner } from '../provision/store.ts';
 
 /** Exercises actual download bytes and FileReader through the live schema editor. */
 export async function verifySchemaDraftFiles(page, local, directory, progress = () => {}) {
+  if (await page.locator('details.events-advanced').getAttribute('open') === null)
+    await page.getByText('연결 설정', { exact: true }).click();
   const writes = local.counts.apiWrites;
   const draft = page.locator('#schema-draft'), target = page.locator('#schema-version');
   const privacy = page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true });
@@ -103,7 +105,8 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
   await page.screenshot({ path: resolve(directory, 'schema-draft-files-mobile.png'), fullPage: true });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
-  progress('unfinished'); await page.locator('.schema-json-editor > summary').click();
+  progress('unfinished');
+  await page.getByRole('button', { name: 'JSON 직접 편집', exact: true }).click();
   await draft.fill('{unfinished 한글'); await target.fill('');
   const unfinished = await save('schema-draft-unfinished.json');
   await draft.fill('{}'); const restored = consent(true); await choose(unfinished); await restored;

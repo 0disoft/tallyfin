@@ -1,5 +1,32 @@
 # Validation
 
+## Settings tabs and schema workbench redesign — 2026-10-28
+
+- Settings uses five horizontal tabs: project, collection diagnostics, event
+  schema, SDK connection and access. Project fields use flat labeled sections
+  with persistent save/reset actions. The schema editor sits beside validation
+  and manual privacy checks, with JSON/form modes and collapsed draft/version
+  utilities. Actual collection limits and paused-project semantics remain.
+- Hidden panels stay mounted: tab changes retain drafts, unresolved writes,
+  permission locks and cross-section coordination. Keyboard arrows/Home/End
+  select tabs. Settings omits the report date range while retaining connection
+  and account controls. Visual and 390/768/1280px checks are in `design-qa.md`.
+- Passed typecheck, portable admin build, emitted bundle checks (2 tests), and
+  admin unit tests (382 tests, test-concurrency 2). One initial fully parallel
+  run hit an unrelated 10ms read-scheduler timing assertion; it passed with
+  bounded concurrency without changing that implementation or test.
+- Passed `verify:admin-settings-workspace`, `verify:admin-settings-recovery`,
+  `verify:admin-settings-navigation`, `verify:admin-schema-comparison`,
+  `verify:admin-server-draft`, `verify:admin-access`, `verify:admin-goal-access`,
+  `verify:admin-mode-exit`, `verify:admin-onboarding`, and `git diff --check`.
+  Existing browser checks now select visible tabs before interacting. The
+  onboarding check executes generated SDK code, verifies one event in local D1
+  and the event explorer, and covers file-read cancellation/timeout/recovery.
+- Source-of-truth updates: this record and `docs/frontend/FRONTEND_DESIGN.md`.
+  No API/DB contract, Worker, dependency, hygiene or CI/runner changes. Backend
+  and full-repository suites and Sites packaging were skipped for this local
+  admin UI change. Production behavior remains unverified; no push or deployment.
+
 ## Goals explorer and inspector redesign — 2026-10-28
 
 - Replaced the long sequence of workflow/funnel sections with a grouped goal

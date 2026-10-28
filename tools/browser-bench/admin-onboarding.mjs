@@ -81,6 +81,8 @@ try {
       await confirm.click();
     }
     await page.getByRole('heading', { name: '프로젝트 생성을 확인했어요', exact: true }).waitFor();
+    await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+    await page.getByRole('button', { name: '폼으로 편집', exact: true }).click();
     stage = 'schema'; await page.locator('#schema-event-add:not([disabled])').click();
     await page.locator('#schema-event-0-name').fill('action_complete');
     await page.locator('#schema-event-0-label').fill('Action complete');
@@ -106,6 +108,7 @@ try {
     await page.getByRole('button', { name: '정의 검증', exact: true }).click();
     const privacy = page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true });
     await privacy.check();
+    await page.getByText('발행 버전', { exact: true }).click();
     const loadVersion = page.getByRole('button', { name: 'v1 불러오기', exact: true });
     const originalDraft = await page.locator('#schema-draft').inputValue();
     let replacementDialogs = 0;
@@ -138,8 +141,9 @@ try {
     assert.equal(replacementDialogs, 3);
     page.off('dialog', unexpectedDialog);
     stage = 'schema-draft-files';
+    await page.getByText('초안 파일·서버 저장', { exact: true }).click();
     const draftFiles = await verifySchemaDraftFiles(page, local, directory, step => { stage = `schema-draft-files/${step}`; });
-    stage = 'sdk'; await page.locator('#sdk-origin').fill(origin);
+    stage = 'sdk'; await page.getByRole('tab', { name: 'SDK 연결', exact: true }).click(); await page.locator('#sdk-origin').fill(origin);
     const snippet = await page.getByRole('textbox', { name: '브라우저 SDK 연결 코드', exact: true }).inputValue();
     // Compile exactly the UI-generated connection code against the freshly built local SDK.
     const compiled = await build({ stdin: { contents: snippet + '\nwindow.onboardingAnalytics = analytics;', loader: 'ts', resolveDir: root },
@@ -163,8 +167,8 @@ try {
     assert.equal(step, '3 SDK 연결');
     stage = 'query'; await page.getByRole('button', { name: '이벤트 분석', exact: true }).click();
     await page.getByRole('button', { name: 'action_complete', exact: true }).waitFor();
-    const row = page.getByRole('row').filter({ has: page.getByRole('button', { name: 'action_complete', exact: true }) });
-    assert.equal(await row.locator('.number-cell').innerText(), '1');
+    const event = page.getByRole('button', { name: 'action_complete', exact: true });
+    assert.equal(await event.locator('.event-explorer-value').innerText(), '1');
     assert.equal(routeError, false); assert.equal(pageErrors, 0);
     assert.equal(local.counts.browserBatches, 1);
     assert.equal(await page.evaluate(() => localStorage.length + sessionStorage.length), 0);

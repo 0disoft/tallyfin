@@ -90,6 +90,8 @@ try {
   await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
   stage = 'representative-workflow-editor';
   await page.getByRole('button', { name: '설정', exact: true }).click();
+  await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+  await page.getByRole('button', { name: '폼으로 편집', exact: true }).click();
   const representative = page.getByRole('combobox', { name: '개요의 대표 작업 흐름', exact: true });
   await expect(representative).toHaveValue('calculation');
   const originalDraft = await page.locator('#schema-draft').inputValue();
@@ -105,7 +107,9 @@ try {
   await page.getByRole('button', { name: '정의 검증', exact: true }).click();
   await expect(page.locator('#schema-errors')).toContainText('/representativeWorkflowId');
   await expect(representative).toBeFocused(); await expect(representative).toHaveAttribute('aria-invalid', 'true');
+  await page.getByRole('button', { name: 'JSON 직접 편집', exact: true }).click();
   await page.locator('#schema-draft').fill(originalDraft);
+  await page.getByRole('button', { name: '폼으로 편집', exact: true }).click();
   await expect(representative).toHaveValue('calculation');
   await page.screenshot({ path: resolve(directory, 'representative-editor.png'), fullPage: true });
   scenarios.push(stage);
@@ -120,6 +124,7 @@ try {
   await page.getByRole('button', { name: '정의 검증', exact: true }).click();
   await expect(page.locator('#schema-errors')).toContainText('/workflows/0/failureReasonProperty');
   await expect(failureProperty).toBeFocused(); await expect(failureProperty).toHaveAttribute('aria-invalid', 'true');
+  await page.getByRole('button', { name: 'JSON 직접 편집', exact: true }).click();
   await page.locator('#schema-draft').fill(originalDraft); scenarios.push(stage);
 
   await page.getByRole('button', { name: '개요', exact: true }).click();

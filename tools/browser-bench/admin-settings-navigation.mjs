@@ -55,7 +55,10 @@ try {
     await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
     await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
     const navigation = page.getByRole('navigation', { name: '주요 탐색', exact: true });
-    const enter = async () => { await navigation.getByRole('button', { name: '설정', exact: true }).click(); await page.locator('#settings-name').waitFor(); };
+    const projectTab = async () => { await page.getByRole('tab', { name: '프로젝트', exact: true }).click(); };
+    const schemaTab = async () => { await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click(); await page.getByRole('button', { name: '폼으로 편집', exact: true }).click(); };
+    const accessTab = async () => { await page.getByRole('tab', { name: '접근 권한', exact: true }).click(); };
+    const enter = async () => { await navigation.getByRole('button', { name: '설정', exact: true }).click(); await projectTab(); await page.locator('#settings-name').waitFor(); const connection = page.locator('details.events-advanced'); if (await connection.getAttribute('open') === null) await page.getByText('연결 설정', { exact: true }).click(); };
     const leave = async () => { await navigation.getByRole('button', { name: '이벤트 분석', exact: true }).click(); await page.getByRole('heading', { name: '이벤트 분석', exact: true }).waitFor(); };
     const name = page.locator('#settings-name'), label = page.locator('#schema-event-0-label');
     await enter(); await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false && document.getElementById('schema-event-0-label')?.disabled === false);
@@ -89,12 +92,12 @@ try {
         assert.equal(page.isClosed(), false);
       } finally { clearTimeout(timer); page.off('dialog', dismiss); }
     };
-    await name.fill('Retained navigation settings');
+    await projectTab(); await name.fill('Retained navigation settings');
     const projectSelect = page.getByRole('combobox', { name: '프로젝트 선택', exact: true });
     if (values['check-analysis-refresh']) {
-      await label.fill('Retained navigation schema');
+      await schemaTab(); await label.fill('Retained navigation schema');
       for (const [kind, disclosure] of [['grant', '계정 권한 추가'], ['publisher', '발행자 추가']]) {
-        await page.getByText(disclosure, { exact: true }).click();
+        await accessTab(); await page.getByText(disclosure, { exact: true }).click();
         await page.locator(`#${kind}-add-subject`).fill(`retained-${kind}`);
       }
       await leave();
@@ -118,12 +121,12 @@ try {
       await failure.locator('..').getByRole('button', { name: '다시 시도', exact: true }).click();
       await name.waitFor();
       await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
-      await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
+      await schemaTab(); await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
       assert.equal(await projectSelect.inputValue(), 'sembom'); assert.equal(await name.inputValue(), 'Retained navigation settings');
       assert.equal(await label.inputValue(), 'Retained navigation schema');
       for (const kind of ['grant', 'publisher']) {
         const subject = page.locator(`#${kind}-add-subject`);
-        assert.equal(await subject.inputValue(), `retained-${kind}`); await subject.fill('');
+        assert.equal(await subject.inputValue(), `retained-${kind}`); await accessTab(); await subject.fill('');
       }
       assert.equal(local.counts.apiWrites, 0); assert.equal(interceptedProjectReads, 1);
     }
@@ -134,16 +137,16 @@ try {
       await answerConfirm(page, () => projectSelect.selectOption('access-other'), false);
       assert.equal(await projectSelect.inputValue(), 'sembom');
       assert.equal(await name.inputValue(), 'Retained navigation settings');
-      await name.fill(initialName); await label.fill('Retained navigation schema');
+      await projectTab(); await name.fill(initialName); await schemaTab(); await label.fill('Retained navigation schema');
       stage = 'dirty-schema-reload'; await cancelReload();
       assert.equal(await label.inputValue(), 'Retained navigation schema');
       stage = 'schema-project-switch-cancel';
       await answerConfirm(page, () => projectSelect.selectOption('access-other'), false);
       assert.equal(await projectSelect.inputValue(), 'sembom');
       assert.equal(await label.inputValue(), 'Retained navigation schema');
-      await name.fill('Retained navigation settings');
+      await projectTab(); await name.fill('Retained navigation settings');
     }
-    stage = 'draft-return'; await label.fill('Retained navigation schema');
+    stage = 'draft-return'; await schemaTab(); await label.fill('Retained navigation schema');
     await leave(); assert.equal(await name.isVisible(), false); assert.equal(await label.isVisible(), false);
     if (values['check-unload']) {
       stage = 'hidden-drafts-reload'; await cancelReload();
@@ -187,7 +190,7 @@ try {
     assert.equal(await label.inputValue(), 'Retained navigation schema');
     // Returning rechecks permission and requires an explicit comparison choice.
     await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
-    await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
+    await schemaTab(); await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
     assert.equal(await name.isEditable(), true); assert.equal(await label.isEditable(), true);
     assert.equal(local.counts.apiWrites, expectedWrites);
     assert.equal((await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name, initialName);
@@ -197,7 +200,7 @@ try {
     assert.equal(await name.inputValue(), 'Retained navigation settings'); assert.equal(await label.inputValue(), 'Retained navigation schema');
     assert.equal(await name.isEditable(), false); assert.equal(await label.isEditable(), false);
     assert.equal(await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).isDisabled(), true);
-    assert.equal(await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).isDisabled(), true);
+    await schemaTab(); assert.equal(await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).isDisabled(), true);
     stage = 'scope-disposal'; await leave();
     if (values['check-created-exit']) {
       stage = 'created-project-open-accept';
@@ -236,12 +239,12 @@ try {
       unloadChecked: Boolean(values['check-unload']), tabCloseCanceled: Boolean(values['check-unload']), unloadWarnings, pageErrors, routeError, ...local.counts };
     await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2) + '\n'); console.log(JSON.stringify(report));
   }
-} catch {
+} catch (error) {
   if (directory) {
-    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, code: 'admin_settings_navigation_failed', counts: local?.counts, unloadProbe }) + '\n');
+    await writeFile(resolve(directory, 'failure.json'), JSON.stringify({ stage, code: 'admin_settings_navigation_failed', message: error.message, counts: local?.counts, unloadProbe }) + '\n');
     await page?.screenshot({ path: resolve(directory, 'failure.png'), fullPage: true }).catch(() => {});
   }
-  process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, code: 'admin_settings_navigation_failed' }));
+  process.exitCode = 1; console.error(JSON.stringify({ verified: false, stage, code: 'admin_settings_navigation_failed', message: error.message, directory }));
 } finally {
   clearTimeout(watchdog); heldProjectRead?.release.resolve(); await browser?.close(); await server?.close(); await local?.mf.dispose();
 }

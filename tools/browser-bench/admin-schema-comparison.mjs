@@ -82,6 +82,9 @@ try {
     await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
     const project = page.getByRole('combobox', { name: '프로젝트 선택', exact: true });
     await project.selectOption('sembom'); await page.getByRole('button', { name: '설정', exact: true }).click();
+    await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+    await page.getByText('발행 버전', { exact: true }).click();
+    await page.getByText('버전 비교', { exact: true }).click();
     const comparison = page.getByRole('region', { name: '버전 간 정의 비교', exact: true });
     const from = comparison.getByRole('combobox', { name: '기준 버전', exact: true }), to = comparison.getByRole('combobox', { name: '비교 버전', exact: true });
     const compare = () => comparison.getByRole('button', { name: /^(정의 비교|다시 비교)$/ });
@@ -124,12 +127,18 @@ try {
     held = { received: deferred(), release: deferred(), finished: deferred() }; fault = 'held';
     await from.selectOption('1'); await compare().click(); await waitForHeld(held.received.promise);
     page.once('dialog', dialog => dialog.accept()); await project.selectOption('access-other');
+    await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+    await page.getByText('버전 비교', { exact: true }).click();
     await expect(comparison).toContainText('발행된 버전이 두 개 이상이면 비교할 수 있어요.');
     held.release.resolve(); await waitForHeld(held.finished.promise); await expect(rows).toHaveCount(0); scenarios.push(stage);
     stage = 'reader-access';
     // The goals fixture has a backup owner, so downgrading this test identity is safe.
     await provisioner.apply(await provisioner.plan('grant', { projectId: 'sembom', issuer: local.issuer, subject: 'synthetic-login-operator', role: 'reader' }));
-    await project.selectOption('sembom'); await expect(from).toBeEnabled();
+    await project.selectOption('sembom');
+    await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+    await page.getByText('버전 비교', { exact: true }).click();
+    await page.getByText('발행 버전', { exact: true }).click();
+    await expect(from).toBeEnabled();
     await page.getByRole('button', { name: '이전 버전 더 보기', exact: true }).click();
     await from.selectOption('1'); await to.selectOption('27'); await compare().click();
     await expect(rows).toHaveCount(6); await expect(target).toBeDisabled(); scenarios.push(stage);

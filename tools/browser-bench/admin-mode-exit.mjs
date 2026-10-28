@@ -112,10 +112,12 @@ try {
     }
     const navigation = page.getByRole('navigation', { name: '주요 탐색', exact: true });
     await navigation.getByRole('button', { name: '설정', exact: true }).click();
+    await page.getByText('연결 설정', { exact: true }).click();
     const name = page.locator('#settings-name'), label = page.locator('#schema-event-0-label');
     await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false && document.getElementById('schema-event-0-label')?.disabled === false);
     const initialName = (await local.db.prepare('SELECT name FROM projects WHERE id = ?').bind('sembom').first()).name;
     if (values['check-authority-drafts']) {
+      await page.getByRole('tab', { name: '접근 권한', exact: true }).click();
       stage = 'authority-start'; assert.equal(await project.inputValue(), 'sembom');
       const cancelReload = async () => {
         let observed = false;
@@ -192,7 +194,11 @@ try {
       await page.locator('#grant-add-subject').fill('Discard only on approved exit');
       await page.locator('#publisher-add-subject').fill('Discard only on approved exit');
     }
-    await name.fill('Mode exit draft'); await label.fill('Mode exit schema');
+    await page.getByRole('tab', { name: '프로젝트', exact: true }).click();
+    await name.fill('Mode exit draft');
+    await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+    await page.getByRole('button', { name: '폼으로 편집', exact: true }).click();
+    await label.fill('Mode exit schema');
     stage = 'same-mode'; await noDialog(() => api.click());
     assert.equal(await name.inputValue(), 'Mode exit draft'); assert.equal(await label.inputValue(), 'Mode exit schema');
     if (values['check-authority-drafts']) {
@@ -206,7 +212,9 @@ try {
     assert.equal(await name.inputValue(), 'Mode exit draft'); assert.equal(await label.inputValue(), 'Mode exit schema');
     assert.equal(await page.getByRole('button', { name: '관리자 로그인', exact: true }).count(), 0);
     stage = 'draft-return'; await navigation.getByRole('button', { name: '설정', exact: true }).click();
+    await page.getByRole('tab', { name: '프로젝트', exact: true }).click();
     await page.getByRole('button', { name: '내 변경 유지하고 검토', exact: true }).click();
+    await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
     await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
     assert.equal(await name.isEditable(), true); assert.equal(await label.isEditable(), true);
     assert.equal(await name.inputValue(), 'Mode exit draft'); assert.equal(await label.inputValue(), 'Mode exit schema');

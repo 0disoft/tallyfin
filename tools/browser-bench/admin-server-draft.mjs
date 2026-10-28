@@ -61,6 +61,9 @@ try {
       await page.getByRole('heading', { name: '등록 이벤트 집계', exact: true }).waitFor();
       await page.getByRole('combobox', { name: '프로젝트 선택', exact: true }).selectOption('sembom');
       await page.getByRole('button', { name: '설정', exact: true }).click();
+      await page.getByText('연결 설정', { exact: true }).click();
+      await page.getByRole('tab', { name: '이벤트 스키마', exact: true }).click();
+      await page.getByText('초안 파일·서버 저장', { exact: true }).click();
       await expect(page.locator('#schema-version')).toBeEnabled();
       await page.getByText('JSON 직접 편집', { exact: true }).click();
     };

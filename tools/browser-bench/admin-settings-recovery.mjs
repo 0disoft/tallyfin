@@ -135,6 +135,7 @@ try {
     assert.equal(await name.isEditable(), false); assert.equal(await save.isDisabled(), true);
     await local.setRole('owner');
     // The explicit header refresh invokes the editor's existing permission recovery path.
+    await page.getByText('연결 설정', { exact: true }).click();
     await page.getByRole('button', { name: '새로고침', exact: true }).click();
     await page.waitForFunction(() => document.getElementById('settings-name')?.disabled === false);
     assert.equal(await name.inputValue(), 'Committed before role loss'); assert.equal(attemptedWrites, 5);
