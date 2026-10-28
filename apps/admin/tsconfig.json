@@ -4,7 +4,7 @@
     "module": "ESNext", "moduleResolution": "bundler", "jsx": "react-jsx",
     "strict": true, "noEmit": true, "allowJs": true, "checkJs": false,
     "allowImportingTsExtensions": true,
-    "skipLibCheck": true, "types": ["vite/client"]
+    "skipLibCheck": true, "types": ["vite/client", "@0disoft/saylo-vite/virtual"]
   },
   "include": ["src"]
 }

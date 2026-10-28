@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import saylo from "@0disoft/saylo-vite";
 import { collectorProxy } from "./scripts/local-proxy.mjs";
 import { fontAssets } from "./scripts/font-assets.mjs";
 
@@ -20,5 +21,8 @@ export default defineConfig(({ command }) => ({
       clientFiles: ["./src/main.jsx"],
     },
   },
-  plugins: [fontAssets(), react()],
+  plugins: [fontAssets(), react(), saylo({
+    localesDir: "locales", baseLocale: "ko", initialLocale: "ko", timeZone: "UTC",
+    typegen: { outFile: "src/i18n/schema.generated.d.ts" },
+  })],
 }));

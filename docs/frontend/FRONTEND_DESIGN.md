@@ -1,5 +1,26 @@
 # Tallyfin Frontend Design
 
+## Saylo UI locale pilot - 2026-10-28
+
+The client admin uses published Saylo core/React/Vite alpha packages. Flat
+`locales/ko/admin.json` and `locales/en/admin.json` catalogs own pilot UI copy;
+Saylo generates the typed message schema during typecheck and Vite development.
+A stable store and Provider are created once per client application, outside
+React renders. Locale changes are store updates, never React keys or navigation.
+
+The header offers Korean/English. Korean remains the initial fallback and only
+the supported locale preference is persisted under `tallyfin.uiLocale`.
+Denied browser storage keeps the app usable. Tokens and identity are never saved
+with this preference. Document language/title follow the selected UI locale.
+Development catalog edits use Saylo's Vite connection; module disposal releases
+its subscription and store. Production has compiled catalogs and no dev client.
+
+The pilot covers shell navigation/header and Overview copy, not a full English
+translation of settings, event analysis, goals, login dialogs or advanced service
+details. An English notice makes this scope visible. Project/event/workflow labels
+remain administrator data. UI locale does not change report dates, project
+timezones, API identifiers or aggregation. No API/DB contract changes.
+
 ## Overview collection and completion workspace - 2026-10-28
 
 The API Overview uses the compact shared header with a project picker, report
