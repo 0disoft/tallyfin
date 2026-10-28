@@ -9,15 +9,16 @@ import LiveSdkSetup from './LiveSdkSetup';
 import type { ApiClient } from './api/client';
 import type { ProjectSettings, Registry } from './api/types';
 import type { DraftExitRegistration } from './api/draft-exit-guard';
+import { useI18n } from './i18n';
 import './settings-workspace.css';
 
 const ObservationReportPanel = lazy(() => import('./ObservationReportPanel'));
 const TABS = [
-  { id: 'project', label: '프로젝트', panel: 'editor' },
-  { id: 'diagnostics', label: '수집 진단', panel: 'diagnostics' },
-  { id: 'schema', label: '이벤트 스키마', panel: 'schema' },
-  { id: 'sdk', label: 'SDK 연결', panel: 'sdk' },
-  { id: 'access', label: '접근 권한', panel: 'editor' },
+  { id: 'project', label: 'tabProject', panel: 'editor' },
+  { id: 'diagnostics', label: 'tabDiagnostics', panel: 'diagnostics' },
+  { id: 'schema', label: 'tabSchema', panel: 'schema' },
+  { id: 'sdk', label: 'tabSdk', panel: 'sdk' },
+  { id: 'access', label: 'tabAccess', panel: 'editor' },
 ] as const;
 type Tab = typeof TABS[number]['id'];
 
@@ -31,11 +32,12 @@ type Props = {
 /** Controllers remain scoped to the current session/project across analysis navigation. */
 export default function LiveSettingsWorkspace({ client, projectId, version, registry, newlyCreated, refreshTick,
   setupRefreshTick, diagnosticsRevision, onSaved, onAccessLost, onVersionChange, registerDraft }: Props) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('project');
   const tabsRef = useRef<HTMLElement>(null);
   const select = (next: Tab) => { setTab(next); tabsRef.current?.querySelector<HTMLButtonElement>(`#settings-tab-${next}`)?.focus(); };
   return <div className="settings-workspace">
-    <nav className="settings-tabs" role="tablist" aria-label="설정 항목" ref={tabsRef} onKeyDown={event => {
+    <nav className="settings-tabs" role="tablist" aria-label={t('settings:tabsLabel')} ref={tabsRef} onKeyDown={event => {
       const index = TABS.findIndex(item => item.id === tab);
       const next = event.key === 'ArrowRight' ? (index + 1) % TABS.length
         : event.key === 'ArrowLeft' ? (index + TABS.length - 1) % TABS.length
@@ -45,17 +47,17 @@ export default function LiveSettingsWorkspace({ client, projectId, version, regi
     }}>
       {TABS.map(item => <button key={item.id} id={`settings-tab-${item.id}`} type="button" role="tab"
         aria-selected={tab === item.id} aria-controls={`settings-panel-${item.panel}`} tabIndex={tab === item.id ? 0 : -1}
-        onClick={() => setTab(item.id)}>{item.label}</button>)}
+        onClick={() => setTab(item.id)}>{t(`settings:${item.label}`)}</button>)}
     </nav>
-    {newlyCreated && <section className="project-onboarding" aria-label="새 프로젝트 연결" role="status">
-      <h2>프로젝트 생성을 확인했어요</h2><ol className="setup-steps"><li>1 프로젝트 완료</li><li aria-current={registry ? undefined : 'step'}>2 이벤트 스키마</li><li aria-current={registry ? 'step' : undefined}>3 SDK 연결</li></ol>
-      <p>먼저 이벤트 스키마를 검증·발행한 뒤 SDK를 연결하세요.</p><button type="button" className="text-button" onClick={() => select('schema')}>이벤트 스키마로 이동</button> · <button type="button" className="text-button" onClick={() => select('sdk')}>SDK 연결 안내</button>
+    {newlyCreated && <section className="project-onboarding" aria-label={t('settings:newProjectLabel')} role="status">
+      <h2>{t('settings:newProjectTitle')}</h2><ol className="setup-steps"><li>{t('settings:newProjectStep1')}</li><li aria-current={registry ? undefined : 'step'}>{t('settings:newProjectStep2')}</li><li aria-current={registry ? 'step' : undefined}>{t('settings:newProjectStep3')}</li></ol>
+      <p>{t('settings:newProjectHelp')}</p><button type="button" className="text-button" onClick={() => select('schema')}>{t('settings:goToSchema')}</button> · <button type="button" className="text-button" onClick={() => select('sdk')}>{t('settings:goToSdk')}</button>
     </section>}
     {/* Hide panels without unmounting their draft controllers or unresolved writes. */}
     <section id="settings-panel-diagnostics" role="tabpanel" aria-labelledby="settings-tab-diagnostics" hidden={tab !== 'diagnostics'} tabIndex={0}>
     <CollectionDiagnostics client={client} projectId={projectId} version={version} refreshTick={refreshTick + setupRefreshTick + diagnosticsRevision} />
       <LiveHealth client={client} />
-      <DeferredPanel label="운영 로그 보고서"><ObservationReportPanel client={client} /></DeferredPanel>
+      <DeferredPanel label={t('settings:operationsLogReport')}><ObservationReportPanel client={client} /></DeferredPanel>
     </section>
     <section id="settings-panel-editor" role="tabpanel" aria-labelledby={`settings-tab-${tab === 'access' ? 'access' : 'project'}`} hidden={tab !== 'project' && tab !== 'access'} tabIndex={0}>
       <div hidden={tab !== 'access'}><LiveIdentity client={client} /></div>

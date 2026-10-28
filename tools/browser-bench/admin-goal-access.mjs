@@ -413,7 +413,9 @@ try {
   await expect(overview).toContainText('조회하지 못했어요');
   for (const button of await page.getByRole('button', { name: /CSV 내려받기/ }).all()) await expect(button).toBeDisabled();
   assert.equal(overviewRequests, 3); scenarios.push(stage);
-  stage = 'disconnect'; await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
+  stage = 'disconnect';
+  if (!await page.getByRole('button', { name: '연결 끊기', exact: true }).isVisible()) await page.getByText('연결 설정', { exact: true }).click();
+  await page.getByRole('button', { name: '연결 끊기', exact: true }).click();
   await page.getByRole('button', { name: '관리자 로그인', exact: true }).waitFor();
   await expect(page.locator('.event-table, .goal-section, .funnel-section')).toHaveCount(0);
   await expect(page.getByRole('button', { name: /CSV 내려받기/ })).toHaveCount(0);

@@ -5,7 +5,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { i18nViewPlugin, renderWithLocale as renderToStaticMarkup } from '../../tests/i18n-fixture.mjs';
 import { compareFailureReasons } from './failure-reason-comparison.ts';
 import { analyticsCsv, CSV_COLUMNS } from './csv-export.ts';
 
@@ -105,7 +105,7 @@ test('CSV uses the shared comparisons, appends columns, and records provisional 
 test('actual comparison view renders shared rates, blocked changes, loading and failed prior loads', async () => {
   const require = createRequire(import.meta.url);
   const bundle = await build({ entryPoints: [fileURLToPath(new URL('../WorkflowFailureReasonComparison.tsx', import.meta.url))], bundle: true, write: false,
-    format: 'esm', platform: 'node', jsx: 'automatic', plugins: [{ name: 'shared-react', setup(build) {
+    format: 'esm', platform: 'node', jsx: 'automatic', plugins: [i18nViewPlugin, { name: 'shared-react', setup(build) {
       build.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
     } }] });
   const { default: View } = await import(`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`);

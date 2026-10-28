@@ -2,9 +2,10 @@ import { useEffect, useId, useState } from 'react';
 import { ApiClient } from './api/client';
 import type { DateRange } from './api/period-comparison';
 import type { Registry, WorkflowBreakdownResponse, WorkflowDefinition } from './api/types';
-import { validateWorkflowBreakdown, workflowValueLabel, type WorkflowGroupingState } from './api/workflow-analysis';
-import { formatCount, formatRate } from './data';
+import { validateWorkflowBreakdown, type WorkflowGroupingState } from './api/workflow-analysis';
 import WorkflowPropertyComparison from './WorkflowPropertyComparison';
+import { useI18n } from './i18n';
+import { useLocaleFormat } from './i18n/format';
 
 export default function WorkflowPropertyBreakdown({ client, registry, definition, range, previous, context, onState }: {
   client: ApiClient; registry: Registry; definition: WorkflowDefinition; range: DateRange; context: string;
@@ -12,6 +13,9 @@ export default function WorkflowPropertyBreakdown({ client, registry, definition
   onState: (workflowId: string, state: WorkflowGroupingState) => void;
 }) {
   const id = useId(), [groupBy, setGroupBy] = useState(''), [retry, setRetry] = useState(0);
+  const { t } = useI18n();
+  const { count: formatCount, rate: formatRate } = useLocaleFormat();
+  const valueLabel = (value: string | number | boolean) => typeof value === 'boolean' ? value ? t('analysis:valueTrue') : t('analysis:valueFalse') : String(value);
   const [result, setResult] = useState<{ key: string; status: 'loading' | 'ready' | 'error'; data?: WorkflowBreakdownResponse }>({ key: '', status: 'loading' });
   const [selected, setSelected] = useState<string | null>(null);
   const [comparisonRetry, setComparisonRetry] = useState(0);
@@ -63,23 +67,23 @@ export default function WorkflowPropertyBreakdown({ client, registry, definition
   const buckets = current?.status === 'ready' ? [...current.data!.buckets].sort((a, b) => b.summary.startedAttempts - a.summary.startedAttempts) : [];
   const active = buckets.find(bucket => JSON.stringify(bucket.value) === selected);
   const cells = (value: WorkflowBreakdownResponse['summary']) => <><td className="number-cell">{formatCount(value.startedAttempts)}</td><td className="number-cell">{formatCount(value.succeededAttempts)}</td><td className="number-cell">{value.failedAttempts === null ? '—' : formatCount(value.failedAttempts)}</td><td className="number-cell">{formatCount(value.pendingAttempts)}</td><td className="number-cell">{formatRate(value.completionRate)}</td></>;
-  const headings = <><th scope="col" className="number-cell">시작</th><th scope="col" className="number-cell">성공</th><th scope="col" className="number-cell">실패</th><th scope="col" className="number-cell">대기</th><th scope="col" className="number-cell">완료율</th></>;
+  const headings = <><th scope="col" className="number-cell">{t('analysis:started')}</th><th scope="col" className="number-cell">{t('analysis:succeeded')}</th><th scope="col" className="number-cell">{t('analysis:failed')}</th><th scope="col" className="number-cell">{t('analysis:pending')}</th><th scope="col" className="number-cell">{t('analysis:completionRate')}</th></>;
   return <section className="workflow-property-analysis" aria-labelledby={`${id}-heading`}>
-    <h3 id={`${id}-heading`}>속성별 완료율</h3>
-    <label className="api-field property-grouping" htmlFor={`${id}-group`}><span>시작 시점 분류 기준</span><select id={`${id}-group`} className="text-input settings-select" value={groupBy} onChange={event => choose(event.target.value)} disabled={!definition.dimensions.length}>
-      <option value="">분류 안 함</option>{definition.dimensions.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
-    <p className="context-note">{definition.dimensions.length ? '각 값의 성공 시도 ÷ 시작 시도로 계산해요. 직전 기간 비교를 켜면 같은 속성 값끼리 비교해요.' : '등록된 시작 시점 비교 속성이 없어요. 스키마의 작업 흐름 비교 기준에서 추가할 수 있어요.'}</p>
-    {groupBy && (!current || current.status === 'loading') && <p role="status">속성별 완료율을 조회하는 중이에요.</p>}
-    {groupBy && current?.status === 'error' && <div role="alert"><p>속성별 완료율을 불러오지 못했어요. 전체 목표 결과는 유지돼요.</p><button className="secondary-button" type="button" onClick={() => { onState(definition.id, { context, groupBy, status: 'loading' }); setRetry(value => value + 1); }}>속성별 조회 다시 시도</button></div>}
-    {groupBy && current?.status === 'ready' && (buckets.length === 0 ? <p role="status">선택 기간에 관찰된 속성 값이 없어요.</p> : <>
-      <div className="table-scroll" tabIndex={0} aria-label={`${definition.label} 속성별 완료율 표`}><table className="event-table"><caption className="sr-only">{groupBy} 시작 시점 값별 완료율</caption><thead><tr><th scope="col">{groupBy} 값 · 일별 보기</th>{headings}</tr></thead><tbody>{buckets.map(bucket => <tr key={JSON.stringify(bucket.value)}><th scope="row"><button className="text-button" type="button" aria-pressed={selected === JSON.stringify(bucket.value)} onClick={() => setSelected(JSON.stringify(bucket.value))}>{workflowValueLabel(bucket.value)}</button></th>{cells(bucket.summary)}</tr>)}</tbody></table></div>
-      <p className="context-note">시작이 0이면 완료율은 알 수 없음(—)이에요. 실패 단계가 없으면 실패 수는 —로 표시해요. 확정 전 시작일 코호트는 완료율이 바뀔 수 있어요.</p>
-      {active && <><h4>{groupBy} · {workflowValueLabel(active.value)} 일별 내역</h4><div className="table-scroll" tabIndex={0} aria-label={`${definition.label} 속성 값 일별 내역`}><table className="event-table"><caption className="sr-only">선택한 속성 값의 시작일별 수치</caption><thead><tr><th scope="col">시작일</th>{headings}<th scope="col">확정 상태</th></tr></thead><tbody>{active.days.map(day => <tr key={day.date}><th scope="row">{day.date}</th>{cells(day)}<td>{day.provisional ? '집계 중' : '확정'}</td></tr>)}</tbody></table></div></>}
+    <h3 id={`${id}-heading`}>{t('analysis:workflowPropertyRate')}</h3>
+    <label className="api-field property-grouping" htmlFor={`${id}-group`}><span>{t('analysis:startGroupBy')}</span><select id={`${id}-group`} className="text-input settings-select" value={groupBy} onChange={event => choose(event.target.value)} disabled={!definition.dimensions.length}>
+      <option value="">{t('analysis:noGrouping')}</option>{definition.dimensions.map(name => <option key={name} value={name}>{name}</option>)}</select></label>
+    <p className="context-note">{definition.dimensions.length ? t('analysis:workflowPropertyHelp') : t('analysis:workflowPropertyNoDimensions')}</p>
+    {groupBy && (!current || current.status === 'loading') && <p role="status">{t('analysis:loadingWorkflowProperties')}</p>}
+    {groupBy && current?.status === 'error' && <div role="alert"><p>{t('analysis:workflowPropertiesLoadError')}</p><button className="secondary-button" type="button" onClick={() => { onState(definition.id, { context, groupBy, status: 'loading' }); setRetry(value => value + 1); }}>{t('analysis:retryWorkflowProperties')}</button></div>}
+    {groupBy && current?.status === 'ready' && (buckets.length === 0 ? <p role="status">{t('analysis:noWorkflowPropertyValues')}</p> : <>
+      <div className="table-scroll" tabIndex={0} aria-label={t('analysis:workflowPropertyTable', { workflow: definition.label })}><table className="event-table"><caption className="sr-only">{t('analysis:workflowPropertyCaption', { groupBy })}</caption><thead><tr><th scope="col">{t('analysis:propertyValueDailyView', { property: groupBy })}</th>{headings}</tr></thead><tbody>{buckets.map(bucket => <tr key={JSON.stringify(bucket.value)}><th scope="row"><button className="text-button" type="button" aria-pressed={selected === JSON.stringify(bucket.value)} onClick={() => setSelected(JSON.stringify(bucket.value))}>{valueLabel(bucket.value)}</button></th>{cells(bucket.summary)}</tr>)}</tbody></table></div>
+      <p className="context-note">{t('analysis:workflowPropertyNote')}</p>
+      {active && <><h4>{t('analysis:workflowValueDailyBreakdown', { property: groupBy, value: valueLabel(active.value) })}</h4><div className="table-scroll" tabIndex={0} aria-label={t('analysis:workflowValueDailyTable', { workflow: definition.label })}><table className="event-table"><caption className="sr-only">{t('analysis:workflowValueDailyCaption')}</caption><thead><tr><th scope="col">{t('analysis:startDate')}</th>{headings}<th scope="col">{t('analysis:status')}</th></tr></thead><tbody>{active.days.map(day => <tr key={day.date}><th scope="row">{day.date}</th>{cells(day)}<td>{day.provisional ? t('analysis:provisional') : t('analysis:confirmed')}</td></tr>)}</tbody></table></div></>}
     </>)}
     {groupBy && current?.status === 'ready' && previous && <>
-      {(!before || before.status === 'loading') && <p role="status">직전 기간 속성별 완료율을 조회하는 중이에요.</p>}
-      {before?.status === 'error' && <div role="alert"><p>직전 기간 속성별 비교를 불러오지 못했어요. 현재 기간 결과는 유지돼요.</p>
-        <button className="secondary-button" type="button" onClick={() => setComparisonRetry(value => value + 1)}>속성별 비교 다시 시도</button></div>}
+      {(!before || before.status === 'loading') && <p role="status">{t('analysis:loadingPreviousWorkflowProperties')}</p>}
+      {before?.status === 'error' && <div role="alert"><p>{t('analysis:previousWorkflowPropertiesError')}</p>
+        <button className="secondary-button" type="button" onClick={() => setComparisonRetry(value => value + 1)}>{t('analysis:retryWorkflowPropertyComparison')}</button></div>}
       {before?.status === 'ready' && <WorkflowPropertyComparison current={current.data!} previous={before.data!} registry={registry} />}
     </>}
   </section>;

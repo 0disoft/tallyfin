@@ -7,6 +7,8 @@ import type { PublisherRequest } from './api/publishers-contract.ts';
 import PublisherChangePanel from './PublisherChangePanel.tsx';
 import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
 import useUnloadWarning from './useUnloadWarning.ts';
+import { useI18n } from './i18n';
+import { useMessageText } from './i18n/messages';
 
 /** Owner-only server publisher permission surface. The list and the single write follow the same conventions as LiveGrants. */
 export default function LivePublishers({ client, projectId, canView, timeZone, refreshTick, locked = false, onAccessLost, onSaved, onBusyChange, registerDraft }: {
@@ -16,6 +18,8 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
   onBusyChange?: (busy: boolean) => void;
   registerDraft?: DraftExitRegistration<ApiClient>;
 }) {
+  const { t, locale } = useI18n();
+  const messageText = useMessageText();
   const [snapshot, setSnapshot] = useState<{ client: ApiClient; projectId: string; state: PublisherListState } | null>(null);
   const [mutation, setMutation] = useState<{ client: ApiClient; projectId: string; state: PublisherEditorState } | null>(null);
   const [lostScope, setLostScope] = useState<{ client: ApiClient; projectId: string } | null>(null);
@@ -75,9 +79,9 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
     }
   }, [refreshTick]);
   const formatter = useMemo(() => {
-    try { return new Intl.DateTimeFormat('ko-KR', { timeZone, dateStyle: 'medium', timeStyle: 'short' }); }
+    try { return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'medium', timeStyle: 'short' }); }
     catch { return null; }
-  }, [timeZone]);
+  }, [timeZone, locale]);
   // Never render a previous connection/project snapshot, even before effect cleanup runs.
   const lost = lostScope?.client === client && lostScope.projectId === projectId;
   const visible = canView && !lost;
@@ -105,7 +109,7 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
   const stamp = (value: string) => formatter ? formatter.format(new Date(value)) : value;
   const reload = () => {
     if (saving || uncertain || locked) return;
-    if (editorRef.current?.hasUnsavedChanges && !window.confirm('확인 중인 발행 권한 변경을 버리고 목록을 새로 읽을까요?')) return;
+    if (editorRef.current?.hasUnsavedChanges && !window.confirm(t('operations:publishersUnloadConfirm'))) return;
     editorRef.current?.cancel(); void listRef.current?.refresh();
   };
   useEffect(() => {
@@ -114,23 +118,23 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
   }, [write?.phase]);
   return <section className="settings-section publishers-section" aria-labelledby="project-publishers-heading" aria-busy={loading || saving || undefined}>
     <div className="settings-head">
-      <h3 id="project-publishers-heading" className="settings-subheading">서버 발행자</h3>
-      <span className="settings-badge">소유자 전용</span>
+      <h3 id="project-publishers-heading" className="settings-subheading">{t('operations:publishersHeading')}</h3>
+      <span className="settings-badge">{t('operations:ownerOnlyBadge')}</span>
       {visible && <div className="publishers-actions">
-        <button className="secondary-button" type="button" disabled={loading || saving || uncertain || locked} onClick={reload}>처음부터 새로고침</button>
+        <button className="secondary-button" type="button" disabled={loading || saving || uncertain || locked} onClick={reload}>{t('operations:reloadFromStart')}</button>
         <button className="secondary-button" type="button" disabled={actionsLocked || !state?.data?.page.nextCursor}
-          onClick={() => { void listRef.current?.next(); }}>다음 페이지</button>
+          onClick={() => { void listRef.current?.next(); }}>{t('operations:nextPage')}</button>
       </div>}
     </div>
-    <p className="context-note">서버 발행은 이 목록의 계정만 허용해요. 관리자 조회·소유자 권한과 별개이고, 부여·회수는 확인 후 저장해요.</p>
-    {!visible && <p className="notice" role="status">{lost ? '소유자 권한을 확인할 수 없어 목록과 변경 기능을 닫았어요. 최신 설정이나 연결을 확인해 주세요.' : '설정에서 소유자 권한을 확인하면 목록을 볼 수 있어요. 조회 권한으로 연결한 계정에는 목록을 표시하지 않아요.'}</p>}
+    <p className="context-note">{t('operations:publishersIntro')}</p>
+    {!visible && <p className="notice" role="status">{t(lost ? 'operations:publishersLost' : 'operations:publishersNoAccess')}</p>}
     {visible && <>
-      <details className="publishers-add-disclosure"><summary ref={addSummaryRef}>발행자 추가</summary>
+      <details className="publishers-add-disclosure"><summary ref={addSummaryRef}>{t('operations:publishersAdd')}</summary>
         <form className="publishers-add-form" onSubmit={submit}>
-          <p className="context-note" id="publisher-add-help">발행 서비스가 로그인에 쓰는 발급자(issuer)와 계정 식별자(sub)를 그대로 입력해요. 서버 발행 권한만 생기고 관리자 권한은 생기지 않아요.</p>
-          <label className="api-field" htmlFor="publisher-add-issuer"><span>발급자 주소</span><input className="text-input" id="publisher-add-issuer" type="url" maxLength={512} required autoComplete="off" spellCheck={false} aria-describedby="publisher-add-help" value={values.issuer} disabled={actionsLocked} onChange={e => edit('issuer', e.target.value)} /></label>
-          <label className="api-field" htmlFor="publisher-add-subject"><span>계정 식별자</span><input className="text-input" id="publisher-add-subject" maxLength={512} required autoComplete="off" spellCheck={false} aria-describedby="publisher-add-help" value={values.subject} disabled={actionsLocked} onChange={e => edit('subject', e.target.value)} /></label>
-          <div className="form-actions"><button className="primary-button" type="submit" disabled={actionsLocked}>추가 내용 확인</button></div>
+          <p className="context-note" id="publisher-add-help">{t('operations:publishersAddHelp')}</p>
+          <label className="api-field" htmlFor="publisher-add-issuer"><span>{t('operations:grantsIssuerLabel')}</span><input className="text-input" id="publisher-add-issuer" type="url" maxLength={512} required autoComplete="off" spellCheck={false} aria-describedby="publisher-add-help" value={values.issuer} disabled={actionsLocked} onChange={e => edit('issuer', e.target.value)} /></label>
+          <label className="api-field" htmlFor="publisher-add-subject"><span>{t('operations:grantsSubjectLabel')}</span><input className="text-input" id="publisher-add-subject" maxLength={512} required autoComplete="off" spellCheck={false} aria-describedby="publisher-add-help" value={values.subject} disabled={actionsLocked} onChange={e => edit('subject', e.target.value)} /></label>
+          <div className="form-actions"><button className="primary-button" type="submit" disabled={actionsLocked}>{t('operations:publishersReviewAdd')}</button></div>
         </form>
       </details>
       {write && <PublisherChangePanel state={write} saving={saving} uncertain={uncertain} listLoading={loading}
@@ -138,29 +142,29 @@ export default function LivePublishers({ client, projectId, canView, timeZone, r
         onConfirm={() => { if (uncertain || (!locked && state?.phase === 'ready')) void editorRef.current?.confirm(); }}
         onCancel={() => { if (write.phase === 'error' && write.request) reload(); else editorRef.current?.cancel(); addSummaryRef.current?.focus(); }} onReload={reload} />}
     </>}
-    {loading && <p className="context-note" role="status">발행자 목록을 불러오는 중이에요.</p>}
+    {loading && <p className="context-note" role="status">{t('operations:publishersLoading')}</p>}
     {state?.phase === 'error' && <div role="alert">
-      <p className="form-error">{state.message}</p>
-      {!state.denied && <button className="secondary-button" type="button" disabled={saving || uncertain || locked} onClick={() => { void listRef.current?.retry(); }}>이 페이지 다시 시도</button>}
+      <p className="form-error">{messageText(state.message)}</p>
+      {!state.denied && <button className="secondary-button" type="button" disabled={saving || uncertain || locked} onClick={() => { void listRef.current?.retry(); }}>{t('operations:retryPage')}</button>}
     </div>}
     {state?.phase === 'ready' && state.data && <>
-      <p className="context-note" role="status">{state.pageNumber}페이지 · 표시 중 {state.data.data.length}건{state.data.page.nextCursor === null ? ' · 마지막 페이지' : ''} · 등록 시각: {timeZone}</p>
-      {state.data.data.length === 0 ? <p className="notice">이 페이지에 표시할 발행자가 없어요. 처음부터 새로고침하면 현재 목록을 다시 확인할 수 있어요.</p>
-        : <div className="table-scroll" tabIndex={0} role="region" aria-label="서버 발행자 표">
+      <p className="context-note" role="status">{t('operations:publishersPage', { page: state.pageNumber, count: state.data.data.length })}{state.data.page.nextCursor === null ? t('operations:lastPage') : ''}{t('operations:publishersRegisteredAt', { timeZone })}</p>
+      {state.data.data.length === 0 ? <p className="notice">{t('operations:publishersEmpty')}</p>
+        : <div className="table-scroll" tabIndex={0} role="region" aria-label={t('operations:publishersTableLabel')}>
           <table className="event-table publishers-table">
-            <caption className="sr-only">현재 프로젝트의 서버 발행자 계정 식별자, 발급자, 등록 시각과 권한 회수</caption>
-            <thead><tr><th scope="col">계정 식별자</th><th scope="col">발급자</th><th scope="col">등록 시각</th><th scope="col">변경</th></tr></thead>
+            <caption className="sr-only">{t('operations:publishersTableCaption')}</caption>
+            <thead><tr><th scope="col">{t('operations:publishersSubjectColumn')}</th><th scope="col">{t('operations:publishersIssuerColumn')}</th><th scope="col">{t('operations:publishersCreatedColumn')}</th><th scope="col">{t('operations:publishersChangeColumn')}</th></tr></thead>
             <tbody>{state.data.data.map(publisher => <tr key={JSON.stringify([publisher.issuer, publisher.subject])}>
               <th scope="row">{publisher.subject}</th><td>{publisher.issuer}</td>
               <td><time dateTime={publisher.createdAt}>{stamp(publisher.createdAt)}</time></td>
               <td><div className="publishers-row-actions">
-                <button className="secondary-button" type="button" disabled={actionsLocked} aria-label={`${publisher.subject} 발행 권한 회수`}
-                  onClick={() => prepare({ granted: false, issuer: publisher.issuer, subject: publisher.subject, expectedGrantId: publisher.grantId })}>발행 권한 회수</button>
+                <button className="secondary-button" type="button" disabled={actionsLocked} aria-label={t('operations:publishersRevokeAria', { subject: publisher.subject })}
+                  onClick={() => prepare({ granted: false, issuer: publisher.issuer, subject: publisher.subject, expectedGrantId: publisher.grantId })}>{t('operations:publishersRevoke')}</button>
               </div></td>
             </tr>)}</tbody>
           </table>
         </div>}
-      <p className="context-note">발급자와 식별자 순서로 25건씩 보여줘요. 좁은 화면에서는 표를 옆으로 밀어 권한 회수 버튼까지 볼 수 있어요. 앞쪽에 추가된 발행자는 처음부터 새로고침하면 보여요.</p>
+      <p className="context-note">{t('operations:publishersFooter')}</p>
     </>}
   </section>;
 }

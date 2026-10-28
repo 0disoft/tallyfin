@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { BrowserLogin, LoginError } from './client';
 import { loginConfig } from './config';
 import { initialCallback, clearCallback } from './bootstrap';
+import { useI18n } from '../i18n';
 
 export default function OidcLogin({ onConnected, onBeforeLogin }: { onConnected: (login: BrowserLogin) => void; onBeforeLogin?: () => boolean }) {
+  const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<'failed' | 'config' | null>(null);
   const [enabled, setEnabled] = useState(false);
   const loginRef = useRef<BrowserLogin | null>(null);
   const mountedRef = useRef(false);
@@ -25,13 +27,13 @@ export default function OidcLogin({ onConnected, onBeforeLogin }: { onConnected:
         login.complete(callback).then(() => {
           if (active) { transferredRef.current = true; onConnected(login); }
         })
-          .catch(() => { if (active) setError(new LoginError().message); })
+          .catch(() => { if (active) setError('failed'); })
           .finally(() => { clearCallback(); if (active) setBusy(false); });
       }
     } catch {
       clearCallback();
       setBusy(false);
-      setError('로그인 제공자 설정이 없거나 올바르지 않아요. 운영자 설정을 확인해 주세요.');
+      setError('config');
     }
     return () => {
       active = false;
@@ -56,18 +58,18 @@ export default function OidcLogin({ onConnected, onBeforeLogin }: { onConnected:
       if (!login) throw new LoginError();
       const url = await login.begin();
       if (mountedRef.current) window.location.assign(url);
-    } catch { if (mountedRef.current) { setError(new LoginError().message); setBusy(false); } }
+    } catch { if (mountedRef.current) { setError('failed'); setBusy(false); } }
   }
 
   return <section className="settings-section" aria-labelledby="oidc-login-heading">
-    <h2 id="oidc-login-heading">관리자 로그인</h2>
-    <p className="context-note">로그인 후 권한이 있는 프로젝트를 조회해요. 로그인 정보는 이 탭에서만 유지돼요.</p>
+    <h2 id="oidc-login-heading">{t('operations:loginHeading')}</h2>
+    <p className="context-note">{t('operations:loginIntro')}</p>
     {!enabled && <>
-      <p className="context-note">로그인 제공자가 아직 설정되지 않았어요. 운영자 설정 후 사용할 수 있어요. 설정 전에는 샘플 데이터로 분석 화면을 체험할 수 있어요.</p>
-      <p><a className="secondary-button" href="/demo">샘플 데모 둘러보기</a></p>
+      <p className="context-note">{t('operations:loginNotConfigured')}</p>
+      <p><a className="secondary-button" href="/demo">{t('operations:loginSampleDemo')}</a></p>
     </>}
-    <button className="primary-button" type="button" onClick={start} disabled={!enabled || busy}>{busy ? '로그인 확인 중…' : '관리자 로그인'}</button>
-    {error && <p className="form-error" role="alert">{error}</p>}
-    {busy && <p className="context-note" role="status" aria-live="polite">로그인을 처리하고 있어요.</p>}
+    <button className="primary-button" type="button" onClick={start} disabled={!enabled || busy}>{busy ? t('operations:loginChecking') : t('operations:loginButton')}</button>
+    {error && <p className="form-error" role="alert">{t(error === 'config' ? 'operations:loginConfigError' : 'operations:loginFailed')}</p>}
+    {busy && <p className="context-note" role="status" aria-live="polite">{t('operations:loginBusy')}</p>}
   </section>;
 }

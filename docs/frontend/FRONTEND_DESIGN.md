@@ -1,13 +1,16 @@
 # Tallyfin Frontend Design
 
-## Saylo UI locale pilot - 2026-10-28
+## Saylo Korean/English admin - 2026-10-28
 
 The client admin uses published Saylo core/React/Vite alpha packages. Flat
-`locales/ko/admin.json` and `locales/en/admin.json` catalogs own pilot UI copy;
+matching `locales/{ko,en}/` catalogs own shell, analysis, settings, operations,
+sample and workspace copy. `messages` owns explicitly recognized legacy helper
+errors and validation messages, translated at display time without changing
+controller snapshots or helper return values.
 The explicit `i18n:types` command generates the typed schema and is also run by
 typecheck. Vite does not hold a typegen output lock, so parallel isolated
 previews and production builds can use the same checkout.
-A stable store and Provider are created once per client application, outside
+A stable Saylo instance and Provider are created once per client application, outside
 React renders. Locale changes are store updates, never React keys or navigation.
 
 The header offers Korean/English. Korean remains the initial fallback and only
@@ -15,13 +18,23 @@ the supported locale preference is persisted under `tallyfin.uiLocale`.
 Denied browser storage keeps the app usable. Tokens and identity are never saved
 with this preference. Document language/title follow the selected UI locale.
 Development catalog edits use Saylo's Vite connection; module disposal releases
-its subscription and store. Production has compiled catalogs and no dev client.
+its subscription and instance. Production has compiled catalogs and no dev client.
+The shell boots only the `admin` namespace; detailed namespaces load with the
+lazy workspace. Locale changes load the required catalogs before committing the
+new snapshot. Loading failures retain the current screen with a retryable
+language control. The build requires complete translations in both locales.
 
-The pilot covers shell navigation/header and Overview copy, not a full English
-translation of settings, event analysis, goals, login dialogs or advanced service
-details. An English notice makes this scope visible. Project/event/workflow labels
+Translation includes event search/detail/property/period views; workflow and
+funnel analysis; all five Settings tabs; schema forms, files and server drafts;
+SDK guidance, diagnostics, operational reports, identity and permission controls;
+and login/project creation. Project/event/workflow labels
 remain administrator data. UI locale does not change report dates, project
-timezones, API identifiers or aggregation. No API/DB contract changes.
+timezones, API identifiers or aggregation. Registered labels, purposes, enum
+values, raw observation data, JSON drafts, generated SDK code and CSV content
+remain data and are never passed through general text replacement. Helper copy
+is matched only by explicit exact messages or anchored interpolation templates.
+Language changes do not invalidate API queries, recreate draft controllers or
+repeat writes. No API/DB contract changes.
 
 ## Overview collection and completion workspace - 2026-10-28
 

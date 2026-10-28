@@ -4,10 +4,10 @@ import type { ApiClient } from './api/client';
 import type { EventSource, Project } from './api/types';
 import { countChange } from './api/period-comparison';
 import { projectOverview, OVERVIEW_PAGE_SIZE, type ServiceRow } from './api/project-overview';
-import { formatCount } from './data';
 import OverviewWorkflowCell from './OverviewWorkflowCell';
 import { overviewDateChanged, watchOverviewClock } from './api/overview-freshness';
 import { shiftDate } from './api/dates';
+import { useLocaleFormat } from './i18n/format';
 
 export default function ProjectOverview({ client, projects, source, onSelectProject, activeProjectId, hasMore, onLoadMore, loadingMore }: {
   client: ApiClient; projects: Project[]; source: EventSource; onSelectProject: (id: string) => void;
@@ -15,6 +15,7 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
   activeProjectId?: string;
 }) {
   const { t } = useI18n();
+  const { count: formatCount, dateTime } = useLocaleFormat();
   const [open, setOpen] = useState(false), [page, setPage] = useState(0), [refresh, setRefresh] = useState(0);
   const index = Math.min(page, Math.max(0, Math.ceil(projects.length / OVERVIEW_PAGE_SIZE) - 1));
   const visible = useMemo(() => projects.slice(index * OVERVIEW_PAGE_SIZE, (index + 1) * OVERVIEW_PAGE_SIZE), [projects, index]);
@@ -40,33 +41,33 @@ export default function ProjectOverview({ client, projects, source, onSelectProj
       <button className="secondary-button" aria-expanded={open} aria-controls="overview-services-body" onClick={() => setOpen(value => !value)}>{t(open ? 'admin:closeServiceOverview' : 'admin:loadServiceOverview')}</button></div>
     {!open && <p className="context-note">{t('admin:serviceOverviewHint')}</p>}
     {open && <div id="overview-services-body" className="overview-services-body">
-      <p className="context-note overview-services-context">{source === 'browser' ? '브라우저' : '서버'} 이벤트 · 서비스별 시간대의 최근 7일 / 직전 7일 · 오늘 집계 중 · 거부 요청은 프로젝트 전체 최근 UTC 7일</p>
-      {!!rows?.length && <p className="context-note">조회 기준(UTC): {new Date(rows[0]!.generatedAt).toLocaleString('ko-KR', { timeZone: 'UTC' })}</p>}
-      {!!rows?.length && <p className="context-note">거부 기록(UTC): {shiftDate(rows[0]!.generatedAt.slice(0, 10), -6)} ~ {rows[0]!.generatedAt.slice(0, 10)}</p>}
-      {dateChanged && <p role="status">조회 기준과 현재 기기 날짜가 달라졌어요. 표시된 기간을 확인하고 통합 현황을 새로고침해 주세요.</p>}
-      <div className="toolbar"><button className="secondary-button" disabled={index === 0} onClick={() => setPage(index - 1)}>이전 서비스</button>
-        <span>{index + 1} / {Math.max(1, Math.ceil(projects.length / OVERVIEW_PAGE_SIZE))} 페이지</span>
-        <button className="secondary-button" disabled={(index + 1) * OVERVIEW_PAGE_SIZE >= projects.length} onClick={() => setPage(index + 1)}>다음 서비스</button>
-        <button className="secondary-button" onClick={() => setRefresh(value => value + 1)}>통합 현황 새로고침</button>
-        {hasMore && <button className="secondary-button" disabled={loadingMore} onClick={onLoadMore}>프로젝트 더 불러오기</button>}</div>
-      {!rows && <p role="status">현재 페이지의 서비스 현황을 확인하고 있어요.</p>}
-      {result?.client === client && result.key === key && result.error && <p role="alert">서비스 현황을 불러오지 못했어요. 다시 조회해 주세요.</p>}
-      {rows && !result?.error && <div className="table-scroll" tabIndex={0} aria-label="서비스별 수집과 완료 현황"><table className="event-table"><thead><tr>
-        <th>서비스</th><th>최근 수신(프로젝트 전체)</th><th>이벤트 / 직전 기간 변화</th><th>작업 완료율 / 변화</th><th>거부 요청</th>
+      <p className="context-note overview-services-context">{t('operations:overviewContext', { source: t(source === 'browser' ? 'operations:diagBrowser' : 'operations:diagServer') })}</p>
+      {!!rows?.length && <p className="context-note">{t('operations:overviewCheckedAt', { time: dateTime(rows[0]!.generatedAt, 'UTC') })}</p>}
+      {!!rows?.length && <p className="context-note">{t('operations:overviewRejections', { from: shiftDate(rows[0]!.generatedAt.slice(0, 10), -6), to: rows[0]!.generatedAt.slice(0, 10) })}</p>}
+      {dateChanged && <p role="status">{t('operations:overviewDateChanged')}</p>}
+      <div className="toolbar"><button className="secondary-button" disabled={index === 0} onClick={() => setPage(index - 1)}>{t('operations:overviewPreviousServices')}</button>
+        <span>{t('operations:overviewPage', { page: index + 1, total: Math.max(1, Math.ceil(projects.length / OVERVIEW_PAGE_SIZE)) })}</span>
+        <button className="secondary-button" disabled={(index + 1) * OVERVIEW_PAGE_SIZE >= projects.length} onClick={() => setPage(index + 1)}>{t('operations:overviewNextServices')}</button>
+        <button className="secondary-button" onClick={() => setRefresh(value => value + 1)}>{t('operations:overviewRefresh')}</button>
+        {hasMore && <button className="secondary-button" disabled={loadingMore} onClick={onLoadMore}>{t('operations:overviewLoadMore')}</button>}</div>
+      {!rows && <p role="status">{t('operations:overviewLoading')}</p>}
+      {result?.client === client && result.key === key && result.error && <p role="alert">{t('operations:overviewLoadFailed')}</p>}
+      {rows && !result?.error && <div className="table-scroll" tabIndex={0} aria-label={t('operations:overviewTableLabel')}><table className="event-table"><thead><tr>
+        <th>{t('operations:overviewServiceColumn')}</th><th>{t('operations:overviewLatestColumn')}</th><th>{t('operations:overviewEventColumn')}</th><th>{t('operations:overviewCompletionColumn')}</th><th>{t('operations:overviewRejectionColumn')}</th>
       </tr></thead><tbody>{rows.map(row => {
         const change = row.events === null || row.previousEvents === null ? null : countChange(row.events, row.previousEvents);
         return <tr key={row.project.id} aria-selected={activeProjectId === row.project.id}><th scope="row"><button className="text-button overview-service-name" onClick={() => onSelectProject(row.project.id)}>{row.project.name}</button>
-          <div className="overview-service-meta">{row.project.status === 'paused' ? '일시정지' : '수집 중'} · {row.project.timeZone} · {row.error ? '조회 실패' : row.version === null ? '활성 스키마 없음' : `v${row.version}`}</div>
-          {!row.error && (row.period ? <details className="overview-service-period"><summary>조회 기간</summary><div>현재 {row.period.from} ~ {row.period.to}</div>
-            <div>직전 {row.period.previousFrom} ~ {row.period.previousTo}</div></details> : <div>조회 기간 정보 없음</div>)}</th>
-          {row.error ? <td colSpan={4}>조회하지 못했어요. 권한과 연결을 확인한 뒤 다시 조회해 주세요.</td> : <>
-            <td>{row.latestReceivedAt ? new Date(row.latestReceivedAt).toLocaleString('ko-KR', { timeZone: row.project.timeZone }) : '수신 기록 없음 또는 미조회'}</td>
-            <td><strong className="overview-service-count">{row.events === null ? '—' : formatCount(row.events)}</strong><div className="overview-service-change">{change === null ? '비교 불가' : `${change > 0 ? '+' : ''}${change.toFixed(1)}%`}</div></td>
+          <div className="overview-service-meta">{row.project.status === 'paused' ? t('operations:overviewPaused') : t('operations:overviewCollecting')} · {row.project.timeZone} · {row.error ? t('operations:overviewQueryFailed') : row.version === null ? t('operations:overviewNoSchema') : `v${row.version}`}</div>
+          {!row.error && (row.period ? <details className="overview-service-period"><summary>{t('operations:overviewPeriod')}</summary><div>{t('operations:overviewPeriodCurrent', { from: row.period.from, to: row.period.to })}</div>
+            <div>{t('operations:overviewPeriodPrevious', { from: row.period.previousFrom, to: row.period.previousTo })}</div></details> : <div>{t('operations:overviewNoPeriod')}</div>)}</th>
+          {row.error ? <td colSpan={4}>{t('operations:overviewRowError')}</td> : <>
+            <td>{row.latestReceivedAt ? dateTime(row.latestReceivedAt, row.project.timeZone) : t('operations:overviewNoReceipt')}</td>
+            <td><strong className="overview-service-count">{row.events === null ? '—' : formatCount(row.events)}</strong><div className="overview-service-change">{change === null ? t('operations:overviewIncomparable') : `${change > 0 ? '+' : ''}${change.toFixed(1)}%`}</div></td>
             <td><OverviewWorkflowCell row={row} source={source} /></td>
-            <td>{row.rejectionUnavailable ? '조회 실패' : row.rejected === null ? '—' : formatCount(row.rejected)}</td>
+            <td>{row.rejectionUnavailable ? t('operations:overviewQueryFailed') : row.rejected === null ? '—' : formatCount(row.rejected)}</td>
           </>}</tr>;
       })}</tbody></table></div>}
-      <details className="overview-service-notes"><summary>집계 기준과 주의사항</summary><p className="context-note">최근 수신과 거부 기록은 활성 스키마가 없어도 조회해요. 한 번에 최대 5개 서비스만 읽으며 자동 반복 조회는 하지 않아요. 완료율은 각 버전의 대표 흐름 기준이며, 변화는 두 기간이 집계 중이 아니고 각각 시작 30건 이상일 때 표시해요. 이는 통계적 유의성이나 장애 판정 기준은 아니에요. 수집기 앞단에서 차단한 요청은 거부 건수에 포함되지 않아요. 수신 기록이 없다는 이유만으로 장애로 판단하지 않아요.</p></details>
+      <details className="overview-service-notes"><summary>{t('operations:overviewNotes')}</summary><p className="context-note">{t('operations:overviewNotesBody')}</p></details>
     </div>}
   </section>;
 }

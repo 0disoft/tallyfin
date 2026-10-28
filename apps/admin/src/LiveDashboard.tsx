@@ -1,3 +1,5 @@
+import { useMessageText } from './i18n/messages';
+import { useLocaleFormat } from './i18n/format';
 import { useI18n } from './i18n';
 import useSchemaVersion from './useSchemaVersion';
 import useProjectPages from './useProjectPages';
@@ -10,11 +12,10 @@ import EventWorkspace from './EventWorkspace';
 import { createPortal } from 'react-dom';
 import { Trend } from './Dashboard';
 import DeferredPanel from './DeferredPanel';
-import { sourceLabel } from './SourceEventTable';
 import OverviewWorkspace from './OverviewWorkspace';
 import DateRangePicker from './DateRangePicker';
 import LiveIdentity from './LiveIdentity';
-import { formatCount, type DailyRecord, type Period, type View } from './data';
+import { type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
 import CsvDownload from './CsvDownload';
@@ -41,37 +42,41 @@ const LiveGoals = lazy(() => import('./LiveGoals'));
 
 const MAX_SCHEMA_VERSION = 2147483647;
 
-function describeError(error: ApiError): { title: string; detail: string } {
+function describeError(error: ApiError, t: ReturnType<typeof useI18n>['t'], messageText: ReturnType<typeof useMessageText>): { title: string; detail: string } {
   switch (error.kind) {
     case 'unauthorized':
-      return { title: '인증이 필요해요', detail: '화면 위쪽의 관리자 로그인 버튼으로 다시 로그인해 주세요.' };
+      return { title: t('workspace:authTitle'), detail: t('workspace:authHelp') };
     case 'forbidden':
-      return { title: '이 프로젝트를 볼 권한이 없어요', detail: '서버에서 이 프로젝트에 대한 관리자 grant를 확인해 주세요.' };
+      return { title: t('workspace:forbiddenTitle'), detail: t('workspace:forbiddenHelp') };
     case 'not_found':
-      return { title: '프로젝트나 스키마 버전을 찾지 못했어요', detail: '프로젝트 ID와 스키마 버전을 확인해 주세요.' };
+      return { title: t('workspace:notFoundTitle'), detail: t('workspace:notFoundHelp') };
     case 'invalid_request':
-      return { title: '요청 범위가 계약과 맞지 않아요', detail: '스키마 버전과 기간(최대 31일)을 확인해 주세요.' };
+      return { title: t('workspace:invalidTitle'), detail: t('workspace:invalidHelp') };
     case 'storage_unavailable':
-      return { title: '저장소를 사용할 수 없어요', detail: '서버가 0으로 채운 응답을 주지 않아요. 잠시 후 다시 시도해 주세요.' };
+      return { title: t('workspace:storageTitle'), detail: t('workspace:storageHelp') };
     case 'contract':
-      return { title: '응답이 계약과 맞지 않아요', detail: '값을 임의로 0으로 채우지 않고 그대로 멈췄어요. 응답을 확인해 주세요.' };
+      return { title: t('workspace:contractTitle'), detail: t('workspace:contractHelp') };
     case 'network':
-      return { title: 'API 서버에 연결하지 못했어요', detail: `같은 출처 ${API_BASE_PATH} 경로가 열려 있는지 확인해 주세요.` };
+      return { title: t('workspace:networkTitle'), detail: t('workspace:networkHelp', { path: API_BASE_PATH }) };
     case 'timeout':
-      return { title: '요청 대기 시간이 지났어요', detail: error.message };
+      return { title: t('workspace:timeoutTitle'), detail: messageText(error.message) };
     default:
-      return { title: '요청이 실패했어요', detail: `HTTP ${error.status} 응답이에요.` };
+      return { title: t('workspace:failedTitle'), detail: t('workspace:httpHelp', { status: error.status }) };
   }
 }
 
 function ErrorPanel({ error, onRetry }: { error: ApiError; onRetry: () => void }) {
-  const { title, detail } = describeError(error);
-  return <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>{title}</h2><p>{detail}</p><div className="state-actions"><button className="secondary-button" type="button" onClick={onRetry}>다시 시도</button></div>{error.requestId && <p className="context-note">requestId: {error.requestId}</p>}</section>;
+  const { t } = useI18n();
+  const messageText = useMessageText();
+  const { title, detail } = describeError(error, t, messageText);
+  return <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>{title}</h2><p>{detail}</p><div className="state-actions"><button className="secondary-button" type="button" onClick={onRetry}>{t('workspace:retry')}</button></div>{error.requestId && <p className="context-note">requestId: {error.requestId}</p>}</section>;
 }
 
 export function LiveDashboard({ view, period, customPeriod, onActiveProjectChange, onNavigate, registerExitCheck, headerHost }: { view: View; period: Period; customPeriod: boolean; onActiveProjectChange: (info: ActiveProject | null) => void; onNavigate?: (view: View) => void; registerExitCheck?: (check: () => boolean) => () => void; headerHost?: HTMLElement | null }) {
   const currentOrigin = useMemo(() => window.location.origin, []);
   const { t } = useI18n();
+  const messageText = useMessageText();
+  const { count: formatCount } = useLocaleFormat();
   const [session, setSession] = useState<Session | null>(null);
   const [unauthorizedClient, setUnauthorizedClient] = useState<ApiClient | null>(null);
   const [token, setToken] = useState('');
@@ -131,8 +136,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const activeProject = projects.data?.find(item => item.id === projectId) ?? null;
   const activeProjectId = activeProject?.id ?? null;
   const confirmDraftExit = useCallback((includeConnection = false) => !client || draftExit.canLeave(client, projectId, () =>
-    window.confirm('저장하지 않은 입력이나 확인하지 못한 저장 결과가 있어요. 초안을 버리고 계속할까요? 이미 서버에 저장된 값은 되돌리지 않아요.'), includeConnection),
-  [client, projectId, draftExit]);
+    window.confirm(t('workspace:draftExit')), includeConnection),
+  [client, projectId, draftExit, t]);
   useEffect(() => registerExitCheck?.(() => confirmDraftExit(true)), [registerExitCheck, confirmDraftExit]);
   const settingsScopeRetained = retainedSettings?.client === client && retainedSettings?.projectId === projectId;
   const settingsProjectId = settingsScopeRetained ? retainedSettings.projectId : view === 'settings' ? activeProjectId : null;
@@ -291,18 +296,18 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
 
   if (!client) {
     return <>
-    <DeferredPanel label="로그인"><OidcLogin onConnected={connected} /></DeferredPanel>
-    <details className="manual-connection"><summary>관리자 토큰으로 직접 연결</summary><section className="settings-section">
-      <h2>API 연결</h2>
-      <p className="context-note">같은 출처의 관리자 API에 연결해요. 프로젝트 설정은 소유자만 저장할 수 있어요. 기본 엔드포인트는 현재 출처의 {API_BASE_PATH}예요. 다른 출처는 이번 범위가 아니라 연결하지 않아요.</p>
+    <DeferredPanel label={t('workspace:login')}><OidcLogin onConnected={connected} /></DeferredPanel>
+    <details className="manual-connection"><summary>{t('workspace:manualConnection')}</summary><section className="settings-section">
+      <h2>{t('workspace:apiConnection')}</h2>
+      <p className="context-note">{t('workspace:connectionHelp', { path: API_BASE_PATH })}</p>
       <form className="settings-form" onSubmit={event => { event.preventDefault(); connect(); }}>
-        <label className="field-label" htmlFor="api-endpoint">엔드포인트</label>
+        <label className="field-label" htmlFor="api-endpoint">{t('workspace:endpoint')}</label>
         <input id="api-endpoint" className="text-input" value={endpoint} placeholder={`${currentOrigin}${API_BASE_PATH}`} onChange={event => { setEndpoint(event.target.value); setEndpointError(null); }} />
-        <label className="field-label" htmlFor="api-token">관리자 bearer 토큰</label>
-        <input id="api-token" className="text-input" type="password" autoComplete="off" value={token} placeholder="토큰은 이 탭 메모리에만 보관" onChange={event => setToken(event.target.value)} />
-        <p className="context-note">토큰은 메모리에만 두고 localStorage·sessionStorage·쿠키·쿼리·로그에 저장하지 않아요. 새로고침하면 사라져요.</p>
-        {endpointError && <p className="form-error" role="alert">{endpointError}</p>}
-        <div className="form-actions"><button className="primary-button" type="submit"><PlugsConnected size={22} weight="fill" />연결</button></div>
+        <label className="field-label" htmlFor="api-token">{t('workspace:bearerToken')}</label>
+        <input id="api-token" className="text-input" type="password" autoComplete="off" value={token} placeholder={t('workspace:tokenPlaceholder')} onChange={event => setToken(event.target.value)} />
+        <p className="context-note">{t('workspace:tokenHelp')}</p>
+        {endpointError && <p className="form-error" role="alert">{messageText(endpointError)}</p>}
+        <div className="form-actions"><button className="primary-button" type="submit"><PlugsConnected size={22} weight="fill" />{t('workspace:connect')}</button></div>
       </form>
     </section></details></>;
   }
@@ -316,8 +321,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const successDefinition = data && primary ? data.registry.events.find(item => item.name === primary.definition.successEvent) ?? null : null;
   const { rows: eventRows, filtered: filteredEvents } = dashboardEvents(registry, data?.summary ?? null, source, query);
   const seriesRecords: DailyRecord[] = seriesData ? seriesData.days.map(day => ({ date: day.date, events: { [seriesData.eventName]: day.count } })) : [];
-  const startLabel = startDefinition?.label ?? '시작 시도';
-  const successLabel = successDefinition?.label ?? '성공 시도';
+  const startLabel = startDefinition?.label ?? t('workspace:startAttempt');
+  const successLabel = successDefinition?.label ?? t('workspace:successAttempt');
   const currentWorkflowDetails = view === 'goals' ? Object.values(workflowDetails).filter(detail => detail.context === mainKey && detail.groupBy) : [];
   const { input: exportInput, unavailable: exportUnavailable } = dashboardExport({ data, validVersion, view, source, query, compare,
     comparison: currentComparison, comparisonError, selectedEvent, analysisEvent, seriesData, groupBy,
@@ -340,8 +345,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     </div>;
   return <>
     {unauthorizedClient === client && <>
-      <p className="notice" role="alert">관리자 인증이 만료되었거나 유효하지 않아요. 다시 로그인해 주세요.</p>
-      <DeferredPanel label="관리자 로그인"><OidcLogin onConnected={connected} onBeforeLogin={() => {
+      <p className="notice" role="alert">{t('workspace:sessionExpired')}</p>
+      <DeferredPanel label={t('workspace:adminLogin')}><OidcLogin onConnected={connected} onBeforeLogin={() => {
         if (!confirmDraftExit(true)) return false;
         client.destroy();
         return true;
@@ -351,37 +356,37 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {view !== 'settings' && customPeriod && currentRange && projectToday && <DateRangePicker
       key={JSON.stringify([dateScope, currentRange.from, currentRange.to])} range={currentRange} today={projectToday} timeZone={activeTimeZone!}
       onApply={range => setCustomRange({ scope: dateScope, range })} />}
-    {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
-    {!compactWorkspace && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
+    {view !== 'settings' && dateError && <p className="form-error" role="alert">{messageText(dateError)}</p>}
+    {!compactWorkspace && <><p className="context-note">{t('workspace:apiConnection')} · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · {t('workspace:tokenMemory')}</p><LiveIdentity client={client} /></>}
 
     <div className={view === 'overview' ? 'overview-toolbar events-actions' : analysisWorkspace ? 'events-actions' : undefined}>
     {view === 'overview' && <div className="event-source-switch" role="group" aria-label={t('admin:sourceGroup')}>{(['browser', 'server'] as const).map(value => <button type="button" key={value} aria-pressed={source === value} onClick={() => { setSelectedSource(value); setSelectedEvent(null); setGrouping(null); }}>{value === 'browser' ? <Desktop size={17} /> : <Database size={17} />}{t(value === 'browser' ? 'admin:browserEvents' : 'admin:serverEvents')}</button>)}</div>}
-    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? '작업 흐름·퍼널 기간 비교' : t('admin:comparePrevious')}</label>}
+    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? t('workspace:goalComparison') : t('admin:comparePrevious')}</label>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">{t('admin:todayAggregating')}{compare && ` ${t('admin:todayComparedNotice')}`}</p>}
-    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace || view === 'overview'} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? '작업 흐름 CSV 내려받기' : undefined} />}
+    {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace || view === 'overview'} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? t('workspace:workflowCsv') : undefined} />}
     </div>
-    {showCreate && <DeferredPanel label="프로젝트 생성"><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
-    {pageError && <p className="form-error" role="alert">{pageError}</p>}
-    {projects.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>프로젝트 목록을 확인하는 중이에요</h2></section>}
+    {showCreate && <DeferredPanel label={t('workspace:createProject')}><LiveProjectCreate client={client} onCreated={projectCreated} onClose={() => setShowCreate(false)} registerDraft={registerDraft} /></DeferredPanel>}
+    {pageError && <p className="form-error" role="alert">{messageText(pageError)}</p>}
+    {projects.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>{t('workspace:projectsLoading')}</h2></section>}
     {projects.status === 'error' && projects.error && <ErrorPanel error={projects.error} onRetry={retry} />}
-    {!showCreate && projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>접근 가능한 프로젝트가 없어요</h2><p>생성 권한이 있다면 프로젝트 추가로 시작할 수 있어요. 기존 프로젝트를 조회하려면 운영자에게 해당 프로젝트 권한을 확인해 주세요.</p></section>}
-    {settingsProjectId && <div hidden={!settingsVisible} inert={!settingsVisible}><DeferredPanel key={settingsProjectId} label="프로젝트 설정">
+    {!showCreate && projects.status === 'ready' && projects.data?.length === 0 && <section className="state-panel" role="status"><h2>{t('workspace:noProjects')}</h2><p>{t('workspace:noProjectsHelp')}</p></section>}
+    {settingsProjectId && <div hidden={!settingsVisible} inert={!settingsVisible}><DeferredPanel key={settingsProjectId} label={t('workspace:projectSettings')}>
       <LiveSettingsWorkspace client={client} projectId={settingsProjectId} version={validVersion ? version : null}
         registry={settingsRegistry?.project.id === settingsProjectId ? settingsRegistry : null} newlyCreated={newProjectId === settingsProjectId}
         refreshTick={settingsRefreshTick} setupRefreshTick={setupRefreshTick} diagnosticsRevision={diagnosticsRevision}
         onSaved={settingsSaved} onAccessLost={retry} onVersionChange={schemaVersionChanged} registerDraft={registerDraft} />
     </DeferredPanel></div>}
-    {versionLoading && <p role="status">최신 활성 스키마를 확인하고 있어요.</p>}
+    {versionLoading && <p role="status">{t('workspace:schemaLoading')}</p>}
     {versionError && <ErrorPanel error={versionError} onRetry={retry} />}
-    {view !== 'settings' && !versionLoading && !versionError && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>스키마 버전을 확인해 주세요</h2><p>{versionText.length === 0 ? '조회할 스키마 버전을 입력해 주세요.' : '1 이상 2147483647 이하의 정수만 조회해요. 앞뒤 문자는 허용하지 않아요.'}</p></section>}
-    {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>API에서 조회하는 중이에요</h2><p>등록 정의와 집계를 서버에서 직접 가져와요.</p></section>}
+    {view !== 'settings' && !versionLoading && !versionError && !validVersion && <section className="state-panel" role="status"><WarningCircle size={32} /><h2>{t('workspace:schemaCheck')}</h2><p>{versionText.length === 0 ? t('workspace:schemaRequired') : t('workspace:schemaRange')}</p></section>}
+    {view !== 'settings' && validVersion && currentMain?.status === 'loading' && <section className="state-panel" role="status" aria-busy="true"><h2>{t('workspace:apiLoading')}</h2><p>{t('workspace:apiLoadingHelp')}</p></section>}
     {view !== 'settings' && validVersion && currentMain?.status === 'error' && currentMain.error && <ErrorPanel error={currentMain.error} onRetry={retry} />}
     {view !== 'settings' && deniedRead && <ErrorPanel error={deniedRead} onRetry={retry} />}
     {view !== 'settings' && validVersion && data && registry && <>
-      {compare && comparisonAvailable && comparisonError && <p className="notice" role="status">{comparisonError} 비교를 끄면 현재 기간 CSV도 내려받을 수 있어요.</p>}
+      {compare && comparisonAvailable && comparisonError && <p className="notice" role="status">{messageText(comparisonError)} { t('workspace:comparisonUnavailable') }</p>}
       {compare && aggregateComparisonAvailable && !comparisonError && <>
-        {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">직전 기간을 조회하는 중이에요.</p>}
-        {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>직전 기간 비교를 불러오지 못했어요</h2><p>{describeError(currentComparison.error).detail} 현재 기간 결과는 아래에서 확인할 수 있어요.</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></section>}
+        {(!currentComparison || currentComparison.status === 'loading') && <p className="context-note" role="status">{t('workspace:previousLoading')}</p>}
+        {currentComparison?.status === 'error' && currentComparison.error && <section className="state-panel" role="alert"><h2>{t('workspace:previousFailed')}</h2><p>{describeError(currentComparison.error, t, messageText).detail} { t('workspace:currentAvailable') }</p><button className="secondary-button" type="button" onClick={() => setComparisonRetry(tick => tick + 1)}>{t('workspace:comparisonRetry')}</button></section>}
         {view === 'overview' && currentComparison?.status === 'ready' && currentComparison.data && <PeriodComparison current={data} previous={currentComparison.data} view={view} />}
       </>}
       {view === 'overview' && <OverviewWorkspace source={source} totalEvents={data.summary.totalEvents} rows={eventRows} primary={primary}
@@ -392,37 +397,37 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         onQuery={setQuery} onSource={next => { setSelectedSource(next); setSelectedEvent(null); setGrouping(null); }}
         onSelect={name => { setSelectedEvent(name); setGrouping(null); }}>
         {selectedEvent && <section className="event-detail">
-          <div className="section-header"><h3>일별 발생 추이</h3><button className="text-button" type="button" onClick={() => { setSelectedEvent(null); setGrouping(null); }}>상세 닫기</button></div>
-          {analysisEvent && (!currentSeries || currentSeries.status === 'loading') && <p className="context-note" role="status">일별 시계열을 조회하는 중이에요.</p>}
+          <div className="section-header"><h3>{t('workspace:dailyTrend')}</h3><button className="text-button" type="button" onClick={() => { setSelectedEvent(null); setGrouping(null); }}>{t('workspace:closeDetail')}</button></div>
+          {analysisEvent && (!currentSeries || currentSeries.status === 'loading') && <p className="context-note" role="status">{t('workspace:dailyLoading')}</p>}
           {currentSeries?.status === 'error' && currentSeries.error && <ErrorPanel error={currentSeries.error} onRetry={retry} />}
           {seriesData && <Trend records={seriesRecords} event={seriesData.eventName} />}
-          <div className="event-detail-tabs" role="group" aria-label="상세 보기">
-            <button type="button" aria-pressed={detailTab === 'properties'} onClick={() => setDetailTab('properties')}>속성별 분석</button>
-            <button type="button" aria-pressed={detailTab === 'daily'} onClick={() => setDetailTab('daily')}>일별 데이터</button>
+          <div className="event-detail-tabs" role="group" aria-label={t('workspace:detailView')}>
+            <button type="button" aria-pressed={detailTab === 'properties'} onClick={() => setDetailTab('properties')}>{t('workspace:properties')}</button>
+            <button type="button" aria-pressed={detailTab === 'daily'} onClick={() => setDetailTab('daily')}>{t('workspace:dailyData')}</button>
           </div>
-          {detailTab === 'daily' ? <div className="table-scroll" tabIndex={0} aria-label="선택 이벤트 일별 데이터"><table className="event-table event-daily-table">
-            <thead><tr><th scope="col">날짜</th><th scope="col" className="number-cell">건수</th></tr></thead><tbody>{seriesData?.days.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td className="number-cell">{formatCount(day.count)}</td></tr>)}</tbody>
+          {detailTab === 'daily' ? <div className="table-scroll" tabIndex={0} aria-label={t('workspace:selectedEventDaily')}><table className="event-table event-daily-table">
+            <thead><tr><th scope="col">{t('workspace:date')}</th><th scope="col" className="number-cell">{t('workspace:count')}</th></tr></thead><tbody>{seriesData?.days.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td className="number-cell">{formatCount(day.count)}</td></tr>)}</tbody>
           </table></div> : <>
-          <label className="api-field property-grouping"><span>분류 기준</span><div className="project-select-wrap"><select className="text-input settings-select" aria-label="분류 기준" value={groupBy} disabled={!propertyNames.length}
+          <label className="api-field property-grouping"><span>{t('workspace:groupBy')}</span><div className="project-select-wrap"><select className="text-input settings-select" aria-label={t('workspace:groupBy')} value={groupBy} disabled={!propertyNames.length}
             onChange={event => setGrouping(analysisRegistry && analysisEvent && event.target.value ? { context: eventContext(analysisRegistry, analysisEvent), property: event.target.value } : null)} aria-describedby="event-grouping-help">
-            <option value="">전체 건수</option>{propertyNames.map(name => <option key={name} value={name}>{name}</option>)}</select><CaretDown size={16} aria-hidden="true" /></div></label>
-          <p className="context-note" id="event-grouping-help">{!analysisEvent ? '이 스키마에 등록된 선택 출처의 이벤트만 분석할 수 있어요.' : !propertyNames.length ? '등록된 속성이 없어 일별 전체 건수만 보여줘요.' : groupBy ? `${groupBy} 값별로 나눠 봐요. ${analysisEvent.properties[groupBy].purpose}` : '분류 기준을 고르면 속성 값별 건수·비중·추이를 볼 수 있어요.'}</p>
+            <option value="">{t('workspace:totalCount')}</option>{propertyNames.map(name => <option key={name} value={name}>{name}</option>)}</select><CaretDown size={16} aria-hidden="true" /></div></label>
+          <p className="context-note" id="event-grouping-help">{!analysisEvent ? t('workspace:registeredOnly') : !propertyNames.length ? t('workspace:noProperties') : groupBy ? t('workspace:propertyValues', { property: groupBy, purpose: analysisEvent.properties[groupBy].purpose }) : t('workspace:groupHelp')}</p>
           {seriesData && <>
             {currentSeries?.analysis && <EventPropertyBreakdown key={`${seriesKey}`} analysis={currentSeries.analysis} propertyName={groupBy} />}
             {currentSeries?.analysis && compare && !comparisonError && <>
-              {propertyComparison.state?.status === 'loading' && <p role="status">직전 기간 이벤트 속성을 조회하는 중이에요.</p>}
-              {propertyComparison.state?.status === 'error' && <div role="alert"><p>직전 기간 이벤트 속성을 불러오지 못했어요. 현재 기간 결과는 유지돼요.</p>
-                <button className="secondary-button" type="button" onClick={propertyComparison.retry}>이벤트 속성별 비교 다시 시도</button></div>}
+              {propertyComparison.state?.status === 'loading' && <p role="status">{t('workspace:previousPropertiesLoading')}</p>}
+              {propertyComparison.state?.status === 'error' && <div role="alert"><p>{t('workspace:previousPropertiesFailed')}</p>
+                <button className="secondary-button" type="button" onClick={propertyComparison.retry}>{t('workspace:propertiesRetry')}</button></div>}
               {propertyComparison.state?.status === 'ready' && propertyComparison.state.series && propertyComparison.state.analysis &&
                 <EventPropertyComparison current={seriesData} previous={propertyComparison.state.series} analysis={propertyComparison.state.analysis} />}
             </>}
           </>}
           </>}
-          <p className="event-inspector-meta context-note">스키마 v{registry.schemaVersion} · {sourceLabel(source)} · {registry.schemaStatus === 'retired' ? '사용 중지(retired)' : '운영 중(active)'}</p>
+          <p className="event-inspector-meta context-note">{t('workspace:schemaMeta', { version: registry.schemaVersion, source: t(source === 'browser' ? 'admin:browserEvents' : 'admin:serverEvents'), status: t(registry.schemaStatus === 'retired' ? 'workspace:retired' : 'workspace:active') })}</p>
         </section>}
       </EventWorkspace>}
-      {currentComparison?.data?.workflowErrors?.length ? <p role="alert">직전 기간의 일부 작업 흐름을 불러오지 못했어요. 확인할 수 없는 비교 값은 비워 두며 전체 CSV는 잠겨 있어요. <button className="secondary-button" onClick={() => setComparisonRetry(tick => tick + 1)}>비교 다시 시도</button></p> : null}
-      {view === 'goals' && <DeferredPanel key={activeProjectId} label="목표"><LiveGoals client={client} registry={registry} workflows={data.workflows} workflowErrors={data.workflowErrors ?? []} onRecovered={load => setMain(previous => {
+      {currentComparison?.data?.workflowErrors?.length ? <p role="alert">{t('workspace:partialWorkflows')} <button className="secondary-button" onClick={() => setComparisonRetry(tick => tick + 1)}>{t('workspace:comparisonRetry')}</button></p> : null}
+      {view === 'goals' && <DeferredPanel key={activeProjectId} label={t('workspace:goals')}><LiveGoals client={client} registry={registry} workflows={data.workflows} workflowErrors={data.workflowErrors ?? []} onRecovered={load => setMain(previous => {
         if (previous.key !== mainKey || previous.status !== 'ready' || !previous.data) return previous;
         return { ...previous, data: { ...previous.data, ...recoverWorkflow(previous.data, previous.data.registry, load) } };
       })} range={data.range}
@@ -430,6 +435,6 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         previous={compare && !comparisonError ? previousRange(data.range) : null} compare={compare} comparisonError={comparisonError} context={mainKey} onState={workflowStateChanged} /></DeferredPanel>}
 
     </>}
-    {view === 'overview' && projects.status === 'ready' && !!projects.data?.length && <DeferredPanel label="서비스 통합 현황"><ProjectOverview client={client} projects={projects.data} source={source} onSelectProject={switchProject} activeProjectId={activeProject?.id} hasMore={!!nextCursor} onLoadMore={loadMore} loadingMore={more} /></DeferredPanel>}
+    {view === 'overview' && projects.status === 'ready' && !!projects.data?.length && <DeferredPanel label={t('workspace:services')}><ProjectOverview client={client} projects={projects.data} source={source} onSelectProject={switchProject} activeProjectId={activeProject?.id} hasMore={!!nextCursor} onLoadMore={loadMore} loadingMore={more} /></DeferredPanel>}
   </>;
 }

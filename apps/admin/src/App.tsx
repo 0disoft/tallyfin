@@ -1,13 +1,11 @@
-import { lazy, useCallback, useEffect, useRef, useState } from 'react';
-import { CalendarBlank, CaretDown, ChartBar, FileText, FolderSimple, Gear, House, Leaf, List, Target, WarningCircle, X } from '@phosphor-icons/react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { CalendarBlank, CaretDown, ChartBar, Gear, House, List, Target, WarningCircle, X } from '@phosphor-icons/react';
 import '@fontsource-variable/inter/wght.css';
 import '@fontsource-variable/noto-sans-kr/wght.css';
-import { dateAt, getRecords, periodLabel, projects, summarize, type DisplayState, type Period, type ProjectId, type View } from './data';
-import { EventAnalysis, Goals, Overview } from './Dashboard';
-import Settings from './Settings';
+import { dateAt, getRecords, projects, summarize, type DisplayState, type Period, type ProjectId, type View } from './data';
 import DeferredPanel from './DeferredPanel';
 import './styles.css';
-import { useI18n } from './i18n';
+import { loadWorkspaceCatalogs, useI18n } from './i18n';
 import LanguageControl from './i18n/LanguageControl';
 import { initialCallback } from './auth/bootstrap';
 import { WorkspaceExit } from './api/workspace-exit';
@@ -18,9 +16,17 @@ const navigation = [
   { id: 'goals' as const, title: 'navGoals' as const, icon: Target },
   { id: 'settings' as const, title: 'navSettings' as const, icon: Gear },
 ];
-const stateLabels: Record<DisplayState, string> = { normal: '기본', loading: '로딩', empty: '데이터 없음', error: '조회 실패', stale: '오래된 데이터', unauthorized: '권한 없음' };
+const stateLabels = { normal: 'stateNormal', loading: 'stateLoading', empty: 'stateEmpty', error: 'stateError', stale: 'stateStale', unauthorized: 'stateUnauthorized' } as const;
 type Mode = 'sample' | 'api';
-const LiveDashboard = lazy(() => import('./LiveDashboard').then(module => ({ default: module.LiveDashboard })));
+const LiveDashboard = lazy(async () => {
+  await loadWorkspaceCatalogs();
+  return import('./LiveDashboard').then(module => ({ default: module.LiveDashboard }));
+});
+const Settings = lazy(async () => { await loadWorkspaceCatalogs(); return import('./Settings'); });
+const Overview = lazy(async () => { await loadWorkspaceCatalogs(); return import('./Dashboard').then(module => ({ default: module.Overview })); });
+const EventAnalysis = lazy(async () => { await loadWorkspaceCatalogs(); return import('./Dashboard').then(module => ({ default: module.EventAnalysis })); });
+const Goals = lazy(async () => { await loadWorkspaceCatalogs(); return import('./Dashboard').then(module => ({ default: module.Goals })); });
+const SampleProjects = lazy(() => import('./SampleProjects'));
 
 export function App({ demo = false }: { demo?: boolean }) {
   const { t, locale } = useI18n();
@@ -85,28 +91,26 @@ export function App({ demo = false }: { demo?: boolean }) {
     {mobile && drawerOpen && <button className="drawer-overlay" type="button" aria-label={t('admin:closeNavigation')} onClick={closeDrawer} />}
     <aside ref={drawerRef} className={`sidebar${drawerOpen ? ' open' : ''}`} aria-label={t('admin:projectNavigation')} inert={mobile && !drawerOpen} role={mobile && drawerOpen ? 'dialog' : undefined} aria-modal={mobile && drawerOpen || undefined}>
       <div className="brand"><img src="/assets/tallyfin-fin.png" alt="" width="40" height="30" /><span>Tallyfin</span>{mobile && <button type="button" className="mobile-close" aria-label={t('admin:closeMenu')} onClick={closeDrawer}><X size={24} /></button>}</div>
-      {mode === 'sample' ? <>
-        <div className="project-switcher"><label htmlFor="project-switch">{t('admin:project')}</label><div className="project-select-wrap"><FolderSimple size={24} color="#155EEF" /><select id="project-switch" aria-label={t('admin:selectProject')} value={projectId} onChange={event => switchProject(event.target.value as ProjectId)}>{projects.map(item => <option key={item.id} value={item.id}>{names[item.id]}</option>)}</select><CaretDown size={16} /></div></div>
-        <div className="project-list">{projects.filter(item => item.id !== projectId).map(item => { const Icon = item.id === 'orchid' ? Leaf : item.id === 'sembom' ? FileText : FolderSimple; return <button key={item.id} type="button" className="project-button" onClick={() => switchProject(item.id)}><Icon size={23} /><span>{names[item.id]}</span></button>; })}</div>
-      </> : <p className="context-note sidebar-note">{t('admin:apiSidebarNote')}</p>}
+      {mode === 'sample' ? <Suspense fallback={null}><SampleProjects projectId={projectId} names={names} onSelect={switchProject} /></Suspense>
+        : <p className="context-note sidebar-note">{t('admin:apiSidebarNote')}</p>}
       <nav className="nav-list" aria-label={t('admin:mainNavigation')}>{navigation.map(item => <button key={item.id} type="button" className={`nav-button${view === item.id ? ' active' : ''}`} aria-current={view === item.id ? 'page' : undefined} onClick={() => navigate(item.id)}><item.icon size={25} weight={view === item.id ? 'fill' : 'regular'} /><span>{t(`admin:${item.title}`)}</span></button>)}</nav>
       <div className="sidebar-footer"><p>{t('admin:privacyTagline')}<br />{t('admin:betterProducts')}<br />Tallyfin</p><span className="sample-badge">{t(mode === 'api' ? 'admin:apiConnection' : 'admin:sampleData')}</span></div>
     </aside>
     <main ref={mainRef} id="main-content" className="workspace" tabIndex={-1} inert={mobile && drawerOpen}>
       <div className="mobile-bar"><button ref={menuRef} type="button" className="menu-trigger" aria-label={t('admin:openNavigation')} aria-expanded={drawerOpen} onClick={() => setDrawerOpen(true)}><List size={25} /></button><span>Tallyfin</span><span className="sample-badge">{mode === 'api' ? 'API' : t('admin:sample')}</span></div>
-      <header className="page-header"><div className="title-group"><h1>{titles[view]}</h1>{mode === 'api' && view === 'overview' && <p className="overview-page-subtitle">{t('admin:overviewSubtitle')}</p>}{mode === 'api' && view === 'settings' && <p className="settings-page-subtitle">{t('admin:settingsSubtitle')}</p>}<div className="project-subtitle">{mode === 'api' ? (liveProject?.name ?? '—') : names[projectId]}</div></div>{mode === 'api' && (view === 'overview' || view === 'events' || view === 'goals' || view === 'settings') && <div className="event-header-context" ref={setEventHeaderHost} />}<div className="header-controls"><LanguageControl />{demo && <div className="mode-switch" role="group" aria-label={t('admin:dataMode')}><button type="button" className={mode === 'sample' ? 'active' : ''} aria-pressed={mode === 'sample'} onClick={() => switchMode('sample')}>Sample</button><button type="button" className={mode === 'api' ? 'active' : ''} aria-pressed={mode === 'api'} onClick={() => switchMode('api')}>{t('admin:apiConnection')}</button></div>}{!(mode === 'api' && view === 'settings') && <><div className="period-control"><CalendarBlank size={22} /><label className="sr-only" htmlFor="period">{t('admin:reportPeriod')}</label><select id="period" value={mode === 'api' && customPeriod ? 'custom' : period} onChange={event => { const custom = event.target.value === 'custom'; setCustomPeriod(custom); if (!custom) setPeriod(Number(event.target.value) as Period); }}>{([7, 14, 30] as const).map(days => <option key={days} value={days}>{mode === 'api' ? t('admin:recentDays', { days }) : periodLabel(days)}</option>)}{mode === 'api' && <option value="custom">{t('admin:customRange')}</option>}</select><CaretDown size={16} /></div><span className="timezone">{mode === 'api' ? (liveProject?.timeZone ?? '—') : 'Asia/Seoul (KST)'}</span></>}</div></header>
+      <header className="page-header"><div className="title-group"><h1>{titles[view]}</h1>{mode === 'api' && view === 'overview' && <p className="overview-page-subtitle">{t('admin:overviewSubtitle')}</p>}{mode === 'api' && view === 'settings' && <p className="settings-page-subtitle">{t('admin:settingsSubtitle')}</p>}<div className="project-subtitle">{mode === 'api' ? (liveProject?.name ?? '—') : names[projectId]}</div></div>{mode === 'api' && (view === 'overview' || view === 'events' || view === 'goals' || view === 'settings') && <div className="event-header-context" ref={setEventHeaderHost} />}<div className="header-controls"><LanguageControl />{demo && <div className="mode-switch" role="group" aria-label={t('admin:dataMode')}><button type="button" className={mode === 'sample' ? 'active' : ''} aria-pressed={mode === 'sample'} onClick={() => switchMode('sample')}>Sample</button><button type="button" className={mode === 'api' ? 'active' : ''} aria-pressed={mode === 'api'} onClick={() => switchMode('api')}>{t('admin:apiConnection')}</button></div>}{!(mode === 'api' && view === 'settings') && <><div className="period-control"><CalendarBlank size={22} /><label className="sr-only" htmlFor="period">{t('admin:reportPeriod')}</label><select id="period" value={mode === 'api' && customPeriod ? 'custom' : period} onChange={event => { const custom = event.target.value === 'custom'; setCustomPeriod(custom); if (!custom) setPeriod(Number(event.target.value) as Period); }}>{([7, 14, 30] as const).map(days => <option key={days} value={days}>{t('admin:recentDays', { days })}</option>)}{mode === 'api' && <option value="custom">{t('admin:customRange')}</option>}</select><CaretDown size={16} /></div><span className="timezone">{mode === 'api' ? (liveProject?.timeZone ?? '—') : 'Asia/Seoul (KST)'}</span></>}</div></header>
       {mode === 'sample' && <p className="context-note" role="status">{t('admin:sampleModeNotice')} <a href="/">{t('admin:backToAdminLogin')}</a></p>}
       <div className="view-content" key={mode === 'api' ? 'api-workspace' : `${projectId}-${view}`}>
         {mode === 'api' ? <DeferredPanel label={t('admin:apiManagement')}><LiveDashboard view={view} period={period} customPeriod={customPeriod} onActiveProjectChange={setLiveProjectLabel} onNavigate={navigate} registerExitCheck={registerApiExit} headerHost={eventHeaderHost} /></DeferredPanel> : displayState === 'unauthorized' ? <section className="state-panel" role="status"><WarningCircle size={32} /><h2>{t('admin:unauthorizedTitle')}</h2><p>{t('admin:unauthorizedBody')}</p><button className="secondary-button" onClick={() => setDisplayState('normal')}>{t('admin:backToSample')}</button></section> : displayState === 'error' ? <section className="state-panel" role="alert"><WarningCircle size={32} /><h2>{t('admin:loadErrorTitle')}</h2><p>{t('admin:loadErrorBody')}</p><button className="primary-button" onClick={() => setDisplayState('normal')}>{t('admin:retry')}</button></section> : displayState === 'loading' ? <section className="state-panel" role="status" aria-busy="true"><h2>{t('admin:loadingTitle')}</h2><p>{t('admin:loadingBody')}</p><button className="secondary-button" onClick={() => setDisplayState('normal')}>{t('admin:loadingComplete')}</button></section> : <>
           {displayState === 'stale' && <p className="notice" role="status"><WarningCircle size={20} />{t('admin:staleSampleNotice', { date: dateAt(-1) })} <button className="text-button" onClick={() => setDisplayState('normal')}>{t('admin:refresh')}</button></p>}
           {displayState === 'empty' && <p className="notice" role="status">{t('admin:emptyPeriodNotice')}</p>}
-          {view === 'overview' && <Overview project={project} records={records} summary={summary} onAnalyze={() => navigate('events')} />}
-          {view === 'events' && <EventAnalysis project={project} records={records} summary={summary} />}
-          {view === 'goals' && <Goals project={project} records={records} summary={summary} />}
-          {view === 'settings' && <Settings project={project} displayName={names[projectId]} onSave={name => setNames(previous => ({ ...previous, [projectId]: name }))} onReset={() => setNames(previous => ({ ...previous, [projectId]: project.name }))} />}
+          {view === 'overview' && <DeferredPanel label={t('admin:navOverview')}><Overview project={project} records={records} summary={summary} onAnalyze={() => navigate('events')} /></DeferredPanel>}
+          {view === 'events' && <DeferredPanel label={t('admin:navEvents')}><EventAnalysis project={project} records={records} summary={summary} /></DeferredPanel>}
+          {view === 'goals' && <DeferredPanel label={t('admin:navGoals')}><Goals project={project} records={records} summary={summary} /></DeferredPanel>}
+          {view === 'settings' && <DeferredPanel label={t('admin:navSettings')}><Settings project={project} displayName={names[projectId]} onSave={name => setNames(previous => ({ ...previous, [projectId]: name }))} onReset={() => setNames(previous => ({ ...previous, [projectId]: project.name }))} /></DeferredPanel>}
         </>}
       </div>
-      <footer className="prototype-footer">{locale === 'en' && <p className="locale-scope-note">{t('admin:partialTranslation')}</p>}{mode === 'api' ? <p className="context-note">{t('admin:footerApi')}</p> : <><p className="context-note">{t('admin:footerSample')}</p><details className="diagnostics"><summary>화면 상태 확인</summary><label htmlFor="display-state">{t('admin:sampleState')}</label><select id="display-state" value={displayState} onChange={event => setDisplayState(event.target.value as DisplayState)}>{Object.entries(stateLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></details></>}</footer>
+      <footer className="prototype-footer">{mode === 'api' ? <p className="context-note">{t('admin:footerApi')}</p> : <><p className="context-note">{t('admin:footerSample')}</p><details className="diagnostics"><summary>{t('admin:screenState')}</summary><label htmlFor="display-state">{t('admin:sampleState')}</label><select id="display-state" value={displayState} onChange={event => setDisplayState(event.target.value as DisplayState)}>{Object.entries(stateLabels).map(([value, label]) => <option key={value} value={value}>{t(`admin:${label}`)}</option>)}</select></details></>}</footer>
     </main>
   </div>;
 }

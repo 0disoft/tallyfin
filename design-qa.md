@@ -1,3 +1,41 @@
+# Saylo detailed admin screens - 2026-10-28
+
+## Sources and captures
+
+- The approved event explorer, goal inspector and Settings tab/workbench
+  designs remain the layout sources in `docs/frontend/FRONTEND_DESIGN.md`.
+  This change extends UI language coverage without changing those designs.
+- Final synthetic local-fixture captures are under
+  `.tmp/admin-locales-FCnEgf/`: `events-en-1440.png`, `events-en-390.png`,
+  `goals-en-1440.png`, `goals-en-390.png`, five desktop Settings captures and
+  `settings-tab-{0,1,2,3,4}-en-390.png`. Viewports are 1440x1024 and 390x1024
+  CSS pixels, DPR 1, using full-page captures.
+- English event desktop, goal mobile, project desktop and schema mobile were
+  visually reviewed. Headers, translated guidance, field labels and validation
+  controls fit; long form instructions wrap. Goal/Settings tab strips scroll
+  within their section on narrow screens. No document-wide horizontal overflow.
+  No new assets, icons, fonts or design tokens were introduced.
+
+## Interaction and language boundaries
+
+- `verify:admin-locales` confirms selected event/goal, unsaved project name and
+  JSON draft retention across KO/EN changes. Stored validation errors change
+  language in place. CSV downloads are byte-identical across locales. Language
+  changes trigger no API reads, writes, reauthorization or workspace remount.
+- Schema, collection diagnostics, SDK and access tabs remain reachable in both
+  languages. Locale preferences remain independent of the session. Configured
+  Korean event/workflow labels and operator-entered drafts intentionally retain
+  their original text; API codes and enum values are also unchanged.
+- Existing Overview/Settings/goal-access/schema comparison/server-draft checks pass.
+  A schema-validation focus race exposed during regression verification was
+  fixed by committing editor-mode changes in the layout phase before focus.
+- No actionable layout findings remain in the reviewed views. Production
+  delivery was not verified; this is local browser evidence only.
+
+final result: passed
+
+---
+
 # Saylo Korean/English pilot - 2026-10-28
 
 ## Sources, state and comparison

@@ -25,7 +25,6 @@
   "customRange": "직접 선택",
   "footerApi": "API 연결 · 같은 출처 /v1 · 토큰은 메모리에만 · 프로젝트 권한은 서버에서 확인",
   "footerSample": "샘플 데이터 · Asia/Seoul 일별 집계 · 실제 수집 연결 전",
-  "partialTranslation": "탐색 메뉴와 개요는 번역되었어요. 일부 대화 상자와 고급 섹션은 아직 한국어로 표시돼요.",
   "language": "언어",
   "sampleDemoTitle": "샘플 데모",
   "adminTitle": "관리자",
@@ -117,5 +116,17 @@
   "serviceOverview": "서비스 통합 현황",
   "loadServiceOverview": "통합 현황 불러오기",
   "closeServiceOverview": "통합 현황 닫기",
-  "serviceOverviewHint": "프로젝트별 최근 7일 비교 · 펼칠 때 조회해요."
+  "serviceOverviewHint": "프로젝트별 최근 7일 비교 · 펼칠 때 조회해요.",
+  "localeLoadFailed": "언어를 불러오지 못했어요. 다시 선택해 주세요.",
+  "screenState": "화면 상태 확인",
+  "stateNormal": "기본",
+  "stateLoading": "로딩",
+  "stateEmpty": "데이터 없음",
+  "stateError": "조회 실패",
+  "stateStale": "오래된 데이터",
+  "stateUnauthorized": "권한 없음",
+  "panelFailed": "{label} 화면을 불러오지 못했어요",
+  "panelFailedHelp": "네트워크 연결을 확인한 뒤 새로고침해 주세요. 새로고침하면 입력 중인 내용과 직접 연결한 토큰이 지워져요.",
+  "panelReload": "화면 새로고침",
+  "panelLoading": "{label} 화면을 준비하고 있어요"
 }

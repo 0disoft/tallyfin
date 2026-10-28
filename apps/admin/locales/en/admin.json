@@ -25,7 +25,6 @@
   "customRange": "Custom range",
   "footerApi": "API connection · same-origin /v1 · token kept in memory · project access verified by the server",
   "footerSample": "Sample data · daily aggregation in Asia/Seoul · not connected to live collection",
-  "partialTranslation": "Navigation and Overview are translated. Some dialogs and advanced sections remain in Korean.",
   "language": "Language",
   "sampleDemoTitle": "Sample demo",
   "adminTitle": "Admin",
@@ -117,5 +116,17 @@
   "serviceOverview": "Service overview",
   "loadServiceOverview": "Load service overview",
   "closeServiceOverview": "Close service overview",
-  "serviceOverviewHint": "Compare the last 7 days for each project; loaded when expanded."
+  "serviceOverviewHint": "Compare the last 7 days for each project; loaded when expanded.",
+  "localeLoadFailed": "Could not load the language. Select it again to retry.",
+  "screenState": "Screen state",
+  "stateNormal": "Normal",
+  "stateLoading": "Loading",
+  "stateEmpty": "No data",
+  "stateError": "Load failed",
+  "stateStale": "Outdated data",
+  "stateUnauthorized": "No access",
+  "panelFailed": "Could not load {label}",
+  "panelFailedHelp": "Check your connection and reload. Reloading clears unsaved input and manually connected tokens.",
+  "panelReload": "Reload page",
+  "panelLoading": "Preparing {label}"
 }

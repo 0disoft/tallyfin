@@ -1,9 +1,11 @@
 import { useI18n } from './i18n';
+import { useMessageText } from './i18n/messages';
 import { useState } from 'react';
 import { analyticsCsv, type ExportInput } from './api/csv-export';
 
 export default function CsvDownload({ input, unavailable, buttonLabel, compact = false }: { input: ExportInput | null; unavailable: string | null; buttonLabel?: string; compact?: boolean }) {
   const { t } = useI18n();
+  const messageText = useMessageText();
   const [message, setMessage] = useState<number | null>(null);
   const [error, setError] = useState(false);
   function download() {
@@ -26,7 +28,7 @@ export default function CsvDownload({ input, unavailable, buttonLabel, compact =
   return <div className="csv-export">
     <button className="secondary-button" type="button" disabled={!input || !!unavailable} onClick={download} aria-describedby="csv-export-status">{buttonLabel ?? t('admin:downloadCsv')}</button>
     <p id="csv-export-status" className={error && !unavailable ? 'form-error' : compact && !unavailable && message === null ? 'sr-only' : 'context-note'} role={error && !unavailable ? 'alert' : 'status'}>
-      {unavailable ?? (error ? t('admin:csvFailed') : message !== null ? t('admin:csvRequested', { count: message }) : t('admin:csvHelp'))}
+      {unavailable ? messageText(unavailable) : (error ? t('admin:csvFailed') : message !== null ? t('admin:csvRequested', { count: message }) : t('admin:csvHelp'))}
     </p>
   </div>;
 }

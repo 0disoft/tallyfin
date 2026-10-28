@@ -1,5 +1,48 @@
 # Validation
 
+## Saylo detailed admin screens - 2026-10-28
+
+- Extended KO/EN coverage to event details, property/period comparisons,
+  workflows/funnels, all five Settings tabs, schema forms/files/server drafts,
+  SDK guidance, diagnostics, operational reports, access controls and login.
+  Seven catalog pairs contain 1,695 matching keys per locale. Explicit helper
+  message templates translate stored errors at render time; configured labels,
+  identifiers, raw values, JSON drafts, generated SDK code and CSV remain data.
+- The stable Saylo instance now loads catalogs through the lazy source. The
+  shell starts with `admin`; detailed catalogs load with the workspace. Locale
+  loading completes before its snapshot changes, with a retryable failure
+  indicator. Both locales must be complete at build time. Sample-only screens
+  and navigation are deferred; initial static JS is 100,408 gzip bytes, below
+  the unchanged 102,400-byte cap. No dependencies or budget limits changed.
+- Passed `typecheck:admin`, `build:admin`, emitted bundle tests (2), all admin
+  unit tests (387 with concurrency 2), and the focused locale suite (5).
+  Actual component render tests use real KO/EN catalogs through an isolated
+  fixture rather than importing Vite virtual modules into Node.
+- Passed `verify:admin-locales`: event/goal selection, project-name and JSON
+  drafts survive language changes; stored validation/errors retranslate;
+  CSV bytes remain identical. Locale changes issue no additional API reads,
+  writes or authorization. All Settings tabs and 1440/390px layouts pass.
+  `.tmp/admin-locales-FCnEgf/report.json` records one authorization, zero
+  writes and zero page/route errors. Captures are reviewed in `design-qa.md`.
+- Passed existing `verify:admin-overview`, `verify:admin-settings-workspace`,
+  `verify:admin-goal-access`, `verify:admin-schema-comparison` and
+  `verify:admin-server-draft` browser checks. Overview still covers catalog edits retaining a
+  draft and locale preference after reload. Schema comparisons and server-draft
+  checks retain conflict, lost-response, permission and cancellation coverage.
+- A repeated schema-editor regression check exposed a focus timing race:
+  the animation frame could run before the form-mode DOM committed. The focus
+  effect now uses the layout phase. The goal-access check also explicitly
+  expands connection controls before disconnecting. Its final 17-scenario run
+  passes representative/failure editors, current/previous 403s, stale table and
+  export clearing, recovery and disconnect, with zero page/route errors:
+  `.tmp/admin-goal-access-XCmeNm/report.json`.
+- Source-of-truth updates: this record, `docs/frontend/FRONTEND_DESIGN.md` and
+  `apps/admin/AGENTS.md`. Added only a local `verify:admin-locales` command;
+  API/DB contracts, Workers, auth policy, repository hygiene and CI/runners
+  are unchanged. Backend/full-repository and Sites packaging checks were
+  skipped for this admin-only change. Production verification, push and
+  deployment were not performed.
+
 ## Saylo Korean/English admin pilot - 2026-10-28
 
 - Added published `@0disoft/saylo-core`/`saylo-react` runtime dependencies and

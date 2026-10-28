@@ -1,7 +1,7 @@
-import { createStore } from '@0disoft/saylo-core';
+import { createI18n } from '@0disoft/saylo-core';
 import { createSayloReact } from '@0disoft/saylo-react';
 import { connectDev } from '@0disoft/saylo-vite/client';
-import { baseLocale, initialCatalogs, timeZone } from 'virtual:saylo';
+import { catalogSource, initialCatalogs, initialLocale, initialNamespaces, timeZone } from 'virtual:saylo/lazy';
 import type { AppSchema } from './schema.generated';
 import { readLocale, saveLocale, supportedLocale } from './preference';
 
@@ -10,18 +10,29 @@ function preferenceStorage(): Storage | null {
 }
 
 // One client-app owner, outside React renders/StrictMode. Locale is never a key.
-export const adminI18n = createStore<AppSchema>({
-  catalogs: initialCatalogs, baseLocale, locale: readLocale(preferenceStorage()), timeZone,
+export const adminI18n = createI18n<AppSchema>({
+  catalogSource, initialCatalogs, initialNamespaces, locale: initialLocale, timeZone,
 });
 export const { SayloProvider, useI18n } = createSayloReact<AppSchema>();
 
-export function setAdminLocale(value: string) {
+export let localeRestoreFailed = false;
+export async function restoreAdminLocale() {
+  try { await adminI18n.setLocale(readLocale(preferenceStorage())); }
+  catch { localeRestoreFailed = true; } // Keep the boot locale and show the retryable selector error.
+}
+
+/** Load the detailed catalogs with the API workspace, never on a locale-driven remount. */
+export async function loadWorkspaceCatalogs() {
+  await adminI18n.setNamespaces(['admin', 'workspace', 'analysis', 'settings', 'operations', 'messages', 'sample']);
+}
+
+export async function setAdminLocale(value: string) {
   const locale = supportedLocale(value);
-  adminI18n.setLocale(locale);
-  saveLocale(preferenceStorage(), locale);
+  await adminI18n.setLocale(locale);
+  if (adminI18n.getSnapshot().locale === locale) saveLocale(preferenceStorage(), locale);
 }
 
 if (import.meta.hot) {
-  const disconnect = connectDev(adminI18n, { hot: import.meta.hot });
+  const disconnect = connectDev(adminI18n, { catalogSource });
   import.meta.hot.dispose(() => { disconnect(); adminI18n.dispose(); });
 }

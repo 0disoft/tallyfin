@@ -4,12 +4,12 @@ import { build } from 'esbuild';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { i18nViewPlugin, renderWithLocale as renderToStaticMarkup } from '../../tests/i18n-fixture.mjs';
 
 const require = createRequire(import.meta.url);
 const bundle = await build({ entryPoints: [fileURLToPath(new URL('../EventWorkspace.tsx', import.meta.url))], bundle: true,
   write: false, format: 'esm', platform: 'node', jsx: 'automatic', loader: { '.css': 'empty' },
-  plugins: [{ name: 'shared-react', setup(build) {
+  plugins: [i18nViewPlugin, { name: 'shared-react', setup(build) {
     build.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
   } }],
 });

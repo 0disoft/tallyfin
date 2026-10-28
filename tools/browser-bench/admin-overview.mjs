@@ -105,7 +105,7 @@ try {
   await page.screenshot({ path: resolve(directory, 'overview-en-390.png'), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1024 });
   await page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('button', { name: 'Settings', exact: true }).click();
-  const nameInput = page.getByRole('textbox', { name: '프로젝트 이름', exact: true });
+  const nameInput = page.locator('#settings-name');
   const savedName = await nameInput.inputValue();
   await nameInput.fill('Saylo draft retained');
   await page.locator('.locale-control select').selectOption('ko');
