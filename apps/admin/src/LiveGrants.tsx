@@ -74,7 +74,7 @@ export default function LiveGrants({ client, projectId, canView, timeZone, refre
     }
   }, [refreshTick]);
   const formatter = useMemo(() => {
-    try { return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: 'medium', timeStyle: 'short' }); }
+    try { return new Intl.DateTimeFormat(locale, { timeZone, calendar: 'gregory', dateStyle: 'medium', timeStyle: 'short' }); }
     catch { return null; }
   }, [timeZone, locale]);
   // Never render a previous connection/project snapshot, even before effect cleanup runs.

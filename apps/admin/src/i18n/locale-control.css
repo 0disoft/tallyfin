@@ -10,7 +10,7 @@
 }
 
 .locale-control select {
-  max-width: 110px;
+  max-width: min(160px, 40vw);
   padding: 5px 0;
   border: 0;
   background: transparent;

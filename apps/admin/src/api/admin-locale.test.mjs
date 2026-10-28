@@ -6,7 +6,7 @@ import { readLocale, saveLocale, supportedLocale, LOCALE_KEY } from '../i18n/pre
 import { createMessageText } from '../i18n/message-text.ts';
 
 test('language preferences accept only the supported UI locales', () => {
-  for (const value of [null, undefined, '', 'en-US', 'fr', '{}']) assert.equal(supportedLocale(value), 'ko');
+  for (const value of [null, undefined, '', 'en-US', '{}']) assert.equal(supportedLocale(value), 'en');
   assert.equal(readLocale({ getItem: key => { assert.equal(key, LOCALE_KEY); return 'en'; } }), 'en');
   assert.equal(supportedLocale('ko'), 'ko');
 });

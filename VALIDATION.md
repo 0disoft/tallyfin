@@ -1,5 +1,21 @@
 # Validation
 
+## ZDP language expansion foundation - 2026-10-28
+
+- Added the twelve-language registry from architecture product standards,
+  native selector labels, English base/fallback and safe saved preferences.
+  Korean remains the no-preference initial language. Additional languages
+  remain inactive until their complete catalogs and browser checks are ready.
+- Added four compatible-major self-hosted script fonts with lazy stylesheet
+  loading and original OFL assets. Install audit reports zero vulnerabilities.
+  Gregorian date formatting preserves calendar years in Thai as well as
+  project timezone semantics in all languages.
+- Passed `typecheck:admin` and locale/font tests (13). Full translation build
+  and multilingual browser checks belong to the following catalog activation
+  step; the existing KO/EN active set still has complete translations.
+- Updated `docs/frontend/FRONTEND_DESIGN.md` and this record. No API/DB,
+  Worker, auth-policy, CI/runner or repository hygiene changes. No push/deploy.
+
 ## Saylo detailed admin screens - 2026-10-28
 
 - Extended KO/EN coverage to event details, property/period comparisons,

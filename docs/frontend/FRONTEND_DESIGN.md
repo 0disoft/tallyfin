@@ -1,5 +1,24 @@
 # Tallyfin Frontend Design
 
+## ZDP locale expansion - 2026-10-28
+
+The target language registry follows `zdp-architecture`'s
+`docs/45-cross-cutting-product-standards.md`: en, zh, es, fr, hi, ko, ja, vi,
+ru, id, ms, th. `zh` uses Simplified Chinese. Native option names make each
+language recognizable. English is the fallback/base catalog; a new session
+keeps Korean as its initial language, and saved supported preferences win.
+Invalid preferences fall back to English; denied storage does not block use.
+Catalogs remain complete and per-locale lazy-loaded. Only reviewed complete
+catalog sets enter the active selector; the initial rollout still activates
+Korean/English while the other ten catalogs are being prepared.
+
+Self-hosted Noto Sans SC/JP/Devanagari/Thai styles load only when their locale
+is selected; Inter already covers Latin, Vietnamese and Cyrillic. Korean
+remains available for operator data in any locale. Font licenses ship with
+the assets. Locale date formatting uses the Gregorian calendar so selecting
+Thai cannot change report/operation years to the Buddhist calendar. Neither
+display language nor font loading changes project timezones or API reads.
+
 ## Saylo Korean/English admin - 2026-10-28
 
 The client admin uses published Saylo core/React/Vite alpha packages. Flat

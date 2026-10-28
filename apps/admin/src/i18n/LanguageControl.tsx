@@ -1,5 +1,6 @@
 import { localeRestoreFailed, setAdminLocale, useI18n } from './index';
 import { useState } from 'react';
+import { ACTIVE_LOCALES, TARGET_LOCALES } from './preference';
 import './locale-control.css';
 
 export default function LanguageControl() {
@@ -14,8 +15,8 @@ export default function LanguageControl() {
       catch { setFailed(true); }
       finally { setLoading(false); }
     }}>
-      <option value="ko" lang="ko">한국어</option>
-      <option value="en" lang="en">English</option>
+      {TARGET_LOCALES.filter(item => ACTIVE_LOCALES.includes(item.code)).map(item =>
+        <option key={item.code} value={item.code} lang={item.code}>{item.name}</option>)}
     </select>
     {failed && <span role="alert">{t('admin:localeLoadFailed')}</span>}
   </label>;

@@ -11,7 +11,7 @@ export function useLocaleFormat() {
       count: (value: number) => number.format(value),
       rate: (value: number | null) => value === null ? '—' : percent.format(value / 100),
       dateTime: (value: string, timeZone: string) => new Intl.DateTimeFormat(locale, {
-        timeZone, dateStyle: 'short', timeStyle: 'medium',
+        timeZone, calendar: 'gregory', dateStyle: 'short', timeStyle: 'medium',
       }).format(new Date(value)),
     };
   }, [locale]);

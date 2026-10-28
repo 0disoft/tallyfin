@@ -8,6 +8,10 @@ const require = createRequire(import.meta.url);
 const fonts = [
   { path: '/@fontsource-variable/inter/wght.css', family: 'Inter', weights: ['400 800'] },
   { path: '/@fontsource-variable/noto-sans-kr/wght.css', family: 'Noto Sans KR', weights: ['400 500', '700', '900'] },
+  { path: '/@fontsource-variable/noto-sans-sc/wght.css', family: 'Noto Sans SC', weights: ['100 900'] },
+  { path: '/@fontsource-variable/noto-sans-jp/wght.css', family: 'Noto Sans JP', weights: ['100 900'] },
+  { path: '/@fontsource-variable/noto-sans-devanagari/wght.css', family: 'Noto Sans Devanagari', weights: ['100 900'] },
+  { path: '/@fontsource-variable/noto-sans-thai/wght.css', family: 'Noto Sans Thai', weights: ['100 900'] },
 ];
 
 export function fontAssets() {

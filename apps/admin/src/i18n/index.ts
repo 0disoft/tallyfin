@@ -4,6 +4,7 @@ import { connectDev } from '@0disoft/saylo-vite/client';
 import { catalogSource, initialCatalogs, initialLocale, initialNamespaces, timeZone } from 'virtual:saylo/lazy';
 import type { AppSchema } from './schema.generated';
 import { readLocale, saveLocale, supportedLocale } from './preference';
+import { loadLocaleFont } from './fonts';
 
 function preferenceStorage(): Storage | null {
   try { return window.localStorage; } catch { return null; }
@@ -17,7 +18,11 @@ export const { SayloProvider, useI18n } = createSayloReact<AppSchema>();
 
 export let localeRestoreFailed = false;
 export async function restoreAdminLocale() {
-  try { await adminI18n.setLocale(readLocale(preferenceStorage())); }
+  try {
+    const locale = readLocale(preferenceStorage());
+    await loadLocaleFont(locale);
+    await adminI18n.setLocale(locale);
+  }
   catch { localeRestoreFailed = true; } // Keep the boot locale and show the retryable selector error.
 }
 
@@ -28,6 +33,7 @@ export async function loadWorkspaceCatalogs() {
 
 export async function setAdminLocale(value: string) {
   const locale = supportedLocale(value);
+  await loadLocaleFont(locale);
   await adminI18n.setLocale(locale);
   if (adminI18n.getSnapshot().locale === locale) saveLocale(preferenceStorage(), locale);
 }
