@@ -56,6 +56,7 @@
     "verify:admin-access": "node tools/browser-bench/admin-access.mjs",
     "verify:admin-settings-recovery": "node tools/browser-bench/admin-settings-recovery.mjs",
     "verify:admin-settings-navigation": "node tools/browser-bench/admin-settings-navigation.mjs",
+    "verify:admin-settings-workspace": "node tools/browser-bench/admin-settings-workspace.mjs",
     "verify:admin-schema-comparison": "node tools/browser-bench/admin-schema-comparison.mjs",
     "verify:admin-server-draft": "node tools/browser-bench/admin-server-draft.mjs",
     "verify:admin-mode-exit": "node tools/browser-bench/admin-mode-exit.mjs",

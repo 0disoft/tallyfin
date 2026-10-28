@@ -1,0 +1,53 @@
+/* Scoped to the live settings surface; existing schema controllers own every write. */
+.settings-workspace .schema-section > .context-note { margin: 8px 0 16px; }
+.settings-workspace .schema-section { position: relative; }
+.settings-workspace .schema-utilities { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 22px; }
+.settings-workspace .schema-utilities:not(:has(details[open])) { position: absolute; top: 0; right: 0; margin: 0; }
+.settings-workspace .schema-utility { min-width: 0; font-size: 13px; }
+.settings-workspace .schema-utility > summary { padding: 8px 0; color: #475569; font-weight: 600; cursor: pointer; }
+.settings-workspace .schema-utility[open] { flex: 1 0 100%; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+.settings-workspace .schema-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 0; max-width: none; margin: 0; border: 1px solid #e2e8f0; border-radius: 6px; }
+.settings-workspace .schema-editing-pane { position: relative; min-width: 0; padding: 0 20px 20px; }
+.settings-workspace .schema-edit-mode { display: flex; gap: 24px; padding-right: 190px; border-bottom: 1px solid #e2e8f0; margin-bottom: 18px; }
+.settings-workspace .schema-edit-mode button { min-height: 48px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #64748b; font-size: 13px; font-weight: 650; cursor: pointer; }
+.settings-workspace .schema-edit-mode button[aria-pressed="true"] { color: #155eef; border-bottom-color: #155eef; }
+.settings-workspace .schema-version-field { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 12px; max-width: none; margin: 0 0 16px; }
+.settings-workspace .schema-version-field input { width: 100px; }
+.settings-workspace .schema-version-field .field-help { flex: 1 0 100%; margin: 0; }
+.settings-workspace .schema-version-field { position: absolute; top: 6px; right: 20px; flex-wrap: nowrap; margin: 0; }
+.settings-workspace .schema-version-field label { font-size: 12px; margin: 0; }
+.settings-workspace .schema-version-field input { width: 70px; }
+.settings-workspace .schema-version-field .field-help { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.settings-workspace .schema-json-editor { padding: 0; margin: 0; border: 0; }
+.settings-workspace .schema-json-editor .settings-field { margin: 0; }
+.settings-workspace .schema-json-editor label { margin-bottom: 8px; }
+.settings-workspace .schema-textarea { width: 100%; min-height: 300px; height: 360px; padding: 18px; border: 1px solid #edf2f8; background: #f8fafc; color: #1e3a5f; font: 13px/1.8 Consolas, monospace; tab-size: 2; resize: vertical; }
+.settings-workspace .schema-preview { margin: 18px 0 0; font-size: 13px; }
+.settings-workspace .schema-inspector { min-width: 0; padding: 22px; border-left: 1px solid #e2e8f0; }
+.settings-workspace .schema-inspector > h3 { margin: 0 0 20px; }
+.settings-workspace .schema-check { display: flex; align-items: flex-start; gap: 10px; color: #64748b; }
+.settings-workspace .schema-check svg { flex: 0 0 auto; }
+.settings-workspace .schema-check strong { color: #0f172a; font-size: 14px; }
+.settings-workspace .schema-check.complete svg { color: #079455; }
+.settings-workspace .schema-definition-count { margin: 10px 0; color: #475569; font-size: 12px; line-height: 1.7; }
+.settings-workspace .schema-inspector .schema-privacy { align-items: flex-start; margin: 24px 0 8px; font-size: 13px; line-height: 1.65; }
+.settings-workspace .schema-privacy input { flex: 0 0 auto; width: 17px; height: 17px; margin-top: 3px; accent-color: #155eef; }
+.settings-workspace .schema-access-note { margin: 24px 0 0; padding-top: 20px; border-top: 1px solid #e2e8f0; }
+.settings-workspace .schema-access-note p { margin-top: 8px; color: #64748b; font-size: 13px; line-height: 1.65; }
+.settings-workspace .schema-action-bar { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-top: 1px solid #e2e8f0; background: white; }
+.settings-workspace .schema-action-bar > p { color: #64748b; font-size: 12px; line-height: 1.6; }
+.settings-workspace .schema-action-bar .form-actions { flex: 0 0 auto; gap: 8px; margin: 0; }
+@media (max-width: 1100px) {
+  .settings-workspace .schema-workbench { grid-template-columns: minmax(0, 1fr) 240px; }
+  .settings-workspace .schema-inspector { padding: 18px; }
+}
+@media (max-width: 900px) {
+  .settings-workspace .schema-utilities:not(:has(details[open])) { position: static; margin: 16px 0 22px; }
+  .settings-workspace .schema-version-field { position: static; margin-bottom: 16px; flex-wrap: wrap; }
+  .settings-workspace .schema-version-field .field-help { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .settings-workspace .schema-edit-mode { padding-right: 0; }
+  .settings-workspace .schema-workbench { grid-template-columns: minmax(0, 1fr); }
+  .settings-workspace .schema-inspector { border-left: 0; border-top: 1px solid #e2e8f0; }
+  .settings-workspace .schema-action-bar { align-items: flex-start; flex-direction: column; }
+  .settings-workspace .schema-textarea { min-height: 330px; }
+}

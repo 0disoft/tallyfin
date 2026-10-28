@@ -13,7 +13,6 @@ import SourceEventTable, { sourceLabel } from './SourceEventTable';
 import SourceMetrics from './SourceMetrics';
 import DateRangePicker from './DateRangePicker';
 import LiveIdentity from './LiveIdentity';
-import LiveHealth from './LiveHealth';
 import { formatCount, type DailyRecord, type Period, type View } from './data';
 import { API_BASE_PATH, ApiClient, ApiError, resolveApiEndpoint } from './api/client';
 import PeriodComparison from './PeriodComparison';
@@ -38,7 +37,6 @@ const LiveSettingsWorkspace = lazy(() => import('./LiveSettingsWorkspace'));
 const LiveProjectCreate = lazy(() => import('./LiveProjectCreate'));
 const ProjectOverview = lazy(() => import('./ProjectOverview'));
 const LiveGoals = lazy(() => import('./LiveGoals'));
-const ObservationReportPanel = lazy(() => import('./ObservationReportPanel'));
 
 const MAX_SCHEMA_VERSION = 2147483647;
 
@@ -86,6 +84,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const [selectedSource, setSelectedSource] = useState<EventSource>('browser');
   const source = view === 'goals' ? 'browser' : selectedSource;
   const analysisWorkspace = view === 'events' || view === 'goals';
+  const compactWorkspace = analysisWorkspace || view === 'settings';
   const [refreshTick, setRefreshTick] = useState(0);
   const [settingsRefreshTick, setSettingsRefreshTick] = useState(0);
   const [settingsRegistry, setSettingsRegistry] = useState<Registry | null>(null);
@@ -337,10 +336,10 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
       <button className="secondary-button" type="button" onClick={disconnect}>연결 끊기</button>
       </>;
 
-  const projectControls = <div className={`toolbar api-toolbar${analysisWorkspace ? ' events-connection-bar' : ''}`}>
-      <ProjectPicker compact={analysisWorkspace} client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
+  const projectControls = <div className={`toolbar api-toolbar${compactWorkspace ? ' events-connection-bar' : ''}`}>
+      <ProjectPicker compact={compactWorkspace} client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
         hasMore={!!nextCursor} loadingMore={more} onLoadMore={loadMore} onSelect={project => switchProject(project.id, project)} />
-      {analysisWorkspace ? <details className="events-advanced"><summary>연결 설정<CaretDown size={14} /></summary><div className="toolbar">{connectionControls}</div><LiveIdentity client={client} /></details> : connectionControls}
+      {compactWorkspace ? <details className="events-advanced"><summary>연결 설정<CaretDown size={14} /></summary><div className="toolbar">{connectionControls}</div>{view !== 'settings' && <LiveIdentity client={client} />}</details> : connectionControls}
     </div>;
   return <>
     {unauthorizedClient === client && <>
@@ -351,14 +350,12 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
         return true;
       }} /></DeferredPanel>
     </>}
-    {analysisWorkspace && headerHost ? createPortal(projectControls, headerHost) : projectControls}
+    {compactWorkspace && headerHost ? createPortal(projectControls, headerHost) : projectControls}
     {view !== 'settings' && customPeriod && currentRange && projectToday && <DateRangePicker
       key={JSON.stringify([dateScope, currentRange.from, currentRange.to])} range={currentRange} today={projectToday} timeZone={activeTimeZone!}
       onApply={range => setCustomRange({ scope: dateScope, range })} />}
     {view !== 'settings' && dateError && <p className="form-error" role="alert">{dateError}</p>}
-    {!analysisWorkspace && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
-    {view === 'settings' && <LiveHealth client={client} />}
-    {view === 'settings' && <DeferredPanel label="운영 로그 보고서"><ObservationReportPanel client={client} /></DeferredPanel>}
+    {!compactWorkspace && <><p className="context-note">API 연결 · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · 토큰은 메모리에만</p><LiveIdentity client={client} /></>}
     {view === 'overview' && projects.status === 'ready' && !!projects.data?.length && <DeferredPanel label="서비스 통합 현황"><ProjectOverview client={client} projects={projects.data} source={source} onSelectProject={switchProject} hasMore={!!nextCursor} onLoadMore={loadMore} loadingMore={more} /></DeferredPanel>}
     {view !== 'settings' && !analysisWorkspace && <p className="context-note" role="status">{sourceLabel(source)} 출처의 이벤트를 조회해요.</p>}
     <div className={analysisWorkspace ? 'events-actions' : undefined}>

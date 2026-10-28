@@ -15,6 +15,7 @@ import LivePublishers from './LivePublishers.tsx';
 import LiveAdminChanges from './LiveAdminChanges.tsx';
 import useUnloadWarning from './useUnloadWarning.ts';
 import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
+import './settings-project.css';
 
 export type LiveSettingsProps = {
   client: ApiClient;
@@ -24,6 +25,7 @@ export type LiveSettingsProps = {
   registry?: Registry | null;
   onAccessLost?: () => void;
   registerDraft?: DraftExitRegistration<ApiClient>;
+  panel?: 'project' | 'access';
 };
 
 const FIELD_ORDER: (keyof SettingsDraft)[] = ['name', 'status', 'origins', 'requestsPerMinute', 'newReceiptsPerUtcDay'];
@@ -35,6 +37,8 @@ const FIELD_ID: Record<keyof SettingsDraft, string> = {
   requestsPerMinute: 'settings-requests-per-minute',
   newReceiptsPerUtcDay: 'settings-new-receipts-per-utc-day',
 };
+
+const READONLY_FIELD_ID = { projectId: 'settings-project-id', timeZone: 'settings-project-time-zone' } as const;
 
 const STATUS_LABEL: Record<'active' | 'paused', string> = { active: '수집 중', paused: '일시정지' };
 
@@ -55,7 +59,7 @@ function displayValue(value: string): string {
   return value.length > 0 ? value : '—';
 }
 
-export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null, onAccessLost, registerDraft }: LiveSettingsProps) {
+export function LiveSettings({ client, projectId, onSaved, refreshTick, registry = null, onAccessLost, registerDraft, panel = 'project' }: LiveSettingsProps) {
   const [snapshotState, setSnapshotState] = useState<{ client: ApiClient; projectId: string; state: SettingsState } | null>(null);
   const state = snapshotState?.client === client && snapshotState.projectId === projectId ? snapshotState.state : null;
   const editorRef = useRef<SettingsEditor | null>(null);
@@ -82,7 +86,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
   const tickRef = useRef(refreshTick);
   const lastErrorRef = useRef<keyof SettingsDraft | null>(null);
   const nameRef = useRef<HTMLInputElement>(null);
-  const statusRef = useRef<HTMLSelectElement>(null);
+  const statusRef = useRef<HTMLInputElement>(null);
   const originsRef = useRef<HTMLTextAreaElement>(null);
   const requestsPerMinuteRef = useRef<HTMLInputElement>(null);
   const newReceiptsRef = useRef<HTMLInputElement>(null);
@@ -179,18 +183,20 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
 
   const activeSnapshot = snapshot as SettingsSnapshot;
   const activeDraft = draft as SettingsDraft;
+  const originalDraft = settingsDraft(activeSnapshot);
+  const dirtyCount = (Object.keys(originalDraft) as (keyof SettingsDraft)[]).filter(key => originalDraft[key] !== activeDraft[key]).length;
 
-  return <section className="settings-section" aria-labelledby="live-settings-heading">
-    <div className="settings-head">
-      <h2 id="live-settings-heading">프로젝트 설정</h2>
-      {(saving || loading) && <span className="settings-badge" role="status">{saving ? '저장 중…' : '불러오는 중…'}</span>}
-      {!canEdit && <span className="settings-badge">읽기 전용</span>}
+  return <section className="settings-section live-settings" data-panel={panel} aria-labelledby="live-settings-heading">
+    <div className="live-settings-head">
+      <div className="live-settings-title">
+        <h2 id="live-settings-heading">{panel === 'access' ? '접근 권한' : '프로젝트 설정'}</h2>
+        <p className="context-note">{panel === 'access' ? '프로젝트 권한과 서버 발행자, 변경 이력을 관리해요.' : '프로젝트와 이벤트 수집 환경을 관리해요.'}</p>
+      </div>
+      <div className="live-settings-badges">
+        {(saving || loading) && <span className="settings-badge" role="status">{saving ? '저장 중…' : '불러오는 중…'}</span>}
+        {!canEdit && <span className="settings-badge is-readonly">읽기 전용</span>}
+      </div>
     </div>
-    <p className="context-note">이름·상태·허용 출처·수집 한도를 바꿔요. 저장하면 서버 값이 갱신돼요.</p>
-    <dl className="settings-source">
-      <div><dt>프로젝트 ID</dt><dd>{activeSnapshot.project.id}</dd></div>
-      <div><dt>시간대</dt><dd>{activeSnapshot.project.timeZone}</dd></div>
-    </dl>
     {!canEdit && <p className="notice" role="status">조회 권한으로 연결했어요. 설정을 바꾸려면 프로젝트 소유자 권한이 필요해요.</p>}
     {state.message && !showRecovery && <p className="settings-message" role="status">{state.message}</p>}
 
@@ -206,69 +212,132 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
       </> : null}
     </section>}
 
-    <form className="settings-form" onSubmit={submit} aria-busy={saving || loading || undefined} noValidate>
-      <div className="settings-field">
-        <label className="field-label" htmlFor={FIELD_ID.name}>프로젝트 이름</label>
-        <input id={FIELD_ID.name} ref={nameRef} className="text-input" type="text" autoComplete="off" maxLength={80} value={activeDraft.name} disabled={inputsLocked} onChange={event => edit('name', event.target.value)} aria-invalid={errors?.name ? true : undefined} aria-describedby={describedBy('name', errors, true)} />
-        <p id={`${FIELD_ID.name}-help`} className="field-help">1~80자.</p>
-        {errors?.name && <p id={`${FIELD_ID.name}-error`} className="form-error" role="alert">{errors.name}</p>}
-      </div>
+    <div className="settings-panel settings-panel-project" hidden={panel !== 'project'}>
+      <form className="settings-form project-settings-form" onSubmit={submit} aria-busy={saving || loading || undefined} noValidate>
+        <section className="settings-row" aria-labelledby="settings-basic-heading">
+          <div className="settings-row-copy">
+            <h3 id="settings-basic-heading">기본 정보</h3>
+            <p>프로젝트의 기본 정보와 수집 상태를 관리해요.</p>
+          </div>
+          <div className="settings-row-fields">
+            <div className="settings-field">
+              <label className="field-label" htmlFor={FIELD_ID.name}>프로젝트 이름</label>
+              <input id={FIELD_ID.name} ref={nameRef} className="text-input" type="text" autoComplete="off" maxLength={80} value={activeDraft.name} disabled={inputsLocked} onChange={event => edit('name', event.target.value)} aria-invalid={errors?.name ? true : undefined} aria-describedby={describedBy('name', errors, true)} />
+              <p id={`${FIELD_ID.name}-help`} className="field-help">1~80자.</p>
+              {errors?.name && <p id={`${FIELD_ID.name}-error`} className="form-error" role="alert">{errors.name}</p>}
+            </div>
 
-      <div className="settings-field">
-        <label className="field-label" htmlFor={FIELD_ID.status}>상태</label>
-        <select id={FIELD_ID.status} ref={statusRef} className="text-input settings-select" value={activeDraft.status} disabled={inputsLocked} onChange={event => edit('status', event.target.value)} aria-invalid={errors?.status ? true : undefined} aria-describedby={describedBy('status', errors, true)}>
-          <option value="active">{STATUS_LABEL.active}</option>
-          <option value="paused">{STATUS_LABEL.paused}</option>
-        </select>
-        <p id={`${FIELD_ID.status}-help`} className="field-help">수집 중 또는 일시정지 중 하나를 골라요.</p>
-        {errors?.status && <p id={`${FIELD_ID.status}-error`} className="form-error" role="alert">{errors.status}</p>}
-      </div>
+            <div className="settings-field">
+              <label className="field-label" htmlFor={READONLY_FIELD_ID.projectId}>프로젝트 ID</label>
+              <div className="settings-readonly-row">
+                <input id={READONLY_FIELD_ID.projectId} className="text-input settings-readonly" type="text" value={activeSnapshot.project.id} readOnly aria-describedby={`${READONLY_FIELD_ID.projectId}-help`} />
+                <span id={`${READONLY_FIELD_ID.projectId}-help`} className="field-help">변경할 수 없어요.</span>
+              </div>
+            </div>
 
-      <div className="settings-field">
-        <label className="field-label" htmlFor={FIELD_ID.origins}>허용 출처</label>
-        <textarea id={FIELD_ID.origins} ref={originsRef} className="text-input settings-textarea" rows={5} spellCheck={false} value={activeDraft.origins} disabled={inputsLocked} onChange={event => edit('origins', event.target.value)} aria-invalid={errors?.origins ? true : undefined} aria-describedby={describedBy('origins', errors, true)} />
-        <p id={`${FIELD_ID.origins}-help`} className="field-help">브라우저 출처를 한 줄에 하나씩, 최대 16개. 비워 두면 브라우저 수집이 차단돼요. 서버 발행에는 이 목록을 사용하지 않아요.</p>
-        {errors?.origins && <p id={`${FIELD_ID.origins}-error`} className="form-error" role="alert">{errors.origins}</p>}
-      </div>
+            <div className="settings-field">
+              <span className="field-label" id={`${FIELD_ID.status}-label`}>수집 상태</span>
+              <div className="settings-segmented" role="radiogroup" aria-labelledby={`${FIELD_ID.status}-label`} aria-invalid={errors?.status ? true : undefined} aria-describedby={describedBy('status', errors, true)}>
+                {(['active', 'paused'] as const).map((value, index) => <label key={value} className={`settings-segment${activeDraft.status === value ? ' is-active' : ''}`}>
+                  <input id={index === 0 ? FIELD_ID.status : `${FIELD_ID.status}-paused`} ref={index === 0 ? statusRef : undefined} className="settings-segment-input" type="radio" name={`settings-status-${projectId}`} value={value} checked={activeDraft.status === value} disabled={inputsLocked} onChange={() => edit('status', value)} />
+                  <span>{STATUS_LABEL[value]}</span>
+                </label>)}
+              </div>
+              <p id={`${FIELD_ID.status}-help`} className="field-help">일시정지하면 브라우저·서버의 새 이벤트 수집이 중단돼요.</p>
+              {errors?.status && <p id={`${FIELD_ID.status}-error`} className="form-error" role="alert">{errors.status}</p>}
+            </div>
+          </div>
+        </section>
 
-      <div className="settings-field">
-        <label className="field-label" htmlFor={FIELD_ID.requestsPerMinute}>분당 요청 한도</label>
-        <input id={FIELD_ID.requestsPerMinute} ref={requestsPerMinuteRef} className="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={activeDraft.requestsPerMinute} disabled={inputsLocked} onChange={event => edit('requestsPerMinute', event.target.value)} aria-invalid={errors?.requestsPerMinute ? true : undefined} aria-describedby={describedBy('requestsPerMinute', errors, true)} />
-        <p id={`${FIELD_ID.requestsPerMinute}-help`} className="field-help">1~600 사이 정수.</p>
-        {errors?.requestsPerMinute && <p id={`${FIELD_ID.requestsPerMinute}-error`} className="form-error" role="alert">{errors.requestsPerMinute}</p>}
-      </div>
+        <section className="settings-row" aria-labelledby="settings-origins-heading">
+          <div className="settings-row-copy">
+            <h3 id="settings-origins-heading">허용 도메인</h3>
+            <p>이 도메인에서 발생하는 브라우저 이벤트만 수집해요.</p>
+          </div>
+          <div className="settings-row-fields">
+            <div className="settings-field">
+              <label className="field-label" htmlFor={FIELD_ID.origins}>허용 출처 (최대 16개)</label>
+              <textarea id={FIELD_ID.origins} ref={originsRef} className="text-input settings-textarea" rows={5} spellCheck={false} value={activeDraft.origins} disabled={inputsLocked} onChange={event => edit('origins', event.target.value)} aria-invalid={errors?.origins ? true : undefined} aria-describedby={describedBy('origins', errors, true)} />
+              <p id={`${FIELD_ID.origins}-help`} className="field-help">브라우저 출처를 한 줄에 하나씩, 최대 16개. 비워 두면 브라우저 수집이 차단돼요. 서버 발행에는 이 목록을 사용하지 않아요.</p>
+              {errors?.origins && <p id={`${FIELD_ID.origins}-error`} className="form-error" role="alert">{errors.origins}</p>}
+            </div>
+          </div>
+        </section>
 
-      <div className="settings-field">
-        <label className="field-label" htmlFor={FIELD_ID.newReceiptsPerUtcDay}>UTC 하루 신규 수신 한도</label>
-        <input id={FIELD_ID.newReceiptsPerUtcDay} ref={newReceiptsRef} className="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={activeDraft.newReceiptsPerUtcDay} disabled={inputsLocked} onChange={event => edit('newReceiptsPerUtcDay', event.target.value)} aria-invalid={errors?.newReceiptsPerUtcDay ? true : undefined} aria-describedby={describedBy('newReceiptsPerUtcDay', errors, true)} />
-        <p id={`${FIELD_ID.newReceiptsPerUtcDay}-help`} className="field-help">1~1,000,000 사이 정수, UTC 날짜 기준.</p>
-        {errors?.newReceiptsPerUtcDay && <p id={`${FIELD_ID.newReceiptsPerUtcDay}-error`} className="form-error" role="alert">{errors.newReceiptsPerUtcDay}</p>}
-      </div>
+        <section className="settings-row" aria-labelledby="settings-limits-heading">
+          <div className="settings-row-copy">
+            <h3 id="settings-limits-heading">수집 한도</h3>
+            <p>프로젝트별 요청 수와 신규 수집량을 제한할 수 있어요.</p>
+          </div>
+          <div className="settings-row-fields settings-limit-fields">
+            <div className="settings-field">
+              <label className="field-label" htmlFor={FIELD_ID.requestsPerMinute}>분당 요청 한도</label>
+              <input id={FIELD_ID.requestsPerMinute} ref={requestsPerMinuteRef} className="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={activeDraft.requestsPerMinute} disabled={inputsLocked} onChange={event => edit('requestsPerMinute', event.target.value)} aria-invalid={errors?.requestsPerMinute ? true : undefined} aria-describedby={describedBy('requestsPerMinute', errors, true)} />
+              <p id={`${FIELD_ID.requestsPerMinute}-help`} className="field-help">1~600 사이 정수. 1분 동안 허용되는 최대 요청 수예요.</p>
+              {errors?.requestsPerMinute && <p id={`${FIELD_ID.requestsPerMinute}-error`} className="form-error" role="alert">{errors.requestsPerMinute}</p>}
+            </div>
 
-      <div className="form-actions">
-        <button className="primary-button" type="submit" disabled={!canSubmit}>{saving ? '저장 중…' : '변경 저장'}</button>
-        <button className="secondary-button" type="button" disabled={inputsLocked} onClick={() => editorRef.current?.reset()}>편집 초기화</button>
-      </div>
-    </form>
+            <div className="settings-field">
+              <label className="field-label" htmlFor={FIELD_ID.newReceiptsPerUtcDay}>일일 신규 수집 한도</label>
+              <input id={FIELD_ID.newReceiptsPerUtcDay} ref={newReceiptsRef} className="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={activeDraft.newReceiptsPerUtcDay} disabled={inputsLocked} onChange={event => edit('newReceiptsPerUtcDay', event.target.value)} aria-invalid={errors?.newReceiptsPerUtcDay ? true : undefined} aria-describedby={describedBy('newReceiptsPerUtcDay', errors, true)} />
+              <p id={`${FIELD_ID.newReceiptsPerUtcDay}-help`} className="field-help">1~1,000,000 사이 정수. UTC 날짜 기준으로 초기화돼요.</p>
+              {errors?.newReceiptsPerUtcDay && <p id={`${FIELD_ID.newReceiptsPerUtcDay}-error`} className="form-error" role="alert">{errors.newReceiptsPerUtcDay}</p>}
+            </div>
+          </div>
+        </section>
 
-    <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
-      canView={canEdit && !blocked} locked={loading || saving || reviewing || publishersBusy} onAccessLost={accessLost} onSaved={grantsSaved} registerDraft={registerDraft} />
+        <section className="settings-row" aria-labelledby="settings-timezone-heading">
+          <div className="settings-row-copy">
+            <h3 id="settings-timezone-heading">프로젝트 시간대</h3>
+            <p>보고서와 이벤트의 기준 시간대예요.</p>
+          </div>
+          <div className="settings-row-fields">
+            <div className="settings-field">
+              <label className="field-label" htmlFor={READONLY_FIELD_ID.timeZone}>프로젝트 시간대</label>
+              <input id={READONLY_FIELD_ID.timeZone} className="text-input settings-readonly" type="text" value={activeSnapshot.project.timeZone} readOnly aria-describedby={`${READONLY_FIELD_ID.timeZone}-help`} />
+              <p id={`${READONLY_FIELD_ID.timeZone}-help`} className="field-help">프로젝트 생성 시 설정되어 변경할 수 없어요.</p>
+            </div>
+          </div>
+        </section>
 
-    <LivePublishers client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
-      canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} onSaved={publishersSaved}
-      onBusyChange={publisherBusyChange} registerDraft={registerDraft} />
+        <details className="settings-registry">
+          <summary>
+            <span>등록 정의 보기</span>
+            {registry && <span className="settings-registry-meta">스키마 v{registry.schemaVersion} · {registry.schemaStatus === 'retired' ? '사용 중지' : '사용 중'}</span>}
+          </summary>
+          {registry ? <div className="settings-registry-body">
+            <h3 className="settings-subheading">등록 이벤트</h3>
+            <div className="table-scroll" tabIndex={0} aria-label="등록 이벤트 표"><table className="event-table"><thead><tr><th scope="col">이벤트</th><th scope="col">출처</th><th scope="col">허용 속성</th></tr></thead><tbody>{registry.events.map(definition => <tr key={definition.name}><th scope="row" className="event-name">{definition.name}<div className="event-label">{definition.label}</div></th><td>{definition.source}</td><td>{Object.keys(definition.properties).join(', ') || '—'}</td></tr>)}</tbody></table></div>
+            <h3 className="settings-subheading">작업 흐름</h3>
+            <div className="table-scroll" tabIndex={0} aria-label="작업 흐름 표"><table className="event-table"><thead><tr><th scope="col">흐름</th><th scope="col">시작</th><th scope="col">성공</th><th scope="col">실패</th></tr></thead><tbody>{registry.workflows.length === 0 ? <tr><th scope="row">—</th><td>—</td><td>—</td><td>—</td></tr> : registry.workflows.map(definition => <tr key={definition.id}><th scope="row" className="event-name">{definition.id}<div className="event-label">{definition.label}</div></th><td>{definition.startEvent}</td><td>{definition.successEvent}</td><td>{definition.failureEvent ?? '—'}</td></tr>)}</tbody></table></div>
+          </div> : <p className="context-note settings-registry-empty">등록 이벤트와 작업 흐름 표는 스키마 버전을 함께 조회했을 때 보여줘요. 설정 편집에는 영향이 없어요.</p>}
+        </details>
 
-    <LiveAdminChanges client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone}
-      refreshTick={`${refreshTick}:${historyRevision}`} canView={canEdit && !blocked}
-      locked={loading || saving || reviewing} onAccessLost={accessLost} />
+        <div className="settings-action-bar">
+          <p className={`settings-action-status${dirtyCount > 0 && canEdit ? ' is-dirty' : ''}`} role="status" aria-live="polite">
+            <span className={`settings-dirty-dot${dirtyCount > 0 ? ' is-dirty' : ''}`} aria-hidden="true" />
+            {saving ? '저장 중…' : !canEdit ? '읽기 전용' : dirtyCount > 0 ? `변경 ${dirtyCount}개 · 저장 전` : '저장할 변경 없음'}
+          </p>
+          <div className="settings-action-buttons">
+            <button className="secondary-button" type="button" disabled={inputsLocked} onClick={() => editorRef.current?.reset()}>편집 초기화</button>
+            <button className="primary-button" type="submit" disabled={!canSubmit}>{saving ? '저장 중…' : '변경 저장'}</button>
+          </div>
+        </div>
+      </form>
+    </div>
 
-    {registry ? <>
-      <p className="context-note">등록 정의 · 스키마 v{registry.schemaVersion} · {registry.schemaStatus === 'retired' ? '사용 중지' : '사용 중'}</p>
-      <h3 className="settings-subheading">등록 이벤트</h3>
-      <div className="table-scroll" tabIndex={0} aria-label="등록 이벤트 표"><table className="event-table"><thead><tr><th scope="col">이벤트</th><th scope="col">출처</th><th scope="col">허용 속성</th></tr></thead><tbody>{registry.events.map(definition => <tr key={definition.name}><th scope="row" className="event-name">{definition.name}<div className="event-label">{definition.label}</div></th><td>{definition.source}</td><td>{Object.keys(definition.properties).join(', ') || '—'}</td></tr>)}</tbody></table></div>
-      <h3 className="settings-subheading">작업 흐름</h3>
-      <div className="table-scroll" tabIndex={0} aria-label="작업 흐름 표"><table className="event-table"><thead><tr><th scope="col">흐름</th><th scope="col">시작</th><th scope="col">성공</th><th scope="col">실패</th></tr></thead><tbody>{registry.workflows.length === 0 ? <tr><th scope="row">—</th><td>—</td><td>—</td><td>—</td></tr> : registry.workflows.map(definition => <tr key={definition.id}><th scope="row" className="event-name">{definition.id}<div className="event-label">{definition.label}</div></th><td>{definition.startEvent}</td><td>{definition.successEvent}</td><td>{definition.failureEvent ?? '—'}</td></tr>)}</tbody></table></div>
-    </> : <p className="context-note">등록 이벤트와 작업 흐름 표는 스키마 버전을 함께 조회했을 때 보여줘요. 설정 편집에는 영향이 없어요.</p>}
+    <div className="settings-panel settings-panel-access" hidden={panel !== 'access'}>
+      <LiveGrants client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
+        canView={canEdit && !blocked} locked={loading || saving || reviewing || publishersBusy} onAccessLost={accessLost} onSaved={grantsSaved} registerDraft={registerDraft} />
+
+      <LivePublishers client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone} refreshTick={refreshTick}
+        canView={canEdit && !blocked} locked={loading || saving || reviewing} onAccessLost={accessLost} onSaved={publishersSaved}
+        onBusyChange={publisherBusyChange} registerDraft={registerDraft} />
+
+      <LiveAdminChanges client={client} projectId={projectId} timeZone={activeSnapshot.project.timeZone}
+        refreshTick={`${refreshTick}:${historyRevision}`} canView={canEdit && !blocked}
+        locked={loading || saving || reviewing} onAccessLost={accessLost} />
+    </div>
   </section>;
 }
 

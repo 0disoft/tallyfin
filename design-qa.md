@@ -1,4 +1,82 @@
-# Goals design QA — 2026-10-28
+# Settings design QA — 2026-10-28
+
+## Target and rendered evidence
+
+- Selected sources: project layout option 1,
+  `C:/Users/cherr/.codex/generated_images/01a15ad4-6aab-7240-8474-7038a2c27c48/exec-981df9f6-f860-4d07-b577-9f7fc039135f.png`;
+  schema workbench option 4,
+  `C:/Users/cherr/.codex/generated_images/01a15ad4-6aab-7240-8474-7038a2c27c48/exec-3c7adb57-2f31-4878-8ed4-36d1d654bf93.png`.
+- Sources are 1487 x 1058px, normalized to 1440 x 1024px. Browser evidence is
+  1440 x 1024 CSS/image pixels at deviceScaleFactor 1, light theme, signed-in
+  local fixture owner. Content is the actual Sembom fixture, not production data.
+- Final captures: `.tmp/admin-settings-workspace-l0mifi/project-desktop.png`,
+  `schema-desktop.png` and `project-mobile.png` (390 x 1024px).
+- Full-view comparisons opened as combined inputs:
+  `.tmp/settings-project-comparison.png` and `.tmp/settings-schema-comparison.png`;
+  each is 2880 x 1024px with source left and implementation right.
+- Live IAB inspection: `http://127.0.0.1:5191/`, isolated local-D1 fixture,
+  project and schema panels. Never connected to production. Main interactions
+  were also exercised through the repository's signed-OIDC browser fixture.
+
+## Findings and iteration history
+
+- Initial [P2]: duplicate project heading and roomy fields pushed collection
+  limits below the first desktop viewport. Hid the redundant visual heading,
+  shortened the origin textarea and tightened row spacing. Final project capture
+  shows the labeled rows and persistent actions; the mobile form stacks normally.
+- Initial [P2]: expanded connection controls covered schema tabs. Kept the open
+  disclosure in header flow. Existing navigation and server-draft refresh checks
+  pass with this disclosure open, including cross-section recovery.
+- Initial [P2]: schema utilities and version input pushed publication actions
+  below the desktop viewport. Moved collapsed utilities beside the heading and
+  the version field beside editor selection, with an accessible hint/title.
+  Bounded the resizable JSON editor. Final same-state comparison shows both
+  editor and publication action row in the desktop viewport.
+- No actionable P0/P1/P2 findings remain. Intentional adaptations: actual
+  validation ranges/status semantics, multiline origin editing, real schema JSON,
+  manual privacy checkbox, existing account navigation in connection controls,
+  and collapsed file/server-draft utilities instead of fabricated one-click saves.
+
+## Required fidelity surfaces
+
+- Typography: existing self-hosted Inter/Noto Sans KR, clear title/section/field
+  hierarchy and readable 13–14px controls. JSON uses a monospace textarea.
+- Spacing/layout: compact 220px shell, flat two-column project rows, horizontal
+  tabs, editor/inspector split and explicit save/publish actions. At 390/768px
+  panels stack; the tab strip scrolls without document-wide horizontal overflow.
+- Colors/tokens: white/slate surfaces, #155eef actions/selection, subdued borders,
+  green only for a current successful definition validation.
+- Assets: existing Tallyfin raster brand and Phosphor icons; no new decorative
+  images or replacement logos. Fields remain editable native controls.
+- Copy/content: uses the actual fixture's values, true owner/reader capabilities,
+  and real request/UTC-day limits. No mock credentials or fabricated health states.
+- Focused review: mobile project capture and direct IAB AX/visual review of
+  labels, segmented status, version input, privacy checkbox and action buttons.
+  Full combined captures were inspected with the 1440px implementation captures
+  opened separately to read fine text that the combined display downscales.
+
+## Interaction and verification
+
+- Five tabs, roving focus and arrow/Home/End selection; one visible panel.
+- Settings/schema drafts retained across tab/view changes; unresolved writes,
+  revoked access, project switches, disconnect and explicit recovery preserved.
+- Definition validation and manual privacy gate, malformed-JSON focus, JSON/form
+  switching, actual local-D1 PATCH and 390/768/1280px overflow checks passed.
+- Version comparison, server draft conflict/lost-response handling and settings
+  write recovery passed. No page errors or fixture route errors were reported.
+- Existing admin unit tests: 382 passed with test-concurrency 2. The first fully
+  parallel run hit one unrelated 10ms read-scheduler timing assertion under load;
+  it passed in the bounded-concurrency run without code/test changes.
+- Typecheck, portable Vite build and emitted lazy-bundle checks passed. Sites
+  packaging and production deployment are outside this local implementation.
+- Follow-up P3: a syntax-highlighted editor could be evaluated separately; the
+  current native textarea preserves existing editing/validation behavior.
+
+final result: passed
+
+---
+
+# Previous Goals design QA — 2026-10-28
 
 ## Target and evidence
 

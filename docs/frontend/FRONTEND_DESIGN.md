@@ -1,5 +1,36 @@
 # Tallyfin Frontend Design
 
+## Settings tabs and schema workbench — 2026-10-28
+
+The API Settings page uses the existing compact 220px navigation shell, a project
+picker, expandable connection/account controls and five horizontal tabs:
+project, collection diagnostics, event schema, SDK connection and access.
+Settings has no analytics date selector. Its expanded connection controls stay
+in the header layout rather than covering the tab strip.
+
+`LiveSettingsWorkspace` owns only the selected tab and keyboard navigation
+(Left/Right/Home/End). Panels remain mounted and hidden so the existing settings,
+schema, grant and publisher controllers retain dirty drafts, pending writes,
+access coordination and their registered exit checks. `LiveSettings` shares one
+controller across its project/access panels; diagnostics includes the existing
+storage check and operational report. Server and API state ownership is unchanged.
+
+The project form groups identity/status, allowed origins, admission limits and
+read-only timezone into flat labeled rows with a persistent save/reset bar.
+Actual limits remain 1–600 requests/minute and 1–1,000,000 new receipts/UTC day;
+pausing stops both browser and server ingestion. The allowed-origin list applies
+only to browser requests. No policy is inferred from the generated mock values.
+
+`LiveSchemas` presents JSON/structured editing beside validation and manual
+privacy review. Structured error targets reveal the relevant editor before
+focus moves; malformed JSON reveals the textarea. Version history/comparison,
+local draft files and server drafts remain available in expandable utilities.
+Publishing still requires the current validated definition and privacy review;
+the existing controllers retain conflict/lost-response and permission recovery.
+All styles are scoped; panels stack on mobile and tabs scroll within their strip.
+No API/DB contracts, URL state, persistent browser state or sample-mode settings
+behavior changed.
+
 ## Goals explorer and inspector — 2026-10-28
 
 The API Goals screen keeps a searchable, grouped list of registered workflows
