@@ -1,5 +1,23 @@
 # Validation
 
+## Locale-specific Noto Sans typography - 2026-10-28
+
+- Replaced the Inter package/import with compatible-major Noto Sans. Korean
+  prioritizes Noto Sans KR, Chinese SC, Japanese JP, Hindi Devanagari and Thai
+  Thai; the remaining seven languages prioritize Noto Sans. Centralized the
+  locale stack in a CSS custom property and removed local Inter overrides in
+  event/goal controls. Monospace data/code styles are retained. Script fonts
+  remain lazy-loaded and all six upstream OFL notices are emitted unchanged.
+- Passed `typecheck:admin`, `build:admin`, font-asset tests (8), emitted bundle
+  checks (2) and npm install audit (zero vulnerabilities). Browser checks cover
+  all twelve locale stacks and font readiness; all twelve have no horizontal
+  overflow at measured 390px. Evidence: `.tmp/login-design/noto-font-checks.json`
+  and `06-noto-sans.jpg`. No production deployment was performed.
+- Updated frontend design and admin guidance. Auth/backend/full-repository
+  suites were skipped for this typography change. No API/DB, auth-policy,
+  Worker, CI/runner or hygiene changes. Package and lockfile changes replace
+  one self-hosted font dependency; no push or deployment.
+
 ## Login text readability - 2026-10-28
 
 - Increased login supporting text and controls from 12-14px to 1rem (16px

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { CalendarBlank, CaretDown, ChartBar, Gear, House, List, Target, WarningCircle, X } from '@phosphor-icons/react';
-import '@fontsource-variable/inter/wght.css';
+import '@fontsource-variable/noto-sans/wght.css';
 import '@fontsource-variable/noto-sans-kr/wght.css';
 import { dateAt, getRecords, projects, summarize, type DisplayState, type Period, type ProjectId, type View } from './data';
 import DeferredPanel from './DeferredPanel';

@@ -4,9 +4,9 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 
 // Retain the previous weight matching while sharing one WOFF2 per character subset.
-// Inter 900 still matches 800; Korean 600/800 still match 700/900.
+// Korean 600/800 still match 700/900; other Noto families retain their full range.
 const fonts = [
-  { path: '/@fontsource-variable/inter/wght.css', family: 'Inter', weights: ['400 800'] },
+  { path: '/@fontsource-variable/noto-sans/wght.css', family: 'Noto Sans', weights: ['100 900'] },
   { path: '/@fontsource-variable/noto-sans-kr/wght.css', family: 'Noto Sans KR', weights: ['400 500', '700', '900'] },
   { path: '/@fontsource-variable/noto-sans-sc/wght.css', family: 'Noto Sans SC', weights: ['100 900'] },
   { path: '/@fontsource-variable/noto-sans-jp/wght.css', family: 'Noto Sans JP', weights: ['100 900'] },

@@ -9,7 +9,7 @@ const faces = css => css.match(/@font-face\s*\{[^}]+\}/g) ?? [];
 const property = (face, name) => face.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1];
 
 for (const [name, family, weights] of [
-  ['inter', 'Inter', ['400 800']],
+  ['noto-sans', 'Noto Sans', ['100 900']],
   ['noto-sans-kr', 'Noto Sans KR', ['400 500', '700', '900']],
   ['noto-sans-sc', 'Noto Sans SC', ['100 900']],
   ['noto-sans-jp', 'Noto Sans JP', ['100 900']],
@@ -39,7 +39,7 @@ for (const [name, family, weights] of [
 test('font transform leaves app CSS alone and rejects incompatible upstream font ranges', () => {
   const plugin = fontAssets();
   assert.equal(plugin.transform('body { color: blue }', '/src/styles.css'), null);
-  const id = require.resolve('@fontsource-variable/inter/wght.css');
+  const id = require.resolve('@fontsource-variable/noto-sans/wght.css');
   const source = readFileSync(id, 'utf8');
   assert.throws(() => plugin.transform(source.replaceAll('font-weight: 100 900;', 'font-weight: 100 300;'), id), /Unsupported variable font/);
   assert.throws(() => plugin.transform('', id), /No font faces/);
@@ -49,7 +49,7 @@ test('font licenses accompany the emitted self-hosted assets unchanged', () => {
   const emitted = [];
   fontAssets().generateBundle.call({ emitFile: asset => emitted.push(asset) });
   assert.equal(emitted.length, 6);
-  for (const name of ['inter', 'noto-sans-kr', 'noto-sans-sc', 'noto-sans-jp', 'noto-sans-devanagari', 'noto-sans-thai']) {
+  for (const name of ['noto-sans', 'noto-sans-kr', 'noto-sans-sc', 'noto-sans-jp', 'noto-sans-devanagari', 'noto-sans-thai']) {
     const license = emitted.find(asset => asset.fileName === `fonts/${name}-OFL.txt`);
     assert.equal(license?.source, readFileSync(require.resolve(`@fontsource-variable/${name}/LICENSE`), 'utf8'));
   }

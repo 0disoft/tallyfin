@@ -1,6 +1,6 @@
 import type { AdminLocale } from './preference';
 
-// Additional scripts load with their language; English/Korean keep their existing assets.
+// Additional scripts load with their language; Noto Sans and Noto Sans KR are shared assets.
 const loaders = {
   zh: () => import('@fontsource-variable/noto-sans-sc/wght.css'),
   ja: () => import('@fontsource-variable/noto-sans-jp/wght.css'),

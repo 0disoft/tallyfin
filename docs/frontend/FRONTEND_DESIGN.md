@@ -36,9 +36,12 @@ or the no-preference Korean choice before mounting React. A failed restoration
 retains the English fallback and a retryable selector error.
 
 Self-hosted Noto Sans SC/JP/Devanagari/Thai styles load only when their locale
-is selected; Inter already covers Latin, Vietnamese and Cyrillic. Korean
+is selected; Noto Sans covers Latin, Vietnamese and Cyrillic. Korean
 remains available for operator data in any locale. Font licenses ship with
-the assets. Locale date formatting uses the Gregorian calendar so selecting
+the assets. Korean UI prioritizes Noto Sans KR, including Latin characters;
+Chinese/Japanese/Hindi/Thai UI prioritizes its corresponding Noto family.
+The remaining supported languages use Noto Sans. Search fields and event/goal
+selectors inherit this locale stack. Locale date formatting uses the Gregorian calendar so selecting
 Thai cannot change report/operation years to the Buddhist calendar. Neither
 display language nor font loading changes project timezones or API reads.
 

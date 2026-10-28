@@ -8,6 +8,7 @@
 }
 
 html {
+  --admin-font-family: "Noto Sans", "Noto Sans KR", sans-serif;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -17,17 +18,18 @@ body {
   min-height: 100vh;
   background: #ffffff;
   color: #0f172a;
-  font-family: Inter, "Noto Sans KR", sans-serif;
+  font-family: var(--admin-font-family);
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-html:lang(zh) body { font-family: Inter, "Noto Sans SC", "Noto Sans KR", sans-serif; }
-html:lang(ja) body { font-family: Inter, "Noto Sans JP", "Noto Sans KR", sans-serif; }
-html:lang(hi) body { font-family: Inter, "Noto Sans Devanagari", "Noto Sans KR", sans-serif; }
-html:lang(th) body { font-family: Inter, "Noto Sans Thai", "Noto Sans KR", sans-serif; }
+html:lang(ko) { --admin-font-family: "Noto Sans KR", "Noto Sans", sans-serif; }
+html:lang(zh) { --admin-font-family: "Noto Sans SC", "Noto Sans", "Noto Sans KR", sans-serif; }
+html:lang(ja) { --admin-font-family: "Noto Sans JP", "Noto Sans", "Noto Sans KR", sans-serif; }
+html:lang(hi) { --admin-font-family: "Noto Sans Devanagari", "Noto Sans", "Noto Sans KR", sans-serif; }
+html:lang(th) { --admin-font-family: "Noto Sans Thai", "Noto Sans", "Noto Sans KR", sans-serif; }
 
 h1,
 h2,
