@@ -8,6 +8,8 @@ Keep login body text, notices, form labels, inputs, buttons and language selecti
 
 Use Noto Sans throughout the admin. Korean prioritizes Noto Sans KR; Chinese, Japanese, Hindi and Thai prioritize Noto Sans SC, JP, Devanagari and Thai respectively. Other supported UI languages use Noto Sans. UI controls inherit the locale font; code and raw identifiers may retain monospace.
 
+Connected Overview, Events, Goals and Settings use the shared text-size tokens: 1rem for body copy, field labels and controls, and at least 0.875rem for metadata, helper text and chart ticks. Keep existing large headings and metric values. Use the 2.75rem control-height token for compact actions; wrap long translations and filters instead of shrinking their text or overlapping neighboring controls. Apply the same sizes in mobile layouts and detailed Settings panels.
+
 Run the local server yourself and open the preview in the browser available to this environment. Do not give the user server-start instructions when you can run it.
 
 Before making substantial visual changes, use the Product Design plugin's `get-context` skill when the visual source is unclear or no longer matches the current goal. When the user gives durable prototype-specific design feedback, preferences, or decisions, record them in `AGENTS.md`.

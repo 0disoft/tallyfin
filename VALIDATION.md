@@ -1,5 +1,30 @@
 # Validation
 
+## Connected workspace text readability - 2026-10-28
+
+- Replaced per-screen 10-15.5px supporting/control text with shared 1rem body
+  and 0.875rem metadata tokens across Overview, Events, Goals and detailed
+  Settings. Compact actions use the 2.75rem target token. Existing large
+  headings, metric sizes and locale-specific Noto families are retained.
+- Headers, comparison labels, CSV actions and event-total captions wrap at
+  narrow widths. Overview's subtitle uses normal flow. Fixed French event
+  and Spanish goal overflow found during the responsive verification.
+- Passed `typecheck:admin`, `build:admin`, emitted bundle tests (2),
+  `verify:admin-overview` and `verify:admin-language-matrix`. The matrix covers
+  twelve locales at 1440px and 390px, including all five Settings tabs, draft
+  retention, locale-independent CSV, no repeated reads on locale changes,
+  zero API writes and zero page errors. Evidence:
+  `.tmp/admin-language-matrix-QAgdrr` and `.tmp/admin-overview-i73Cki`.
+- Browser computed-style checks confirm 16px event search/close controls,
+  14px chart ticks and metadata, 44px detail-close height, and 16px Settings
+  field labels with 14px help. Inspected local fixture captures are in
+  `.tmp/main-readability-20261028`. These are not production-auth evidence.
+- Updated admin guidance and frontend design. Backend/auth/full-repository
+  suites and full accessibility testing were skipped for this CSS-only
+  change. No API/DB, dependencies, Worker, runner or hygiene changes. No push
+  or deployment. Schema editor defaults and permission-table layout are
+  separate follow-up work.
+
 ## Locale-specific Noto Sans typography - 2026-10-28
 
 - Replaced the Inter package/import with compatible-major Noto Sans. Korean

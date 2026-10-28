@@ -13,12 +13,12 @@
 }
 .live-settings-title { min-width: 0; }
 .live-settings-title h2 { font-size: 20px; font-weight: 800; line-height: 1.35; letter-spacing: -0.01em; }
-.live-settings-title .context-note { margin-top: 6px; color: #64748b; font-size: 13px; }
+.live-settings-title .context-note { margin-top: 6px; color: #64748b; font-size: var(--admin-meta-size); }
 .live-settings-badges { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
-.live-settings .settings-badge { font-size: 12px; font-weight: 650; }
+.live-settings .settings-badge { font-size: var(--admin-meta-size); font-weight: 650; }
 .live-settings .settings-badge.is-readonly { background: #f8fafc; color: #64748b; }
 .live-settings > .notice { margin-top: 16px; }
-.live-settings > .settings-message { margin: 14px 0 0; color: #334155; font-size: 14px; font-weight: 650; }
+.live-settings > .settings-message { margin: 14px 0 0; color: #334155; font-size: var(--admin-text-size); font-weight: 650; }
 
 .live-settings .settings-recovery {
   margin: 18px 0 0;
@@ -28,7 +28,7 @@
   border-left: 3px solid #155eef;
   border-radius: 6px;
 }
-.live-settings .settings-recovery-message { font-size: 14px; }
+.live-settings .settings-recovery-message { font-size: var(--admin-text-size); }
 .live-settings .settings-recovery > .secondary-button { margin-top: 12px; }
 .live-settings .settings-recovery .form-actions { margin-top: 14px; }
 .live-settings .settings-diff { min-width: 520px; }
@@ -61,13 +61,13 @@
   max-width: 230px;
   margin-top: 8px;
   color: #64748b;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   line-height: 1.7;
   overflow-wrap: anywhere;
 }
 .live-settings .settings-row-fields { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .live-settings .settings-field { min-width: 0; }
-.live-settings .field-label { margin-bottom: 7px; color: #334155; font-size: 13px; font-weight: 700; }
+.live-settings .field-label { margin-bottom: 7px; color: #334155; font-size: var(--admin-text-size); font-weight: 700; }
 .live-settings .text-input {
   width: 100%;
   min-width: 0;
@@ -77,7 +77,7 @@
   border: 1px solid #d8e0ea;
   border-radius: 5px;
   color: #0f172a;
-  font-size: 14px;
+  font-size: var(--admin-text-size);
 }
 .live-settings .text-input:hover:not(:disabled):not(:read-only) { border-color: #b9c6d8; }
 .live-settings .text-input:focus { border-color: #155eef; outline: 2px solid rgba(21, 94, 239, 0.16); outline-offset: 0; }
@@ -85,8 +85,8 @@
 .live-settings .text-input:disabled { background: #f3f6f9; color: #526173; cursor: not-allowed; }
 .live-settings .text-input.settings-readonly, .live-settings .text-input:read-only { background: #f5f7fa; color: #64748b; cursor: default; }
 .live-settings .settings-textarea { min-height: 120px; line-height: 1.7; resize: vertical; }
-.live-settings .field-help { margin-top: 7px; color: #64748b; font-size: 13px; line-height: 1.6; }
-.live-settings .form-error { margin-top: 6px; color: #b91c1c; font-size: 13px; line-height: 1.55; }
+.live-settings .field-help { margin-top: 7px; color: #64748b; font-size: var(--admin-meta-size); line-height: 1.6; }
+.live-settings .form-error { margin-top: 6px; color: #b91c1c; font-size: var(--admin-text-size); line-height: 1.55; }
 
 .live-settings .settings-readonly-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
 .live-settings .settings-readonly-row .text-input { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
@@ -109,7 +109,7 @@
   min-width: 0;
   min-height: 44px;
   color: #334155;
-  font-size: 14px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   cursor: pointer;
   user-select: none;
@@ -141,11 +141,11 @@
   gap: 12px;
   min-height: 48px;
   color: #334155;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   font-weight: 700;
   cursor: pointer;
 }
-.live-settings .settings-registry-meta { margin-left: auto; color: #64748b; font-size: 12px; font-weight: 500; }
+.live-settings .settings-registry-meta { margin-left: auto; color: #64748b; font-size: var(--admin-text-size); font-weight: 500; }
 .live-settings .settings-registry-body { min-width: 0; padding-bottom: 18px; }
 .live-settings .settings-registry .settings-subheading { margin-top: 14px; }
 .live-settings .settings-registry .event-table { background: #ffffff; }
@@ -178,7 +178,7 @@
   border: 1px solid #e6ecf3;
   border-radius: 4px;
   color: #64748b;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   overflow-wrap: anywhere;
 }
@@ -187,7 +187,7 @@
 .live-settings .settings-dirty-dot.is-dirty { background: #f59e0b; box-shadow: 0 0 0 3px #fef3c7; }
 .live-settings .settings-action-buttons { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
 .live-settings .settings-action-buttons .secondary-button,
-.live-settings .settings-action-buttons .primary-button { min-width: 112px; min-height: 44px; padding: 0 18px; font-size: 14px; }
+.live-settings .settings-action-buttons .primary-button { min-width: 112px; min-height: 44px; padding: 0 18px; font-size: var(--admin-text-size); }
 .live-settings .settings-panel-project { padding-bottom: 86px; }
 
 .settings-panel-access { min-width: 0; }

@@ -71,7 +71,7 @@
 .goal-page .goal-explorer-heading small {
   padding-top: 4px;
   color: var(--goal-muted);
-  font-size: 11px;
+  font-size: var(--admin-meta-size);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -85,7 +85,7 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-  min-height: 40px;
+  min-height: var(--admin-control-height);
   margin-top: 16px;
   padding: 0 10px;
   background: var(--goal-surface);
@@ -105,12 +105,12 @@
 .goal-page .goal-explorer .search-control input {
   width: 100%;
   min-width: 0;
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding: 7px 0;
   background: transparent;
   border: 0;
   border-radius: 0;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   outline: 0;
 }
 
@@ -122,11 +122,11 @@
 
 .goal-page input.goal-search {
   width: 100%;
-  min-height: 40px;
+  min-height: var(--admin-control-height);
   padding: 0 11px;
   border: 1px solid #d8e1ee;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 /* Explorer list --------------------------------------------------------- */
@@ -138,7 +138,7 @@
   gap: 7px;
   margin: 20px 4px 7px;
   color: #334155;
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 700;
   line-height: 1.4;
 }
@@ -155,7 +155,7 @@
 .goal-page .goal-group h3 span {
   margin-left: auto;
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -220,7 +220,7 @@
 .goal-page .goal-item-label strong {
   overflow: hidden;
   color: var(--goal-ink);
-  font-size: 13.5px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -235,7 +235,7 @@
   overflow: hidden;
   color: var(--goal-muted);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 400;
   line-height: 1.4;
   text-overflow: ellipsis;
@@ -247,7 +247,7 @@
   align-self: center;
   grid-area: rate;
   color: #334155;
-  font-size: 15px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -264,13 +264,13 @@
   grid-area: error;
   margin: 1px 0 0;
   color: #b42318;
-  font-size: 10.5px;
+  font-size: var(--admin-text-size);
   line-height: 1.35;
 }
 
 .goal-page .goal-explorer > .context-note {
   margin: 10px 4px;
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
 }
 
 .goal-page .goal-explorer-footer {
@@ -288,13 +288,13 @@
   background: var(--goal-surface);
   border-top: 1px solid var(--goal-line);
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.5;
 }
 
 .goal-page .goal-explorer-footer strong {
   color: var(--goal-ink);
-  font-size: 13px;
+  font-size: var(--admin-meta-size);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -321,7 +321,7 @@
 }
 
 .goal-page .goal-inspector > .state-panel p {
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .goal-section,
@@ -337,14 +337,14 @@
   gap: 6px;
   margin: 0 0 10px;
   color: var(--goal-muted);
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.5;
 }
 
 .goal-page .goal-eyebrow code {
   color: #475569;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -358,7 +358,7 @@
   background: var(--goal-blue-soft);
   border-radius: 999px;
   color: var(--goal-blue-strong);
-  font-size: 11px;
+  font-size: var(--admin-meta-size);
   font-weight: 650;
   white-space: nowrap;
 }
@@ -392,19 +392,19 @@
   margin-top: 6px;
   max-width: 68ch;
   color: var(--goal-muted);
-  font-size: 13px;
+  font-size: var(--admin-meta-size);
   line-height: 1.55;
 }
 
 .goal-page .goal-header .text-button,
 .goal-page .goal-eyebrow .text-button {
-  min-height: 32px;
+  min-height: var(--admin-control-height);
   padding: 0 10px;
   background: var(--goal-surface);
   border: 1px solid #d8e1ee;
   border-radius: 6px;
   color: var(--goal-blue);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
@@ -438,7 +438,7 @@
   display: block;
   margin-top: 5px;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
   font-weight: 550;
   line-height: 1.45;
   white-space: nowrap;
@@ -484,7 +484,7 @@
 .goal-page .goal-metrics dt {
   order: 1;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -515,7 +515,7 @@
   display: block;
   margin-top: 3px;
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 500;
   line-height: 1.4;
   letter-spacing: 0;
@@ -576,7 +576,7 @@
   gap: 7px 16px;
   margin-top: 9px;
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .goal-page .goal-outcomes meter,
@@ -624,7 +624,7 @@
 .goal-page .goal-section > .context-note {
   margin-top: 9px;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
   line-height: 1.55;
 }
 
@@ -657,7 +657,7 @@
   background: transparent;
   border: 0;
   color: #64748b;
-  font-size: 13.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -707,20 +707,20 @@
 .goal-page .goal-panel .section-header .context-note {
   margin: 0;
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   white-space: nowrap;
 }
 
 .goal-page .goal-panel .context-note {
   margin-top: 7px;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
   line-height: 1.55;
 }
 
 .goal-page .goal-panel > section > p,
 .goal-page .goal-panel > section > div > p {
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 /* Trend chart ----------------------------------------------------------- */
@@ -779,7 +779,7 @@
 .goal-page .goal-trend .recharts-text,
 .goal-page .goal-trend .recharts-cartesian-axis-tick-value {
   fill: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .goal-page .goal-overview .chart-wrap,
@@ -814,7 +814,7 @@
 .goal-page .goal-comparison > .context-note {
   margin-top: 5px;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
 }
 
 .goal-page .goal-comparison .table-scroll {
@@ -828,7 +828,7 @@
   min-width: 560px;
   border-collapse: collapse;
   color: var(--goal-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .goal-comparison th,
@@ -838,7 +838,7 @@
   background: var(--goal-surface-soft);
   border-bottom: 1px solid var(--goal-line);
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
@@ -879,7 +879,7 @@
   padding-top: 14px;
   border-top: 1px solid var(--goal-line-soft);
   color: var(--goal-muted);
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .goal-page .goal-definition > summary,
@@ -887,10 +887,10 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
+  min-height: var(--admin-control-height);
   padding: 0;
   color: #475569;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -904,7 +904,7 @@
 .goal-page .goal-definition > summary::before,
 .goal-page .goal-definition details > summary::before {
   color: var(--goal-subtle);
-  font-size: 10px;
+  font-size: var(--admin-text-size);
   content: "▸";
   transition: transform 120ms ease;
 }
@@ -922,19 +922,19 @@
   padding: 14px 0 2px;
   border-top: 1px solid var(--goal-line-soft);
   color: var(--goal-ink);
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .goal-page .goal-definition .definition-list dt {
   color: var(--goal-muted);
-  font-size: 11px;
+  font-size: var(--admin-meta-size);
   font-weight: 600;
 }
 
 .goal-page .goal-definition .definition-list dd {
   margin: 3px 0 0;
   color: #334155;
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
   overflow-wrap: anywhere;
 }
 
@@ -952,9 +952,9 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
+  min-height: var(--admin-control-height);
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -968,7 +968,7 @@
 .goal-page .goal-panel > section > details > summary::before,
 .goal-page .funnel-daily > summary::before {
   color: var(--goal-subtle);
-  font-size: 10px;
+  font-size: var(--admin-text-size);
   content: "▸";
 }
 
@@ -1003,7 +1003,7 @@
 
 .goal-page .goal-empty p {
   margin-top: 6px;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   line-height: 1.55;
 }
 
@@ -1051,7 +1051,7 @@
   gap: 8px;
   min-width: 0;
   color: #334155;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
   line-height: 1.45;
 }
 
@@ -1062,7 +1062,7 @@
 
 .goal-page .goal-step-heading strong {
   color: var(--goal-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   font-weight: 700;
   overflow-wrap: anywhere;
 }
@@ -1078,14 +1078,14 @@
 
 .goal-page .goal-step-heading > strong small {
   color: var(--goal-muted);
-  font-size: 10.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 500;
 }
 
 .goal-page .goal-step-heading .context-note {
   margin-top: 2px;
   color: var(--goal-muted);
-  font-size: 10.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -1110,7 +1110,7 @@
   gap: 3px 10px;
   margin-top: 8px;
   color: var(--goal-muted);
-  font-size: 10.5px;
+  font-size: var(--admin-text-size);
   line-height: 1.45;
 }
 
@@ -1120,7 +1120,7 @@
 
 .goal-page .goal-stage-facts strong {
   color: var(--goal-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -1132,7 +1132,7 @@
   gap: 4px;
   margin-top: 8px;
   color: #b42318;
-  font-size: 10.5px;
+  font-size: var(--admin-text-size);
   line-height: 1.4;
 }
 
@@ -1173,11 +1173,11 @@
 }
 
 .goal-page .funnel-section .property-grouping select {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding: 8px 10px;
   border-color: #d8e1ee;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-summary {
@@ -1200,7 +1200,7 @@
 .goal-page .funnel-summary .context-note {
   margin-top: 2px;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-ratio {
@@ -1223,7 +1223,7 @@
   display: block;
   margin-top: 4px;
   color: var(--goal-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 550;
   white-space: nowrap;
 }
@@ -1245,7 +1245,7 @@
 .goal-page .funnel-section .event-table,
 .goal-page .funnel-section .event-table th,
 .goal-page .funnel-section .event-table td {
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-section .event-table th,
@@ -1262,7 +1262,7 @@
 .goal-page .funnel-section .funnel-event-name,
 .goal-page .funnel-section .funnel-day,
 .goal-page .funnel-section .funnel-provisional {
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-section .funnel-track {
@@ -1281,13 +1281,13 @@
 
 .goal-page .funnel-section .funnel-daily > summary {
   color: #334155;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-section .funnel-day-heading {
   margin-top: 16px;
   color: var(--goal-ink);
-  font-size: 14px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-section .table-section > h2,
@@ -1301,7 +1301,7 @@
 
 .goal-page .funnel-section .table-section .property-grouping select,
 .goal-page .funnel-section .workflow-property-analysis .property-grouping select {
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .funnel-section .funnel-csv {
@@ -1335,7 +1335,7 @@
 .goal-page .goal-panel .workflow-failure-comparison .context-note {
   margin-top: 6px;
   color: var(--goal-muted);
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
   line-height: 1.55;
 }
 
@@ -1353,7 +1353,7 @@
 .goal-page .goal-panel .workflow-property-analysis .event-table,
 .goal-page .goal-panel .workflow-failure-comparison .event-table {
   min-width: 560px;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .goal-page .goal-panel .workflow-property-analysis > h4 {
@@ -1557,8 +1557,8 @@
   }
 
   .goal-page .goal-tabs button {
-    min-height: 42px;
-    font-size: 12.5px;
+    min-height: var(--admin-control-height);
+    font-size: var(--admin-text-size);
   }
 
   .goal-page .goal-panel .section-header {

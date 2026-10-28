@@ -41,7 +41,7 @@
 .event-page .event-explorer-heading small {
   padding-top: 4px;
   color: var(--event-muted);
-  font-size: 11px;
+  font-size: var(--admin-meta-size);
   font-weight: 500;
   text-align: right;
   white-space: nowrap;
@@ -66,11 +66,11 @@
 }
 
 .event-page .event-explorer .search-control input {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding: 7px 0;
   border: 0;
   border-radius: 0;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
   outline: 0;
 }
 
@@ -92,7 +92,7 @@
 }
 
 .event-page .event-explorer > .state-panel p {
-  font-size: 12px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-source-switch {
@@ -107,13 +107,13 @@
 
 .event-page .event-source-switch button {
   min-width: 0;
-  min-height: 34px;
+  min-height: var(--admin-control-height);
   padding: 0 8px;
   background: transparent;
   border: 0;
   border-radius: 5px;
   color: #475569;
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
 }
 
@@ -130,7 +130,7 @@
 .event-page .event-explorer-count {
   margin: 10px 3px 6px;
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .event-explorer-list {
@@ -179,7 +179,7 @@
 .event-page .event-explorer-label strong {
   overflow: hidden;
   color: var(--event-ink);
-  font-size: 14px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   line-height: 1.45;
   text-overflow: ellipsis;
@@ -190,7 +190,7 @@
   overflow: hidden;
   color: var(--event-muted);
   font-family: inherit;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.4;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -207,7 +207,7 @@
 
 .event-page .event-explorer-value {
   color: #334155;
-  font-size: 15.5px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -228,13 +228,13 @@
   padding: 11px 6px 12px;
   border-top: 1px solid var(--event-line);
   color: #475569;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
 }
 
 .event-page .event-explorer-total strong {
   color: var(--event-ink);
-  font-size: 15px;
+  font-size: var(--admin-text-size);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -278,7 +278,7 @@
   overflow: hidden;
   color: var(--event-muted);
   font-family: inherit;
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.5;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -294,12 +294,13 @@
 }
 
 .event-page .event-inspector > .state-panel p {
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-inspector-count {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   align-items: flex-end;
   flex-direction: column;
   gap: 0;
@@ -319,15 +320,16 @@
 .event-page .event-inspector-count > span {
   margin-top: 5px;
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .event-page .event-inspector-count strong span {
   margin: 0 0 0 2px;
   color: var(--event-blue);
-  font-size: 14px;
+  font-size: var(--admin-text-size);
   font-weight: 650;
   vertical-align: 0.14em;
 }
@@ -340,7 +342,7 @@
 .event-page .event-inspector-body > p[role="status"],
 .event-page .event-inspector-body > p[role="alert"] {
   margin-top: 8px;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-detail {
@@ -350,7 +352,7 @@
   background: transparent;
   border: 0;
   border-radius: 0;
-  font-size: 14px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-detail > .section-header {
@@ -374,9 +376,9 @@
 }
 
 .event-page .event-detail > .section-header .text-button {
-  min-height: 28px;
+  min-height: var(--admin-control-height);
   color: var(--event-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 500;
 }
 
@@ -385,18 +387,18 @@
   max-width: 100%;
   margin-top: 8px;
   color: var(--event-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 500;
 }
 
 .event-page .event-detail .property-grouping .project-select-wrap {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   margin-top: 4px;
 }
 
 .event-page .event-detail .property-grouping select {
-  min-height: 36px;
-  font-size: 13px;
+  min-height: var(--admin-control-height);
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-detail .trend-figure {
@@ -410,7 +412,7 @@
 }
 
 .event-page .event-detail .chart-wrap svg text {
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .event-detail .daily-values {
@@ -419,10 +421,10 @@
 
 .event-page .event-detail .daily-values > summary {
   display: inline-flex;
-  min-height: 28px;
+  min-height: var(--admin-control-height);
   align-items: center;
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 500;
   cursor: pointer;
 }
@@ -442,12 +444,12 @@
 
 .event-page .event-detail-tabs button {
   position: relative;
-  min-height: 42px;
+  min-height: var(--admin-control-height);
   padding: 0;
   background: transparent;
   border: 0;
   color: #64748b;
-  font-size: 13.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
 }
 
@@ -480,7 +482,7 @@
   margin-top: 12px;
   border-collapse: collapse;
   color: var(--event-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-daily-table th {
@@ -489,7 +491,7 @@
   background: var(--event-surface-soft);
   border-bottom: 1px solid var(--event-line);
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
@@ -537,19 +539,19 @@
 .event-page .property-analysis > .context-note {
   max-width: 82ch;
   margin-top: 7px;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .property-analysis-help {
   margin-top: 7px;
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .property-analysis-help > summary {
   display: inline-flex;
   align-items: center;
-  min-height: 28px;
+  min-height: var(--admin-control-height);
   color: var(--event-muted);
   font-weight: 500;
   cursor: pointer;
@@ -561,7 +563,7 @@
 
 .event-page .property-analysis-help .context-note {
   margin-top: 4px;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .property-analysis-scroll,
@@ -572,7 +574,7 @@
 
 .event-page .property-analysis .event-table {
   min-width: 500px;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .property-analysis .property-analysis-table {
@@ -596,7 +598,7 @@
   padding: 0 12px;
   background: var(--event-surface-soft);
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
 }
 
@@ -638,7 +640,7 @@
   min-height: 28px;
   padding: 0;
   color: var(--event-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   font-weight: 550;
   text-align: left;
   white-space: normal;
@@ -663,7 +665,7 @@
 }
 
 .event-page .property-analysis-empty p {
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .property-analysis-trend {
@@ -696,7 +698,7 @@
   padding-top: 10px;
   border-top: 1px solid var(--event-line-soft);
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-property-share,
@@ -761,7 +763,7 @@
 .event-page .event-comparison-bars span {
   min-width: 34px;
   color: var(--event-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-size);
   font-variant-numeric: tabular-nums;
   text-align: left;
   white-space: nowrap;
@@ -824,10 +826,10 @@
 }
 
 .event-page .event-comparison-header .search-control input {
-  min-height: 36px;
+  min-height: var(--admin-control-height);
   padding: 6px 0;
   border: 0;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-comparison-header .event-source-switch {
@@ -838,7 +840,7 @@
 
 .event-page .event-comparison-header .event-source-switch button {
   min-width: 78px;
-  min-height: 32px;
+  min-height: var(--admin-control-height);
 }
 
 .event-page .event-comparison-summary {
@@ -871,7 +873,7 @@
   flex-direction: column;
   gap: 2px;
   color: var(--event-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-size);
   line-height: 1.35;
 }
 
@@ -888,7 +890,7 @@
 .event-page .event-comparison-summary small,
 .event-page .event-comparison-summary > span:not(:has(strong)) {
   color: var(--event-muted);
-  font-size: 11px;
+  font-size: var(--admin-text-size);
   line-height: 1.35;
 }
 
@@ -898,7 +900,7 @@
   margin-top: 14px;
   border-collapse: collapse;
   color: var(--event-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .event-comparison-table th {
@@ -907,7 +909,7 @@
   background: var(--event-surface-soft);
   border-bottom: 1px solid var(--event-line);
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   text-align: left;
   white-space: nowrap;
@@ -942,7 +944,7 @@
   border: 0;
   border-radius: 4px;
   color: var(--event-ink);
-  font-size: 13px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   text-align: left;
 }
@@ -957,7 +959,7 @@
   display: block;
   margin-top: 1px;
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 450;
   line-height: 1.3;
 }
@@ -997,7 +999,7 @@
   .event-page .nav-button {
     gap: 11px;
     padding-inline: 10px;
-    font-size: 14px;
+    font-size: var(--admin-text-size);
   }
 
   .event-page .page-header,
@@ -1289,7 +1291,7 @@
   }
 
   .event-page .event-inspector-count span {
-    font-size: 10.5px;
+    font-size: var(--admin-text-size);
   }
 
   .event-page .event-inspector-body {
@@ -1302,7 +1304,7 @@
   }
 
   .event-page .event-detail .chart-wrap svg text {
-    font-size: 11px;
+    font-size: var(--admin-meta-size);
   }
 
   .event-page .event-detail-tabs {
@@ -1310,12 +1312,12 @@
   }
 
   .event-page .event-detail-tabs button {
-    font-size: 12.5px;
+    font-size: var(--admin-text-size);
   }
 
   .event-page .event-daily-table {
     min-width: 500px;
-    font-size: 12.5px;
+    font-size: var(--admin-text-size);
   }
 
   .event-page .property-analysis .event-table {
@@ -1359,7 +1361,7 @@
 }
 
 .event-page .page-header { gap: 16px; min-height: 76px; }
-.event-page .event-header-context { flex: 1; min-width: 0; }
+.event-page .event-header-context { flex: 1 1 360px; min-width: 0; }
 .event-page .event-header-context .events-connection-bar { padding: 0; min-height: 38px; border: 0; justify-content: flex-end; flex-wrap: wrap; }
 .event-page .events-connection-bar > .context-note:empty { display: none; }
 .event-page .events-connection-bar > .api-field { order: 0; flex-basis: 240px; }
@@ -1381,13 +1383,17 @@
 .event-page .event-comparison-table [data-change="down"] { color: #b54708; }
 .event-page .property-analysis-trend summary { color: #475569; cursor: pointer; }
 .event-page .property-analysis-trend summary h3 { display: inline; }
+@media (max-width: 520px) {
+  .event-page:not(.overview-page) .page-header .title-group { flex: 1 1 100%; }
+  .event-page:not(.overview-page) .page-header .header-controls { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+}
 @media (max-width: 800px) {
   .event-page .page-header { flex-direction: row; align-items: center; }
   .event-page .title-group { flex: 1 1 110px; min-width: 0; }
   .event-page .title-group h1 { font-size: 24px; }
   .event-page .page-header .header-controls { width: auto; flex: 0 1 auto; flex-direction: column; align-items: flex-end; gap: 3px; }
   .event-page .page-header .period-control { width: auto; min-width: 0; }
-  .event-page .page-header .timezone { font-size: 11px; }
+  .event-page .page-header .timezone { font-size: var(--admin-meta-size); }
   .event-page .event-header-context .events-connection-bar { gap: 8px; }
   .event-page .event-header-context .events-connection-bar > .api-field { flex: 1 1 140px; min-width: 140px; }
   .event-page .events-actions { align-items: center; flex-direction: row; flex-wrap: wrap; gap: 8px; }

@@ -9,6 +9,9 @@
 
 html {
   --admin-font-family: "Noto Sans", "Noto Sans KR", sans-serif;
+  --admin-text-size: 1rem;
+  --admin-meta-size: 0.875rem;
+  --admin-control-height: 2.75rem;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }

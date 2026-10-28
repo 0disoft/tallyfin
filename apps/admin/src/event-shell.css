@@ -55,11 +55,11 @@
 }
 
 .event-page .nav-button {
-  min-height: 43px;
+  min-height: var(--admin-control-height);
   gap: 13px;
   padding: 0 12px;
   border-radius: 7px;
-  font-size: 15px;
+  font-size: var(--admin-text-size);
   font-weight: 560;
 }
 
@@ -82,14 +82,14 @@
 
 .event-page .sidebar-footer p {
   color: var(--event-muted);
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.55;
 }
 
 .event-page .sample-badge {
   min-height: 24px;
   padding: 3px 9px;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   font-weight: 600;
 }
 
@@ -119,6 +119,7 @@
 .event-page .page-header {
   flex: 0 0 auto;
   align-items: center;
+  flex-wrap: wrap;
   min-height: 0;
   padding: 16px 28px 14px;
   border-bottom: 1px solid var(--event-line-soft);
@@ -142,12 +143,12 @@
 }
 
 .event-page .period-control {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   gap: 7px;
   padding: 0 10px;
   border-color: #d8e1ee;
   border-radius: 7px;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .period-control svg,
@@ -157,19 +158,20 @@
 }
 
 .event-page .period-control select {
-  font-size: 13px;
+  min-height: calc(var(--admin-control-height) - 2px);
+  font-size: var(--admin-text-size);
 }
 
 .event-page .timezone {
   color: var(--event-muted);
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .header-controls .primary-button,
 .event-page .header-controls .secondary-button {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding-inline: 12px;
-  font-size: 13px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .prototype-footer {
@@ -181,27 +183,27 @@
 
 .event-page .prototype-footer .context-note {
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .view-content .context-note {
   margin-top: 7px;
   color: var(--event-muted);
-  font-size: 12.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.55;
 }
 
 .event-page .view-content .form-error,
 .event-page .view-content .form-success {
   margin-top: 7px;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .view-content .notice {
   margin: 10px 28px 0;
   padding: 9px 12px;
   border-left-width: 3px;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
   line-height: 1.55;
 }
 
@@ -231,7 +233,7 @@
   min-width: 160px;
   gap: 0;
   color: var(--event-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-connection-bar > .api-field > span {
@@ -248,8 +250,8 @@
 
 .event-page .events-connection-bar > .api-field .project-select-wrap,
 .event-page .events-connection-bar > .api-field .text-input {
-  min-height: 38px;
-  font-size: 13px;
+  min-height: var(--admin-control-height);
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-connection-bar > .api-field .project-select-wrap {
@@ -257,10 +259,14 @@
   border-radius: 7px;
 }
 
+.event-page .events-connection-bar > .api-field .project-select-wrap select {
+  min-height: calc(var(--admin-control-height) - 2px);
+}
+
 .event-page .events-connection-bar > .secondary-button {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding-inline: 12px;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-connection-bar > .context-note {
@@ -268,7 +274,7 @@
   max-width: 330px;
   margin: 0;
   overflow: hidden;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -276,7 +282,7 @@
 .event-page .events-connection-bar > .form-error {
   flex: 1 1 100%;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-project-search {
@@ -286,13 +292,13 @@
 .event-page .events-project-search > summary {
   display: inline-flex;
   align-items: center;
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding: 0 11px;
   border: 1px solid #d8e1ee;
   border-radius: 7px;
   background: var(--event-surface);
   color: #475569;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -349,7 +355,7 @@
   min-width: 142px;
   gap: 0;
   color: var(--event-muted);
-  font-size: 12px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-project-controls .api-field > span {
@@ -367,8 +373,8 @@
 .event-page .events-project-controls .project-select-wrap,
 .event-page .events-project-controls .text-input {
   width: 100%;
-  min-height: 38px;
-  font-size: 13px;
+  min-height: var(--admin-control-height);
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-project-controls .project-select-wrap {
@@ -379,27 +385,27 @@
 }
 
 .event-page .events-project-controls .project-select-wrap select {
-  min-height: 36px;
-  font-size: 13px;
+  min-height: var(--admin-control-height);
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-project-controls .context-note {
   flex: 1 1 160px;
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .events-project-controls .form-error {
   flex: 1 1 100%;
   margin: 0;
-  font-size: 12px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-project-controls .secondary-button,
 .event-page .events-project-controls .primary-button {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding-inline: 12px;
-  font-size: 12.5px;
+  font-size: var(--admin-text-size);
 }
 
 .event-page .events-actions {
@@ -418,16 +424,18 @@
 }
 
 .event-page .events-actions .comparison-toggle {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   gap: 7px;
   color: #334155;
-  font-size: 12.5px;
-  white-space: nowrap;
+  font-size: var(--admin-text-size);
+  max-width: 100%;
+  white-space: normal;
 }
 
 .event-page .events-actions .comparison-toggle input {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
 }
 
 .event-page .events-actions .context-note {
@@ -435,7 +443,7 @@
   margin: 0;
   overflow: hidden;
   color: var(--event-muted);
-  font-size: 11.5px;
+  font-size: var(--admin-meta-size);
   line-height: 1.35;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -446,25 +454,28 @@
   align-items: center;
   gap: 7px;
   margin: 0;
-  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
 }
 
 .event-page .events-actions .csv-export button {
-  min-height: 38px;
+  min-height: var(--admin-control-height);
   padding-inline: 12px;
-  font-size: 12.5px;
-  white-space: nowrap;
+  font-size: var(--admin-text-size);
+  max-width: 100%;
+  white-space: normal;
 }
 
 .event-page .events-actions .csv-export .context-note {
   max-width: 220px;
-  font-size: 11px;
+  font-size: var(--admin-meta-size);
 }
 
 .event-page .events-actions .csv-export .form-error {
   max-width: 300px;
   margin: 0;
-  font-size: 11.5px;
+  font-size: var(--admin-text-size);
   line-height: 1.4;
 }
 
@@ -476,13 +487,13 @@
 .event-page .events-advanced > summary {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
+  min-height: var(--admin-control-height);
   padding: 0 10px;
   border: 1px solid var(--event-line);
   border-radius: 7px;
   background: var(--event-surface);
   color: #475569;
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   font-weight: 600;
   cursor: pointer;
   list-style: none;
@@ -538,5 +549,5 @@
 
 .event-page .events-advanced .context-note {
   margin-top: 8px;
-  font-size: 12px;
+  font-size: var(--admin-meta-size);
 }

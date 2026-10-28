@@ -1,5 +1,21 @@
 # Tallyfin Frontend Design
 
+## Connected workspace readability - 2026-10-28
+
+Overview, Events, Goals and all five Settings panels share the root typography
+tokens in `styles.css`: 1rem body/control text, 0.875rem supporting metadata
+and chart ticks, and 2.75rem compact action targets. Existing page titles and
+large metric values retain their sizes. The locale-specific Noto stacks apply
+to both text tiers. Update each workspace's existing declarations rather than
+adding a competing override stylesheet.
+
+Header controls wrap when project, language and period labels need more room.
+Overview's subtitle stays in normal flow so wrapped headers cannot overlap it.
+Narrow event/goal screens give the title its own row, and comparison labels,
+CSV actions and count captions wrap without extending the document width.
+This is a presentation change: data queries, authentication, drafts, schema
+editor defaults and permission-table structure remain unchanged.
+
 ## Administrator login entry - 2026-10-28
 
 The disconnected API workspace displays a centered branded login card. Its

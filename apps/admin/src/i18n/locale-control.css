@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
-  min-height: 36px;
+  min-height: var(--admin-control-height);
   padding: 0 9px;
   border: 1px solid #d8e1ee;
   border-radius: 7px;
@@ -10,16 +10,17 @@
 }
 
 .locale-control select {
+  min-height: calc(var(--admin-control-height) - 2px);
   max-width: min(160px, 40vw);
   padding: 5px 0;
   border: 0;
   background: transparent;
   color: #334155;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--admin-text-size);
   cursor: pointer;
 }
 
 .locale-control:focus-within { outline: 2px solid #155eef; outline-offset: 2px; }
 .locale-control select:focus-visible { outline: 0; }
-.locale-scope-note { margin: 0; font-size: 11px; color: #64748b; }
+.locale-scope-note { margin: 0; font-size: var(--admin-text-size); color: #64748b; }
