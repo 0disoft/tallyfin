@@ -60,12 +60,12 @@ export default function ServerSchemaDraft({ client, projectId, editor, editable 
     {state.error && <p className="form-error" role="alert">{messageText(state.error)}</p>}
     {state.reviewRequired && <p className="notice">{t('settings:serverDraftReviewRequired')}</p>}
     {editable && state.phase === 'ready' && state.snapshot && <>
-      <details><summary>{t('settings:compareServerAndCurrent')}</summary>
+      <section><h4>{t('settings:compareServerAndCurrent')}</h4>
         <div className="schema-comparison">
           <div><h4>{t('settings:serverDraft')}</h4><p>{t('settings:versionInput')} {stored?.targetVersion || t('settings:emptyValue')}</p><pre tabIndex={0} aria-label={t('settings:savedServerDraft')}>{stored ? stored.draftText : t('settings:noSavedDraft')}</pre></div>
           <div><h4>{t('settings:currentInput')}</h4><p>{t('settings:versionInput')} {current.targetVersion || t('settings:emptyValue')}</p><pre tabIndex={0} aria-label={t('settings:currentDraftInput')}>{current.draftText}</pre></div>
         </div>
-      </details>
+      </section>
       {state.reviewRequired && <button className="secondary-button" type="button" onClick={() => { controller?.acceptReview(); setNotice('keptCurrent'); }}>{t('settings:keepCurrentAndReviewSave')}</button>}
     </>}
     {notice && <p role="status">{notice === 'loadCancelled' ? t('settings:serverDraftLoadCancelled') : t('settings:currentInputKept')}</p>}

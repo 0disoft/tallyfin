@@ -17,7 +17,7 @@ function ChangeValue({ field, value }: { field: string; value: unknown }) {
   const { t } = useI18n();
   if (value === undefined) return <>{t('settings:none')}</>;
   if (value === null) return <>{t('settings:noneNull')}</>;
-  if (field === 'definition') return <details><summary>{t('settings:viewDefinition')}</summary><pre>{JSON.stringify(value, null, 2)}</pre></details>;
+  if (field === 'definition') return <pre>{JSON.stringify(value, null, 2)}</pre>;
   if (field === 'steps' && Array.isArray(value)) return <pre>{value.map((step, index) => `${index + 1}. ${step.eventName} (${step.source})`).join('\n')}</pre>;
   const text = Array.isArray(value) ? JSON.stringify(value) : String(value);
   return <pre>{text}</pre>;

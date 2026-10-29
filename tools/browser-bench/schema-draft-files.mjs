@@ -6,12 +6,15 @@ import { Provisioner } from '../provision/store.ts';
 
 /** Exercises actual download bytes and FileReader through the live schema editor. */
 export async function verifySchemaDraftFiles(page, local, directory, progress = () => {}) {
-  if (await page.locator('details.events-advanced').getAttribute('open') === null)
-    await page.getByText('연결 설정', { exact: true }).click();
+  if (await page.locator('details.events-advanced').getAttribute('open') !== null)
+    await page.locator('.events-advanced > summary').click();
   const writes = local.counts.apiWrites;
+  const refresh = async () => { await page.locator('.events-advanced > summary').click(); await page.getByRole('button', { name: '새로고침', exact: true }).click(); await page.locator('.events-advanced > summary').click(); };
+  const edit = async action => { await page.locator('#schema-tab-editor').click(); await action(); await page.locator('#schema-tab-storage').click(); };
   const draft = page.locator('#schema-draft'), target = page.locator('#schema-version');
-  const privacy = page.getByRole('checkbox', { name: '정의와 허용 값에 개인정보·원시 입력값이 없음을 검토했어요.', exact: true });
+  const privacy = page.locator('.schema-privacy input');
   const save = async filename => {
+    await page.locator('#schema-tab-storage').click();
     const pending = page.waitForEvent('download');
     await page.getByRole('button', { name: '초안 파일 저장', exact: true }).click();
     const download = await pending;
@@ -19,17 +22,17 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
     const path = resolve(directory, filename); await download.saveAs(path);
     return readFile(path, 'utf8');
   };
-  const choose = text => page.locator('#schema-draft-file').setInputFiles({ name: 'draft.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+  const choose = async text => { await page.locator('#schema-tab-storage').click(); await page.locator('#schema-draft-file').setInputFiles({ name: 'draft.json', mimeType: 'application/json', buffer: Buffer.from(text) }); };
   let dialogs = 0;
   const consent = async accept => {
     const dialog = await page.waitForEvent('dialog');
     dialogs++; assert.equal(dialog.type(), 'confirm'); assert.match(dialog.message(), /초안.*파일/);
     await (accept ? dialog.accept() : dialog.dismiss());
   };
-  await page.locator('#schema-event-0-label').fill('Saved draft'); await target.fill('3');
+  await edit(() => page.locator('#schema-event-0-label').fill('Saved draft')); await edit(() => target.fill('3'));
   const savedDraft = await draft.inputValue(), saved = await save('schema-draft.json');
   assert.deepEqual(JSON.parse(saved), { format: 'tallyfin.schema-draft/v1', projectId: 'onboarding-test', targetVersion: '3', draftText: savedDraft });
-  await target.fill('4'); await page.getByRole('button', { name: '정의 검증', exact: true }).click(); await privacy.check();
+  await edit(() => target.fill('4')); await edit(() => page.getByRole('button', { name: '정의 검증', exact: true }).click()); await edit(() => privacy.check());
   const validatedWrites = local.counts.apiWrites;
   progress('validation-count'); assert.equal(validatedWrites, writes + 1);
   for (const [text, message] of [
@@ -98,7 +101,7 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
   await page.getByText('초안 파일을 불러왔어요. 버전과 정의를 검증하고 개인정보 검토를 다시 확인해 주세요.', { exact: true }).waitFor();
   assert.equal(await target.inputValue(), '3'); assert.equal(await draft.inputValue(), savedDraft);
   assert.equal(await privacy.isChecked(), false);
-  assert.equal(await page.getByRole('button', { name: '새 버전 발행 (v3)', exact: true }).isDisabled(), true);
+  assert.equal(await page.locator('.schema-action-bar button[type=submit]').isDisabled(), true);
   assert.equal(await page.locator('#schema-draft-file').inputValue(), '');
   progress('screenshots'); await page.screenshot({ path: resolve(directory, 'schema-draft-files.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -106,15 +109,15 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
   await page.setViewportSize({ width: 1280, height: 900 });
   progress('unfinished');
-  await page.getByRole('button', { name: 'JSON 직접 편집', exact: true }).click();
-  await draft.fill('{unfinished 한글'); await target.fill('');
+  await edit(() => page.getByRole('button', { name: 'JSON 직접 편집', exact: true }).click());
+  await edit(() => draft.fill('{unfinished 한글')); await edit(() => target.fill(''));
   const unfinished = await save('schema-draft-unfinished.json');
-  await draft.fill('{}'); const restored = consent(true); await choose(unfinished); await restored;
+  await edit(() => draft.fill('{}')); const restored = consent(true); await choose(unfinished); await restored;
   await page.waitForFunction(() => document.querySelector('#schema-draft')?.value === '{unfinished 한글');
   assert.equal(await draft.inputValue(), '{unfinished 한글'); assert.equal(await target.inputValue(), '');
   assert.equal(local.counts.apiWrites, validatedWrites);
   progress('refresh-during-read'); await hold();
-  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await refresh();
   await expect(page.locator('#schema-draft-file')).toBeDisabled(); await releaseLate();
   assert.equal(await draft.inputValue(), '{unfinished 한글');
   await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
@@ -123,20 +126,21 @@ export async function verifySchemaDraftFiles(page, local, directory, progress = 
   const operator = new Provisioner(local.db), identity = { projectId: 'onboarding-test', issuer: local.issuer, subject: 'synthetic-login-operator' };
   await operator.apply(await operator.plan('grant', { ...identity, subject: 'synthetic-draft-file-backup', role: 'owner' }));
   await hold(); await operator.apply(await operator.plan('grant', { ...identity, role: 'reader' }));
-  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await refresh();
   await expect(page.locator('#schema-draft-file')).toBeDisabled(); await releaseLate();
   assert.equal(await draft.inputValue(), '{unfinished 한글');
   await operator.apply(await operator.plan('grant', { ...identity, role: 'owner' }));
-  await page.getByRole('button', { name: '새로고침', exact: true }).click();
+  await refresh();
   await page.getByRole('button', { name: '초안 유지하고 다시 검토', exact: true }).click();
   await expect(page.locator('#schema-draft-file')).toBeEnabled();
   await operator.apply(await operator.plan('revoke', { ...identity, subject: 'synthetic-draft-file-backup' }));
   const abortedReads = await page.evaluate(() => { window.FileReader = window.draftFileProbe.native; return window.draftFileProbe.aborts; });
   assert.equal(abortedReads, 4);
   progress('restore'); page.once('dialog', dialog => dialog.accept());
+  await page.locator('#schema-tab-versions').click();
   await page.getByRole('button', { name: 'v1 불러오기', exact: true }).click();
   await page.waitForFunction(() => document.querySelector('#schema-event-0-label')?.disabled === false);
-  await target.fill('2');
+  await edit(() => target.fill('2'));
   assert.equal(await page.locator('#schema-event-0-label').inputValue(), 'Action complete');
   return { schemaDraftFiles: true, draftFileDialogs: dialogs, draftFileAbortedReads: abortedReads,
     draftFileBoundaries: true, draftFileUtf8Rejected: true, draftFileTimeout: true, draftFilePermissionReadCancelled: true,

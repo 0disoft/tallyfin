@@ -1,5 +1,21 @@
 # Tallyfin Frontend Design
 
+## Schema tools without accordions - 2026-10-29
+
+The Event schema settings panel has four explicit tabs: My draft, Published
+versions, Version comparison and Draft files/server storage. `LiveSchemas`
+owns their selection and keyboard navigation. Each tab has its own labelled
+tabpanel; hidden panels stay mounted to retain the existing editor, file-read,
+comparison and server-draft controllers. Tab switches do not initiate API calls
+or discard unsaved input. The existing twelve-language labels are reused.
+
+Loading a published definition selects My draft; a validation error also reveals
+the editor before moving focus to its input. Permission checks, draft replacement
+confirmation, read-only access and publication recovery retain their previous
+contracts. Schema previews, property inputs, compared definitions and a retrieved
+server/current draft comparison use visible sections rather than disclosures.
+Other primary workflows should follow this tabs-or-visible-sections pattern.
+
 ## Minimal shared header - 2026-10-29
 
 Overview, Events, Goals and Settings use one header defined in `event-shell.css`.

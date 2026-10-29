@@ -11,10 +11,9 @@ export default function SchemaPropertyForm({ draft, eventIndex, editable, onChan
 }) {
   const { t } = useI18n();
   const messageText = useMessageText();
-  const [open, setOpen] = useState(false), [error, setError] = useState<{ message: string } | { local: true } | null>(null), [notice, setNotice] = useState<'added' | 'removed' | null>(null);
+  const [error, setError] = useState<{ message: string } | { local: true } | null>(null), [notice, setNotice] = useState<'added' | 'removed' | null>(null);
   const focus = useRef<string | null>(null), prefix = `schema-event-${eventIndex}`;
   const target = issue ? propertyIssueTarget(draft, issue) : null;
-  useEffect(() => { if (target?.startsWith(`${prefix}-`)) setOpen(true); }, [target, prefix, issue]);
   useEffect(() => {
     setError(null);
     if (focus.current) { document.getElementById(focus.current)?.focus(); focus.current = null; }
@@ -39,9 +38,8 @@ export default function SchemaPropertyForm({ draft, eventIndex, editable, onChan
       onChange(next);
     } catch (e) { focus.current = null; setError(e instanceof Error ? { message: e.message } : { local: true }); }
   }
-  return <details className="schema-property-form" open={open} onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary>{t('settings:propertyEditorSummary', { event: eventIndex + 1, count: rows.length })}</summary>
-    <h4 id={`${prefix}-properties-heading`} tabIndex={-1}>{t('settings:propertyDefinition')}</h4>
+  return <section className="schema-property-form" aria-labelledby={`${prefix}-properties-heading`}>
+    <h4 id={`${prefix}-properties-heading`} tabIndex={-1}>{t('settings:propertyEditorSummary', { event: eventIndex + 1, count: rows.length })}</h4>
     <p className="field-help" id={`${prefix}-properties-help`}>{t('settings:propertyLimitsHelp')}</p>
     <p className={combinations !== null && combinations > 256 ? 'form-error' : 'field-help'}>
       {combinations === null ? t('settings:combinationsIncomplete') : combinations > 256 ? t('settings:combinationsExceeded') : t('settings:combinationsCount', { count: combinations })}</p>
@@ -81,5 +79,5 @@ export default function SchemaPropertyForm({ draft, eventIndex, editable, onChan
     {error && <p className="form-error" role="alert">{'message' in error ? messageText(error.message) : t('settings:propertyUpdateFailed')}</p>}
     <button className="secondary-button" type="button" id={`${prefix}-property-add`} aria-label={t('settings:addPropertyLabel', { event: eventIndex + 1 })} disabled={!editable || rows.length >= 4} onClick={() => change({ kind: 'add' })}>{t('settings:addProperty')}</button>
     <p role="status">{notice ? t(notice === 'added' ? 'settings:propertyAdded' : 'settings:propertyRemoved') : ''}</p>
-  </details>;
+  </section>;
 }

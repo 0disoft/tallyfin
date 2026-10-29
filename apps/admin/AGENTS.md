@@ -1,5 +1,7 @@
 # Admin Application Instructions
 
+Do not hide primary page content or workflows in accordion-style disclosures. Use explicit menus/tabs or always-visible sections instead. The schema workspace has My draft, Published versions, Version comparison and Draft files/server storage tabs. Keep their controllers mounted across tab changes so drafts, validation, comparisons and unresolved saves survive navigation. Schema previews, property fields and compared definitions remain visible within their selected tool.
+
 Prefer a single compact header shared by Overview, Events, Goals and Settings: page title, project selector and report controls on one desktop row, wrapping only when space requires it. Keep connection controls in an anchored disclosure that does not move the header. Remove generic page introductions, promotional taglines and repeated implementation notes; retain actionable errors, empty states, data limitations and field constraints. Maintain readable text sizes rather than shrinking controls to fit.
 
 Account password changes must be directly reachable from the signed-in administrator UI through a separate account screen; keep the change form out of the login screen. The password minimum is 12 characters, with the same rule enforced server-side.

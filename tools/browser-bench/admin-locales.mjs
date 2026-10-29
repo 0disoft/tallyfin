@@ -123,7 +123,7 @@ try {
   await switchLocale('ko'); await expect(schema).toHaveValue('{'); await schema.fill(originalSchema);
   for (const ko of ['수집 진단', 'SDK 연결', '접근 권한']) {
     await tab(ko).click(); await switchLocale('en');
-    await expect(page.locator('[role=tabpanel]:visible')).toHaveCount(1);
+    await expect(page.locator('.settings-workspace > [role=tabpanel]:not([hidden])')).toHaveCount(1);
     await snapshot(`settings-${ko === '수집 진단' ? 'diagnostics' : ko === 'SDK 연결' ? 'sdk' : 'access'}-en`);
     await switchLocale('ko');
   }

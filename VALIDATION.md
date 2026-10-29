@@ -1,5 +1,34 @@
 # Validation
 
+## Schema tools as explicit tabs - 2026-10-29
+
+- Replaced the schema utility disclosures with My draft, Published versions,
+  Version comparison and Draft files/server storage tabs. Panels stay mounted;
+  switching tabs retains drafts, validation, comparison and pending saves.
+  Version loading selects the editor, and validation reveals its focus target.
+- Schema previews, property inputs, definition-diff values and retrieved
+  server/current draft comparisons now use visible sections. Reused existing
+  twelve-language labels and updated design guidance against content accordions.
+- Passed `typecheck:admin`, `build:admin`, emitted bundle tests (2),
+  `verify:admin-schema-comparison` (10 scenarios), `verify:admin-server-draft`
+  (8 scenarios) and `verify:admin-onboarding`, including file byte boundaries,
+  UTF-8 rejection, timeout/cancellation, permission changes and a generated SDK
+  sending one event to the local fixture. No production data was accessed.
+- Browser checks passed 96 combinations of twelve locales, four tabs and
+  1440/390px widths, plus keyboard navigation. No schema disclosures,
+  horizontal overflow, lost drafts, repeated API reads or tab-triggered writes.
+  Evidence: `.tmp/schema-tab-qa-20261029/report.json`,
+  `.tmp/admin-schema-comparison-9ObLSN/report.json`,
+  `.tmp/admin-server-draft-tevPeu/report.json` and
+  `.tmp/schema-tab-onboarding-20261029.log`.
+- Admin tests passed 391/391 on an isolated rerun. An earlier concurrent run
+  failed the existing short-deadline error-body timing assertion (0 transport
+  calls versus expected 1); request-lifecycle code was unchanged.
+- Backend/auth/full-repository suites, full accessibility review and production
+  verification were skipped for this UI change. No API/DB, dependency, Worker,
+  runner/CI or repository-hygiene changes. Updated frontend design and admin
+  guidance. No push or deployment.
+
 ## Minimal shared header and UI copy - 2026-10-29
 
 - Consolidated connected Overview, Events, Goals and Settings headers in

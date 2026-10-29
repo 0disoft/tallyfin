@@ -71,7 +71,7 @@ try {
     await page.setViewportSize({ width, height: 1024 });
     for (const label of ['프로젝트', '수집 진단', '이벤트 스키마', 'SDK 연결', '접근 권한']) {
       await tab(label).click();
-      await expect(page.locator('[role="tabpanel"]:visible')).toHaveCount(1);
+      await expect(page.locator('.settings-workspace > [role=tabpanel]:not([hidden])')).toHaveCount(1);
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${label}: horizontal overflow at ${width}px`);
     }
     await tab('프로젝트').click();

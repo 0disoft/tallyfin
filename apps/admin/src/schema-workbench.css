@@ -1,11 +1,13 @@
-/* Scoped to the live settings surface; existing schema controllers own every write. */
+/* Schema tools use explicit tabs; their controllers stay mounted across navigation. */
+.settings-workspace .schema-tabs { display: flex; gap: 24px; min-width: 0; max-width: 100%; margin: 20px 0 24px; border-bottom: 1px solid #e2e8f0; overflow-x: auto; }
+.settings-workspace .schema-tabs button { flex: 0 0 auto; min-height: var(--admin-control-height); max-width: 260px; padding: 10px 2px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: transparent; color: #64748b; font: inherit; font-weight: 600; }
+.settings-workspace .schema-tabs button[aria-selected="true"] { color: #155eef; border-bottom-color: #155eef; }
+.settings-workspace .schema-tabs button:focus-visible { outline-offset: -3px; }
+.settings-workspace .schema-tool-panel { min-width: 0; }
+.settings-workspace .schema-preview > h3 { margin-bottom: 12px; font-size: var(--admin-text-size); }
+@media (max-width: 800px) { .settings-workspace .schema-tabs { gap: 20px; margin-block: 16px 20px; } }
 .settings-workspace .schema-section > .context-note { margin: 8px 0 16px; }
 .settings-workspace .schema-section { position: relative; }
-.settings-workspace .schema-utilities { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 16px 0 22px; }
-.settings-workspace .schema-utilities:not(:has(details[open])) { position: absolute; top: 0; right: 0; margin: 0; }
-.settings-workspace .schema-utility { min-width: 0; font-size: var(--admin-text-size); }
-.settings-workspace .schema-utility > summary { padding: 8px 0; color: #475569; font-weight: 600; cursor: pointer; }
-.settings-workspace .schema-utility[open] { flex: 1 0 100%; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
 .settings-workspace .schema-workbench { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 0; max-width: none; margin: 0; border: 1px solid #e2e8f0; border-radius: 6px; }
 .settings-workspace .schema-editing-pane { position: relative; min-width: 0; padding: 0 20px 20px; }
 .settings-workspace .schema-edit-mode { display: flex; gap: 24px; padding-right: 190px; border-bottom: 1px solid #e2e8f0; margin-bottom: 18px; }
@@ -42,7 +44,6 @@
   .settings-workspace .schema-inspector { padding: 18px; }
 }
 @media (max-width: 900px) {
-  .settings-workspace .schema-utilities:not(:has(details[open])) { position: static; margin: 16px 0 22px; }
   .settings-workspace .schema-version-field { position: static; margin-bottom: 16px; flex-wrap: wrap; }
   .settings-workspace .schema-version-field .field-help { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
   .settings-workspace .schema-edit-mode { padding-right: 0; }

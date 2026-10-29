@@ -21,6 +21,14 @@ import { useI18n } from './i18n';
 import { useMessageText } from './i18n/messages';
 import './schema-workbench.css';
 
+const SCHEMA_TABS = [
+  { id: 'editor', label: 'myDraft' },
+  { id: 'versions', label: 'publishedVersions' },
+  { id: 'comparison', label: 'compareVersions' },
+  { id: 'storage', label: 'draftFilesAndServer' },
+] as const;
+type SchemaTab = typeof SCHEMA_TABS[number]['id'];
+
 const ISSUE_TEXT = {
   invalid_definition: 'issueInvalidDefinition', definition_limit: 'issueDefinitionLimit', duplicate: 'issueDuplicate', cardinality_limit: 'issueCardinalityLimit',
   browser_event_required: 'issueBrowserEventRequired', invalid_reference: 'issueInvalidReference',
@@ -32,6 +40,9 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   const messageText = useMessageText();
   const [state, setState] = useState<SchemaState | null>(null);
   const [editMode, setEditMode] = useState<'json' | 'form'>('json');
+  const [tab, setTab] = useState<SchemaTab>('editor');
+  const tabsRef = useRef<HTMLElement>(null);
+  const selectTab = (next: SchemaTab) => { setTab(next); tabsRef.current?.querySelector<HTMLButtonElement>(`#schema-tab-${next}`)?.focus(); };
   const editorRef = useRef<SchemaEditor | null>(null), inputRef = useRef<HTMLTextAreaElement>(null), tick = useRef(refreshTick);
   useUnloadWarning(Boolean(editorRef.current?.hasUnsavedChanges), () => Boolean(editorRef.current?.hasUnsavedChanges));
   const previousVersion = useRef<number | null | undefined>(undefined);
@@ -44,6 +55,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     previousVersion.current = version;
   }, [version, onVersionChange]);
   useEffect(() => {
+    setTab('editor');
     const editor = new SchemaEditor(client, projectId, () => {
       if (activeScope.current.client === client && activeScope.current.projectId === projectId) accessCallbackRef.current?.();
     }); editorRef.current = editor;
@@ -56,6 +68,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   // Commit the editor-mode change before the frame that focuses its input.
   useLayoutEffect(() => {
     if (!state?.formError && !issue) return;
+    setTab('editor');
     const target = issue && state ? funnelIssueTarget(state.draft, issue) ?? workflowIssueTarget(state.draft, issue) ?? propertyIssueTarget(state.draft, issue) ?? eventIssueTarget(state.draft, issue) : null;
     if (target) { setEditMode('form'); const frame = requestAnimationFrame(() => document.getElementById(target)?.focus()); return () => cancelAnimationFrame(frame); }
     setEditMode('json');
@@ -76,6 +89,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     const editor = editorRef.current;
     if (!editor) return;
     if (editor.hasDraftChanges && !window.confirm(t('settings:confirmLoadVersion', { version }))) return;
+    setTab('editor');
     void editor.selectVersion(version, { discardDraft: true });
   };
   let preview: { events: unknown[]; workflows: unknown[]; funnels?: unknown[] } | null = null;
@@ -88,8 +102,20 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     <p className="context-note">{t('settings:schemaIntro')}</p>
     {state.blocked ? <p className="notice">{t('settings:schemaBlocked')}</p>
       : !owner && <p className="notice">{t('settings:schemaReadOnly')}</p>}
-    <div className="schema-utilities"><details className="schema-utility"><summary>{t('settings:publishedVersions')}</summary>
-    <div className="schema-toolbar"><p>{t('settings:latestQueriedVersion')} <strong>{snapshot.page.latestVersion === null ? t('settings:noneYet') : `v${snapshot.page.latestVersion}`}</strong></p>
+    <nav className="schema-tabs" role="tablist" aria-label={t('settings:schemaTitle')} ref={tabsRef} onKeyDown={event => {
+      const index = SCHEMA_TABS.findIndex(item => item.id === tab);
+      const next = event.key === 'ArrowRight' ? (index + 1) % SCHEMA_TABS.length
+        : event.key === 'ArrowLeft' ? (index + SCHEMA_TABS.length - 1) % SCHEMA_TABS.length
+          : event.key === 'Home' ? 0 : event.key === 'End' ? SCHEMA_TABS.length - 1 : null;
+      if (next === null) return;
+      event.preventDefault(); selectTab(SCHEMA_TABS[next].id);
+    }}>
+      {SCHEMA_TABS.map(item => <button key={item.id} id={`schema-tab-${item.id}`} type="button" role="tab"
+        aria-selected={tab === item.id} aria-controls={`schema-panel-${item.id}`} tabIndex={tab === item.id ? 0 : -1}
+        onClick={() => setTab(item.id)}>{t(`settings:${item.label}`)}</button>)}
+    </nav>
+    <section id="schema-panel-versions" role="tabpanel" aria-labelledby="schema-tab-versions" hidden={tab !== 'versions'} tabIndex={0} className="schema-tool-panel">
+<div className="schema-toolbar"><p>{t('settings:latestQueriedVersion')} <strong>{snapshot.page.latestVersion === null ? t('settings:noneYet') : `v${snapshot.page.latestVersion}`}</strong></p>
       <button className="secondary-button" disabled={busy || state.more} onClick={() => { void editorRef.current?.refresh(); }}>{t('settings:refreshList')}</button></div>
     <div className="table-scroll" tabIndex={0} aria-label={t('settings:schemaVersionList')}><table className="event-table">
       <caption className="sr-only">{t('settings:publishedSchemaVersionsCaption')}</caption>
@@ -102,13 +128,18 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
     </table></div>
     {snapshot.page.page.beforeVersion !== null && <button className="secondary-button" disabled={!unlocked} onClick={() => { void editorRef.current?.loadMore(); }}>{state.more ? t('settings:loading') : t('settings:loadOlderVersions')}</button>}
     <p className="field-help">{t('settings:loadVersionHelp')}</p>
-    </details><details className="schema-utility"><summary>{t('settings:compareVersions')}</summary>
+
+    </section>
+    <section id="schema-panel-comparison" role="tabpanel" aria-labelledby="schema-tab-comparison" hidden={tab !== 'comparison'} tabIndex={0} className="schema-tool-panel">
     <SchemaVersionComparison key={projectId} client={client} projectId={projectId} versions={snapshot.page.data}
       enabled={unlocked && !state.blocked} refreshTick={refreshTick} />
-    </details><details className="schema-utility"><summary>{t('settings:draftFilesAndServer')}</summary>
+
+    </section>
+    <section id="schema-panel-storage" role="tabpanel" aria-labelledby="schema-tab-storage" hidden={tab !== 'storage'} tabIndex={0} className="schema-tool-panel">
     {editorRef.current && <SchemaDraftFiles editor={editorRef.current} editable={editable} projectId={projectId} />}
     {editorRef.current && <ServerSchemaDraft key={projectId} editor={editorRef.current} client={client} projectId={projectId} editable={editable} />}
-    </details></div>
+
+    </section>
     {state.message && <p className="settings-message" role="status">{messageText(state.message)}</p>}
     {state.phase === 'review' && <section className="settings-recovery" aria-label={t('settings:schemaRecoveryLabel')}>
       <h3>{t('settings:reviewPublication')}</h3>
@@ -123,6 +154,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
           <button className="secondary-button" disabled={!state.latest.settings.canEdit} onClick={() => editorRef.current?.keepDraft()}>{t('settings:keepDraftAndReview')}</button></div>
       </>}
     </section>}
+    <section id="schema-panel-editor" role="tabpanel" aria-labelledby="schema-tab-editor" hidden={tab !== 'editor'} tabIndex={0}>
     <form className="schema-form schema-workbench" onSubmit={event => { event.preventDefault(); void editorRef.current?.publish(); }} noValidate>
       <div className="schema-editing-pane">
       <div className="schema-edit-mode" role="group" aria-label={t('settings:editModeLabel')}>
@@ -148,14 +180,14 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
       </div></div>
         <div id="schema-errors">{state.formError && <p className="form-error" role="alert">{messageText(state.formError)}</p>}
           {issue && <p className="form-error" role="alert"><code>{issue.path || t('settings:wholeDefinition')}</code> — {t(`settings:${ISSUE_TEXT[issue.code]}`)}</p>}</div>
-      <details className="schema-preview"><summary>{t('settings:draftPreview')}{preview ? t('settings:draftPreviewCounts', { events: preview.events.length, workflows: preview.workflows.length, funnels: preview.funnels?.length ?? 0 }) : ''}</summary>
+      <section className="schema-preview"><h3>{t('settings:draftPreview')}{preview ? t('settings:draftPreviewCounts', { events: preview.events.length, workflows: preview.workflows.length, funnels: preview.funnels?.length ?? 0 }) : ''}</h3>
         {preview ? <div className="table-scroll" tabIndex={0} aria-label={t('settings:draftEventList')}><table className="event-table"><caption className="sr-only">{t('settings:draftEventsCaption')}</caption>
           <thead><tr><th scope="col">{t('settings:event')}</th><th scope="col">{t('settings:displayName')}</th><th scope="col">{t('settings:source')}</th></tr></thead>
           <tbody>{preview.events.slice(0, 50).map((item, index) => { const r = item && typeof item === 'object' ? item as Record<string, unknown> : {};
             const text = (key: string) => typeof r[key] === 'string' ? String(r[key]) : '—';
             return <tr key={index}><th scope="row">{text('name')}</th><td>{text('label')}</td><td>{text('source')}</td></tr>; })}</tbody></table></div>
           : <p>{t('settings:previewJsonHelp')}</p>}
-      </details>
+      </section>
       </div>
       <aside className="schema-inspector" aria-label={t('settings:prePublishChecks')}>
       <h3>{t('settings:prePublishChecks')}</h3>
@@ -175,5 +207,6 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
         <button className="primary-button" type="submit" disabled={!publishable}>{state.phase === 'publishing' ? t('settings:publishing') : state.target ? t('settings:publishVersion', { version: state.target }) : t('settings:publishNewVersion')}</button></div>
       </div>
     </form>
+    </section>
   </section>;
 }

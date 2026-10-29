@@ -76,7 +76,7 @@ try{
     assert.equal(local.counts.apiReads,reads,stage+': locale repeated API reads');await capture(stage);matrix.push(stage);
     for(const panel of ['project','diagnostics','sdk','access']){
       await page.locator(`#settings-tab-${panel}`).click();
-      await expect(page.getByRole('tabpanel')).toHaveCount(1);
+      await expect(page.locator('.settings-workspace > [role=tabpanel]:not([hidden])')).toHaveCount(1);
       await capture(`${stage}-${panel}`);
       assert.equal(local.counts.apiReads,reads,`${stage}-${panel}: tabs repeated API reads`);
     }
