@@ -1,5 +1,20 @@
 # Tallyfin Frontend Design
 
+## Minimal shared header - 2026-10-29
+
+Overview, Events, Goals and Settings use one header defined in `event-shell.css`.
+Title, project selection and language/report controls share a desktop row;
+narrow screens wrap without fixed columns or smaller text. Connection settings
+open an anchored panel while its trigger stays in place. Mobile uses the same
+accessible connection label with an icon-only trigger.
+
+Remove generic page subtitles, sidebar promotional copy and repeated API/footer
+implementation notes from the UI and all twelve shell catalogs. Keep errors,
+empty states, incomplete-data notices, field constraints and sample-mode status.
+Authentication, API calls, project selection, report ranges and drafts keep their
+existing owners. Remove competing per-screen header rules rather than adding
+another override layer.
+
 ## Connected workspace readability - 2026-10-28
 
 Overview, Events, Goals and all five Settings panels share the root typography
@@ -10,8 +25,7 @@ to both text tiers. Update each workspace's existing declarations rather than
 adding a competing override stylesheet.
 
 Header controls wrap when project, language and period labels need more room.
-Overview's subtitle stays in normal flow so wrapped headers cannot overlap it.
-Narrow event/goal screens give the title its own row, and comparison labels,
+The shared header has no generic introductory subtitle. Comparison labels,
 CSV actions and count captions wrap without extending the document width.
 This is a presentation change: data queries, authentication, drafts, schema
 editor defaults and permission-table structure remain unchanged.

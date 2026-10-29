@@ -4,11 +4,9 @@ export type AppSchema = {
   "admin:adminTitle": {};
   "admin:apiConnection": {};
   "admin:apiManagement": {};
-  "admin:apiSidebarNote": {};
   "admin:autoSchema": {};
   "admin:backToAdminLogin": {};
   "admin:backToSample": {};
-  "admin:betterProducts": {};
   "admin:browserEvents": {};
   "admin:changePassword": {};
   "admin:chartDescription": { "event": number | string; };
@@ -39,8 +37,6 @@ export type AppSchema = {
   "admin:downloadCsv": {};
   "admin:emptyPeriodNotice": {};
   "admin:eventCountLabel": { "name": number | string; };
-  "admin:footerApi": {};
-  "admin:footerSample": {};
   "admin:language": {};
   "admin:loadErrorBody": {};
   "admin:loadErrorTitle": {};
@@ -66,7 +62,6 @@ export type AppSchema = {
   "admin:noRepresentativeWorkflow": {};
   "admin:noServerEvents": {};
   "admin:openNavigation": {};
-  "admin:overviewSubtitle": {};
   "admin:panelFailed": { "label": number | string; };
   "admin:panelFailedHelp": {};
   "admin:panelLoading": { "label": number | string; };
@@ -74,7 +69,6 @@ export type AppSchema = {
   "admin:pending": {};
   "admin:previousCount": { "count": number | string; };
   "admin:previousZero": {};
-  "admin:privacyTagline": {};
   "admin:project": {};
   "admin:projectNavigation": {};
   "admin:recentDays": { "days": number | string; };
@@ -103,7 +97,6 @@ export type AppSchema = {
   "admin:serverEvents": {};
   "admin:serviceOverview": {};
   "admin:serviceOverviewHint": {};
-  "admin:settingsSubtitle": {};
   "admin:showValues": {};
   "admin:skipLink": {};
   "admin:sourceGroup": {};
@@ -942,7 +935,6 @@ export type AppSchema = {
   "operations:loginConfigError": {};
   "operations:loginFailed": {};
   "operations:loginHeading": {};
-  "operations:loginIntro": {};
   "operations:loginNotConfigured": {};
   "operations:loginSampleDemo": {};
   "operations:nextPage": {};

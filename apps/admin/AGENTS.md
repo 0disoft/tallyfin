@@ -1,5 +1,7 @@
 # Admin Application Instructions
 
+Prefer a single compact header shared by Overview, Events, Goals and Settings: page title, project selector and report controls on one desktop row, wrapping only when space requires it. Keep connection controls in an anchored disclosure that does not move the header. Remove generic page introductions, promotional taglines and repeated implementation notes; retain actionable errors, empty states, data limitations and field constraints. Maintain readable text sizes rather than shrinking controls to fit.
+
 Account password changes must be directly reachable from the signed-in administrator UI through a separate account screen; keep the change form out of the login screen. The password minimum is 12 characters, with the same rule enforced server-side.
 
 The signed-out administrator entry is a focused, branded login card with the language selector available. Hide analysis navigation and date controls until connected. Keep direct bearer-token connection in a collapsed advanced section, with bounded fields. When no login provider is configured, make the sample demo the available primary action instead of showing a nonfunctional login button. Preserve compact inline reauthentication in connected workspaces.

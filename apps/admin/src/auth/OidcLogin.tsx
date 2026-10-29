@@ -67,7 +67,6 @@ export default function OidcLogin({ onConnected, onBeforeLogin, standalone = fal
   return <section className={standalone ? 'oidc-login' : 'settings-section oidc-login'} aria-labelledby={headingId}>
     {standalone && <span className="login-emblem"><LockKey size={28} aria-hidden="true" /></span>}
     <Heading id={headingId}>{t('operations:loginHeading')}</Heading>
-    <p className="context-note login-intro">{t('operations:loginIntro')}</p>
     {!enabled && <div className="login-setup-note">
       <Info size={20} aria-hidden="true" /><p>{t('operations:loginNotConfigured')}</p>
     </div>}

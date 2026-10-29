@@ -1,10 +1,224 @@
 /* ==========================================================================
    Tallyfin event analytics workspace
 
-   Shared shell for the API event and goal screens. Keep every selector
-   beneath .event-page or .event-workspace so the overview, settings,
-   login and sample views retain the existing stylesheet.
+   Shared shell for connected Overview, Events, Goals and Settings.
+   Scope selectors beneath .event-page to leave login and sample styling alone.
    ========================================================================== */
+
+/* One shared header: title, project, then report controls. Wrap only when needed. */
+.event-page .page-header {
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  min-height: 76px;
+  padding: 16px 28px;
+  border-bottom: 1px solid #edf2f8;
+}
+
+.event-page .title-group {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+.event-page .title-group h1 {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+}
+.event-page .project-subtitle {
+  display: none;
+}
+.event-page .event-header-context {
+  flex: 1 1 300px;
+  min-width: 0;
+}
+.event-page .event-header-context:empty {
+  display: none;
+}
+.event-page .header-controls {
+  flex: 0 1 auto;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+}
+.event-page .header-controls .locale-control select {
+  field-sizing: content;
+  min-width: 4rem;
+  max-width: 10.5rem;
+}
+.event-page .header-controls .period-control {
+  flex: 0 1 auto;
+  width: auto;
+}
+.event-page .period-control select {
+  field-sizing: content;
+}
+
+.event-page .events-connection-bar {
+  position: relative;
+  z-index: 8;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.event-page .events-connection-bar > .api-field {
+  order: 0;
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 320px;
+  gap: 0;
+}
+.event-page .events-connection-bar > .api-field > span,
+.event-page .events-project-search > summary > span {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.event-page .events-connection-bar .project-select-wrap {
+  width: 100%;
+  min-height: var(--admin-control-height);
+  padding: 0 10px;
+  border: 1px solid #d8e1ee;
+  border-radius: 7px;
+}
+.event-page .events-connection-bar .project-select-wrap select {
+  width: 100%;
+  min-width: 0;
+  min-height: calc(var(--admin-control-height) - 2px);
+  font-size: var(--admin-text-size);
+}
+.event-page .events-connection-bar > .context-note:empty {
+  display: none;
+}
+.event-page .events-connection-bar > :is(.context-note, .form-error) {
+  order: 3;
+  flex: 1 0 100%;
+  margin: 0;
+}
+.event-page .events-connection-bar > .secondary-button {
+  order: 3;
+}
+.event-page .events-project-search {
+  position: static;
+  order: 1;
+  flex: 0 0 auto;
+}
+.event-page .events-advanced {
+  position: static;
+  order: 2;
+  flex: 0 0 auto;
+}
+.event-page :is(.events-project-search, .events-advanced) > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: var(--admin-control-height);
+  min-height: var(--admin-control-height);
+  padding: 0 10px;
+  border: 1px solid #d8e1ee;
+  border-radius: 7px;
+  background: #fff;
+  color: #475569;
+  font-size: var(--admin-text-size);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+.event-page :is(.events-project-search, .events-advanced) > summary::-webkit-details-marker {
+  display: none;
+}
+.event-page :is(.events-project-search, .events-advanced)[open] > summary {
+  border-color: #b8cdf0;
+  background: #eef4ff;
+  color: #1049c4;
+}
+.event-page .events-project-search[open] > .api-field,
+.event-page .events-advanced[open] > .events-advanced-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  z-index: 30;
+  max-height: min(70vh, 620px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid #d8e1ee;
+  border-radius: 9px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(15 23 42 / 12%);
+}
+.event-page .events-project-search[open] > .api-field {
+  left: 0;
+  width: min(290px, 100%);
+}
+.event-page .events-advanced[open] > .events-advanced-panel {
+  left: 0;
+  width: min(680px, 100%);
+}
+.event-page .events-advanced-panel .toolbar {
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0;
+}
+.event-page .events-advanced-panel .context-note {
+  margin-top: 8px;
+  font-size: var(--admin-meta-size);
+}
+
+@media (max-width: 1100px) {
+  .event-page .page-header {
+    padding-inline: 24px;
+  }
+  .event-page .timezone {
+    display: none;
+  }
+}
+@media (max-width: 800px) {
+  .event-page .page-header {
+    gap: 10px 12px;
+    min-height: 0;
+    padding: 12px 16px;
+  }
+  .event-page .title-group h1 {
+    font-size: 26px;
+  }
+  .event-page .event-header-context {
+    order: 3;
+    flex-basis: 100%;
+  }
+  .event-page .events-advanced > summary > .connection-settings-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .event-page .events-advanced[open] > .events-advanced-panel {
+    right: 0;
+    width: 100%;
+  }
+}
 
 .event-page {
   --event-blue: #155eef;
@@ -43,10 +257,6 @@
   height: 27px;
 }
 
-.event-page .sidebar-note {
-  display: none;
-}
-
 .event-page .nav-list {
   gap: 5px;
   margin-top: 8px;
@@ -80,12 +290,6 @@
   padding: 16px 8px 22px;
 }
 
-.event-page .sidebar-footer p {
-  color: var(--event-muted);
-  font-size: var(--admin-meta-size);
-  line-height: 1.55;
-}
-
 .event-page .sample-badge {
   min-height: 24px;
   padding: 3px 9px;
@@ -116,32 +320,6 @@
   overscroll-behavior: contain;
 }
 
-.event-page .page-header {
-  flex: 0 0 auto;
-  align-items: center;
-  flex-wrap: wrap;
-  min-height: 0;
-  padding: 16px 28px 14px;
-  border-bottom: 1px solid var(--event-line-soft);
-}
-
-.event-page .title-group h1 {
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1.15;
-  letter-spacing: -0.035em;
-}
-
-.event-page .project-subtitle {
-  display: none;
-}
-
-.event-page .header-controls {
-  gap: 8px;
-  margin-top: 0;
-  flex-wrap: wrap;
-}
-
 .event-page .period-control {
   min-height: var(--admin-control-height);
   gap: 7px;
@@ -151,8 +329,7 @@
   font-size: var(--admin-text-size);
 }
 
-.event-page .period-control svg,
-.event-page .header-controls > button svg {
+.event-page .period-control svg {
   width: 18px;
   height: 18px;
 }
@@ -164,25 +341,6 @@
 
 .event-page .timezone {
   color: var(--event-muted);
-  font-size: var(--admin-meta-size);
-}
-
-.event-page .header-controls .primary-button,
-.event-page .header-controls .secondary-button {
-  min-height: var(--admin-control-height);
-  padding-inline: 12px;
-  font-size: var(--admin-text-size);
-}
-
-.event-page .prototype-footer {
-  flex: 0 0 auto;
-  margin-top: 0;
-  padding: 4px 28px 6px;
-  border-top: 1px solid var(--event-line-soft);
-}
-
-.event-page .prototype-footer .context-note {
-  margin: 0;
   font-size: var(--admin-meta-size);
 }
 
@@ -211,133 +369,6 @@
 .event-page .event-inspector-body > .state-panel {
   margin: 16px 0;
   padding: 20px;
-}
-
-.event-page .events-connection-bar {
-  position: relative;
-  z-index: 8;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px 16px;
-  min-height: 54px;
-  margin: 0;
-  padding: 8px 28px;
-  background: var(--event-surface);
-  border-bottom: 1px solid var(--event-line-soft);
-}
-
-.event-page .events-connection-bar > .api-field {
-  position: relative;
-  flex: 0 1 220px;
-  min-width: 160px;
-  gap: 0;
-  color: var(--event-muted);
-  font-size: var(--admin-text-size);
-}
-
-.event-page .events-connection-bar > .api-field > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
-.event-page .events-connection-bar > .api-field .project-select-wrap,
-.event-page .events-connection-bar > .api-field .text-input {
-  min-height: var(--admin-control-height);
-  font-size: var(--admin-text-size);
-}
-
-.event-page .events-connection-bar > .api-field .project-select-wrap {
-  border-color: #d8e1ee;
-  border-radius: 7px;
-}
-
-.event-page .events-connection-bar > .api-field .project-select-wrap select {
-  min-height: calc(var(--admin-control-height) - 2px);
-}
-
-.event-page .events-connection-bar > .secondary-button {
-  min-height: var(--admin-control-height);
-  padding-inline: 12px;
-  font-size: var(--admin-text-size);
-}
-
-.event-page .events-connection-bar > .context-note {
-  flex: 1 1 180px;
-  max-width: 330px;
-  margin: 0;
-  overflow: hidden;
-  font-size: var(--admin-meta-size);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.event-page .events-connection-bar > .form-error {
-  flex: 1 1 100%;
-  margin: 0;
-  font-size: var(--admin-text-size);
-}
-
-.event-page .events-project-search {
-  position: relative;
-}
-
-.event-page .events-project-search > summary {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--admin-control-height);
-  padding: 0 11px;
-  border: 1px solid #d8e1ee;
-  border-radius: 7px;
-  background: var(--event-surface);
-  color: #475569;
-  font-size: var(--admin-text-size);
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-  white-space: nowrap;
-}
-
-.event-page .events-project-search > summary::-webkit-details-marker {
-  display: none;
-}
-
-.event-page .events-project-search[open] > summary {
-  border-color: #b8cdf0;
-  background: var(--event-blue-soft);
-  color: var(--event-blue-strong);
-}
-
-.event-page .events-project-search[open] > .api-field {
-  position: absolute;
-  top: calc(100% + 7px);
-  left: 0;
-  z-index: 31;
-  width: min(290px, calc(100vw - 40px));
-  padding: 12px;
-  background: var(--event-surface);
-  border: 1px solid #d8e1ee;
-  border-radius: 8px;
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.14);
-}
-
-.event-page .events-project-search[open] > .api-field > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .event-page .events-project-controls {
@@ -477,77 +508,4 @@
   margin: 0;
   font-size: var(--admin-text-size);
   line-height: 1.4;
-}
-
-.event-page .events-advanced {
-  position: relative;
-  flex: 0 0 auto;
-}
-
-.event-page .events-advanced > summary {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--admin-control-height);
-  padding: 0 10px;
-  border: 1px solid var(--event-line);
-  border-radius: 7px;
-  background: var(--event-surface);
-  color: #475569;
-  font-size: var(--admin-text-size);
-  font-weight: 600;
-  cursor: pointer;
-  list-style: none;
-  white-space: nowrap;
-}
-
-.event-page .events-advanced > summary::-webkit-details-marker {
-  display: none;
-}
-
-.event-page .events-advanced[open] > summary {
-  border-color: #c9d8ef;
-  background: var(--event-blue-soft);
-  color: var(--event-blue);
-}
-
-.event-page .events-advanced[open] {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 30;
-  width: min(760px, calc(100vw - var(--event-sidebar) - 56px));
-  max-height: min(70vh, 620px);
-  overflow: auto;
-  padding: 16px;
-  background: var(--event-surface);
-  border: 1px solid #d8e1ee;
-  border-radius: 9px;
-  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
-}
-
-.event-page .events-advanced[open] > summary {
-  margin: -6px 0 12px;
-}
-
-.event-page .events-advanced[open] > :not(summary) {
-  position: static;
-  width: auto;
-  max-height: none;
-  overflow: visible;
-  padding: 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.event-page .events-advanced .toolbar {
-  align-items: flex-end;
-  gap: 10px;
-  margin: 0;
-}
-
-.event-page .events-advanced .context-note {
-  margin-top: 8px;
-  font-size: var(--admin-meta-size);
 }

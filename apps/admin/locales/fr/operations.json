@@ -398,7 +398,6 @@
   "overviewReasonProvisional": "Agrégation en cours · comparaison en suspens",
   "overviewReasonSmallSample": "Échantillon réduit · comparaison en suspens",
   "loginHeading": "Connexion administrateur",
-  "loginIntro": "Après connexion, vous pouvez consulter les projets auxquels vous avez accès. Les informations de connexion restent uniquement dans cet onglet.",
   "loginNotConfigured": "Le fournisseur de connexion n’est pas encore configuré. Il sera disponible après la configuration par l’opérateur. En attendant, vous pouvez explorer les écrans d’analyse avec des données d’exemple.",
   "loginSampleDemo": "Explorer la démo avec des données d’exemple",
   "loginChecking": "Vérification de la connexion…",

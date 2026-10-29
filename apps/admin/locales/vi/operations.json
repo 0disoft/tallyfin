@@ -398,7 +398,6 @@
   "overviewReasonProvisional": "Đang tổng hợp · tạm hoãn so sánh",
   "overviewReasonSmallSample": "Mẫu nhỏ · tạm hoãn so sánh",
   "loginHeading": "Đăng nhập quản trị",
-  "loginIntro": "Sau khi đăng nhập, bạn có thể xem các dự án mà mình có quyền truy cập. Thông tin đăng nhập chỉ được giữ trong tab này.",
   "loginNotConfigured": "Nhà cung cấp đăng nhập chưa được cấu hình. Nhà cung cấp sẽ khả dụng sau khi người vận hành thiết lập. Cho đến lúc đó, bạn có thể khám phá các màn hình phân tích bằng dữ liệu mẫu.",
   "loginSampleDemo": "Khám phá bản demo mẫu",
   "loginChecking": "Đang kiểm tra đăng nhập…",

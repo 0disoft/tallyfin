@@ -398,7 +398,6 @@
   "overviewReasonProvisional": "集計中 · 比較は保留中",
   "overviewReasonSmallSample": "サンプルが少ない · 比較は保留中",
   "loginHeading": "管理者サインイン",
-  "loginIntro": "サインインすると、アクセス権のあるプロジェクトを表示できます。サインイン情報はこのタブ内にのみ保持されます。",
   "loginNotConfigured": "サインインプロバイダーはまだ設定されていません。オペレーターの設定後に利用可能になります。それまでは、サンプルデータで分析画面を試せます。",
   "loginSampleDemo": "サンプルデモを試す",
   "loginChecking": "サインインを確認中…",

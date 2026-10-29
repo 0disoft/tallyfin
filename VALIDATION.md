@@ -1,5 +1,29 @@
 # Validation
 
+## Minimal shared header and UI copy - 2026-10-29
+
+- Consolidated connected Overview, Events, Goals and Settings headers in
+  `event-shell.css`, removing competing page-specific layouts. Title, project
+  and report controls share one desktop row. Connection/search disclosures
+  stay anchored within the project toolbar without moving the header.
+- Removed generic page/login introductions, sidebar taglines and repeated
+  footer implementation notes, including their keys in all twelve catalogs.
+  Actionable errors, data limitations, field constraints and demo status remain.
+- Passed `typecheck:admin`, `build:admin`, admin tests (391), emitted bundle
+  tests (2), and `verify:admin-overview` (including 503 recovery, comparison,
+  navigation, locale/session/project persistence and draft retention).
+- Local browser checks passed 144 locale/view/viewport combinations: twelve
+  locales, all four menus, and widths 1920/1280/390px. Desktop headers measure
+  77px; controls retain 16px text. No horizontal document overflow, offscreen
+  connection panels, header movement on disclosure, page errors or API writes.
+  Evidence: `.tmp/header-qa-20261029/report.json` and
+  `.tmp/admin-overview-LZjbvB/report.json`. These use a local test provider,
+  not production credentials or data.
+- Updated admin guidance and frontend design. Backend/auth/full-repository
+  suites, production login/deployment and full accessibility review were
+  skipped for this presentation change. No API/DB, dependency, Worker,
+  runner/CI or repository-hygiene changes. No push or deployment.
+
 ## Connected workspace text readability - 2026-10-28
 
 - Replaced per-screen 10-15.5px supporting/control text with shared 1rem body

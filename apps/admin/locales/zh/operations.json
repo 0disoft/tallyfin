@@ -398,7 +398,6 @@
   "overviewReasonProvisional": "聚合中 · 比较暂停",
   "overviewReasonSmallSample": "样本量小 · 比较暂停",
   "loginHeading": "管理员登录",
-  "loginIntro": "登录后，你可以查看有权访问的项目。登录信息仅保存在此标签页中。",
   "loginNotConfigured": "登录提供程序尚未配置。操作员完成设置后即可使用。在此之前，你可以使用示例数据浏览分析页面。",
   "loginSampleDemo": "浏览示例演示",
   "loginChecking": "正在检查登录…",

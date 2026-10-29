@@ -410,7 +410,6 @@
   "overviewReasonSmallSample": "Small sample · comparison on hold",
 
   "loginHeading": "Admin sign-in",
-  "loginIntro": "After signing in, you can view projects you have access to. Sign-in details stay in this tab only.",
   "loginNotConfigured": "The sign-in provider is not configured yet. It becomes available after operator setup. Until then, you can explore the analysis screens with sample data.",
   "loginSampleDemo": "Explore the sample demo",
   "loginChecking": "Checking sign-in…",

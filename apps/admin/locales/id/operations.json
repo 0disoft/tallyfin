@@ -398,7 +398,6 @@
   "overviewReasonProvisional": "Sedang beragregasi · perbandingan ditahan",
   "overviewReasonSmallSample": "Sampel kecil · perbandingan ditahan",
   "loginHeading": "Masuk admin",
-  "loginIntro": "Setelah masuk, Anda dapat melihat proyek yang dapat Anda akses. Detail masuk hanya tersimpan di tab ini.",
   "loginNotConfigured": "Penyedia masuk belum dikonfigurasi. Penyedia tersedia setelah operator menyiapkannya. Sampai saat itu, Anda dapat menjelajahi layar analisis dengan data sampel.",
   "loginSampleDemo": "Jelajahi demo sampel",
   "loginChecking": "Memeriksa masuk…",

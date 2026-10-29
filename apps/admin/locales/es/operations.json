@@ -398,7 +398,6 @@
   "overviewReasonProvisional": "En agregación · comparación en pausa",
   "overviewReasonSmallSample": "Muestra pequeña · comparación en pausa",
   "loginHeading": "Inicio de sesión de administrador",
-  "loginIntro": "Después de iniciar sesión, puedes ver los proyectos a los que tienes acceso. Los datos de inicio de sesión permanecen solo en esta pestaña.",
   "loginNotConfigured": "El proveedor de inicio de sesión aún no está configurado. Estará disponible después de la configuración del operador. Mientras tanto, puedes explorar las pantallas de análisis con datos de muestra.",
   "loginSampleDemo": "Explorar la demo de muestra",
   "loginChecking": "Comprobando inicio de sesión…",
