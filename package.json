@@ -62,6 +62,7 @@
     "verify:admin-mode-exit": "node tools/browser-bench/admin-mode-exit.mjs",
     "verify:admin-analysis-access": "node tools/browser-bench/admin-analysis-access.mjs",
     "verify:admin-overview": "node tools/browser-bench/admin-overview.mjs",
+    "verify:admin-header-menus": "node tools/browser-bench/admin-header-menus.mjs",
     "verify:admin-locales": "node tools/browser-bench/admin-locales.mjs",
     "verify:admin-language-matrix": "node tools/browser-bench/admin-language-matrix.mjs",
     "verify:admin-goal-access": "node tools/browser-bench/admin-goal-access.mjs",

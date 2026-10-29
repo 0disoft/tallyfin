@@ -4,6 +4,8 @@ Do not hide primary page content or workflows in accordion-style disclosures. Us
 
 Prefer a single compact header shared by Overview, Events, Goals and Settings: page title, project selector and report controls on one desktop row, wrapping only when space requires it. Keep connection controls in an anchored disclosure that does not move the header. Remove generic page introductions, promotional taglines and repeated implementation notes; retain actionable errors, empty states, data limitations and field constraints. Maintain readable text sizes rather than shrinking controls to fit.
 
+Header connection/search menus must dismiss on Escape, outside pointer interaction and focus moving outside. Escape returns focus to the trigger; outside interactions retain the newly chosen focus. Preserve inputs on dismissal, allow only one header menu open, respect IME composition, and remove document listeners when the menu owner unmounts.
+
 Account password changes must be directly reachable from the signed-in administrator UI through a separate account screen; keep the change form out of the login screen. The password minimum is 12 characters, with the same rule enforced server-side.
 
 The signed-out administrator entry is a focused, branded login card with the language selector available. Hide analysis navigation and date controls until connected. Keep direct bearer-token connection in a collapsed advanced section, with bounded fields. When no login provider is configured, make the sample demo the available primary action instead of showing a nonfunctional login button. Preserve compact inline reauthentication in connected workspaces.

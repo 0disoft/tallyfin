@@ -4,6 +4,7 @@ import { useI18n } from './i18n';
 import useSchemaVersion from './useSchemaVersion';
 import useProjectPages from './useProjectPages';
 import ProjectPicker from './ProjectPicker';
+import useHeaderMenu from './useHeaderMenu';
 import { useMainAnalysis, usePeriodComparison, useEventSeries } from './useAnalysis';
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BrowserLogin } from './auth/client';
@@ -125,6 +126,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   }, [session]);
   const { projects, nextCursor, more, pageError, loadMore, invalidatePages, resetProjects, updateProject, addProject, rememberProject } = useProjectPages(client, refreshTick, projectId);
   const clientRef = useRef<ApiClient | null>(null);
+  const connectionMenuRef = useHeaderMenu(Boolean(client && compactWorkspace));
   clientRef.current = client;
   const draftExit = useMemo(() => new DraftExitGuard<ApiClient>(), []);
   const registerDraft = useCallback((scope: ApiClient, project: string | null, check: () => boolean) =>
@@ -344,7 +346,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
   const projectControls = <div className={`toolbar api-toolbar${compactWorkspace ? ' events-connection-bar' : ''}`}>
       <ProjectPicker compact={compactWorkspace} client={client} projects={projects.data ?? []} active={activeProject} enabled={projects.status === 'ready'} refreshTick={refreshTick}
         hasMore={!!nextCursor} loadingMore={more} onLoadMore={loadMore} onSelect={project => switchProject(project.id, project)} />
-      {compactWorkspace ? <details className="events-advanced"><summary title={t('admin:connectionSettings')}><Gear size={18} aria-hidden="true" /><span className="connection-settings-label">{t('admin:connectionSettings')}</span></summary><div className="events-advanced-panel"><div className="toolbar">{connectionControls}</div>{view !== 'settings' && <LiveIdentity client={client} />}</div></details> : connectionControls}
+      {compactWorkspace ? <details className="events-advanced" ref={connectionMenuRef} data-header-menu><summary title={t('admin:connectionSettings')}><Gear size={18} aria-hidden="true" /><span className="connection-settings-label">{t('admin:connectionSettings')}</span></summary><div className="events-advanced-panel"><div className="toolbar">{connectionControls}</div>{view !== 'settings' && <LiveIdentity client={client} />}</div></details> : connectionControls}
     </div>;
   return <>
     {unauthorizedClient === client && <>

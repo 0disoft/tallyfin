@@ -1,5 +1,28 @@
 # Validation
 
+## Header menu dismissal - 2026-10-29
+
+- Connection settings and project search share `useHeaderMenu`. Escape closes
+  and restores trigger focus; outside pointer/focus interactions close without
+  stealing the chosen focus. Inputs survive dismissal, only one header menu
+  remains open, and composing input does not consume Escape. Document and native
+  toggle listeners are removed with the owning menu.
+- Passed `typecheck:admin`, `build:admin`, emitted bundle tests (2), and the new
+  `verify:admin-header-menus` browser regression. Twelve view/viewport cases
+  cover all four menus at 1440/1280/390px: unchanged trigger x/y/width/height and
+  header height when opened, bounded panels, inside/outside interaction,
+  keyboard dismissal/focus, retained inputs, exclusive menus and IME Escape.
+  Disconnect/reconnect also verifies listener cleanup and fresh menu behavior.
+  No page errors or management API writes. Evidence:
+  `.tmp/admin-header-menus-HhCCch/report.json` and its connection screenshots.
+- The public production entry still references `index-2xIdLBtc.js`, the older
+  deployment. The preceding local header-position and schema-tab changes have
+  not yet been deployed. This validation used a local provider and fixture only.
+- Updated admin guidance and frontend design; added one local browser command.
+  Broad admin/backend/auth suites, full accessibility review and production
+  authentication were skipped for the focused UI change. No API/DB, dependency,
+  Worker, CI/runner or repository-hygiene changes. No push or deployment.
+
 ## Schema tools as explicit tabs - 2026-10-29
 
 - Replaced the schema utility disclosures with My draft, Published versions,

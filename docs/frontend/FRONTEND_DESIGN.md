@@ -1,5 +1,18 @@
 # Tallyfin Frontend Design
 
+## Header menu dismissal - 2026-10-29
+
+`useHeaderMenu` gives both header connection settings and project search a shared
+dismissal lifecycle. Their native disclosure state and existing anchored panels
+remain independent from authentication, search and draft controllers. Opening a
+menu leaves its trigger and header geometry unchanged and closes its peer.
+
+Escape closes the menu and restores trigger focus, except during IME composition
+or when a child already consumed the key. Outside pointer interaction and focus
+leaving the menu close it without stealing focus. Clicking inside retains the
+menu and its inputs. Listener cleanup follows the mounted menu owner, including
+disconnect/reconnect and React effect cleanup. No API writes or new dependencies.
+
 ## Schema tools without accordions - 2026-10-29
 
 The Event schema settings panel has four explicit tabs: My draft, Published

@@ -4,6 +4,7 @@ import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
 import { MAX_PROJECT_SEARCH_CHARS, type ApiClient } from './api/client';
 import { ProjectSearch, type ProjectSearchState } from './api/project-search';
 import type { Project } from './api/types';
+import useHeaderMenu from './useHeaderMenu';
 
 export default function ProjectPicker({ client, projects, active, enabled, refreshTick, hasMore, loadingMore, onLoadMore, onSelect, compact = false }: {
   client: ApiClient; projects: Project[]; active: Project | null; enabled: boolean; refreshTick: number;
@@ -11,6 +12,7 @@ export default function ProjectPicker({ client, projects, active, enabled, refre
   compact?: boolean;
 }) {
   const { t } = useI18n();
+  const menuRef = useHeaderMenu(compact);
   const [search, setSearch] = useState<ProjectSearch | null>(null);
   const [state, setState] = useState<ProjectSearchState>({ query: '', phase: 'idle', items: [], nextCursor: null, more: false, message: null });
   const [input, setInput] = useState('');
@@ -30,7 +32,7 @@ export default function ProjectPicker({ client, projects, active, enabled, refre
   const searchField = <label className="api-field"><span>{t('admin:searchProjects')}</span><input className="text-input" type="search" aria-label={t('admin:searchProjects')} placeholder={t('admin:nameOrId')} maxLength={MAX_PROJECT_SEARCH_CHARS}
       value={input} disabled={!enabled} onChange={event => change(event.target.value)} aria-describedby="project-search-status" /></label>;
   return <>
-    {compact ? <details className="events-project-search"><summary><MagnifyingGlass size={16} /><span>{t('admin:searchProjects')}</span></summary>{searchField}</details> : searchField}
+    {compact ? <details className="events-project-search" ref={menuRef} data-header-menu><summary><MagnifyingGlass size={16} /><span>{t('admin:searchProjects')}</span></summary>{searchField}</details> : searchField}
     <label className="api-field"><span>{t('admin:project')}</span><div className="project-select-wrap"><select aria-label={t('admin:selectProject')} value={active?.id ?? ''}
       onChange={event => { const project = options.find(item => item.id === event.target.value); if (project) onSelect(project); }} disabled={!enabled || !options.length}>
       {!active && <option value="">{t('admin:selectProjectPlaceholder')}</option>}
