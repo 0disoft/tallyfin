@@ -11,6 +11,8 @@ import type { BrowserLogin } from './auth/client';
 import './auth/login-workspace.css';
 import { CaretDown, Desktop, Database, Gear, PlugsConnected, WarningCircle } from '@phosphor-icons/react';
 import EventWorkspace from './EventWorkspace';
+import HelpTerm from './HelpTerm';
+import HelpTooltip from './HelpTooltip';
 import { createPortal } from 'react-dom';
 import { Trend } from './Dashboard';
 import DeferredPanel from './DeferredPanel';
@@ -334,9 +336,9 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     propertyComparison: propertyComparison.state, workflowDetails: currentWorkflowDetails });
 
   const connectionControls = <>
-      <label className="api-field"><span>{t('admin:schemaVersion')}</span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label={t('admin:schemaVersion')} value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
+      <label className="api-field"><span><HelpTerm content={t('analysis:helpSchemaVersion')}>{t('admin:schemaVersion')}</HelpTerm></span><input className="text-input" inputMode="numeric" pattern="[0-9]*" aria-label={t('admin:schemaVersion')} value={versionInput} onChange={event => { setVersionInput(event.target.value); setGrouping(null); }} /></label>
       <label className="comparison-toggle"><input type="checkbox" checked={automaticVersion} disabled={!projectId || versionLoading}
-        onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} />{t('admin:autoSchema')}</label>
+        onChange={event => { if (event.target.checked) selectAutomatic(); else setVersionInput(versionInput); setGrouping(null); }} /><HelpTerm content={t('analysis:helpAutoSchema')}>{t('admin:autoSchema')}</HelpTerm></label>
       <button className="secondary-button" type="button" onClick={retry}>{t('admin:refresh')}</button>
       <button className="primary-button" type="button" aria-expanded={showCreate} aria-controls="project-create-heading" disabled={showCreate} onClick={() => setShowCreate(true)}>{t('admin:addProject')}</button>
       {session?.login?.passwordChangeUrl && <a className="secondary-button" href={session.login.passwordChangeUrl} target="_blank" rel="noopener noreferrer">{t('admin:changePassword')}<span className="sr-only"> {t('admin:newTab')}</span></a>}
@@ -365,8 +367,8 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
     {!compactWorkspace && <><p className="context-note">{t('workspace:apiConnection')} · {range ? rangeLabel(range.from, range.to) : '—'} · {activeTimeZone ?? '—'} · {t('workspace:tokenMemory')}</p><LiveIdentity client={client} /></>}
 
     <div className={view === 'overview' ? 'overview-toolbar events-actions' : analysisWorkspace ? 'events-actions' : undefined}>
-    {view === 'overview' && <div className="event-source-switch" role="group" aria-label={t('admin:sourceGroup')}>{(['browser', 'server'] as const).map(value => <button type="button" key={value} aria-pressed={source === value} onClick={() => { setSelectedSource(value); setSelectedEvent(null); setGrouping(null); }}>{value === 'browser' ? <Desktop size={17} /> : <Database size={17} />}{t(value === 'browser' ? 'admin:browserEvents' : 'admin:serverEvents')}</button>)}</div>}
-    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} />{view === 'goals' ? t('workspace:goalComparison') : t('admin:comparePrevious')}</label>}
+    {view === 'overview' && <div className="event-source-switch" role="group" aria-label={t('admin:sourceGroup')}>{(['browser', 'server'] as const).map(value => <HelpTooltip<HTMLButtonElement> key={value} content={t(value === 'browser' ? 'analysis:sourceBrowserHelp' : 'analysis:sourceServerHelp')}>{trigger => <button {...trigger} type="button" aria-pressed={source === value} onClick={() => { trigger.onClick(); setSelectedSource(value); setSelectedEvent(null); setGrouping(null); }}>{value === 'browser' ? <Desktop size={17} /> : <Database size={17} />}{t(value === 'browser' ? 'admin:browserEvents' : 'admin:serverEvents')}</button>}</HelpTooltip>)}</div>}
+    {(analysisWorkspace || view === 'overview') && comparisonAvailable && <label className="comparison-toggle"><input type="checkbox" checked={compare} onChange={event => setCompare(event.target.checked)} /><HelpTerm content={t('analysis:helpComparison')}>{view === 'goals' ? t('workspace:goalComparison') : t('admin:comparePrevious')}</HelpTerm></label>}
     {view !== 'settings' && range?.to === projectToday && <p className="context-note">{t('admin:todayAggregating')}{compare && ` ${t('admin:todayComparedNotice')}`}</p>}
     {view !== 'settings' && (view !== 'goals' || !!data?.registry.workflows.length) && <CsvDownload compact={analysisWorkspace || view === 'overview'} key={JSON.stringify([mainKey, comparisonKey, compare, query, selectedEvent, groupBy, seriesKey, propertyComparison.state?.key, propertyComparison.state?.status, currentWorkflowDetails.map(detail => [detail.groupBy, detail.status, detail.comparisonStatus])])} input={exportInput} unavailable={exportUnavailable} buttonLabel={view === 'goals' ? t('workspace:workflowCsv') : undefined} />}
     </div>
@@ -413,7 +415,7 @@ export function LiveDashboard({ view, period, customPeriod, onActiveProjectChang
           {detailTab === 'daily' ? <div className="table-scroll" tabIndex={0} aria-label={t('workspace:selectedEventDaily')}><table className="event-table event-daily-table">
             <thead><tr><th scope="col">{t('workspace:date')}</th><th scope="col" className="number-cell">{t('workspace:count')}</th></tr></thead><tbody>{seriesData?.days.map(day => <tr key={day.date}><th scope="row">{day.date}</th><td className="number-cell">{formatCount(day.count)}</td></tr>)}</tbody>
           </table></div> : <>
-          <label className="api-field property-grouping"><span>{t('workspace:groupBy')}</span><div className="project-select-wrap"><select className="text-input settings-select" aria-label={t('workspace:groupBy')} value={groupBy} disabled={!propertyNames.length}
+          <label className="api-field property-grouping"><span><HelpTerm content={t('analysis:helpGrouping')}>{t('workspace:groupBy')}</HelpTerm></span><div className="project-select-wrap"><select className="text-input settings-select" aria-label={t('workspace:groupBy')} value={groupBy} disabled={!propertyNames.length}
             onChange={event => setGrouping(analysisRegistry && analysisEvent && event.target.value ? { context: eventContext(analysisRegistry, analysisEvent), property: event.target.value } : null)} aria-describedby="event-grouping-help">
             <option value="">{t('workspace:totalCount')}</option>{propertyNames.map(name => <option key={name} value={name}>{name}</option>)}</select><CaretDown size={16} aria-hidden="true" /></div></label>
           <p className="context-note" id="event-grouping-help">{!analysisEvent ? t('workspace:registeredOnly') : !propertyNames.length ? t('workspace:noProperties') : groupBy ? t('workspace:propertyValues', { property: groupBy, purpose: analysisEvent.properties[groupBy].purpose }) : t('workspace:groupHelp')}</p>

@@ -13,6 +13,7 @@ import { SettingsEditor, settingsDraft, type SettingsDraft, type SettingsState, 
 import LiveGrants from './LiveGrants.tsx';
 import LivePublishers from './LivePublishers.tsx';
 import LiveAdminChanges from './LiveAdminChanges.tsx';
+import HelpTerm from './HelpTerm';
 import useUnloadWarning from './useUnloadWarning.ts';
 import type { DraftExitRegistration } from './api/draft-exit-guard.ts';
 import { useI18n } from './i18n';
@@ -260,7 +261,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
           </div>
           <div className="settings-row-fields">
             <div className="settings-field">
-              <label className="field-label" htmlFor={FIELD_ID.origins}>{t('settings:allowedOrigins')}</label>
+              <label className="field-label" htmlFor={FIELD_ID.origins}><HelpTerm content={t('analysis:helpAllowedOrigins')}>{t('settings:allowedOrigins')}</HelpTerm></label>
               <textarea id={FIELD_ID.origins} ref={originsRef} className="text-input settings-textarea" rows={5} spellCheck={false} value={activeDraft.origins} disabled={inputsLocked} onChange={event => edit('origins', event.target.value)} aria-invalid={errors?.origins ? true : undefined} aria-describedby={describedBy('origins', errors, true)} />
               <p id={`${FIELD_ID.origins}-help`} className="field-help">{t('settings:originsHelp')}</p>
               {errors?.origins && <p id={`${FIELD_ID.origins}-error`} className="form-error" role="alert">{messageText(errors.origins)}</p>}
@@ -275,14 +276,14 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
           </div>
           <div className="settings-row-fields settings-limit-fields">
             <div className="settings-field">
-              <label className="field-label" htmlFor={FIELD_ID.requestsPerMinute}>{t('settings:requestsPerMinute')}</label>
+              <label className="field-label" htmlFor={FIELD_ID.requestsPerMinute}><HelpTerm content={t('analysis:helpRequestLimit')}>{t('settings:requestsPerMinute')}</HelpTerm></label>
               <input id={FIELD_ID.requestsPerMinute} ref={requestsPerMinuteRef} className="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={activeDraft.requestsPerMinute} disabled={inputsLocked} onChange={event => edit('requestsPerMinute', event.target.value)} aria-invalid={errors?.requestsPerMinute ? true : undefined} aria-describedby={describedBy('requestsPerMinute', errors, true)} />
               <p id={`${FIELD_ID.requestsPerMinute}-help`} className="field-help">{t('settings:requestsPerMinuteHelp')}</p>
               {errors?.requestsPerMinute && <p id={`${FIELD_ID.requestsPerMinute}-error`} className="form-error" role="alert">{messageText(errors.requestsPerMinute)}</p>}
             </div>
 
             <div className="settings-field">
-              <label className="field-label" htmlFor={FIELD_ID.newReceiptsPerUtcDay}>{t('settings:dailyReceiptLimit')}</label>
+              <label className="field-label" htmlFor={FIELD_ID.newReceiptsPerUtcDay}><HelpTerm content={t('analysis:helpDailyReceiptLimit')}>{t('settings:dailyReceiptLimit')}</HelpTerm></label>
               <input id={FIELD_ID.newReceiptsPerUtcDay} ref={newReceiptsRef} className="text-input" type="text" inputMode="numeric" pattern="[0-9]*" value={activeDraft.newReceiptsPerUtcDay} disabled={inputsLocked} onChange={event => edit('newReceiptsPerUtcDay', event.target.value)} aria-invalid={errors?.newReceiptsPerUtcDay ? true : undefined} aria-describedby={describedBy('newReceiptsPerUtcDay', errors, true)} />
               <p id={`${FIELD_ID.newReceiptsPerUtcDay}-help`} className="field-help">{t('settings:dailyReceiptLimitHelp')}</p>
               {errors?.newReceiptsPerUtcDay && <p id={`${FIELD_ID.newReceiptsPerUtcDay}-error`} className="form-error" role="alert">{messageText(errors.newReceiptsPerUtcDay)}</p>}
@@ -297,7 +298,7 @@ export function LiveSettings({ client, projectId, onSaved, refreshTick, registry
           </div>
           <div className="settings-row-fields">
             <div className="settings-field">
-              <label className="field-label" htmlFor={READONLY_FIELD_ID.timeZone}>{t('settings:projectTimezone')}</label>
+              <label className="field-label" htmlFor={READONLY_FIELD_ID.timeZone}><HelpTerm content={t('analysis:helpTimeZone')}>{t('settings:projectTimezone')}</HelpTerm></label>
               <input id={READONLY_FIELD_ID.timeZone} className="text-input settings-readonly" type="text" value={activeSnapshot.project.timeZone} readOnly aria-describedby={`${READONLY_FIELD_ID.timeZone}-help`} />
               <p id={`${READONLY_FIELD_ID.timeZone}-help`} className="field-help">{t('settings:timezoneReadOnlyHelp')}</p>
             </div>

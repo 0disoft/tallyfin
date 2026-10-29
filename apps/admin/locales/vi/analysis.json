@@ -321,5 +321,22 @@
   "completionRateCurrentPrevious": "Tỷ lệ hoàn thành\nHiện tại / trước đó",
   "completionRateChange": "Thay đổi tỷ lệ hoàn thành",
   "workflowPropertyComparisonNote": "Mỗi ô hiển thị hiện tại / trước đó. Các giá trị không được quan sát có số lượng bằng không; khi một trong hai kỳ có số lượt bắt đầu bằng không, tỷ lệ hoàn thành và so sánh của kỳ đó là —. Thay đổi tỷ lệ hoàn thành tính bằng %p.",
-  "workflowPropertyProvisionalSuffix": " Ngày bắt đầu vẫn đang được tổng hợp, vì vậy tỷ lệ hoàn thành có thể thay đổi."
+  "workflowPropertyProvisionalSuffix": " Ngày bắt đầu vẫn đang được tổng hợp, vì vậy tỷ lệ hoàn thành có thể thay đổi.",
+  "helpCollectedEvents": "Số lần sự kiện được thu thập. Nếu cùng một người thực hiện nhiều thao tác, mỗi thao tác đều được tính nên con số này khác với số lượt truy cập.",
+  "helpCompletionRate": "Tỷ lệ các lần thử đã bắt đầu và thành công: thành công ÷ đã bắt đầu × 100.",
+  "helpWorkflow": "Gom toàn bộ quá trình từ lúc bắt đầu đến khi thành công hoặc thất bại thành một lần thử.",
+  "helpFunnel": "Cho biết các lần thử đã đi qua bao nhiêu bước theo thứ tự đã định. Chưa đến bước tiếp theo không có nghĩa là lần thử đó đã chắc chắn thất bại.",
+  "helpConfirmedFailure": "Một lần thử có sự kiện thất bại được ghi nhận. Trường hợp này khác với lần thử chưa đến bước tiếp theo hoặc chưa rõ kết quả.",
+  "helpPending": "Lần thử đã bắt đầu nhưng chưa xác nhận được kết quả thành công hay thất bại. Không được tính là thất bại.",
+  "helpDuration": "Phân bố thời gian từ lúc bắt đầu đến khi thành công hoặc thất bại được ghi nhận trong trình duyệt. Khác với thời gian xử lý trên máy chủ, và chỉ gồm những lần thử có mốc thời gian đo được.",
+  "helpSchemaVersion": "Phiên bản của bộ quy tắc quy định tên, nguồn và thuộc tính của sự kiện cần thu thập. Kết quả từ các phiên bản khác nhau không được gộp chung.",
+  "helpLastReceipt": "Thời điểm sự kiện từ nguồn này được thu thập gần nhất. Chỉ dựa vào thời điểm này thì chưa thể kết luận dịch vụ có hoạt động bình thường hay không.",
+  "helpAllowedOrigins": "Các nguồn trang web được phép gửi sự kiện từ trình duyệt. Giao thức http/https và cổng của địa chỉ cũng được phân biệt.",
+  "helpRequestLimit": "Giới hạn số yêu cầu thu thập mà dự án có thể nhận trong một phút. Một yêu cầu có thể chứa nhiều sự kiện nên con số này khác với số sự kiện.",
+  "helpDailyReceiptLimit": "Số sự kiện mới tối đa có thể được tiếp nhận và lưu trữ mỗi ngày. Giới hạn được đặt lại vào nửa đêm UTC, và các lần gửi lại được xác định là trùng lặp sẽ không được tính.",
+  "helpTimeZone": "Múi giờ dùng để xác định một ngày của dự án và chia thống kê theo ngày. Múi giờ này không đổi khi bạn đổi ngôn ngữ hiển thị.",
+  "helpGrouping": "Chia kết quả theo giá trị của thuộc tính sự kiện. Ví dụ, có thể so sánh theo ngôn ngữ hoặc theo công cụ.",
+  "helpComparison": "So sánh khoảng thời gian đã chọn với khoảng ngay trước đó có cùng độ dài. Nếu có hôm nay, kết quả đang được tổng hợp có thể được tính vào.",
+  "helpAutoSchema": "Tự động chọn phiên bản lược đồ do máy chủ cung cấp. Tắt tùy chọn này để tự chọn một phiên bản cụ thể.",
+  "helpCohort": "Gom các lần thử bắt đầu trong cùng một ngày để so sánh kết quả. Dù kết thúc vào ngày hôm sau, kết quả vẫn được tính vào ngày bắt đầu."
 }

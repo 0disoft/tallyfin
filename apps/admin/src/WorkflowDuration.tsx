@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { WorkflowDuration as Duration } from './api/workflow-duration';
+import HelpTerm from './HelpTerm';
 import { useI18n } from './i18n';
 import { useLocaleFormat } from './i18n/format';
 
@@ -13,7 +14,7 @@ export default function WorkflowDuration({ duration, provisional }: { duration: 
   const { t } = useI18n();
   const { count: formatCount, rate: formatRate } = useLocaleFormat();
   return <section className="workflow-duration" aria-labelledby={heading}>
-    <h3 id={heading}>{t('analysis:completionDuration')}</h3>
+    <h3 id={heading}><HelpTerm content={t('analysis:helpDuration')}>{t('analysis:completionDuration')}</HelpTerm></h3>
     <p className="context-note">{t('analysis:durationNote')}</p>
     {!duration ? <p role="status">{t('analysis:durationUnavailable')}</p>
       : <><p className="context-note">{t('analysis:durationMeasured', { measured: formatCount(duration.measuredAttempts), unmeasured: formatCount(duration.unmeasuredAttempts) })}{provisional && t('analysis:provisionalSuffix')}</p>

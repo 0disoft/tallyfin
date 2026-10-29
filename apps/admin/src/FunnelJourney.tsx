@@ -1,4 +1,5 @@
 import { ArrowDown } from '@phosphor-icons/react';
+import HelpTerm from './HelpTerm';
 import type { FunnelResponse } from './api/funnel-contract';
 import type { Registry } from './api/types';
 import { sourceLabel } from './SourceEventTable';
@@ -10,7 +11,7 @@ export default function FunnelJourney({ data, registry }: { data: FunnelResponse
   const { count: formatCount, rate: formatRate } = useLocaleFormat();
   const labels = new Map(registry.events.map(event => [`${event.source}:${event.name}`, event.label]));
   const sourceLabels = { server: t('analysis:sourceServer'), browser: t('analysis:sourceBrowser') };
-  return <section aria-label={t('analysis:funnelJourney')}><div className="section-header"><h3>{t('analysis:stageJourney')}</h3><span className="context-note">{t('analysis:reachFromFirst')}</span></div>
+  return <section aria-label={t('analysis:funnelJourney')}><div className="section-header"><h3><HelpTerm content={t('analysis:helpFunnel')}>{t('analysis:stageJourney')}</HelpTerm></h3><span className="context-note">{t('analysis:reachFromFirst')}</span></div>
     <ol className="goal-journey">{data.summary.steps.map(step => {
       const definition = data.definition.steps[step.stepIndex];
       return <li className="goal-journey-step" key={step.stepIndex}>

@@ -79,6 +79,42 @@ try {
   await page.clock.runFor(2000); await expect(tips).toContainText('서버'); cases.push(stage);
   stage = 'unmount-cleanup'; await page.locator('.nav-list button').nth(3).click(); await expect(tips).toHaveCount(0);
   await page.clock.runFor(3000); await expect(tips).toHaveCount(0); cases.push(stage);
+  const catalog = async (locale, namespace = 'analysis') => JSON.parse(await readFile(resolve(root, `apps/admin/locales/${locale}/${namespace}.json`), 'utf8'));
+  const checkHelp = async (term, expected) => {
+    await page.locator('.page-header h1').hover(); await page.clock.runFor(200);
+    await term.hover(); await page.clock.runFor(1999); await expect(tips).toHaveCount(0);
+    await page.clock.runFor(1); await expect(tips).toHaveText(expected);
+    const rect = await tips.boundingBox(), width = page.viewportSize().width;
+    assert.ok(rect.x >= 0 && rect.x + rect.width <= width && rect.y >= 0 && rect.y + rect.height <= 1000, stage);
+    await page.keyboard.press('Escape'); await expect(tips).toHaveCount(0); cases.push(stage);
+  };
+  await page.locator('.nav-list button').nth(0).click();
+  for (const locale of ACTIVE_LOCALES) {
+    const labels = await catalog(locale);
+    await page.locator('.locale-control select').selectOption(locale);
+    await expect(page.locator('html')).toHaveAttribute('lang', locale);
+    for (const width of [1440, 390]) {
+      stage = `metric-help/${locale}/${width}`; await page.setViewportSize({ width, height: 1000 });
+      await checkHelp(page.locator('.metric-label .help-term').nth(3), labels.helpCompletionRate);
+    }
+  }
+  for (const locale of ['ko', 'en']) {
+    const labels = await catalog(locale), settings = await catalog(locale, 'settings');
+    await page.locator('.locale-control select').selectOption(locale); await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.locator('.nav-list button').nth(2).click();
+    stage = `pending-help/${locale}`; await checkHelp(page.locator('.goal-outcomes .help-term').nth(3), labels.helpPending);
+    stage = `workflow-help/${locale}`; await checkHelp(page.locator('.goal-group-heading .help-term').first(), labels.helpWorkflow);
+    await page.locator('.nav-list button').nth(3).click(); await page.locator('#settings-tab-project').click();
+    stage = `origins-help/${locale}`; const origins = page.locator('label[for=settings-origins] .help-term');
+    await checkHelp(origins, labels.helpAllowedOrigins);
+    await expect(page.getByRole('textbox', { name: settings.allowedOrigins, exact: true })).toHaveCount(1);
+    stage = `timezone-help/${locale}`; await checkHelp(page.locator('label[for=settings-project-time-zone] .help-term'), labels.helpTimeZone);
+    await page.keyboard.press('Tab'); await origins.focus(); await expect(tips).toHaveText(labels.helpAllowedOrigins);
+    await page.keyboard.press('Escape'); await expect(origins).toBeFocused(); await expect(tips).toHaveCount(0); cases.push(`term-keyboard/${locale}`);
+    await origins.click(); await expect(page.getByRole('textbox', { name: settings.allowedOrigins, exact: true })).toBeFocused();
+    await page.locator('#settings-tab-schema').click();
+    stage = `schema-help/${locale}`; await checkHelp(page.locator('#schema-heading .help-term'), labels.helpSchemaVersion);
+  }
   assert.equal(local.counts.apiWrites, 0); assert.deepEqual(errors, []);
   const report = { verified: true, cases, errors, ...local.counts };
   await writeFile(resolve(directory, 'report.json'), JSON.stringify(report, null, 2));

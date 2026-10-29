@@ -8,6 +8,7 @@ import type { DateRange, PeriodSnapshot, WorkflowLoad, WorkflowFailure } from '.
 import type { WorkflowGroupingState } from './api/workflow-analysis';
 import LiveFunnels from './LiveFunnels';
 import GoalWorkflowDetail, { GoalWorkflowAnalysis } from './GoalWorkflowDetail';
+import HelpTerm from './HelpTerm';
 import { useI18n } from './i18n';
 import { useLocaleFormat } from './i18n/format';
 import './event-shell.css';
@@ -47,7 +48,7 @@ export default function LiveGoals({ client, registry, workflows, workflowErrors,
       <label className="goal-search"><MagnifyingGlass size={18} aria-hidden="true" /><span className="sr-only">{t('analysis:searchGoals')}</span>
         <input type="search" placeholder={t('analysis:goalSearchPlaceholder')} value={query} onChange={event => setSearch({ scope, value: event.target.value })} /></label>
       {(['workflow', 'funnel'] as const).map(kind => <div key={kind}>
-        <h3 className="goal-group-heading">{kind === 'workflow' ? <ListChecks size={17} /> : <Funnel size={17} />}{kind === 'workflow' ? t('analysis:workflow') : t('analysis:funnel')} <span>{goals.filter(goal => goal.kind === kind).length}</span></h3>
+        <h3 className="goal-group-heading">{kind === 'workflow' ? <ListChecks size={17} /> : <Funnel size={17} />}<HelpTerm content={kind === 'workflow' ? t('analysis:helpWorkflow') : t('analysis:helpFunnel')}>{kind === 'workflow' ? t('analysis:workflow') : t('analysis:funnel')}</HelpTerm> <span>{goals.filter(goal => goal.kind === kind).length}</span></h3>
         <ul className="goal-list">{matches.filter(goal => goal.kind === kind).map(goal => <li key={goal.key}>
           <button type="button" className="goal-option" aria-label={goal.definition.label} aria-pressed={active?.key === goal.key} onClick={() => choose(goal.key)}>
             <span className="goal-option-label">{goal.definition.label}</span><span className="goal-option-key">{goal.definition.id}</span>

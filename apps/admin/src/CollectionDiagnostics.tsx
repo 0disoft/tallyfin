@@ -4,6 +4,7 @@ import { ApiError } from './api/client.ts';
 import { loadCollectionDiagnostics, originMatch, type CollectionDiagnostics as Diagnostics } from './api/collection-diagnostics.ts';
 import CollectionRejections from './CollectionRejections.tsx';
 import type { EventSource } from './api/types.ts';
+import HelpTerm from './HelpTerm';
 import { useI18n } from './i18n';
 import { useLocaleFormat } from './i18n/format';
 import { useMessageText } from './i18n/messages';
@@ -51,11 +52,11 @@ export default function CollectionDiagnostics({ client, projectId, version, refr
     {!data ? <p role="status">{t('operations:diagLoading')}</p> : <>
       <dl className="diagnostic-facts">
         <div><dt>{t('operations:diagProjectSettings')}</dt><dd>{settings ? settings.project.status === 'active' ? t('operations:diagCollecting') : t('operations:diagPausedState') : t('operations:diagUnknown')}</dd></div>
-        <div><dt>{t('operations:diagSelectedSchema')}</dt><dd>{schema ? t('operations:diagSchemaValue', { version: schema.schemaVersion, state: t(schema.schemaStatus === 'active' ? 'operations:diagSchemaActive' : 'operations:diagSchemaRetired') }) : t('operations:diagUnknown')}</dd></div>
-        <div><dt>{t('operations:diagLastReceipt')}</dt><dd>{summary ? receipt ? <time dateTime={receipt}>{time(receipt)} · {timeZone}</time> : t('operations:diagNoReceipt') : t('operations:diagUnknown')}</dd></div>
+        <div><dt><HelpTerm content={t('analysis:helpSchemaVersion')}>{t('operations:diagSelectedSchema')}</HelpTerm></dt><dd>{schema ? t('operations:diagSchemaValue', { version: schema.schemaVersion, state: t(schema.schemaStatus === 'active' ? 'operations:diagSchemaActive' : 'operations:diagSchemaRetired') }) : t('operations:diagUnknown')}</dd></div>
+        <div><dt><HelpTerm content={t('analysis:helpLastReceipt')}>{t('operations:diagLastReceipt')}</HelpTerm></dt><dd>{summary ? receipt ? <time dateTime={receipt}>{time(receipt)} · {timeZone}</time> : t('operations:diagNoReceipt') : t('operations:diagUnknown')}</dd></div>
         <div><dt>{t('operations:diagTodayEvents', { source: t(source === 'server' ? 'operations:diagServer' : 'operations:diagBrowser') })}</dt><dd>{summary ? t('operations:diagTodayValue', { count: formatCount(summary.totalEvents), from: summary.meta.from, timeZone }) : t('operations:diagUnknown')}</dd></div>
-        <div><dt>{t('operations:diagRequestsPerMinute')}</dt><dd>{settings ? t('operations:diagRequestsValue', { count: formatCount(settings.limits.requestsPerMinute) }) : t('operations:diagUnknown')}</dd></div>
-        <div><dt>{t('operations:diagDailyLimit')}</dt><dd>{settings ? t('operations:diagDailyValue', { count: formatCount(settings.limits.newReceiptsPerUtcDay) }) : t('operations:diagUnknown')}</dd></div>
+        <div><dt><HelpTerm content={t('analysis:helpRequestLimit')}>{t('operations:diagRequestsPerMinute')}</HelpTerm></dt><dd>{settings ? t('operations:diagRequestsValue', { count: formatCount(settings.limits.requestsPerMinute) }) : t('operations:diagUnknown')}</dd></div>
+        <div><dt><HelpTerm content={t('analysis:helpDailyReceiptLimit')}>{t('operations:diagDailyLimit')}</HelpTerm></dt><dd>{settings ? t('operations:diagDailyValue', { count: formatCount(settings.limits.newReceiptsPerUtcDay) }) : t('operations:diagUnknown')}</dd></div>
       </dl>
       {summary && <p className="field-help">{t('operations:diagGeneratedAtLabel')}<time dateTime={summary.meta.generatedAt}>{time(summary.meta.generatedAt)}</time>{t('operations:diagGeneratedAtNote', { timeZone })}</p>}
       {data.settings.error && <p className="form-error" role="alert">{t('operations:diagSettingsError', { message: errorText(data.settings.error.message) })}</p>}

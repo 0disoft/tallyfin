@@ -1,5 +1,25 @@
 # Validation
 
+## Contextual metric/settings help - 2026-10-29
+
+- Added seventeen beginner definitions in all twelve analysis catalogs and
+  applied shared help to Overview metrics/outcomes/source buttons, Events
+  grouping/share/comparison, Goals workflow/funnel/outcomes/duration/cohort,
+  and Settings schema, origins, limits, timezone and collection diagnostics.
+  Existing translations also explain provisional results and property share.
+  Dotted label text is keyboard-focusable; labels, field constraints, native
+  controls, mandatory warnings and existing click behavior remain intact.
+- Passed `typecheck:admin`, `build:admin`, emitted bundle tests (2), and the
+  expanded `verify:admin-source-tooltips` (90 cases). Coverage includes the
+  existing 54 source cases, twelve-language completion-rate help at 1440/390px,
+  Korean/English pending/workflow/origins/timezone/schema help, keyboard focus
+  and retained textbox names/label click focus. No page errors or API writes.
+  Evidence: `.tmp/admin-source-tooltips-ZYPluQ/report.json`. Saylo type generation
+  and build enforce catalog completeness. Broad backend/auth suites and
+  production checks were skipped for the UI-only change.
+- Updated frontend design and admin guidance. No dependencies, API/DB, Worker,
+  CI/runner or hygiene changes. No push or deployment.
+
 ## Shared supplemental-help lifecycle - 2026-10-29
 
 - Extracted `HelpTooltip` with native trigger render props and `HelpTerm` for

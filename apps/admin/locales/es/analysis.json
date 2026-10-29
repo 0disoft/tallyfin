@@ -321,5 +321,22 @@
   "completionRateCurrentPrevious": "Tasa de finalización\nActual / anterior",
   "completionRateChange": "Cambio de la tasa de finalización",
   "workflowPropertyComparisonNote": "Cada celda muestra actual / anterior. Los valores no observados tienen un recuento de cero; cuando alguno de los periodos tiene cero inicios, su tasa de finalización y su comparación son —. Los cambios de la tasa de finalización se expresan en %p.",
-  "workflowPropertyProvisionalSuffix": " La fecha de inicio aún se está agregando, por lo que las tasas de finalización pueden cambiar."
+  "workflowPropertyProvisionalSuffix": " La fecha de inicio aún se está agregando, por lo que las tasas de finalización pueden cambiar.",
+  "helpCollectedEvents": "Número de veces que se recopilaron eventos. Si la misma persona realiza varias acciones, cada una cuenta por separado, así que el total difiere del número de visitantes.",
+  "helpCompletionRate": "Porcentaje de intentos iniciados que terminaron con éxito: exitosos ÷ iniciados × 100.",
+  "helpWorkflow": "Agrupa el recorrido desde el inicio hasta el éxito o el fallo como un solo intento.",
+  "helpFunnel": "Muestra cuántos pasos, en el orden definido, superaron los intentos. No llegar al siguiente paso no confirma que el intento haya fallado.",
+  "helpConfirmedFailure": "Intento con un evento de fallo registrado. Se distingue de los intentos que no llegaron al siguiente paso o cuyo resultado aún se desconoce.",
+  "helpPending": "Intento que ya empezó, pero cuyo resultado de éxito o fallo aún no se ha confirmado. No se cuenta como fallo.",
+  "helpDuration": "Distribución del tiempo transcurrido desde el inicio hasta el éxito o el fallo según las marcas de tiempo registradas en el navegador. Es distinto del tiempo de procesamiento del servidor y solo incluye intentos con marcas de tiempo medibles.",
+  "helpSchemaVersion": "Versión del conjunto de reglas que define los nombres, las fuentes y las propiedades de los eventos que se recopilan. Los resultados de versiones distintas no se mezclan.",
+  "helpLastReceipt": "Última vez que se recopilaron eventos de esta fuente. Este dato por sí solo no permite saber si el servicio funciona con normalidad.",
+  "helpAllowedOrigins": "Orígenes de sitios web autorizados a enviar eventos desde el navegador. También se distingue el esquema http/https y el puerto de la dirección.",
+  "helpRequestLimit": "Máximo de solicitudes de recopilación que el proyecto puede recibir en un minuto. Una solicitud puede contener varios eventos, así que el número difiere del total de eventos.",
+  "helpDailyReceiptLimit": "Número máximo de eventos nuevos que se pueden aceptar y guardar al día. El límite se reinicia a medianoche UTC y no se cuentan los reenvíos identificados como duplicados.",
+  "helpTimeZone": "Zona horaria que define el día del proyecto y divide las estadísticas diarias. No cambia al cambiar el idioma de la interfaz.",
+  "helpGrouping": "Desglosa los resultados por los valores de una propiedad del evento. Por ejemplo, permite comparar por idioma o por herramienta.",
+  "helpComparison": "Compara el periodo seleccionado con el periodo anterior de la misma duración. Si incluye hoy, pueden aparecer resultados que aún se están agregando.",
+  "helpAutoSchema": "Selecciona automáticamente la versión del esquema indicada por el servidor. Para elegir una versión concreta, desactiva esta opción.",
+  "helpCohort": "Agrupa los intentos que comenzaron el mismo día para comparar sus resultados. Aunque un intento termine al día siguiente, su resultado se cuenta en el día en que comenzó."
 }

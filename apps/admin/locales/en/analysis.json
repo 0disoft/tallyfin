@@ -321,5 +321,22 @@
   "completionRateCurrentPrevious": "Completion rate\nCurrent / previous",
   "completionRateChange": "Completion rate change",
   "workflowPropertyComparisonNote": "Each cell shows current / previous. Unobserved values have a count of zero; when either period has zero starts, its completion rate and comparison are —. Completion rate changes are in %p.",
-  "workflowPropertyProvisionalSuffix": " A start date is still aggregating, so completion rates may change."
+  "workflowPropertyProvisionalSuffix": " A start date is still aggregating, so completion rates may change.",
+  "helpCollectedEvents": "How many times events were collected. If the same person acts more than once, each action is counted, so this differs from the visitor count.",
+  "helpCompletionRate": "The share of started attempts that succeeded: succeeded ÷ started × 100.",
+  "helpWorkflow": "Groups everything from start to success or failure as one attempt.",
+  "helpFunnel": "Shows how far attempts progress through the steps in a fixed order. Not reaching the next step does not confirm that the attempt failed.",
+  "helpConfirmedFailure": "An attempt with a recorded failure event. This is distinct from attempts that did not reach the next step or whose outcome is still unknown.",
+  "helpPending": "An attempt has started, but no success or failure result has been confirmed yet. It is not counted as a failure.",
+  "helpDuration": "The distribution of time from start to success or failure recorded in the browser. It differs from server processing time, and only attempts with measurable timestamps are included.",
+  "helpSchemaVersion": "A versioned set of rules for the event names, sources, and properties to collect. Results from different versions are not combined.",
+  "helpLastReceipt": "The last time events from this source were collected. This timestamp alone does not show whether the service is healthy.",
+  "helpAllowedOrigins": "The website origins allowed to send browser events. The http/https scheme and port are part of the match.",
+  "helpRequestLimit": "The maximum number of collection requests the project can receive in one minute. A request can contain multiple events, so this differs from the event count.",
+  "helpDailyReceiptLimit": "The maximum number of new events that can be accepted and stored per day. The limit resets at midnight UTC, and duplicate resends are excluded.",
+  "helpTimeZone": "The time zone used to define a project day and split daily statistics. It does not change when you change the display language.",
+  "helpGrouping": "Breaks results down by values of an event property. For example, you can compare by language or by tool.",
+  "helpComparison": "Compares the selected period with the preceding period of the same length. If today is included, the comparison can include results still being aggregated.",
+  "helpAutoSchema": "Automatically selects the schema version the server provides. Turn this option off to choose a specific version yourself.",
+  "helpCohort": "Groups attempts that started on the same day so their results can be compared. An attempt that finishes the next day is still included in the results for its original start date."
 }

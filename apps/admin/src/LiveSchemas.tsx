@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import HelpTerm from './HelpTerm';
 import type { ApiClient } from './api/client.ts';
 import { SchemaEditor } from './api/schema-editor.ts';
 import type { SchemaState } from './api/schema-editor.ts';
@@ -95,7 +96,7 @@ export default function LiveSchemas({ client, projectId, refreshTick, onVersionC
   let preview: { events: unknown[]; workflows: unknown[]; funnels?: unknown[] } | null = null;
   try { preview = readDraft(state.draft); } catch { /* Invalid JSON remains in the editor until explicitly validated. */ }
   return <section className="settings-section schema-section" aria-labelledby="schema-heading" aria-busy={busy || undefined}>
-    <div className="settings-head"><h2 id="schema-heading">{t('settings:schemaTitle')}</h2>
+    <div className="settings-head"><h2 id="schema-heading"><HelpTerm content={t('analysis:helpSchemaVersion')}>{t('settings:schemaTitle')}</HelpTerm></h2>
       <span className="settings-badge">{snapshot.page.latestVersion === null ? t('settings:firstSchema') : t('settings:currentVersion', { version: snapshot.page.latestVersion })}</span>
       {(state.blocked || !owner) && <span className="settings-badge">{state.blocked ? t('settings:permissionRequired') : t('settings:readOnly')}</span>}
       <span className="field-help">{state.target ? t('settings:draftVersion', { version: state.target }) : t('settings:draftInProgress')}</span></div>

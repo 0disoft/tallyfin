@@ -321,5 +321,22 @@
   "completionRateCurrentPrevious": "Taux d'achèvement\nActuel / précédent",
   "completionRateChange": "Variation du taux d'achèvement",
   "workflowPropertyComparisonNote": "Chaque cellule affiche actuel / précédent. Les valeurs non observées ont un décompte nul ; lorsque l'une ou l'autre période ne compte aucun démarrage, son taux d'achèvement et la comparaison sont —. Les variations du taux d'achèvement sont en %p.",
-  "workflowPropertyProvisionalSuffix": " Une date de début est encore en cours d’agrégation ; les taux d’achèvement peuvent donc évoluer."
+  "workflowPropertyProvisionalSuffix": " Une date de début est encore en cours d’agrégation ; les taux d’achèvement peuvent donc évoluer.",
+  "helpCollectedEvents": "Nombre de fois où des événements ont été collectés. Si une même personne agit plusieurs fois, chaque action est comptée, ce qui diffère du nombre de visiteurs.",
+  "helpCompletionRate": "Part des tentatives démarrées qui ont réussi : réussies ÷ démarrées × 100.",
+  "helpWorkflow": "Regroupe le parcours depuis le démarrage jusqu’au succès ou à l’échec en une seule tentative.",
+  "helpFunnel": "Indique à combien d’étapes, dans l’ordre défini, les tentatives sont arrivées. Ne pas atteindre l’étape suivante ne confirme pas un échec.",
+  "helpConfirmedFailure": "Tentative pour laquelle un événement d’échec a été enregistré. Elle se distingue d’une tentative qui n’a pas atteint l’étape suivante ou dont le résultat est encore inconnu.",
+  "helpPending": "Tentative démarrée dont le résultat, réussi ou échoué, n’a pas encore été confirmé. Elle n’est pas comptée comme un échec.",
+  "helpDuration": "Répartition du temps écoulé entre le démarrage et le succès ou l’échec, tel qu’enregistré dans le navigateur. Elle diffère du temps de traitement serveur et ne comprend que les tentatives dont les horodatages sont mesurables.",
+  "helpSchemaVersion": "Version du jeu de règles qui définit les noms, sources et propriétés des événements à collecter. Les résultats de versions différentes ne sont pas mélangés.",
+  "helpLastReceipt": "Date à laquelle des événements de cette source ont été collectés pour la dernière fois. Cette date seule ne permet pas de savoir si le service fonctionne normalement.",
+  "helpAllowedOrigins": "Origines des sites autorisées à envoyer des événements depuis le navigateur. Le protocole http/https et le port font partie de la comparaison.",
+  "helpRequestLimit": "Nombre maximal de requêtes de collecte qu’un projet peut recevoir en une minute. Une requête peut contenir plusieurs événements ; ce nombre diffère donc du nombre d’événements.",
+  "helpDailyReceiptLimit": "Nombre maximal de nouveaux événements pouvant être acceptés et enregistrés par jour. La limite est réinitialisée à minuit UTC ; les renvois reconnus comme des doublons sont exclus.",
+  "helpTimeZone": "Fuseau horaire qui définit la journée du projet et le découpage des statistiques quotidiennes. Il ne change pas avec la langue d’affichage.",
+  "helpGrouping": "Décompose les résultats selon les valeurs d’une propriété d’événement. Vous pouvez par exemple comparer par langue ou par outil.",
+  "helpComparison": "Compare la période sélectionnée à la période précédente de même durée. Si aujourd’hui est inclus, des résultats encore en cours d’agrégation peuvent apparaître.",
+  "helpAutoSchema": "Sélectionne automatiquement la version de schéma indiquée par le serveur. Pour choisir une version précise, désactivez cette option.",
+  "helpCohort": "Regroupe les tentatives démarrées le même jour pour comparer leurs résultats. Une tentative terminée le lendemain reste comptée dans les résultats de son jour de démarrage."
 }

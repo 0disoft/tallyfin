@@ -1,4 +1,5 @@
 import { useId, useState } from 'react';
+import HelpTerm from './HelpTerm';
 import { Trend } from './Dashboard';
 import type { DailyRecord } from './data';
 import type { PropertyAnalysis } from './api/event-analysis.ts';
@@ -42,7 +43,7 @@ export default function EventPropertyBreakdown({ analysis, propertyName }: { ana
         <div className="table-scroll property-analysis-scroll" tabIndex={0} aria-label={t('analysis:propertyBreakdownTable', { property: propertyName })}>
           <table className="event-table property-analysis-table">
             <caption className="sr-only">{t('analysis:propertyBreakdownCaption', { property: propertyName, count: formatCount(analysis.total) })}</caption>
-            <thead><tr><th scope="col">{t('analysis:propertyValue', { property: propertyName })}</th><th scope="col" className="number-cell">{t('analysis:eventCount')}</th><th scope="col" className="number-cell">{t('analysis:share')}</th></tr></thead>
+            <thead><tr><th scope="col">{t('analysis:propertyValue', { property: propertyName })}</th><th scope="col" className="number-cell">{t('analysis:eventCount')}</th><th scope="col" className="number-cell"><HelpTerm content={t('analysis:shareHelpBody')}>{t('analysis:share')}</HelpTerm></th></tr></thead>
             <tbody>{analysis.rows.map(row => <tr key={row.key}>
               <th scope="row"><button type="button" className="text-button property-analysis-value" aria-pressed={row.key === activeKey} onClick={() => setSelection({ signature, key: row.key })}>{valueLabel(row.value)}</button></th>
               <td className="number-cell">{formatCount(row.count)}</td>

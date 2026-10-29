@@ -321,5 +321,22 @@
   "completionRateCurrentPrevious": "完成率\n当前 / 上期",
   "completionRateChange": "完成率变化",
   "workflowPropertyComparisonNote": "每个单元格显示当前 / 上期。未观测到的值计数为零；任一周期开始数为零时，其完成率和比较值均为 —。完成率变化以 %p 表示。",
-  "workflowPropertyProvisionalSuffix": " 开始日期仍在聚合中，因此完成率可能会变化。"
+  "workflowPropertyProvisionalSuffix": " 开始日期仍在聚合中，因此完成率可能会变化。",
+  "helpCollectedEvents": "事件被收集的次数。同一个人多次操作会分别计入，因此与访客数不同。",
+  "helpCompletionRate": "已开始的尝试中成功尝试所占的比例。按成功数 ÷ 开始数 × 100 计算。",
+  "helpWorkflow": "把从开始到成功或失败的整个过程归为一次尝试。",
+  "helpFunnel": "查看尝试按既定顺序通过了多少步骤。未进入下一步并不代表已确认失败。",
+  "helpConfirmedFailure": "记录了失败事件的一次尝试。与未进入下一步或结果仍未知的尝试相区分。",
+  "helpPending": "已经开始，但尚未确认成功或失败结果的尝试。不会计入失败数。",
+  "helpDuration": "浏览器中记录的从开始到成功或失败的时间分布。它与服务器处理时间不同，只包含能测量时间的尝试。",
+  "helpSchemaVersion": "用于收集的事件名称、来源和属性规则所属的版本。不同版本的结果不会混合查看。",
+  "helpLastReceipt": "此来源的事件最后一次被收集的时间。仅凭这个时间无法判断服务是否正常。",
+  "helpAllowedOrigins": "允许发送浏览器事件的网站来源。匹配时会区分地址的 http/https 和端口。",
+  "helpRequestLimit": "项目每分钟可接收的收集请求上限。一个请求可以包含多个事件，因此与事件数不同。",
+  "helpDailyReceiptLimit": "每天最多可以新接收并保存的事件数量。上限在 UTC 零点重置，经确认属于重复发送的事件不计入。",
+  "helpTimeZone": "用于划分项目的一天和按日统计的基准时区。更改显示语言不会改变它。",
+  "helpGrouping": "按事件注册属性值拆分并比较结果。例如可以按语言或工具查看。",
+  "helpComparison": "将所选时间段与紧邻的同长度时间段进行比较。包含今天时，可能混入仍在汇总中的结果。",
+  "helpAutoSchema": "自动选择服务器提供的架构版本。若要手动选择特定版本，请关闭此选项。",
+  "helpCohort": "将同一天开始的尝试归为一组进行比较。即使第二天才结束，结果仍计入最初开始的那一天。"
 }

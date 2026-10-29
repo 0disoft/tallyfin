@@ -1,5 +1,26 @@
 # Tallyfin Frontend Design
 
+## Contextual metric and settings help - 2026-10-29
+
+`HelpTooltip` retains native control semantics through trigger props; `HelpTerm`
+uses focusable dotted-underlined label text for supplemental explanations.
+Both share the existing 2000ms hover, keyboard/Escape, portal bounds, pointer
+transfer and lifetime behavior. Opening one dismisses any other help tooltip,
+including those in separate workspaces or portalled connection controls.
+
+Seventeen new twelve-language definitions cover counts versus visitors,
+completion rate, workflow/funnel, pending/confirmed failure, browser-measured
+duration, schema/automatic selection, property grouping, period comparison,
+cohorts, permitted origins, request/daily limits, timezone and last receipt.
+Overview metrics/outcomes, Events grouping/share, Goals labels/duration/cohort,
+and Settings fields/schema/diagnostics use this help. Existing descriptions
+also explain provisional results and property share. Overview source buttons
+now share the same explanations as the Events source selector.
+
+Visible labels, form associations, controller state and mandatory warnings or
+field constraints remain in place. Supplemental help does not replace them.
+The API, metric definitions, CSV output and registered project labels do not change.
+
 ## Event-source explanations - 2026-10-29
 
 `EventSourceSwitch` owns the two source buttons and their localized explanations.

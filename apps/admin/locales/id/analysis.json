@@ -321,5 +321,22 @@
   "completionRateCurrentPrevious": "Tingkat penyelesaian\nSaat ini / sebelumnya",
   "completionRateChange": "Perubahan tingkat penyelesaian",
   "workflowPropertyComparisonNote": "Setiap sel menampilkan saat ini / sebelumnya. Nilai yang tidak teramati memiliki jumlah nol; saat jumlah mulai di salah satu periode nol, tingkat penyelesaian dan perbandingannya adalah —. Perubahan tingkat penyelesaian dinyatakan dalam %p.",
-  "workflowPropertyProvisionalSuffix": " Tanggal mulai masih diagregasi, sehingga tingkat penyelesaian dapat berubah."
+  "workflowPropertyProvisionalSuffix": " Tanggal mulai masih diagregasi, sehingga tingkat penyelesaian dapat berubah.",
+  "helpCollectedEvents": "Berapa kali peristiwa dikumpulkan. Jika orang yang sama melakukan beberapa tindakan, setiap tindakan dihitung, jadi angkanya berbeda dari jumlah pengunjung.",
+  "helpCompletionRate": "Persentase percobaan yang dimulai dan berhasil: berhasil ÷ dimulai × 100.",
+  "helpWorkflow": "Menggabungkan perjalanan dari mulai hingga berhasil atau gagal sebagai satu percobaan.",
+  "helpFunnel": "Menunjukkan seberapa jauh percobaan melewati langkah-langkah dalam urutan tertentu. Belum mencapai langkah berikutnya tidak berarti percobaan sudah dipastikan gagal.",
+  "helpConfirmedFailure": "Percobaan yang memiliki peristiwa gagal tercatat. Ini berbeda dari percobaan yang belum mencapai langkah berikutnya atau yang hasilnya belum diketahui.",
+  "helpPending": "Percobaan yang sudah dimulai, tetapi hasil berhasil atau gagalnya belum dikonfirmasi. Tidak dihitung sebagai kegagalan.",
+  "helpDuration": "Distribusi waktu dari mulai hingga berhasil atau gagal yang dicatat di browser. Ini berbeda dari waktu pemrosesan server, dan hanya menyertakan percobaan yang stempel waktunya dapat diukur.",
+  "helpSchemaVersion": "Versi kumpulan aturan untuk nama peristiwa, sumber, dan properti yang dikumpulkan. Hasil dari versi berbeda tidak digabungkan.",
+  "helpLastReceipt": "Waktu terakhir peristiwa dari sumber ini dikumpulkan. Waktu ini saja tidak cukup untuk menilai apakah layanan berjalan normal.",
+  "helpAllowedOrigins": "Asal situs web yang diizinkan mengirim peristiwa dari browser. Skema http/https dan port pada alamat juga dibedakan.",
+  "helpRequestLimit": "Batas jumlah permintaan pengumpulan yang dapat diterima proyek dalam satu menit. Satu permintaan dapat berisi beberapa peristiwa, jadi angkanya berbeda dari jumlah peristiwa.",
+  "helpDailyReceiptLimit": "Jumlah maksimum peristiwa baru yang dapat diterima dan disimpan per hari. Batas ini direset pada tengah malam UTC, dan pengiriman ulang yang terdeteksi sebagai duplikat tidak dihitung.",
+  "helpTimeZone": "Zona waktu yang menjadi dasar pembagian hari proyek dan statistik harian. Zona ini tidak berubah saat bahasa tampilan diganti.",
+  "helpGrouping": "Memecah hasil berdasarkan nilai properti peristiwa. Misalnya, hasil dapat dibandingkan per bahasa atau per alat.",
+  "helpComparison": "Membandingkan periode yang dipilih dengan periode sebelumnya yang sama panjang. Jika hari ini termasuk, hasil yang masih dikumpulkan dapat ikut terbanding.",
+  "helpAutoSchema": "Memilih versi skema dari server secara otomatis. Matikan opsi ini untuk memilih versi tertentu sendiri.",
+  "helpCohort": "Mengelompokkan percobaan yang dimulai pada hari yang sama agar hasilnya dapat dibandingkan. Meski selesai pada hari berikutnya, hasilnya tetap masuk ke hari saat percobaan dimulai."
 }

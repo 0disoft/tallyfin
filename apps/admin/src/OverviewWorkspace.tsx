@@ -7,6 +7,7 @@ import { useLocaleFormat } from './i18n/format';
 import { workflowRecords, type EventRow } from './api/dashboard-model';
 import type { WorkflowLoad } from './api/period-comparison';
 import type { EventSource } from './api/types';
+import HelpTerm from './HelpTerm';
 import './event-shell.css';
 import './overview-workspace.css';
 
@@ -51,7 +52,7 @@ export default function OverviewWorkspace({ source, totalEvents, rows, primary, 
     </div>
     {primary && outcome && <section className="overview-outcomes" aria-labelledby="overview-outcomes-heading">
       <h2 id="overview-outcomes-heading">{t('admin:workflowProgress', { workflow: primary.definition.label })}</h2>
-      <dl>{([[t('admin:startedAttempts'), outcome.startedAttempts], [t('admin:succeeded'), outcome.succeededAttempts], [t('admin:confirmedFailed'), outcome.failedAttempts], [t('admin:pending'), outcome.pendingAttempts]] as const).map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count === null ? t('admin:undefined') : formatCount(count)}</dd></div>)}</dl>
+      <dl>{([[t('admin:startedAttempts'), outcome.startedAttempts, t('analysis:helpWorkflow')], [t('admin:succeeded'), outcome.succeededAttempts, t('analysis:helpWorkflow')], [t('admin:confirmedFailed'), outcome.failedAttempts, t('analysis:helpConfirmedFailure')], [t('admin:pending'), outcome.pendingAttempts, t('analysis:helpPending')]] as const).map(([label, count, help]) => <div key={label}><dt><HelpTerm content={help}>{label}</HelpTerm></dt><dd>{count === null ? t('admin:undefined') : formatCount(count)}</dd></div>)}</dl>
       {onNavigate && <button className="text-button" type="button" onClick={() => onNavigate('goals')}>{t('admin:viewGoals')}<ArrowRight size={16} /></button>}
     </section>}
   </div>;
