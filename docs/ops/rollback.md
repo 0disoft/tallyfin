@@ -1,7 +1,8 @@
 # Rollback
 
-Status: documentation-only runbook. No actual rollback, remote restoration, or failover has been
-performed. A remote `rollback`, restoration, or traffic switch changes remote state. A remote export
+Status: code rollback and whole-service failover remain unverified. A one-off encrypted remote D1
+backup/restore is recorded in [current state](../validation/2026-10-29-current-state.md).
+A remote `rollback`, restoration, or traffic switch changes remote state. A remote export
 reads the database and creates a local SQL file. Execute changes only against an approved target and
 scope.
 

@@ -1,6 +1,6 @@
 # Operational Contract
 
-Status: documentation-only draft. No production deployment, established SLO, or designated alert recipient has been provided. The figures below are confirmed properties of the current implementation; they do not create new targets.
+Status: an initial installation and repeated manual deployments are verified. SLOs and alert recipients remain undecided. See [current state](../validation/2026-10-29-current-state.md) for component versions, dated evidence and remaining operational gaps; implementation limits below do not create new targets.
 
 ## Core User Journeys
 
@@ -22,24 +22,23 @@ Status: documentation-only draft. No production deployment, established SLO, or 
 
 | Layer | Component | Local evidence | Production status |
 | --- | --- | --- | --- |
-| 1 | D1 (storage) | Storage adapter and migrations `0001`–`0013` verified with Miniflare | Not applied to a remote database |
-| 1 | OIDC verification (authentication) | Verification with ephemeral signed tokens and local D1 | No real provider |
-| 2 | Collector Worker | Verified with local workerd | Not deployed remotely |
-| 2 | Administrator Worker and proxy | Verified with a local proxy and smoke tests | Not deployed remotely |
-| 3 | Cron cleanup | Verified with a local scheduled run | Cron Trigger not registered |
-| 3 | Observability logs | Verified locally | No log collection, dashboard, or alerting |
+| 1 | D1 (storage) | Storage adapter and migrations `0001`–`0014` | Initial remote migrations and backup/restore verified; check the target head before upgrades |
+| 1 | OIDC verification (authentication) | Ephemeral signed-token tests | Better Auth administrator login verified; publisher OIDC disabled |
+| 2 | Collector Worker | Local workerd tests | Deployed; bounded remote 12/16 requests/s checks passed |
+| 2 | Administrator Worker and proxy | Proxy and browser smoke tests | Deployed; dated manual release checks recorded |
+| 3 | Cleanup scheduling | Scheduled/alarm tests | Durable Object alarm progress verified; no production cleanup SLO |
+| 3 | Observability logs | Bounded structured-log tests | Logs deployed; automated alert delivery and operational dashboard not configured |
 
-## Current Local-Only Evidence
+## Implementation and Verification Boundaries
 
-- Thirteen migrations, `0001`–`0013`, create 16 application tables. The current head is
-  `0013_workflow_failure_reasons.sql`, and it has been applied only in Miniflare.
+- Fourteen migrations, `0001`–`0014`, define 17 application tables. The source head is
+  `0014_saved_schema_drafts.sql`. The current-state version recheck does not query the remote database schema.
 - The recovery drill `verify:restore` uses only a local synthetic database. On local D1, it passed
   aggregation for 20-second successful and 3-second failed attempts, the ordering where an
   `error=range` termination arrives first, and matching administrator workflow results after
   restoration and retransmission (7c2fab8). This is not evidence for a production RTO or RPO.
-- The installation and inspection tools (`install:prepare`, `install:check`,
-  `install:database-check`, and `install:access-check`) have been verified only locally and with
-  fixtures. They have not touched a real provider, remote database, or remote writes.
+- Installation/inspection tools have local fixture checks. Initial operational checks and later
+  deployments have separate dated evidence; a pass from one tool does not validate the others.
 - Production logs consist of a one-line completion observation and cleanup logs. There is no
   dashboard or alert recipient.
 - The code contains an administrator-only `GET /v1/health` read probe. It accepts only a verified
@@ -48,13 +47,13 @@ Status: documentation-only draft. No production deployment, established SLO, or 
   `{status:'ok', scope:'administrator_storage_read'}`. This proves only that the two
   control-plane tables can be read at that moment. It does not prove collection writes,
   aggregation, all tables, Cron, log completeness, or overall service health. There is no
-  production probe schedule, real-provider OIDC, alert recipient, or remote deployment.
+  production probe schedule or designated alert recipient. Production OIDC and deployment have separate evidence.
 
 ## Release Blocking Conditions
 
 - A SHA-256 mismatch in the preparation bundle, or a modified or moved file.
 - An unknown migration head, or a mismatch between local and remote state. The current head is
-  `0013_workflow_failure_reasons.sql`.
+  `0014_saved_schema_drafts.sql`.
 - No confirmed backup before applying a migration.
 - Exposure of personal information or secret values.
 - Failure of an authentication or authorization gate (issuer, audience, PKCE, owner/reader, tenant).

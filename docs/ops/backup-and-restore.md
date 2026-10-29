@@ -1,8 +1,9 @@
 # Backup and Restore
 
 Status: a local synthetic-data recovery drill for all current migrations has been implemented and
-verified. Production database backups, remote restoration, failover, and production RTO/RPO have not
-been verified. A database operator who manages the installation performs these tasks, and the actual
+verified. A one-off encrypted remote backup/restore for analytics and Auth D1 is also recorded in
+[current state](../validation/2026-10-29-current-state.md). Automated backups, whole-service failover
+and production RTO/RPO remain unverified. A database operator manages these tasks, and the actual
 owners, cadence, retention period, and RTO/RPO targets will be set after operational resources are
 assigned (UNDECIDED).
 
@@ -20,7 +21,7 @@ needed.
 
 The current drill stores browser workflows, the four-stage mixed-source funnel, administrator and
 publishing permissions with their generation IDs, creation history, administrator history,
-receipts, usage and rejection data, and cleanup cursors for migrations 0001 through 0013. It also
+receipts, usage and rejection data, shared schema drafts, and cleanup cursors for migrations 0001 through 0014. It also
 includes the permission revision from 0010, the duration buckets from 0012, and the failure-reason
 slots from 0013. It covers runs where the final funnel stage arrives first and the maximum safe
 integer counters. After closing the database, the drill exports all SQL with the real Wrangler
@@ -29,7 +30,7 @@ integer counters. After closing the database, the drill exports all SQL with the
 
 The restore check verifies the following:
 
-- All 16 application tables are non-empty, and every row has the same content hash and count.
+- All 17 application tables are non-empty, and every row has the same content hash and count.
 - The schema hashes for tables, indexes, and triggers match. Only the physical row order and
   whitespace outside SQL quotes are excluded from the comparison; whitespace inside string values
   is compared exactly.

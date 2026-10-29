@@ -1,9 +1,9 @@
 # Secrets
 
-Status: documentation-only contract. No production values, token store, or vault has been selected
-(UNDECIDED). Only source and file names were inspected; plaintext token values, credentials, and
-provider commands were not opened or executed. No secret scan was run, so this document contains
-only the results of inspecting source and file names.
+Status: production credentials are configured outside Git in the verified installation. This document
+defines handling rules; it is not a fresh secret scan or proof of a managed-vault deployment.
+Recovery on a separate device and whole-service failover remain unverified.
+See [current state](../validation/2026-10-29-current-state.md).
 
 ## Public Configuration and Secret Separation
 

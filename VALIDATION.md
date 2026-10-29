@@ -1,5 +1,29 @@
 # Validation
 
+## Deployment/performance documentation reconciliation - 2026-10-29
+
+- Added `docs/validation/2026-10-29-current-state.md` as the dated source,
+  component deployment and bounded-performance summary. README/roadmap link to
+  it and distinguish historical 12/16 requests/s failures from the successful
+  2026-10-26 five-minute runs. The recorded p95 is a single-client observation,
+  not a maximum-throughput result, multi-region proof or SLO.
+- Read-only Cloudflare API checks at 12:51:39 UTC confirmed administrator
+  `074da2bc-2453-45d5-b401-2f4ca18b7ba4`, collector
+  `abecfc07-3648-4f4d-9159-abf351d00298`, and auth
+  `dcf73e41-bd30-4efd-86dc-fa428c6077fa`, all at 100%. Publisher OIDC remained
+  disabled, the required limiter flag was absent, and no rate-limit binding was
+  configured. No remote database schema query or mutation was performed.
+  Evidence: `.tmp/site-capacity-remote-status-20261029.json` (not shipped).
+- Reconciled operational runbooks and installation guidance with the current
+  source migration head 0014/17 tables, deployed health/logging, manual releases
+  and the earlier one-off encrypted D1 restore. Automated backups, portable-key
+  and whole-service recovery, production rollback and SLOs remain unverified.
+  Site/SDK guides describe grouping, capacity reports and new-site-only use.
+- Passed changed-document local link checks (224 targets) and `git diff --check`.
+- No production load rerun, login attempt, backup or restore was needed for
+  this documentation update. No API/DB, SDK package, dependency, Worker,
+  CI/runner or hygiene changes. No push or deployment.
+
 ## Multilingual site capacity planning - 2026-10-29
 
 - `site:prepare` partitions previously over-budget tool enums into bounded

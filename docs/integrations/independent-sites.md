@@ -1,14 +1,15 @@
 # Independent Site Integration
 
 This guide covers a site in its own repository that sends browser events to an existing Tallyfin install. The
-delivery ZIP carries the browser and server tarballs, `SHA256SUMS`, `manifest.json`, this guide,
-`site.example.json`, and `site-example/` (eight prepared files). The site team needs only the ZIP to install
-the SDK; `npm run site:prepare` runs inside the Tallyfin checkout.
+SDK distribution carries the browser and server tarballs, `SHA256SUMS`, `manifest.json`, this guide, the
+site README and `site.example.json`. Running `site:prepare` is a separate local step and creates nine files;
+the bundler does not run it or include that generated directory automatically. The site team needs the SDK
+files to install the client, and the checked-in examples remain `.invalid` fixtures.
 
 The ZIP may also include `tallyfin-connection.json`: public collector origin
 `https://tallyfin-admin.rodisoft1.workers.dev`, `browserEndpointPattern` `/v1/projects/{projectId}/batches`,
 matching `csp.connectSrcOrigins`, and `registrationRequired: true`. Its presence registers nothing. No
-project ID or site domain was supplied, so no real site was registered and `site-example/` stays an
+project ID or site domain was supplied, so no real site was registered and the prepared output stays an
 `.invalid` fixture with `registrationVerified: false`. Use it as schema and consent-wrapper reference, then
 use the config and `analytics.ts` generated for the registered project.
 
@@ -61,6 +62,16 @@ inside each tarball.
 npm run site:prepare -- --file site.example.json --out site-example
 ```
 
+The checked-in [12-language, 5-tool example](../../examples/independent-site/README.md#multilingual-fixture)
+is a real preparation fixture:
+
+```sh
+npm run site:prepare -- --file examples/independent-site/site-multilingual.example.json --out .tmp/site-multilingual
+```
+
+It produces 2 tool workflows and 8 events: `page_view`, `language_changed`, and three
+`tool_started`/`tool_succeeded`/`tool_failed` events per group.
+
 Input is closed and at most 16 KiB:
 
 - `project {id, name, timeZone}`: id `^[a-z][a-z0-9-]{0,47}$`, name 1-80 characters, IANA zone.
@@ -71,15 +82,47 @@ Input is closed and at most 16 KiB:
 - `pages`, `tools`: 1-32 unique public enums matching `^[a-z0-9][a-z0-9_-]{0,31}$`; categories
   only, never URLs, queries, input, file names, or user IDs.
 - `limits`: 1-600 requests per minute, 1-1,000,000 new receipts per UTC day.
-- Each event allows 256 property combinations: `page_view` is `locales x pages`; tool events are
-  `locales x tools`; `tool_failed` is `locales x tools x 5`. Two locales allow at most 25 tools.
+- Each event allows 256 property combinations. `page_view` uses `locales x pages` and rejects values
+  over 256. Tool workflows use `locales x tools x 5`; inputs over 256 are divided into groups as described
+  below, subject to the other schema and generated-file byte limits.
 
 It is offline and writes only to a new directory: `registry.json`, `project-create.json`,
 `schema-draft.json`, `schema-publication.review.json`, `browser-config.json`,
-`template-config.json`, `analytics.ts`, `requests.json`. This is schema 1 for a new project only.
+`template-config.json`, `capacity-report.json`, `analytics.ts`, `requests.json`. This is schema 1
+for a new project only.
 Publication stays `privacyReviewed: false` with `expectedLatestVersion: null`; the template stays
 `registrationVerified: false` with `privacyReviewRequired: true`. Supported languages exist only in the
 `locale` enum property; there is no new database field.
+
+Small valid inputs keep exactly one `tool_usage` workflow and the existing event IDs. When the
+`tool_failed` combination count would exceed 256 (`locales x tools x 5`), tools are split in input order
+into groups of `floor(256 / (locales x 5))`. The first group keeps `tool_usage`, `tool_started`,
+`tool_succeeded` and `tool_failed`; later groups add `_2`, `_3`, and so on to the workflow and three tool
+event IDs. Every group keeps the full reviewed `locale` and its assigned `tool` enums. The generated
+`startTool(tool, locale)` helper selects the matching workflow automatically; its public signature,
+consent, cancellation and same-ID retry behavior are unchanged.
+
+For example, 12 locales with 5 tools produce 2 workflows and 8 events (2 page-level events plus 3 tool
+events per group). 12 locales with 32 tools produce 8 workflows and 26 events. The result remains within
+the existing limits of 10 workflows, 50 events, 32 enum values per property and 256 combinations per
+event: 32 locales with 10 tools produce 10 workflows, while 11 tools return a structured capacity error.
+`page_view` is not partitioned; `locales x pages` over 256 is rejected separately.
+
+`capacity-report.json` records the applicable limits, event and workflow counts, compact schema and
+generated request-file byte counts, the originally requested failure-combination count, and each event's
+factor and combination counts. `schema-draft.json` is pretty when it fits and compact when whitespace
+crosses the 32 KiB budget; compact JSON plus a newline must still fit. `schema-publication.review.json`
+uses the same fallback and must fit 33 KiB. Thus 32 short locales with 10 tools pass, 11 tool groups fail
+the workflow limit, and 32 long locale tags with 10 tools can still fail a byte limit after compaction.
+Capacity errors report the computed actual count or byte size, limit and factors; these checks do not
+raise the existing policy limits.
+
+`template-config.json` includes `workflowGroups` and `representativeWorkflowId`. The latter is a string
+for one group and `null` for multiple groups. A multi-group new site omits the registry-level
+`representativeWorkflowId`, so Overview cannot present the first group as the whole site; Goals lists
+each group for explicit selection. Grouping applies only when generating a new schema 1 site. Existing
+published sites keep their IDs and require an explicit migration with a fresh privacy review; the
+generator does not rewrite or publish them automatically.
 
 Local D1 only:
 
@@ -148,9 +191,10 @@ old handles fail; later consent creates a fresh client. Accepted data remains an
 Events are `page_view {locale, page}`, `language_changed {locale}`,
 `tool_started|tool_succeeded {locale, tool}`, and `tool_failed {locale, tool, failure_reason}`.
 `failure_reason` is exactly `validation`, `unsupported`, `dependency`, `timeout`, or `other`.
-`tool_usage` starts with `startTool`; terminal dimensions keep the starting locale and tool even if the UI
-language changes mid-task. Do not send workflow phases with `track()`. Do not read `navigator.languages` or
-map an unknown locale to English; pass the reviewed value or skip the event.
+`startTool` starts the generated workflow containing the requested tool; terminal dimensions keep the
+starting locale and tool even if the UI language changes mid-task. Do not send workflow phases with
+`track()`. Do not read `navigator.languages` or map an unknown locale to English; pass the reviewed value
+or skip the event.
 
 `flushAnalytics()` only schedules delivery. Retries keep the same ID, time, and body. Collector receipts
 give at-most-once aggregation for the same retained event ID; delivery can still be lost, so there is no

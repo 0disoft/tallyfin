@@ -1,8 +1,8 @@
 # Incident Response
 
-Status: documentation-only runbook. No automated alerting, dashboard, or health endpoint has been
-deployed. Responders work directly from console operational logs, deployment records, and D1. This
-document does not create new response tooling.
+Status: incident procedures remain manual. Collector logs and the authenticated storage-read health
+endpoint are deployed; automated alert delivery and an operational dashboard are not configured.
+Responders use console logs, deployment records and D1. See [current state](../validation/2026-10-29-current-state.md).
 
 ## Principles
 

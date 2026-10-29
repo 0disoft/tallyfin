@@ -216,8 +216,8 @@ npm run install:database-check -- --remote --dir .tmp/installation
 
 This command validates the five files in the prepared installation directory again, applies the baseline migrations to a new
 in-memory D1 created by the current run, then queries the remote D1's `sqlite_master` once and compares the names and definitions of tables, indexes, and triggers.
-The baseline is the current thirteen migrations from `0001` through `0013` and 16 tables, including publisher history and assigned IDs, grant revisions,
-read indexes, and elapsed-time and failure-cause extensions. It reuses the installed Wrangler transport from the existing remote creator authorization tool
+The baseline is the current fourteen migrations from `0001` through `0014` and 17 tables, including publisher history and assigned IDs, grant revisions,
+read indexes, elapsed-time and failure-cause extensions, and shared schema drafts. It reuses the installed Wrangler transport from the existing remote creator authorization tool
 as-is and accepts no SQL input, environment variables, or additional configuration options.
 
 The report contains baseline and observed object counts, names of missing or changed objects (baseline objects only), unexpected object counts, the schema

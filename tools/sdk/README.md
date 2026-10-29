@@ -57,7 +57,9 @@ existing output directory is rejected before the build. The command runs the exi
 It copies four required files with fixed names: `tools/sdk/README.md` as `sdk-README.md`,
 `docs/integrations/independent-sites.md` as `independent-sites.md`, `examples/independent-site/README.md`
 as `site-README.md`, and `examples/independent-site/site.example.json` unchanged. Their hashes are listed
-in the manifest. The source identity is checked again after those copies and immediately before
+in the manifest. The copied guides describe multi-workflow tool grouping and the generated
+`capacity-report.json`. The bundler does not run `site:prepare` or include its nine generated files; the
+operator prepares and reviews that output separately. The source identity is checked again after those copies and immediately before
 `manifest.json`, which is written last and marks completion; a failed run keeps partial files for
 inspection. The command does not publish, change versions, or accept credentials. Use `--help` for the
 usage summary.
