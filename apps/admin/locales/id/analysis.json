@@ -1,6 +1,8 @@
 {
   "sourceBrowser": "Browser",
   "sourceServer": "Server",
+  "sourceBrowserHelp": "Peristiwa yang dikirim dari browser web pengunjung. Gunakan ini untuk melihat tindakan di layar, seperti tampilan halaman atau klik tombol.",
+  "sourceServerHelp": "Peristiwa yang dikirim dari server layanan. Gunakan ini untuk melihat hasil yang diproses server, seperti pembayaran selesai atau hasil pemrosesan tugas.",
   "sourceGroup": "Sumber peristiwa",
   "event": "Peristiwa",
   "eventCount": "Jumlah",

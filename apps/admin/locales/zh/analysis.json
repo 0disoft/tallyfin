@@ -1,6 +1,8 @@
 {
   "sourceBrowser": "浏览器",
   "sourceServer": "服务器",
+  "sourceBrowserHelp": "从访客的网页浏览器发送的事件。想查看页面浏览或按钮点击等屏幕上的操作时使用。",
+  "sourceServerHelp": "从服务服务器发送的事件。想查看支付完成或任务处理结果等服务器处理的结果时使用。",
   "sourceGroup": "事件来源",
   "event": "事件",
   "eventCount": "计数",

@@ -1,5 +1,18 @@
 # Tallyfin Frontend Design
 
+## Event-source explanations - 2026-10-29
+
+`EventSourceSwitch` owns the two source buttons and their localized explanations.
+Mouse hover opens a tooltip after 2000ms; keyboard focus opens it immediately.
+Escape, source selection, scrolling or resizing dismisses it without changing
+focus. Leaving early cancels the timer, and a 150ms leave grace period allows
+the pointer to cross into the explanation. Portals keep the tooltip outside
+clipped explorer/comparison containers; placement is bounded to the viewport.
+Descriptions are associated through `aria-describedby`, available to assistive
+technology even while hidden, and translated in all twelve analysis catalogs.
+Timers and listeners belong to each mounted button and are cleaned up on exit.
+No changes to source selection, data reads, authentication or registered labels.
+
 ## Header menu dismissal - 2026-10-29
 
 `useHeaderMenu` gives both header connection settings and project search a shared

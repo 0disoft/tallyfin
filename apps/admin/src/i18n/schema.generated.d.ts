@@ -389,9 +389,11 @@ export type AppSchema = {
   "analysis:showDailyValues": {};
   "analysis:showStageValues": {};
   "analysis:sourceBrowser": {};
+  "analysis:sourceBrowserHelp": {};
   "analysis:sourceEmptyTitle": {};
   "analysis:sourceGroup": {};
   "analysis:sourceServer": {};
+  "analysis:sourceServerHelp": {};
   "analysis:stage": {};
   "analysis:stageCount": { "count": number | string; };
   "analysis:stageEvent": {};

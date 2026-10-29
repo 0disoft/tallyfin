@@ -1,6 +1,8 @@
 {
   "sourceBrowser": "Browser",
   "sourceServer": "Server",
+  "sourceBrowserHelp": "Events sent from the visitor’s web browser. Use this to see actions on the screen, such as page views or button clicks.",
+  "sourceServerHelp": "Events sent from your service’s server. Use this to see results processed by the server, such as checkout completion or a processing result.",
   "sourceGroup": "Event source",
   "event": "Event",
   "eventCount": "Count",

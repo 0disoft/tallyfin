@@ -1,5 +1,25 @@
 # Validation
 
+## Event-source help tooltips - 2026-10-29
+
+- Added localized beginner explanations to the event explorer/comparison source
+  buttons. Mouse hover waits 2000ms; keyboard focus shows the explanation
+  immediately. Escape dismisses without moving focus; clicking still selects
+  the source. Tooltip hover remains readable across a 150ms pointer-leave gap.
+  Portals avoid clipped containers, viewport bounds constrain placement, and
+  timers/listeners are released on dismissal or unmount. Only one tooltip opens.
+- Passed `typecheck:admin`, `build:admin`, emitted bundle tests (2), and
+  `verify:admin-source-tooltips` (54 cases). Browser checks cover 1999/2000ms,
+  early departure, pointer transfer, keyboard focus/description/Escape, source
+  selection, twelve locales at 1440/390px, comparison and unmount cleanup.
+  Evidence: `.tmp/admin-source-tooltips-eW1l9l/report.json` and its screenshot.
+  The local workerd fixture logged a WSARecv socket warning; browser assertions
+  passed with zero page errors or API writes and process exit status 0.
+- Updated frontend design/admin guidance and added one local browser command.
+  No dependencies, API/DB contracts, Worker, CI/runner or hygiene changes.
+  Broad backend/auth suites and production verification were skipped for this
+  UI-only change. No push or deployment.
+
 ## Inter for Latin UI and tabular numbers - 2026-10-29
 
 - English, Spanish, French, Vietnamese, Indonesian and Malay prioritize

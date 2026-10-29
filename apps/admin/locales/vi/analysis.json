@@ -1,6 +1,8 @@
 {
   "sourceBrowser": "Trình duyệt",
   "sourceServer": "Máy chủ",
+  "sourceBrowserHelp": "Sự kiện được gửi từ trình duyệt web của người truy cập. Dùng mục này để xem các hành động diễn ra trên màn hình như lượt xem trang hoặc nhấp nút.",
+  "sourceServerHelp": "Sự kiện được gửi từ máy chủ của dịch vụ. Dùng mục này để xem kết quả do máy chủ xử lý, như hoàn tất thanh toán hoặc kết quả xử lý công việc.",
   "sourceGroup": "Nguồn sự kiện",
   "event": "Sự kiện",
   "eventCount": "Số lượng",

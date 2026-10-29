@@ -1,6 +1,8 @@
 {
   "sourceBrowser": "Navigateur",
   "sourceServer": "Serveur",
+  "sourceBrowserHelp": "Événements envoyés depuis le navigateur web du visiteur. Utilisez cette source pour voir les actions à l’écran, comme les pages vues ou les clics sur des boutons.",
+  "sourceServerHelp": "Événements envoyés depuis le serveur du service. Utilisez cette source pour voir les résultats traités par le serveur, comme la fin d’un paiement ou le résultat d’une tâche.",
   "sourceGroup": "Source de l’événement",
   "event": "Événement",
   "eventCount": "Nombre",

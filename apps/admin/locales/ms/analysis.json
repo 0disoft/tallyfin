@@ -1,6 +1,8 @@
 {
   "sourceBrowser": "Pelayar",
   "sourceServer": "Pelayan",
+  "sourceBrowserHelp": "Peristiwa yang dihantar daripada pelayar web pelawat. Gunakan ini untuk melihat tindakan di skrin, seperti paparan halaman atau klik butang.",
+  "sourceServerHelp": "Peristiwa yang dihantar daripada pelayan perkhidmatan. Gunakan ini untuk melihat hasil yang diproses oleh pelayan, seperti pembayaran selesai atau hasil pemprosesan tugasan.",
   "sourceGroup": "Sumber peristiwa",
   "event": "Peristiwa",
   "eventCount": "Bilangan",

@@ -6,6 +6,7 @@ import type { EventRow } from './api/dashboard-model';
 import type { EventSource, SummaryResponse } from './api/types';
 import { useI18n } from './i18n';
 import { useLocaleFormat } from './i18n/format';
+import EventSourceSwitch from './EventSourceSwitch';
 import './event-shell.css';
 import './event-workspace.css';
 
@@ -33,9 +34,7 @@ export default function EventWorkspace({ rows, filtered, source, query, selected
   const controls = <>
     <label className="search-control"><MagnifyingGlass size={18} /><span className="sr-only">{t('analysis:searchEvents')}</span>
       <input type="search" placeholder={t('analysis:searchEventsPlaceholder')} value={query} onChange={event => onQuery(event.target.value)} /></label>
-    <div className="event-source-switch" role="group" aria-label={t('analysis:sourceGroup')}>
-      {(['browser', 'server'] as const).map(value => <button key={value} type="button" aria-pressed={source === value} onClick={() => onSource(value)}>{value === 'browser' ? t('analysis:sourceBrowser') : t('analysis:sourceServer')}</button>)}
-    </div>
+    <EventSourceSwitch source={source} onSource={onSource} />
   </>;
   return <div className={`event-workspace${compare ? ' is-comparing' : ''}`}>
     {compare ? <section aria-label={t('analysis:eventPeriodComparison')}>
