@@ -49,7 +49,7 @@ another override layer.
 Overview, Events, Goals and all five Settings panels share the root typography
 tokens in `styles.css`: 1rem body/control text, 0.875rem supporting metadata
 and chart ticks, and 2.75rem compact action targets. Existing page titles and
-large metric values retain their sizes. The locale-specific Noto stacks apply
+large metric values retain their sizes. The locale-specific Inter/Noto stacks apply
 to both text tiers. Update each workspace's existing declarations rather than
 adding a competing override stylesheet.
 
@@ -94,15 +94,18 @@ The store boots with the English shell only, then restores the saved language
 or the no-preference Korean choice before mounting React. A failed restoration
 retains the English fallback and a retryable selector error.
 
-Self-hosted Noto Sans SC/JP/Devanagari/Thai styles load only when their locale
-is selected; Noto Sans covers Latin, Vietnamese and Cyrillic. Korean
-remains available for operator data in any locale. Font licenses ship with
-the assets. Korean UI prioritizes Noto Sans KR, including Latin characters;
-Chinese/Japanese/Hindi/Thai UI prioritizes its corresponding Noto family.
-The remaining supported languages use Noto Sans. Search fields and event/goal
-selectors inherit this locale stack. Locale date formatting uses the Gregorian calendar so selecting
-Thai cannot change report/operation years to the Buddhist calendar. Neither
-display language nor font loading changes project timezones or API reads.
+Self-hosted Inter is the primary face for English, Spanish, French, Vietnamese,
+Indonesian and Malay, with Noto Sans as its fallback. Russian uses Noto Sans as
+its primary face. Noto Sans SC/JP/Devanagari/Thai styles load only when their
+locale is selected; Korean remains available for operator data in any locale.
+Font licenses ship with the assets. Korean UI prioritizes Noto Sans KR,
+including Latin characters; Chinese/Japanese/Hindi/Thai UI prioritizes its
+corresponding Noto family. Search fields and event/goal selectors inherit this
+locale stack. Statistics, table data and chart ticks/tooltips use tabular
+numerals without changing existing text sizes or monospace raw identifiers.
+Locale date formatting uses the Gregorian calendar so selecting Thai cannot
+change report/operation years to the Buddhist calendar. Neither display
+language nor font loading changes project timezones or API reads.
 
 ## Saylo admin runtime - 2026-10-28
 

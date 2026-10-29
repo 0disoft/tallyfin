@@ -8,7 +8,7 @@
 }
 
 html {
-  --admin-font-family: "Noto Sans", "Noto Sans KR", sans-serif;
+  --admin-font-family: "Inter", "Noto Sans", "Noto Sans KR", sans-serif;
   --admin-text-size: 1rem;
   --admin-meta-size: 0.875rem;
   --admin-control-height: 2.75rem;
@@ -33,6 +33,28 @@ html:lang(zh) { --admin-font-family: "Noto Sans SC", "Noto Sans", "Noto Sans KR"
 html:lang(ja) { --admin-font-family: "Noto Sans JP", "Noto Sans", "Noto Sans KR", sans-serif; }
 html:lang(hi) { --admin-font-family: "Noto Sans Devanagari", "Noto Sans", "Noto Sans KR", sans-serif; }
 html:lang(th) { --admin-font-family: "Noto Sans Thai", "Noto Sans", "Noto Sans KR", sans-serif; }
+html:lang(ru) { --admin-font-family: "Noto Sans", "Noto Sans KR", sans-serif; }
+
+/* Numeric data stays aligned without changing font size, families or raw identifiers. */
+:where(
+  .event-table,
+  .rejection-table-scroll table,
+  .chart-wrap svg text,
+  .goal-trend .recharts-text,
+  .chart-wrap .recharts-default-tooltip,
+  .goal-trend .recharts-default-tooltip,
+  .settings-badge,
+  .settings-registry-meta,
+  .settings-action-status,
+  .settings-source dd,
+  .diagnostic-facts dd
+) {
+  font-variant-numeric: tabular-nums;
+}
+
+:where(.event-table, .rejection-table-scroll table) :where(.event-name, code, pre, samp) {
+  font-variant-numeric: normal;
+}
 
 h1,
 h2,

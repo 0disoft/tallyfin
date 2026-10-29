@@ -11,7 +11,7 @@ const root=fileURLToPath(new URL('../../',import.meta.url));
 let local,server,browser,page,directory,watchdog,stage='fixture',routeError=false;
 const pageErrors=[],screenshots=[],matrix=[],fontChecks=[];
 const catalog=async(locale,namespace)=>JSON.parse(await readFile(resolve(root,`apps/admin/locales/${locale}/${namespace}.json`),'utf8'));
-const fontScripts={zh:['Noto Sans SC','事件分析'],ja:['Noto Sans JP','イベント分析'],hi:['Noto Sans Devanagari','घटनाएँ'],th:['Noto Sans Thai','เหตุการณ์']};
+const fontScripts={en:['Inter','Event analysis'],es:['Inter','Análisis'],fr:['Inter','Événements'],vi:['Inter','Tiếng Việt'],id:['Inter','Peristiwa'],ms:['Inter','Peristiwa'],ru:['Noto Sans','События'],ko:['Noto Sans KR','이벤트 분석'],zh:['Noto Sans SC','事件分析'],ja:['Noto Sans JP','イベント分析'],hi:['Noto Sans Devanagari','घटनाएँ'],th:['Noto Sans Thai','เหตุการณ์']};
 try{
   await mkdir(resolve(root,'.tmp'),{recursive:true});directory=await mkdtemp(resolve(root,'.tmp/admin-language-matrix-'));
   local=await adminLoginFixture(directory,{profile:'goals'});
@@ -51,7 +51,20 @@ try{
     if(fontScripts[locale]){
       const [family,text]=fontScripts[locale];
       const loaded=await page.evaluate(async({family,text})=>{const faces=await document.fonts.load(`400 16px "${family}"`,text);return {family:getComputedStyle(document.body).fontFamily,count:faces.length,ready:faces.every(face=>face.status==='loaded')};},{family,text});
-      assert.ok(loaded.family.includes(family)&&loaded.count>0&&loaded.ready,JSON.stringify({locale,...loaded}));fontChecks.push(locale);
+      assert.equal(loaded.family.split(',')[0].replaceAll('"',''),family,JSON.stringify({locale,...loaded}));
+      assert.ok(loaded.count>0&&loaded.ready,JSON.stringify({locale,...loaded}));fontChecks.push(locale);
+      if(family==='Inter'){
+        assert.match(await page.locator('.event-detail .recharts-cartesian-axis-tick-value').first().evaluate(element=>getComputedStyle(element).fontVariantNumeric),/tabular-nums/);
+        const digits=await page.locator('.event-explorer-value').first().evaluate(async element=>{
+          await document.fonts.ready;
+          const sample=document.createElement('span');element.append(sample);
+          try{
+            const widths=[...'0123456789'].map(digit=>{sample.textContent=digit;return sample.getBoundingClientRect().width;});
+            return {variant:getComputedStyle(sample).fontVariantNumeric,spread:Math.max(...widths)-Math.min(...widths)};
+          }finally{sample.remove();}
+        });
+        assert.match(digits.variant,/tabular-nums/);assert.ok(digits.spread<0.05,JSON.stringify({locale,...digits}));
+      }
     }
     await capture(stage);matrix.push(stage);
   }

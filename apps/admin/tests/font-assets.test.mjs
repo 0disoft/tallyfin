@@ -9,6 +9,7 @@ const faces = css => css.match(/@font-face\s*\{[^}]+\}/g) ?? [];
 const property = (face, name) => face.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1];
 
 for (const [name, family, weights] of [
+  ['inter', 'Inter', ['100 900']],
   ['noto-sans', 'Noto Sans', ['100 900']],
   ['noto-sans-kr', 'Noto Sans KR', ['400 500', '700', '900']],
   ['noto-sans-sc', 'Noto Sans SC', ['100 900']],
@@ -48,8 +49,8 @@ test('font transform leaves app CSS alone and rejects incompatible upstream font
 test('font licenses accompany the emitted self-hosted assets unchanged', () => {
   const emitted = [];
   fontAssets().generateBundle.call({ emitFile: asset => emitted.push(asset) });
-  assert.equal(emitted.length, 6);
-  for (const name of ['noto-sans', 'noto-sans-kr', 'noto-sans-sc', 'noto-sans-jp', 'noto-sans-devanagari', 'noto-sans-thai']) {
+  assert.equal(emitted.length, 7);
+  for (const name of ['inter', 'noto-sans', 'noto-sans-kr', 'noto-sans-sc', 'noto-sans-jp', 'noto-sans-devanagari', 'noto-sans-thai']) {
     const license = emitted.find(asset => asset.fileName === `fonts/${name}-OFL.txt`);
     assert.equal(license?.source, readFileSync(require.resolve(`@fontsource-variable/${name}/LICENSE`), 'utf8'));
   }

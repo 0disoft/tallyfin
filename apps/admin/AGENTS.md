@@ -12,7 +12,7 @@ The signed-out administrator entry is a focused, branded login card with the lan
 
 Keep login body text, notices, form labels, inputs, buttons and language selection at least 1rem on desktop and mobile. Titles are already large enough; do not compensate for small supporting text by enlarging headings. Use readable supporting-text contrast.
 
-Use Noto Sans throughout the admin. Korean prioritizes Noto Sans KR; Chinese, Japanese, Hindi and Thai prioritize Noto Sans SC, JP, Devanagari and Thai respectively. Other supported UI languages use Noto Sans. UI controls inherit the locale font; code and raw identifiers may retain monospace.
+Use Inter as the primary admin face for English, Spanish, French, Vietnamese, Indonesian and Malay, with Noto Sans as the fallback. Russian prioritizes Noto Sans. Korean prioritizes Noto Sans KR; Chinese, Japanese, Hindi and Thai prioritize Noto Sans SC, JP, Devanagari and Thai respectively. UI controls inherit the locale font; code and raw identifiers may retain monospace. Use tabular numerals for statistics, table data and chart ticks/tooltips while preserving existing text sizes and monospace identifiers.
 
 Connected Overview, Events, Goals and Settings use the shared text-size tokens: 1rem for body copy, field labels and controls, and at least 0.875rem for metadata, helper text and chart ticks. Keep existing large headings and metric values. Use the 2.75rem control-height token for compact actions; wrap long translations and filters instead of shrinking their text or overlapping neighboring controls. Apply the same sizes in mobile layouts and detailed Settings panels.
 

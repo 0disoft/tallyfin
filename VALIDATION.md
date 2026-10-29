@@ -1,5 +1,29 @@
 # Validation
 
+## Inter for Latin UI and tabular numbers - 2026-10-29
+
+- English, Spanish, French, Vietnamese, Indonesian and Malay prioritize
+  self-hosted Inter; Russian and the five other script-specific Noto stacks
+  retain their previous primary families. Added `@fontsource-variable/inter`
+  with major range `^5`, no transitive dependencies and its original OFL license
+  in the built assets. Existing text sizes and controller state are unchanged.
+- Extended tabular numerals to shared tables, chart ticks/tooltips and Settings
+  statistics. Raw identifiers keep their existing font/numeral presentation.
+- Passed `typecheck:admin`, `build:admin`, font asset tests (9), emitted bundle
+  tests (2), production dependency audit (0 vulnerabilities), and
+  `verify:admin-language-matrix`. The browser matrix verifies all twelve primary
+  font families and loaded glyph subsets, 1440/390px layouts across Events,
+  Goals and all five Settings tabs, draft retention, identical CSV output,
+  no locale-triggered API reads, no API writes and no page errors. In all six
+  Inter locales, chart ticks use tabular numerals and the measured digit-width
+  spread is below 0.05px. Evidence: `.tmp/admin-language-matrix-m3AjUF/report.json`.
+- Opened the local preview and visually checked its English sample Overview
+  and the connected fixture's mobile event screen. Fixtures are local only.
+  Full backend/auth suites and production checks were skipped because this
+  change only affects admin font assets and CSS. No API/DB, Worker, CI/runner
+  or repository-hygiene changes. Updated frontend design and admin guidance.
+  No push or deployment.
+
 ## Header menu dismissal - 2026-10-29
 
 - Connection settings and project search share `useHeaderMenu`. Escape closes
