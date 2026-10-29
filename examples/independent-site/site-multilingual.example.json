@@ -1,0 +1,9 @@
+{
+  "project": { "id": "multilingual-example", "name": "Multilingual tool site example", "timeZone": "Asia/Seoul" },
+  "collectorOrigin": "https://tallyfin-admin.example.invalid",
+  "allowedOrigins": ["https://tools.example.invalid"],
+  "locales": ["en", "zh", "es", "fr", "hi", "ko", "ja", "vi", "ru", "id", "ms", "th"],
+  "pages": ["home", "tool", "other"],
+  "tools": ["calculator", "converter", "formatter", "validator", "generator"],
+  "limits": { "requestsPerMinute": 120, "newReceiptsPerUtcDay": 100000 }
+}

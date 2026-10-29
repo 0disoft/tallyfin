@@ -1,5 +1,28 @@
 # Validation
 
+## Multilingual site capacity planning - 2026-10-29
+
+- `site:prepare` partitions previously over-budget tool enums into bounded
+  workflows, preserving each locale/tool dimension and the original identifiers
+  for valid small inputs. The generated `startTool(tool, locale)` signature,
+  consent lifecycle and retained-ID replay behavior are unchanged. Multiple
+  groups omit the registry representative workflow to avoid presenting one group
+  as the whole-site completion rate. No existing site is migrated or published.
+- Added `capacity-report.json`, explicit group mappings, structured count/byte
+  errors before output creation, and a twelve-language/five-tool fixture.
+  Schema request files retain pretty JSON when it fits and use compact JSON when
+  whitespace alone exceeds the existing API byte limit. Core policy is unchanged.
+- Passed root `tsc --noEmit` and 13 focused schema/site checks, including 12
+  languages with 4/5/32 tools, group and page boundaries, byte exhaustion, CLI
+  errors with no output, privacy-review rejection, real browser SDK delivery,
+  cancellation and local D1 exact replay. The 32-tool D1 test confirms the first
+  and eighth workflows receive their respective success/failure counts. The new
+  example CLI writes nine public files with collection disabled.
+  Evidence: `.tmp/site-capacity-tests.log`, `.tmp/site-multilingual-20261029/`.
+- No API/DB, core policy, SDK package, dependency, Worker, CI/runner or hygiene
+  changes. Broad auth/admin suites, remote registration and load tests were
+  skipped for this local generator change. No push or deployment.
+
 ## Contextual metric/settings help - 2026-10-29
 
 - Added seventeen beginner definitions in all twelve analysis catalogs and

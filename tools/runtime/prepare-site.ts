@@ -2,9 +2,11 @@ import { mkdir, open, unlink, rmdir } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { siteIntegration } from './site-integration.ts';
+import { SiteCapacityError, siteRequestJson } from './site-capacity.ts';
+import { MAX_PUBLICATION_BYTES } from '@tallyfin/core';
 
 export async function prepareSite(argv: string[]) {
-  if (argv.length === 1 && argv[0] === '--help') return { help: 'npm run site:prepare -- --file <public-site-json> --out <new-directory>\nNew sites, schema 1 only. Writes public registry, API request bodies, disabled browser config, template/CSP settings and a consent wrapper. No remote requests, credentials, publication or privacy approval.' };
+  if (argv.length === 1 && argv[0] === '--help') return { help: 'npm run site:prepare -- --file <public-site-json> --out <new-directory>\nNew sites, schema 1 only. Writes public registry, API request bodies, disabled browser config, template/CSP settings, capacity-report.json and a consent wrapper. Tool groups preserve the 256-combination/event limit. No remote requests, credentials, publication or privacy approval.' };
   const options = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     const key = argv[i]!, value = argv[i + 1];
@@ -20,9 +22,9 @@ export async function prepareSite(argv: string[]) {
     input = JSON.parse(bytes.toString('utf8'));
   } finally { await file.close(); }
   const plan = siteIntegration(input), output = resolve(options.get('--out')!);
-  const artifacts = [['registry.json', plan.registry], ['project-create.json', plan.creation], ['schema-draft.json', plan.draft],
-    ['schema-publication.review.json', plan.publication], ['browser-config.json', plan.configuration],
-    ['template-config.json', plan.template], ['requests.json', plan.requests]] as const;
+  const artifacts = [['registry.json', plan.registry], ['project-create.json', plan.creation], ['schema-draft.json', siteRequestJson(plan.draft)],
+    ['schema-publication.review.json', siteRequestJson(plan.publication, MAX_PUBLICATION_BYTES)], ['browser-config.json', plan.configuration],
+    ['template-config.json', plan.template], ['requests.json', plan.requests], ['capacity-report.json', plan.capacity]] as const;
   await mkdir(dirname(output), { recursive: true }); await mkdir(output);
   const written: string[] = [];
   try {
@@ -39,8 +41,10 @@ export async function prepareSite(argv: string[]) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  prepareSite(process.argv.slice(2)).then(value => console.log(JSON.stringify(value))).catch(() => {
-    console.error(JSON.stringify({ code: 'site_preparation_failed', message: 'Check the reviewed public input, enum cardinality and a new output directory. Use --help. No registration occurred.' }));
+  prepareSite(process.argv.slice(2)).then(value => console.log(JSON.stringify(value))).catch(error => {
+    console.error(JSON.stringify({ code: 'site_preparation_failed',
+      message: error instanceof SiteCapacityError ? error.message : 'Check the reviewed public input, enum cardinality and a new output directory. Use --help. No registration occurred.',
+      ...(error instanceof SiteCapacityError ? { capacity: error.capacity } : {}) }));
     process.exitCode = 1;
   });
 }
