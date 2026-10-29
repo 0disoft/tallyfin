@@ -1,5 +1,23 @@
 # Validation
 
+## Human commit attribution - 2026-10-29
+
+- Removed 34 bot `Co-authored-by` entries (15 Codex, 19 CommandCodeBot) from
+  the existing main history. Verified identical file trees for all 371 original
+  commits, unchanged author/committer identities and timestamps, preserved parent
+  topology and commit count. Only matching bot attribution lines and the required
+  descendant parent hashes were rewritten. Original history and the commit mapping
+  are retained locally in `.tmp/bot-attribution-20261029/` (not shipped).
+- Added the human-attribution policy to AGENTS/Contributing, a repository-local
+  commit-message hook and `npm run git:hooks` for fresh clones. Activated the hook
+  in this checkout. Eleven actual Git-hook checks passed, including ordinary tool
+  discussion, human co-authors, both historical bot identities, bot authors,
+  casing/whitespace and tool signatures. Hook syntax and `git diff --check` passed.
+- No application/API/DB, dependency, CI/runner or deployed service changes.
+  Runtime and load tests were skipped because the rewrite preserves application
+  content. Fresh clones must enable the hook; Git hooks can be bypassed explicitly,
+  so the written authorship policy remains applicable to every commit path.
+
 ## Deployment/performance documentation reconciliation - 2026-10-29
 
 - Added `docs/validation/2026-10-29-current-state.md` as the dated source,

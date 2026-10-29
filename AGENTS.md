@@ -36,6 +36,8 @@ DB structure is sourced from `db/schema.dbml`.
 
 ## Repository Hygiene
 
+- Attribute commits to the human contributor. Do not add AI tools or bots as authors or `Co-authored-by` entries, or append tool-generated attribution signatures. Preserve legitimate human co-authors.
+- Enable the repository commit guard once per clone with `npm run git:hooks`. Do not bypass the guard to add bot attribution. This checkout uses `.githooks/commit-msg`; fresh clones must opt in to the same local hook setting.
 - .editorconfig sets line ending, encoding, and final newline policy.
 - .gitattributes sets Git text normalization and binary diff policy.
 - .gitignore excludes local, secret, build, and cache artifacts.

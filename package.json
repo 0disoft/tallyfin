@@ -11,6 +11,7 @@
     "node": ">=24"
   },
   "scripts": {
+    "git:hooks": "git config --local core.hooksPath .githooks",
     "dev": "node tools/runtime/stack.ts",
     "dev:admin": "npm run dev --workspace @tallyfin/admin --",
     "admin:config": "node tools/runtime/prepare-admin.ts",

@@ -13,6 +13,7 @@ Status: These are the procedures for code, test, and documentation changes in th
 - For SDK changes, run the relevant SDK tests and build plus `npm run check:browser-size`; for administrator changes, run `npm run check:admin`; and for storage or collection changes, run the relevant tests and type checks. You may skip the size check when the SDK did not change.
 - Record executed checks, skipped checks and reasons, and production scope that remains unverified in the [validation record](VALIDATION.md). Do not assume that lint exists or that CI passed.
 - Commit small logical units and exclude unrelated changes. Version bumps, pushes, publications, and deployments are decided explicitly for the task at hand.
+- After cloning, run `npm run git:hooks` to enable the repository's commit-message guard. Use human authorship; do not add AI/bot co-authors or tool attribution signatures. Human co-authors remain welcome. The guard requires Node.js and is local to each clone.
 
 ## Review criteria
 - Privacy: do not use data outside the allowlist, persistent identifiers, cookies, or storage ([ADR 0003](./docs/adr/0003-minimal-privacy-preserving-events.md)).
