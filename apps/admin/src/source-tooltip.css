@@ -20,3 +20,6 @@
 }
 
 .source-help-tooltip[hidden] { display: none; }
+
+.help-term { cursor: help; text-decoration: underline dotted; text-decoration-color: #94a3b8; text-underline-offset: 0.2em; }
+.help-term:focus-visible { outline: 2px solid #155eef; outline-offset: 3px; border-radius: 2px; }

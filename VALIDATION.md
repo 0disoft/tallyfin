@@ -1,5 +1,18 @@
 # Validation
 
+## Shared supplemental-help lifecycle - 2026-10-29
+
+- Extracted `HelpTooltip` with native trigger render props and `HelpTerm` for
+  focusable label text. Source buttons retain their selection behavior.
+  Only one supplemental tooltip can be open across the document. Scroll/resize
+  listeners are active only while a tooltip is open; all listeners and timers
+  clean up with their owner. Existing 2000ms hover and keyboard behavior remains.
+- Passed `verify:admin-source-tooltips` (54 cases), including all twelve locales,
+  1440/390px bounds, keyboard, pointer transfer, comparison and unmount cleanup.
+  Evidence: `.tmp/admin-source-tooltips-Q1jCMf/report.json`. No API writes or page
+  errors. Application integration/typecheck/build follow in the next UI slice.
+  No API/DB, dependencies, Worker or CI/runner changes. No push or deployment.
+
 ## Event-source help tooltips - 2026-10-29
 
 - Added localized beginner explanations to the event explorer/comparison source
