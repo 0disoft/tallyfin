@@ -1,7 +1,9 @@
 # Current State — 2026-10-29
 
-Status: This is the current summary for source, deployment and bounded load evidence. Earlier validation
-records remain historical evidence. This document does not turn a local change into a deployed one.
+Status: This summary covers source, deployment and bounded load evidence as of 2026-10-29. The
+administrator has since been redeployed from `0352ff4`; see the
+[2026-11-09 administrator release](2026-11-09-administrator-release.md). Earlier validation records remain
+historical evidence. This document does not turn a local change into a deployed one.
 
 ## Source and deployment
 

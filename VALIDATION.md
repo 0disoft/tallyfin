@@ -1,5 +1,33 @@
 # Validation
 
+## Administrator release 0352ff4 - 2026-11-09
+
+- Rebuilt the administrator from pushed commit `0352ff48d946309c9ca94d75d50207e891c6bb4c` in the new
+  directory `.tmp/production-20261109-0352ff4` using the validated installation snapshot
+  `.tmp/production-20261029-e46ef03/installation.json`. The regenerated installation, login and OIDC
+  registration files are byte-identical to the previous preparation; only the absolute assets path
+  changed. Installed Saylo packages resolved to 0.1.0, matching the lockfile.
+- Passed `install:prepare`, `admin:build-configured` (513 files, 21,964,798 bytes) and
+  `admin:dry-run` (1.84 KiB Worker script; `ASSETS` and `COLLECTOR` → `tallyfin-collector`
+  bindings). Deployment used `--keep-vars`; no plaintext vars existed before or after, and no
+  secrets, collector, auth or D1 resources were touched.
+- Deployment `e86f9b90-c383-45d6-a65d-07386d0cc864` serves version
+  `516eade5-3ddc-4326-9378-e5b783195b6e` at 100%. Its script etag equals the previous version, so the
+  Worker script, compatibility date and worker-first `/v1` routing are unchanged and the release
+  changed static assets only.
+- Production reads returned 200 for `/`, byte-identical to the local built `index.html`; the
+  `OidcLogin`, `HelpTerm` and `admin` chunks matched local SHA-256, and the served login chunk still
+  carries the configured issuer, resource, scope, password-change URL and ES256 algorithm.
+  `/v1/health`, `/v1/identity` and `/v1/projects?limit=1` returned the expected 401 envelope and an
+  unknown `/v1` path returned 404.
+- The ambient `CLOUDFLARE_API_TOKEN` failed asset upload-session creation with
+  `No access to the specified resource` while Worker reads succeeded; the existing
+  `CLOUDFLARE_WORKERS_DEPLOY_TOKEN` environment variable uploaded the 118 new assets and the script.
+  No token, scope or secret value was printed, written or rotated.
+- Sign-in, token refresh, D1 writes, collector ingestion and Cron were not exercised because this
+  release changes administrator assets only. No API, DB, dependency, CI/runner or hygiene change. The
+  `.tmp` evidence directories are not shipped.
+
 ## Human commit attribution - 2026-10-29
 
 - Removed 34 bot `Co-authored-by` entries (15 Codex, 19 CommandCodeBot) from
